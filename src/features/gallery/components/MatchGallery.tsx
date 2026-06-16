@@ -2,11 +2,10 @@ import React from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { Film, Trash2 } from "lucide-react";
+import { HardDrive, Cloud, Search, Trash2 } from "lucide-react";
 
 interface MatchGalleryProps {
   matches: MatchMetadata[];
-  selectedMatch: MatchMetadata | null;
   onSelectMatch: (match: MatchMetadata) => void;
   onDeleteMatch: (id: string) => void;
   isRecording: boolean;
@@ -14,7 +13,6 @@ interface MatchGalleryProps {
 
 export const MatchGallery: React.FC<MatchGalleryProps> = ({
   matches,
-  selectedMatch,
   onSelectMatch,
   onDeleteMatch,
   isRecording,
@@ -22,88 +20,144 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <div style={styles.headerTop}>
-          <h2 style={styles.title}>Partidas</h2>
-          <span style={styles.count}>{matches.length}</span>
+        <h1 style={styles.pageTitle}>Game Library</h1>
+        <p style={styles.pageSubtitle}>Browse and manage your recorded games</p>
+      </div>
+
+      <div style={styles.storageCardsRow}>
+        <div style={styles.storageCard}>
+          <div style={styles.storageHeader}>
+            <div style={styles.storageIconWrapper}>
+              <HardDrive size={18} color="var(--accent-violet)" />
+            </div>
+            <div>
+              <div style={styles.storageTitle}>Local Storage</div>
+              <div style={styles.storageSubtitle}>LeagueRecorder Folder</div>
+            </div>
+            <div style={styles.storagePercent}>10%</div>
+          </div>
+          <div style={styles.storageBarBg}>
+            <div style={{ ...styles.storageBarFill, width: "10%", background: "var(--accent-violet)" }} />
+          </div>
+          <div style={styles.storageFooter}>
+            <span>Used Space</span>
+            <span>10 GB of 100 GB</span>
+          </div>
         </div>
+
+        <div style={{ ...styles.storageCard, opacity: 0.6 }}>
+          <div style={styles.storageHeader}>
+            <div style={styles.storageIconWrapper}>
+              <Cloud size={18} color="var(--text-muted)" />
+            </div>
+            <div>
+              <div style={styles.storageTitle}>Cloud Storage <span style={styles.proBadge}>Pro</span></div>
+              <div style={styles.storageSubtitle}>Not connected</div>
+            </div>
+            <div style={styles.storagePercent}>0%</div>
+          </div>
+          <div style={styles.storageBarBg}>
+            <div style={{ ...styles.storageBarFill, width: "0%" }} />
+          </div>
+          <div style={styles.storageFooter}>
+            <span>Used Space</span>
+            <span>0 GB</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={styles.filtersRow}>
+        <div style={styles.searchBox}>
+          <Search size={16} color="var(--text-muted)" />
+          <input type="text" placeholder="Search games..." style={styles.searchInput} disabled />
+        </div>
+      </div>
+
+      <div style={styles.tabsRow}>
+        <button style={styles.tabBtnActive}>
+          All Games <span style={styles.tabBadge}>{matches.length}</span>
+        </button>
+        <button style={styles.tabBtnDefault}>
+          League of Legends <span style={styles.tabBadge}>{matches.length}</span>
+        </button>
         {isRecording && (
           <div style={styles.recordingIndicator}>
-            <span style={styles.recordingDot} />
-            <span>GRABANDO PARTIDA</span>
+            <span style={styles.recordingDot} /> GRABANDO PARTIDA EN CURSO
           </div>
         )}
       </div>
 
-      {matches.length === 0 ? (
-        <div style={styles.emptyState}>
-          <Film size={48} color="var(--text-muted)" strokeWidth={1} style={{ marginBottom: "var(--space-4)", opacity: 0.7 }} />
-          <h3 style={styles.emptyTitle}>Sin partidas grabadas</h3>
-          <p style={styles.emptyText}>
-            Abre League of Legends e inicia una partida. La app detectará el juego y grabará automáticamente.
-          </p>
-        </div>
-      ) : (
-        <div style={styles.list}>
-          {matches.map((match) => {
-            const isSelected = selectedMatch?.id === match.id;
-            const result = outcome(match.result);
-            const kda = computeKDA(match.events);
-            const accent =
-              result === "victory" ? "var(--color-victory)" : result === "defeat" ? "var(--color-defeat)" : "var(--text-muted)";
-            const resultLabel = result === "victory" ? "VICTORIA" : result === "defeat" ? "DERROTA" : "—";
+      <div style={styles.tableHeader}>
+        <div style={{ ...styles.th, flex: 2 }}>GAME</div>
+        <div style={{ ...styles.th, flex: 1.5 }}>TIME</div>
+        <div style={{ ...styles.th, flex: 1.5 }}>STATS (APM)</div>
+        <div style={{ ...styles.th, flex: 1.5 }}>KDA</div>
+        <div style={{ ...styles.th, width: "40px" }} />
+      </div>
 
+      <div style={styles.list}>
+        {matches.length === 0 ? (
+          <div style={styles.emptyState}>
+            <span style={styles.emptyIcon}>🎮</span>
+            <p style={styles.emptyText}>No games recorded yet. Play a match to get started.</p>
+          </div>
+        ) : (
+          matches.map((match) => {
+            const kda = computeKDA(match.events);
+            const res = outcome(match.result);
+            const isWin = res === "victory";
+            
             return (
               <div
                 key={match.id}
                 onClick={() => onSelectMatch(match)}
-                style={{
-                  ...styles.card,
-                  borderColor: isSelected ? "var(--border-focus)" : "var(--border-subtle)",
-                  background: isSelected ? "var(--bg-elevated)" : "var(--bg-card)",
-                  boxShadow: isSelected ? "var(--shadow-md), 0 0 0 1px var(--border-focus)" : "var(--shadow-sm)",
-                  transform: isSelected ? "translateY(-1px)" : "none",
-                }}
+                style={styles.row}
+                className="game-row"
               >
-                <div style={{ ...styles.accentBar, background: accent }} />
-
-                <div style={styles.cardMain}>
-                  <div style={styles.cardTop}>
-                    <ChampionAvatar champion={match.champion} size={48} ring={accent} />
-                    <div style={styles.champBlock}>
-                      <span style={styles.championName}>{match.champion}</span>
-                      <span style={styles.subLine}>
-                        {formatDuration(match.game_duration)} · {match.date.split(" ")[0]}
-                      </span>
-                    </div>
-                    <span style={{ ...styles.resultPill, color: accent, borderColor: accent, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}>
-                      {resultLabel}
-                    </span>
+                <div style={{ ...styles.td, flex: 2, display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
+                  <div style={styles.avatarWrapper}>
+                    <ChampionAvatar champion={match.champion} size={48} />
+                    <div style={{ ...styles.resultDot, background: isWin ? "var(--color-victory)" : "var(--color-defeat)" }} />
                   </div>
-
-                  <div style={styles.statsRow}>
-                    <div style={styles.kdaGroup}>
-                      <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>{kda.kills}</span>
-                      <span style={styles.kdaSep}>/</span>
-                      <span style={{ color: "var(--color-death)", fontWeight: 700 }}>{kda.deaths}</span>
-                      <span style={styles.kdaSep}>/</span>
-                      <span style={{ color: "var(--accent-teal)", fontWeight: 700 }}>{kda.assists}</span>
-                      <span style={styles.kdaLabel}>KDA</span>
+                  <div>
+                    <div style={styles.champName}>Ranked Solo/Duo</div>
+                    <div style={styles.gameType}>
+                      {match.champion} <span style={styles.localBadge}>Local only</span>
                     </div>
-                    <span style={styles.ratio}>{kdaRatio(kda)}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                      style={styles.deleteBtn}
-                      title="Eliminar grabación"
-                    >
-                      <Trash2 size={16} />
-                    </button>
                   </div>
+                </div>
+
+                <div style={{ ...styles.td, flex: 1.5 }}>
+                  <div style={styles.primaryText}>{match.date.split(" ")[0]}</div>
+                  <div style={styles.secondaryText}>{formatDuration(match.game_duration)}</div>
+                </div>
+
+                <div style={{ ...styles.td, flex: 1.5 }}>
+                  <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{fontSize:"11px", color:"var(--text-muted)", fontWeight:500}}>APM</span></div>
+                  <div style={styles.secondaryText}>Actions per min</div>
+                </div>
+
+                <div style={{ ...styles.td, flex: 1.5 }}>
+                  <div style={styles.primaryText}>
+                    {kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}
+                  </div>
+                  <div style={styles.secondaryText}>{kdaRatio(kda)} KDA</div>
+                </div>
+
+                <div style={{ ...styles.td, width: "40px", justifyContent: "flex-end" }}>
+                  <button 
+                    style={styles.actionBtn}
+                    onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
+                    title="Delete Match"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
     </div>
   );
 };
@@ -112,145 +166,261 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
     flexDirection: "column",
-    width: "380px",
+    width: "100%",
     height: "100%",
-    background: "var(--bg-panel)",
-    backdropFilter: "blur(16px)",
-    borderRight: "1px solid var(--border-subtle)",
+    padding: "var(--space-8) 10%",
+    overflowY: "auto",
     boxSizing: "border-box",
-    zIndex: 5,
   },
   header: {
-    padding: "var(--space-6) var(--space-5) var(--space-4)",
-    borderBottom: "1px solid var(--border-subtle)",
+    marginBottom: "var(--space-6)",
+  },
+  pageTitle: {
+    margin: 0,
+    fontSize: "var(--font-2xl)",
+    fontWeight: 700,
+    color: "#fff",
+  },
+  pageSubtitle: {
+    margin: "var(--space-2) 0 0 0",
+    fontSize: "var(--font-sm)",
+    color: "var(--text-secondary)",
+  },
+  storageCardsRow: {
+    display: "flex",
+    gap: "var(--space-4)",
+    marginBottom: "var(--space-6)",
+  },
+  storageCard: {
+    flex: 1,
+    backgroundColor: "var(--bg-card)",
+    borderRadius: "var(--radius-lg)",
+    padding: "var(--space-4)",
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-2)",
+    gap: "var(--space-4)",
+    border: "1px solid var(--border-subtle)",
   },
-  headerTop: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-xl)", fontWeight: 800, letterSpacing: "-0.03em" },
-  count: {
-    fontSize: "var(--font-xs)",
-    fontWeight: 700,
-    color: "var(--text-primary)",
-    background: "var(--bg-elevated)",
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-full)",
-    padding: "2px 10px",
+  storageHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
   },
-  recordingIndicator: {
+  storageIconWrapper: {
+    width: "36px",
+    height: "36px",
+    borderRadius: "var(--radius-md)",
+    backgroundColor: "var(--bg-elevated)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  storageTitle: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    color: "#fff",
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
+  },
+  storageSubtitle: {
     fontSize: "var(--font-xs)",
+    color: "var(--text-muted)",
+  },
+  proBadge: {
+    backgroundColor: "var(--accent-violet)",
+    color: "#fff",
+    fontSize: "10px",
+    padding: "2px 6px",
+    borderRadius: "4px",
+    fontWeight: 700,
+  },
+  storagePercent: {
+    marginLeft: "auto",
+    fontSize: "var(--font-lg)",
+    fontWeight: 700,
+    color: "#fff",
+  },
+  storageBarBg: {
+    height: "4px",
+    backgroundColor: "var(--bg-elevated)",
+    borderRadius: "var(--radius-full)",
+    overflow: "hidden",
+  },
+  storageBarFill: {
+    height: "100%",
+    borderRadius: "var(--radius-full)",
+  },
+  storageFooter: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: "var(--font-xs)",
+    color: "var(--text-muted)",
+  },
+  filtersRow: {
+    display: "flex",
+    marginBottom: "var(--space-4)",
+  },
+  searchBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    backgroundColor: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-2) var(--space-3)",
+    width: "300px",
+  },
+  searchInput: {
+    background: "transparent",
+    border: "none",
+    color: "#fff",
+    outline: "none",
+    width: "100%",
+    fontSize: "var(--font-sm)",
+  },
+  tabsRow: {
+    display: "flex",
+    gap: "var(--space-3)",
+    marginBottom: "var(--space-6)",
+    alignItems: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: "var(--accent-violet)",
+    color: "#fff",
+    border: "none",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-2) var(--space-4)",
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    cursor: "pointer",
+  },
+  tabBtnDefault: {
+    backgroundColor: "transparent",
+    color: "var(--text-secondary)",
+    border: "1px solid var(--border-strong)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-2) var(--space-4)",
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    cursor: "pointer",
+  },
+  tabBadge: {
+    backgroundColor: "rgba(0,0,0,0.2)",
+    padding: "2px 6px",
+    borderRadius: "var(--radius-full)",
+    fontSize: "11px",
+  },
+  recordingIndicator: {
+    marginLeft: "auto",
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    fontSize: "11px",
     fontWeight: 800,
     color: "var(--color-defeat)",
-    letterSpacing: "0.06em",
-    marginTop: "var(--space-2)",
   },
   recordingDot: {
     width: "8px",
     height: "8px",
     borderRadius: "var(--radius-full)",
     backgroundColor: "var(--color-defeat)",
-    boxShadow: "0 0 12px var(--color-defeat)",
+    boxShadow: "0 0 8px var(--color-defeat)",
     animation: "pulse 1.5s infinite",
   },
+  tableHeader: {
+    display: "flex",
+    padding: "0 var(--space-4) var(--space-3) var(--space-4)",
+    borderBottom: "1px solid var(--border-subtle)",
+    marginBottom: "var(--space-2)",
+  },
+  th: {
+    fontSize: "11px",
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    letterSpacing: "0.05em",
+  },
   list: {
-    flex: 1,
-    overflowY: "auto",
-    padding: "var(--space-4) var(--space-3)",
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-3)",
   },
-  card: {
-    position: "relative",
+  row: {
     display: "flex",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid var(--border-subtle)",
-    cursor: "pointer",
-    overflow: "hidden",
-    transition: "all 0.2s ease",
-  },
-  accentBar: { width: "4px", flexShrink: 0 },
-  cardMain: {
-    flex: 1,
     padding: "var(--space-4)",
+    borderBottom: "1px solid var(--border-subtle)",
+    cursor: "pointer",
+    transition: "background 0.2s",
+  },
+  td: {
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-3)",
-    minWidth: 0,
+    justifyContent: "center",
   },
-  cardTop: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  champBlock: { display: "flex", flexDirection: "column", gap: "2px", flex: 1, minWidth: 0 },
-  championName: {
+  avatarWrapper: {
+    position: "relative",
+  },
+  resultDot: {
+    position: "absolute",
+    top: "-2px",
+    left: "-2px",
+    width: "12px",
+    height: "12px",
+    borderRadius: "var(--radius-full)",
+    border: "2px solid var(--bg-app)",
+  },
+  champName: {
     fontSize: "var(--font-md)",
     fontWeight: 700,
-    color: "var(--text-primary)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    letterSpacing: "-0.01em",
+    color: "#fff",
+    marginBottom: "2px",
   },
-  subLine: { fontSize: "var(--font-xs)", color: "var(--text-muted)", fontWeight: 500 },
-  resultPill: {
-    fontSize: "10px",
-    fontWeight: 800,
-    letterSpacing: "0.08em",
-    padding: "4px var(--space-3)",
-    borderRadius: "var(--radius-full)",
-    border: "1px solid currentColor",
-    flexShrink: 0,
-  },
-  statsRow: {
+  gameType: {
+    fontSize: "var(--font-sm)",
+    color: "var(--text-secondary)",
     display: "flex",
     alignItems: "center",
-    gap: "var(--space-3)",
-    paddingTop: "var(--space-3)",
-    borderTop: "1px solid var(--border-subtle)",
+    gap: "var(--space-2)",
   },
-  kdaGroup: { display: "flex", alignItems: "center", gap: "6px", fontSize: "var(--font-sm)" },
-  kdaSep: { color: "var(--text-muted)" },
-  kdaLabel: {
-    fontSize: "9px",
-    fontWeight: 800,
+  localBadge: {
+    fontSize: "10px",
+    border: "1px solid var(--border-strong)",
+    padding: "2px 6px",
+    borderRadius: "4px",
     color: "var(--text-muted)",
-    letterSpacing: "0.08em",
-    marginLeft: "var(--space-1)",
   },
-  ratio: {
-    fontSize: "11px",
-    fontWeight: 800,
-    color: "var(--text-primary)",
-    background: "hsla(320, 80%, 70%, 0.15)",
-    border: "1px solid hsla(320, 80%, 70%, 0.3)",
-    borderRadius: "var(--radius-sm)",
-    padding: "2px var(--space-2)",
+  primaryText: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 700,
+    color: "#fff",
+    marginBottom: "4px",
   },
-  deleteBtn: {
-    marginLeft: "auto",
+  secondaryText: {
+    fontSize: "12px",
+    color: "var(--text-secondary)",
+  },
+  actionBtn: {
     background: "transparent",
     border: "none",
     color: "var(--text-muted)",
-    padding: "var(--space-2)",
     cursor: "pointer",
-    borderRadius: "var(--radius-sm)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "color 0.2s, background 0.2s",
+    padding: "var(--space-2)",
   },
   emptyState: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "var(--space-6)",
+    padding: "var(--space-12)",
     textAlign: "center",
     color: "var(--text-muted)",
   },
-  emptyTitle: { margin: 0, color: "var(--text-primary)", fontSize: "var(--font-md)", fontWeight: 700 },
-  emptyText: { fontSize: "var(--font-sm)", marginTop: "var(--space-2)", lineHeight: "1.5", maxWidth: "260px" },
+  emptyIcon: {
+    fontSize: "48px",
+  },
+  emptyText: {
+    marginTop: "var(--space-4)",
+    fontSize: "var(--font-sm)",
+  }
 };

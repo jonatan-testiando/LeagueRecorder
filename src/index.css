@@ -1,58 +1,49 @@
 :root {
   /* =========================================================================
-     Sistema de Diseño — Tema "Hallowed Mist" (Gwen/Ascent style)
+     Sistema de Diseño — Tema "Ascent / Flat Dark"
      ========================================================================= */
 
-  /* Superficies con más profundidad y oscuridad pura */
-  --bg-app: hsl(230, 25%, 6%);
-  --bg-panel: hsla(230, 25%, 9%, 0.85); /* Para Glassmorphism */
-  --bg-card: hsla(230, 22%, 12%, 0.7);
-  --bg-elevated: hsla(230, 22%, 16%, 0.9);
-  --bg-hover: hsla(230, 20%, 20%, 0.8);
+  /* Superficies Ascent-like (Gris Azulado Oscuro) */
+  --bg-sidebar: #12141a;
+  --bg-app: #181a21;
+  --bg-card: #222630;
+  --bg-elevated: #2b303c;
+  --bg-hover: #333947;
 
-  /* Bordes más sutiles */
-  --border-subtle: hsla(230, 20%, 25%, 0.3);
-  --border-strong: hsla(230, 20%, 35%, 0.5);
-  --border-focus: hsl(186, 100%, 69%);
-  --border-gold: hsla(320, 80%, 70%, 0.45); /* Cambiado a rosa/magenta sutil */
+  /* Bordes sutiles (Flat) */
+  --border-subtle: #303645;
+  --border-strong: #4a5368;
+  --border-focus: #a864ff; /* Purple/Violet de Ascent */
 
-  /* Texto */
-  --text-primary: hsl(220, 40%, 98%);
-  --text-secondary: hsl(220, 20%, 75%);
-  --text-muted: hsl(220, 15%, 55%);
+  /* Texto - Alto contraste */
+  --text-primary: #ffffff;
+  --text-secondary: #b3b9c6;
+  --text-muted: #828a9b;
 
-  /* Acentos de marca (Gwen: Cyan y Magenta/Rosado) */
-  --accent-gold: hsl(320, 80%, 70%);     /* Magenta suave */
-  --accent-gold-soft: hsl(320, 75%, 75%);
-  --accent-blue: hsl(200, 100%, 65%);
-  --accent-teal: hsl(186, 100%, 69%);    /* Hallowed Mist Cyan */
-  --accent-violet: hsl(280, 90%, 75%);   /* Gwen violet */
+  /* Acentos de marca (Inspirado en Ascent + Gwen) */
+  --accent-gold: #ffb84d;     
+  --accent-blue: #4da6ff;
+  --accent-teal: #4dffff;    
+  --accent-violet: #b25cff; /* Ascent Purple */
 
   /* Resultados y eventos */
-  --color-victory: hsl(186, 100%, 65%);
-  --color-defeat: hsl(340, 90%, 65%);
+  --color-victory: #4dffb8;
+  --color-defeat: #ff4d6a;
 
-  --color-kill: hsl(320, 80%, 70%);
-  --color-death: hsl(340, 90%, 65%);
-  --color-assist: hsl(186, 100%, 65%);
-  --color-objective: hsl(280, 90%, 75%);
+  --color-kill: #ffb84d;
+  --color-death: #ff4d6a;
+  --color-assist: #4dffb8;
+  --color-objective: #b25cff;
 
-  /* Gradientes Premium */
-  --gradient-gold: linear-gradient(135deg, hsl(320, 80%, 70%), hsl(280, 80%, 65%));
-  --gradient-violet: linear-gradient(135deg, hsl(280, 100%, 75%), hsl(320, 80%, 70%));
-  --gradient-teal: linear-gradient(135deg, hsl(186, 100%, 69%), hsl(200, 100%, 65%));
-  --gradient-app: radial-gradient(ellipse at top right, hsla(280, 50%, 15%, 0.4), transparent 50%),
-                  radial-gradient(ellipse at bottom left, hsla(186, 50%, 15%, 0.3), transparent 50%),
-                  var(--bg-app);
-  --gradient-victory: linear-gradient(135deg, hsl(186, 100%, 40%), hsl(186, 100%, 30%));
-  --gradient-defeat: linear-gradient(135deg, hsl(340, 90%, 45%), hsl(340, 90%, 35%));
+  /* Gradientes (menos marcados, más flat) */
+  --gradient-app: var(--bg-app);
+  --gradient-teal: linear-gradient(135deg, #4dffff, #4da6ff);
+  --gradient-violet: linear-gradient(135deg, #c785ff, #b25cff);
 
-  /* Sombras (profundidad extrema tipo Ascent) */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.6);
-  --glow-teal: 0 0 0 1px var(--border-focus), 0 8px 32px hsla(186, 100%, 69%, 0.15);
-  --glow-pink: 0 0 0 1px var(--border-gold), 0 8px 32px hsla(320, 80%, 70%, 0.15);
+  /* Sombras (planas y suaves) */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.3);
 
   /* Espaciado */
   --space-1: 4px;
@@ -64,11 +55,11 @@
   --space-8: 32px;
   --space-12: 48px;
 
-  /* Radios (más curvos para modernidad) */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* Radios */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
   /* Tipografía */
@@ -104,8 +95,7 @@ body {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: var(--gradient-app);
-  background-attachment: fixed;
+  background: var(--bg-app);
 }
 
 #root {
@@ -116,13 +106,13 @@ body {
 }
 
 h1, h2, h3, h4 {
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 /* Transiciones suaves globales */
 button, a, input {
-  transition: background-color 0.18s ease, border-color 0.18s ease,
-    color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
 }
 
 button:not(:disabled):active {
@@ -130,48 +120,34 @@ button:not(:disabled):active {
 }
 
 button:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed !important;
 }
 
 /* ===== Animaciones ===== */
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.82); }
+  50% { opacity: 0.5; transform: scale(0.85); }
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
-}
-
-.fade-in {
-  animation: fadeIn 0.25s ease both;
-}
-
 /* Spinner reutilizable */
 .spinner {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 3px solid var(--border-strong);
-  border-top-color: var(--accent-teal);
+  border-top-color: var(--accent-violet);
   border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
 }
 
-/* Scrollbars */
+/* Scrollbars Flat */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -179,14 +155,11 @@ button:disabled {
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
-  background-clip: padding-box;
 }
 
 ::selection {
-  background: hsla(41, 55%, 62%, 0.3);
+  background: hsla(280, 100%, 75%, 0.3);
 }

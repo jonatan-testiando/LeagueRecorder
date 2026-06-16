@@ -3,12 +3,13 @@ import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
-import { Scissors, Film, Settings, MonitorPlay } from "lucide-react";
+import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft } from "lucide-react";
 
-type Tab = "matches" | "settings";
+type Tab = "games" | "clips" | "review" | "settings";
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("matches");
+  const [activeTab, setActiveTab] = useState<Tab>("games");
+  
   const {
     matches,
     selectedMatch,
@@ -19,80 +20,95 @@ export const App: React.FC = () => {
 
   return (
     <div style={styles.appContainer}>
-      {/* Barra de Navegación Lateral (Sidebar) */}
+      {/* Sidebar (Ascent Style) */}
       <div style={styles.sidebar}>
         <div style={styles.logoArea}>
-          <div style={styles.logoIconWrapper}>
-            <Scissors color="var(--accent-teal)" size={26} strokeWidth={2.5} />
+          <Scissors color="var(--accent-violet)" size={28} strokeWidth={2.5} style={{ transform: "rotate(-45deg)" }} />
+          <span style={styles.logoText}>ASCENT</span>
+        </div>
+
+        <div style={styles.navSection}>
+          <span style={styles.navHeader}>COMMUNITIES</span>
+          <div style={styles.navItem}>
+            <div style={styles.commIcon}>WTL</div>
+            <span style={styles.navText}>We Teach League</span>
           </div>
-          <span style={styles.logoText}>LeagueRecorder</span>
         </div>
 
         <div style={styles.navLinks}>
           <button
-            onClick={() => setActiveTab("matches")}
+            onClick={() => { setActiveTab("games"); setSelectedMatch(null); }}
             style={{
               ...styles.navBtn,
-              backgroundColor: activeTab === "matches" ? "var(--bg-elevated)" : "transparent",
-              color: activeTab === "matches" ? "var(--text-primary)" : "var(--text-muted)",
-              fontWeight: activeTab === "matches" ? 700 : 500,
-              boxShadow: activeTab === "matches" ? "inset 3px 0 0 var(--accent-teal)" : "none",
+              backgroundColor: activeTab === "games" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "games" ? "#fff" : "var(--text-secondary)",
+              fontWeight: activeTab === "games" ? 700 : 500,
             }}
           >
-            <Film size={18} strokeWidth={activeTab === "matches" ? 2.5 : 2} />
-            Partidas
+            <Gamepad2 size={18} />
+            Games
           </button>
-
           <button
-            onClick={() => setActiveTab("settings")}
+            onClick={() => setActiveTab("clips")}
             style={{
               ...styles.navBtn,
-              backgroundColor: activeTab === "settings" ? "var(--bg-elevated)" : "transparent",
-              color: activeTab === "settings" ? "var(--text-primary)" : "var(--text-muted)",
-              fontWeight: activeTab === "settings" ? 700 : 500,
-              boxShadow: activeTab === "settings" ? "inset 3px 0 0 var(--accent-teal)" : "none",
+              backgroundColor: activeTab === "clips" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "clips" ? "#fff" : "var(--text-secondary)",
             }}
           >
-            <Settings size={18} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
-            Control
+            <Film size={18} />
+            Clips
           </button>
-        </div>
-
-        <div style={styles.footerArea}>
-          <div style={styles.footerVersion}>v1.0.0 (Local)</div>
+          <button
+            onClick={() => setActiveTab("review")}
+            style={{
+              ...styles.navBtn,
+              backgroundColor: activeTab === "review" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "review" ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            <MonitorPlay size={18} />
+            Review
+          </button>
+          <button
+            onClick={() => { setActiveTab("settings"); setSelectedMatch(null); }}
+            style={{
+              ...styles.navBtn,
+              backgroundColor: activeTab === "settings" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "settings" ? "#fff" : "var(--text-secondary)",
+              marginTop: "auto"
+            }}
+          >
+            <Settings size={18} />
+            Settings
+          </button>
         </div>
       </div>
 
-      {/* Contenido Principal */}
+      {/* Main Content Area */}
       <div style={styles.mainContent}>
-        {activeTab === "matches" ? (
-          <div style={styles.galleryLayout}>
-            {/* Listado lateral de partidas */}
-            <MatchGallery
-              matches={matches}
-              selectedMatch={selectedMatch}
-              onSelectMatch={setSelectedMatch}
-              onDeleteMatch={deleteMatch}
-              isRecording={isRecording}
-            />
-            
-            {/* Visor central del Video y el Timeline */}
-            <div style={styles.playerWrapper}>
-              {selectedMatch ? (
-                <VideoPlayer match={selectedMatch} />
-              ) : (
-                <div style={styles.selectPrompt}>
-                  <div style={styles.promptIconWrapper}>
-                    <MonitorPlay size={64} color="var(--accent-teal)" strokeWidth={1} />
-                  </div>
-                  <h3 style={styles.promptTitle}>Ninguna partida seleccionada</h3>
-                  <p style={styles.promptText}>Selecciona una partida de la lista lateral para reproducir el video e interactuar con el timeline de eventos.</p>
-                </div>
-              )}
+        {activeTab === "settings" ? (
+          <SettingsPanel />
+        ) : selectedMatch ? (
+          <div style={styles.playerWrapper}>
+            <div style={styles.playerTopBar}>
+              <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
+                <ArrowLeft size={20} />
+              </button>
+              <div style={styles.playerTitleBlock}>
+                <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
+                <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+              </div>
             </div>
+            <VideoPlayer match={selectedMatch} />
           </div>
         ) : (
-          <SettingsPanel />
+          <MatchGallery
+            matches={matches}
+            onSelectMatch={setSelectedMatch}
+            onDeleteMatch={deleteMatch}
+            isRecording={isRecording}
+          />
         )}
       </div>
     </div>
@@ -106,55 +122,71 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100vh",
     overflow: "hidden",
     boxSizing: "border-box",
+    backgroundColor: "var(--bg-app)",
   },
   sidebar: {
     width: "240px",
-    background: "var(--bg-panel)",
-    backdropFilter: "blur(16px)",
-    borderRight: "1px solid var(--border-subtle)",
+    backgroundColor: "var(--bg-sidebar)",
     display: "flex",
     flexDirection: "column",
     padding: "var(--space-6) var(--space-4)",
     boxSizing: "border-box",
-    zIndex: 10,
   },
   logoArea: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-3)",
-    paddingBottom: "var(--space-6)",
-    borderBottom: "1px solid var(--border-subtle)",
-  },
-  logoIconWrapper: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "hsla(186, 100%, 69%, 0.15)",
-    borderRadius: "var(--radius-md)",
-    width: "42px",
-    height: "42px",
-    border: "1px solid hsla(186, 100%, 69%, 0.3)",
-    boxShadow: "0 0 16px hsla(186, 100%, 69%, 0.2)",
+    paddingBottom: "var(--space-8)",
   },
   logoText: {
     fontWeight: 800,
-    fontSize: "var(--font-md)",
-    letterSpacing: "-0.03em",
-    background: "var(--gradient-teal)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    backgroundClip: "text",
+    fontSize: "var(--font-xl)",
+    letterSpacing: "0.05em",
+    color: "#fff",
+  },
+  navSection: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-3)",
+    marginBottom: "var(--space-8)",
+  },
+  navHeader: {
+    fontSize: "11px",
+    fontWeight: 700,
+    color: "var(--text-muted)",
+    letterSpacing: "0.1em",
+  },
+  navItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    cursor: "pointer",
+  },
+  commIcon: {
+    width: "28px",
+    height: "28px",
+    borderRadius: "6px",
+    backgroundColor: "#fff",
+    color: "#000",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "9px",
+    fontWeight: 800,
+  },
+  navText: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    color: "var(--text-secondary)",
   },
   navLinks: {
     display: "flex",
     flexDirection: "column",
     gap: "var(--space-2)",
-    marginTop: "var(--space-6)",
     flex: 1,
   },
   navBtn: {
     border: "none",
-    background: "transparent",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-3) var(--space-4)",
     textAlign: "left",
@@ -163,67 +195,50 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-3)",
-    letterSpacing: "-0.01em",
-    transition: "all 0.2s ease",
-  },
-  footerArea: {
-    paddingTop: "var(--space-4)",
-    borderTop: "1px solid var(--border-subtle)",
-  },
-  footerVersion: {
-    fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
-    textAlign: "center",
     fontWeight: 600,
-    letterSpacing: "0.05em",
   },
   mainContent: {
     flex: 1,
     height: "100%",
     overflow: "hidden",
     boxSizing: "border-box",
-    background: "var(--gradient-app)",
-  },
-  galleryLayout: {
-    display: "flex",
-    width: "100%",
-    height: "100%",
-    overflow: "hidden",
+    backgroundColor: "var(--bg-app)",
   },
   playerWrapper: {
-    flex: 1,
+    display: "flex",
+    flexDirection: "column",
     height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-    position: "relative",
+    width: "100%",
   },
-  selectPrompt: {
-    flex: 1,
+  playerTopBar: {
     display: "flex",
-    flexDirection: "column",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    padding: "var(--space-4) var(--space-6)",
+    backgroundColor: "var(--bg-app)",
+  },
+  backBtn: {
+    background: "transparent",
+    border: "none",
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+    padding: "var(--space-2)",
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "var(--text-muted)",
-    padding: "var(--space-12)",
-    textAlign: "center",
-    background: "var(--bg-app)",
   },
-  promptIconWrapper: {
-    marginBottom: "var(--space-5)",
-    opacity: 0.6,
-    filter: "drop-shadow(0 0 32px hsla(186, 100%, 69%, 0.3))",
+  playerTitleBlock: {
+    display: "flex",
+    flexDirection: "column",
   },
-  promptTitle: {
-    color: "var(--text-primary)",
-    margin: "0 0 var(--space-3) 0",
+  playerTitle: {
+    margin: 0,
     fontSize: "var(--font-lg)",
+    color: "#fff",
     fontWeight: 700,
   },
-  promptText: {
-    maxWidth: "360px",
-    lineHeight: 1.5,
-    margin: 0,
+  playerSub: {
+    fontSize: "var(--font-xs)",
+    color: "var(--text-muted)",
   }
 };
-export default App;

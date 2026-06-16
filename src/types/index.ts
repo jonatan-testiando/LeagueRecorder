@@ -44,6 +44,12 @@ export interface MatchMetadata {
   mouse_events?: MouseEventData[];
 }
 
+export interface ClipMetadata {
+  path: string;
+  name: string;
+  match_id: string;
+}
+
 export interface AudioStatus {
   system_audio_device: string | null;
   all_devices: string[];

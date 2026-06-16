@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
+import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft } from "lucide-react";
@@ -89,6 +90,8 @@ export const App: React.FC = () => {
       <div style={styles.mainContent}>
         {activeTab === "settings" ? (
           <SettingsPanel />
+        ) : activeTab === "clips" ? (
+          <ClipsGallery />
         ) : selectedMatch ? (
           <div style={styles.playerWrapper}>
             <div style={styles.playerTopBar}>

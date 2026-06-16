@@ -578,9 +578,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <span style={styles.reviewTitle}>Game Review</span>
         </div>
 
-        <div style={styles.reviewScoreCard}>
-          <div style={styles.scoreIcon}>
-            {isWin ? <Trophy size={24} color="#fff" /> : <XCircle size={24} color="#fff" />}
+        <div style={{...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)"}}>
+          <div style={{...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)"}}>
+            {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
           </div>
           <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>
             {isWin ? "Victory" : "Defeat"}
@@ -591,34 +591,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         </div>
 
         <div style={styles.reviewList}>
-          {timedEvents.map((ev, i) => {
-            const meta = eventMeta(ev);
-            const { text: toneText, color: toneColor, icon: toneIcon } = toneLabelAndIcon(meta.tone);
-            const isActive = activeEventTime === ev.time;
+          <div style={styles.timelineContainer}>
+            {/* The vertical line */}
+            <div style={styles.timelineLine} />
+            
+            {timedEvents.map((ev, i) => {
+              const meta = eventMeta(ev);
+              const { text: toneText, color: toneColor, icon: toneIcon } = toneLabelAndIcon(meta.tone);
+              const isActive = activeEventTime === ev.time;
 
-            return (
-              <div 
-                key={i} 
-                onClick={() => jumpToClip(ev.time)}
-                style={{
-                  ...styles.reviewItem,
-                  background: isActive ? "hsla(0,0%,100%,0.05)" : "transparent",
-                  borderLeft: isActive ? `3px solid ${meta.color}` : "3px solid transparent",
-                }}
-              >
-                <div style={styles.reviewItemLeft}>
-                  <span style={styles.reviewNumber}>{i + 1}.</span>
-                  <span style={styles.reviewName}>{meta.label}</span>
-                </div>
-                <div style={styles.reviewItemRight}>
-                  <div style={{...styles.toneIconWrap, color: toneColor}}>
-                    {toneIcon}
+              return (
+                <div 
+                  key={i} 
+                  onClick={() => jumpToClip(ev.time)}
+                  style={{
+                    ...styles.reviewCardWrapper,
+                    opacity: isActive ? 1 : 0.6,
+                    transform: isActive ? "scale(1.02)" : "scale(1)",
+                  }}
+                >
+                  <div style={{
+                    ...styles.timelineDot, 
+                    borderColor: meta.color, 
+                    backgroundColor: isActive ? meta.color : "var(--bg-app)", 
+                    boxShadow: isActive ? `0 0 10px ${meta.color}` : "none"
+                  }} />
+                  <div style={{
+                    ...styles.reviewCard,
+                    borderColor: isActive ? meta.color : "var(--border-subtle)",
+                    backgroundColor: isActive ? "hsla(0,0%,100%,0.08)" : "hsla(0,0%,100%,0.03)",
+                  }}>
+                    <div style={styles.reviewCardHeader}>
+                      <span style={{ color: "var(--text-muted)", fontSize: "10px", fontWeight: "bold" }}>
+                        {formatTime(ev.time)}
+                      </span>
+                      <div style={{...styles.toneBadge, color: toneColor, backgroundColor: `${toneColor}22`}}>
+                        {toneIcon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{toneText}</span>
+                      </div>
+                    </div>
+                    <div style={styles.reviewCardBody}>
+                      <span style={{color: meta.color, display: "flex"}}>{meta.icon}</span>
+                      <span style={styles.reviewCardTitle}>{meta.label}</span>
+                    </div>
                   </div>
-                  <span style={{...styles.toneText, color: toneColor}}>{toneText}</span>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
         <div style={styles.reviewFooter}>
@@ -915,42 +934,72 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: "auto",
     padding: "var(--space-4) 0",
   },
-  reviewItem: {
+  timelineContainer: {
+    position: "relative",
+    padding: "0 var(--space-4)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-4)",
+  },
+  timelineLine: {
+    position: "absolute",
+    left: "21px", // 16px padding + 5px center of 10px dot
+    top: "16px",
+    bottom: "0",
+    width: "2px",
+    backgroundColor: "var(--border-subtle)",
+    zIndex: 1,
+  },
+  reviewCardWrapper: {
+    display: "flex",
+    gap: "var(--space-3)",
+    position: "relative",
+    zIndex: 2,
+    cursor: "pointer",
+    transition: "opacity 0.2s, transform 0.2s",
+  },
+  timelineDot: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+    border: "2px solid",
+    marginTop: "14px",
+    flexShrink: 0,
+    zIndex: 3,
+  },
+  reviewCard: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-2)",
+    padding: "var(--space-3)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid",
+    backdropFilter: "blur(8px)", // Glassmorphism
+    WebkitBackdropFilter: "blur(8px)",
+    transition: "background 0.2s, border-color 0.2s",
+  },
+  reviewCardHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "var(--space-3) var(--space-4)",
-    cursor: "pointer",
-    transition: "background 0.15s",
   },
-  reviewItemLeft: {
+  toneBadge: {
     display: "flex",
     alignItems: "center",
-    gap: "var(--space-3)",
+    gap: "4px",
+    padding: "2px 6px",
+    borderRadius: "4px",
   },
-  reviewNumber: {
-    color: "var(--text-muted)",
-    fontSize: "var(--font-xs)",
-    width: "16px",
-  },
-  reviewName: {
-    color: "#fff",
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-  },
-  reviewItemRight: {
+  reviewCardBody: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
   },
-  toneIconWrap: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  toneText: {
-    fontSize: "11px",
-    fontWeight: 700,
+  reviewCardTitle: {
+    color: "#fff",
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
   },
   reviewFooter: {
     padding: "var(--space-4)",

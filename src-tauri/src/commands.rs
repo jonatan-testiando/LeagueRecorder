@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use std::collections::HashMap;
 use tokio::sync::Mutex;
 use chrono::Local;
+use reqwest::multipart;
 
 // Estructura para almacenar el estado de la partida actual en el worker de background
 pub struct ActiveMatchState {
@@ -706,5 +707,71 @@ pub async fn export_clip(
     } else {
         let err = String::from_utf8_lossy(&output.stderr);
         Err(format!("Error en ffmpeg: {}", err))
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct ClipMetadata {
+    pub path: String,
+    pub name: String,
+    pub match_id: String,
+}
+
+#[tauri::command]
+pub async fn get_all_clips() -> Vec<ClipMetadata> {
+    let mut clips = Vec::new();
+    let root_dir = crate::storage::get_videos_dir();
+    
+    if let Ok(mut entries) = tokio::fs::read_dir(root_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if entry.path().is_dir() {
+                let match_id = entry.file_name().to_string_lossy().to_string();
+                if let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
+                    while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
+                        let name = sub_entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with(&match_id) && name.contains("_clip_") && name.ends_with(".mp4") {
+                            clips.push(ClipMetadata {
+                                path: sub_entry.path().to_string_lossy().to_string(),
+                                name,
+                                match_id: match_id.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Sort descending by name
+    clips.sort_by(|a, b| b.name.cmp(&a.name));
+    clips
+}
+
+#[tauri::command]
+pub async fn upload_to_catbox(path: String) -> Result<String, String> {
+    let bytes = tokio::fs::read(&path).await.map_err(|e| format!("Error leyendo archivo: {}", e))?;
+    let file_name = std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy().to_string();
+    
+    let part = multipart::Part::bytes(bytes)
+        .file_name(file_name)
+        .mime_str("video/mp4")
+        .map_err(|_| "Error configurando el mime type".to_string())?;
+
+    let form = multipart::Form::new()
+        .text("reqtype", "fileupload")
+        .text("userhash", "")
+        .part("fileToUpload", part);
+
+    let client = reqwest::Client::new();
+    let res = client.post("https://catbox.moe/user/api.php")
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|e| format!("Subida fallida: {}", e))?;
+
+    if res.status().is_success() {
+        let text = res.text().await.map_err(|e| e.to_string())?;
+        Ok(text)
+    } else {
+        Err(format!("Error en el servidor: {}", res.status()))
     }
 }

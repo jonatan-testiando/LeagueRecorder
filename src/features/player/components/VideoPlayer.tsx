@@ -608,6 +608,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     fontFamily: "monospace",
   },
+  volumeContainer: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+  },
+  volumeSlider: {
+    width: "80px",
+    accentColor: "var(--accent-violet)",
+    cursor: "pointer",
+    height: "4px",
+    borderRadius: "2px",
+    appearance: "none",
+    background: "var(--bg-card)",
+  },
   timelineArea: {
     height: "140px",
     backgroundColor: "var(--bg-card)",

@@ -293,7 +293,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const render = () => {
       rafRef.current = requestAnimationFrame(render);
       const v = videoRef.current;
-      if (!isPlaying || !v) return;
+      if (!v) return;
+      
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!match.mouse_events || match.mouse_events.length === 0) return;
@@ -342,7 +343,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
     };
-  }, [isPlaying, match.mouse_events, mouseSync]);
+  }, [match.mouse_events, mouseSync]);
 
   return (
     <div ref={containerRef} style={styles.container}>

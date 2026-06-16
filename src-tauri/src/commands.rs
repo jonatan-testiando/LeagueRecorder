@@ -428,10 +428,45 @@ async fn finalize_match(
         });
     }
 
+    let mut final_duration = duration;
+    let dir = crate::storage::get_videos_dir();
+    let match_id_str = match_id.clone();
+    
+    // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 8 segundos (o 4s) 
+    // y recortamos físicamente el video para que no se vea el escritorio.
+    if !has_game_end && is_auto {
+        final_duration = (duration - 8.0).max(1.0);
+        let final_path = dir.join(format!("{}.mp4", match_id_str));
+        let tmp_path = dir.join(format!("{}_trim.mp4", match_id_str));
+        
+        // Esperamos un momento a que ffmpeg libere el archivo tras el kill()
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        
+        if final_path.exists() {
+            let output = std::process::Command::new("ffmpeg")
+                .args(&[
+                    "-i", &final_path.to_string_lossy(),
+                    "-t", &final_duration.to_string(),
+                    "-c", "copy",
+                    &tmp_path.to_string_lossy()
+                ])
+                .output();
+                
+            if let Ok(out) = output {
+                if out.status.success() {
+                    let _ = std::fs::remove_file(&final_path);
+                    let _ = std::fs::rename(&tmp_path, &final_path);
+                } else {
+                    let _ = std::fs::remove_file(&tmp_path);
+                }
+            }
+        }
+    }
+
     let metadata = MatchMetadata {
         id: match_id.clone(),
-        game_duration: duration,
-        video_path: crate::storage::get_videos_dir().join(format!("{}.mp4", match_id)).to_string_lossy().to_string(),
+        game_duration: final_duration,
+        video_path: dir.join(format!("{}.mp4", match_id_str)).to_string_lossy().to_string(),
         result,
         champion,
         date: game_start_time.format("%Y-%m-%d %H:%M:%S").to_string(),

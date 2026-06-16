@@ -6,7 +6,7 @@ import {
   Orbit, Crown, Eye, TowerControl, BrickWall, 
   Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, 
-  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2
+  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2
 } from "lucide-react";
 
 const streamUrl = (path: string): string =>
@@ -113,6 +113,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const clipEndRef = useRef<number | null>(null);
 
+  const [mouseSync, setMouseSync] = useState<number>(() => {
+    return parseFloat(localStorage.getItem("mouseSyncOffset") || "1.0");
+  });
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(match.game_duration || 0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -154,6 +157,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     if (v.paused) v.play().catch(() => {});
     else v.pause();
   }, [loadState]);
+
+  const toggleMute = () => setMuted(m => !m);
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVolume(parseFloat(e.target.value));
+    setMuted(false);
+  };
 
   const seekTo = useCallback((seconds: number, play: boolean) => {
     const v = videoRef.current;
@@ -259,7 +268,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const n = apmSeries.length;
     const pts: [number, number][] = apmSeries.map((v, i) => {
       const x = (i / (n - 1)) * 100;
-      const y = 80 - (v / maxApm) * 70; // Map APM to graph height
+      const y = 80 - (v / maxApm) * 70;
       return [x, y];
     });
     apmLinePath = smoothLinePath(pts);
@@ -269,41 +278,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const isWin = result === "victory";
   const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
 
-  // Mouse Trail Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
     const resizeObserver = new ResizeObserver(() => {
       canvas.width = canvas.clientWidth;
       canvas.height = canvas.clientHeight;
     });
     resizeObserver.observe(canvas);
-    
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    // Asumimos monitor principal para la escala de captura rdev
     const screenW = window.screen.width;
     const screenH = window.screen.height;
-
     const render = () => {
       rafRef.current = requestAnimationFrame(render);
       const v = videoRef.current;
       if (!isPlaying || !v) return;
-      
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
       if (!match.mouse_events || match.mouse_events.length === 0) return;
-
       const TRAIL_DURATION = 1.0;
-      const recentEvents = match.mouse_events.filter(e => e.t <= ct && e.t >= ct - TRAIL_DURATION);
+      const adjustedCt = ct - mouseSync;
+      const recentEvents = match.mouse_events.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
       if (recentEvents.length === 0) return;
-
       const scaleX = canvas.width / screenW;
       const scaleY = canvas.height / screenH;
-
       const moves = recentEvents.filter(e => e.evt === "move");
       if (moves.length > 1) {
         ctx.lineCap = "round";
@@ -311,67 +310,50 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         for (let i = 0; i < moves.length - 1; i++) {
           const p1 = moves[i];
           const p2 = moves[i+1];
-          const ageRatio = Math.max(0, 1 - (ct - p2.t) / TRAIL_DURATION);
-          
+          const ageRatio = Math.max(0, 1 - (adjustedCt - p2.t) / TRAIL_DURATION);
           ctx.beginPath();
           ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
           ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
-          
           ctx.lineWidth = 2 + ageRatio * 3;
-          
-          // Interpolate color from yellow to bright blue
           const r = Math.floor(255 + ageRatio * (0 - 255));
           const g = Math.floor(200 + ageRatio * (150 - 200));
           const b = Math.floor(50 + ageRatio * (255 - 50));
-          
           ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ageRatio})`;
           ctx.stroke();
         }
       }
-
       const clicks = recentEvents.filter(e => e.evt === "left_click" || e.evt === "right_click");
       for (const click of clicks) {
-        const age = ct - click.t;
+        const age = adjustedCt - click.t;
         if (age > 0.5) continue;
-        
         const ageRatio = age / 0.5;
         const radius = 5 + ageRatio * 25;
         const opacity = 1 - ageRatio;
-        
         ctx.beginPath();
         ctx.arc(click.x * scaleX, click.y * scaleY, radius, 0, Math.PI * 2);
         ctx.lineWidth = 2;
-        if (click.evt === "left_click") {
-          ctx.strokeStyle = `rgba(0, 255, 100, ${opacity})`;
-        } else {
-          ctx.strokeStyle = `rgba(255, 50, 50, ${opacity})`;
-        }
+        if (click.evt === "left_click") ctx.strokeStyle = `rgba(0, 255, 100, ${opacity})`;
+        else ctx.strokeStyle = `rgba(255, 50, 50, ${opacity})`;
         ctx.stroke();
       }
     };
-    
     rafRef.current = requestAnimationFrame(render);
-    
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
     };
-  }, [isPlaying, match.mouse_events]);
+  }, [isPlaying, match.mouse_events, mouseSync]);
 
   return (
     <div ref={containerRef} style={styles.container}>
-      {/* Left Column: Video & Timeline */}
       <div style={styles.leftColumn}>
         <div style={styles.videoWrapper}>
           <div style={styles.topBar}>
-            <div style={styles.topBarLeft}>
-              {/* Spacer for when back button is external */}
-            </div>
+            <div style={styles.topBarLeft}></div>
             <button style={styles.shareBtn}>
               <Share2 size={14} /> Share Video
             </button>
           </div>
-          
           <video
             ref={videoRef}
             src={videoSrc}
@@ -381,67 +363,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             onClick={handlePlayPause}
             onPlay={() => setIsPlaying(true)}
             onPause={() => setIsPlaying(false)}
-            onWaiting={() => {}}
-            onPlaying={() => {}}
-            onCanPlay={() => { if (loadState !== "error") setLoadState("ready"); }}
-            onError={() => setLoadState("error")}
             preload="auto"
           />
-
-          {loadState === "loading" && (
-            <div style={styles.centerOverlay}>
-              <div className="spinner" />
-            </div>
-          )}
-          {loadState === "error" && (
-            <div style={styles.centerOverlay}>
-              <AlertTriangle size={48} color="var(--color-defeat)" />
-              <span style={{ color: "#fff", marginTop: 8 }}>No se pudo cargar el video</span>
-            </div>
-          )}
-
-          {/* Canvas for Mouse Trail Overlay */}
-          <canvas
-            ref={canvasRef}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-              zIndex: 5
-            }}
-          />
-
-          {/* Overlay Progress Bar at the bottom of video */}
+          {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
+          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>No se pudo cargar el video</span></div>}
+          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5 }} />
           <div style={styles.videoProgressWrapper}>
             <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
               {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
             </button>
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <button onClick={() => setMuted(m => !m)} style={styles.videoPlayBtn} title="Silenciar (M)">
-                {muted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
+            <div style={styles.volumeContainer}>
+              <button onClick={toggleMute} style={styles.videoPlayBtn}>
+                {muted || volume === 0 ? <VolumeX size={20} /> : volume < 0.5 ? <Volume1 size={20} /> : <Volume2 size={20} />}
               </button>
-              <input
-                type="range" min={0} max={1} step={0.05}
-                value={muted ? 0 : volume}
-                onChange={(e) => { setVolume(parseFloat(e.target.value)); setMuted(false); }}
-                style={{ width: "80px", accentColor: "var(--accent-violet)", cursor: "pointer" }}
-                title="Volumen"
-              />
+              <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={handleVolumeChange} style={styles.volumeSlider} />
             </div>
             <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
-            
-            <div style={{ flex: 1 }} />
-            
-            <button onClick={toggleFullscreen} style={styles.videoPlayBtn}>
-              <Maximize size={16} />
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto", marginRight: "16px" }}>
+              <span style={{ color: "#8b949e", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                <MousePointer2 size={12} /> Sync
+              </span>
+              <input type="range" min="-3" max="3" step="0.1" value={mouseSync} onChange={(e) => { const val = parseFloat(e.target.value); setMouseSync(val); localStorage.setItem("mouseSyncOffset", val.toString()); }} style={{...styles.volumeSlider, width: "60px"}} />
+              <span style={{ color: "#8b949e", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
+            </div>
+            <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
           </div>
         </div>
-
-        {/* Timeline Area (Ascent style, below video) */}
         {!isFullscreen && (
         <div style={styles.timelineArea}>
           <div style={styles.timelineHeaderRow}>
@@ -449,9 +396,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <div style={styles.timelineHeaderRight}>
               <button onClick={() => setClipMode(c => !c)} style={{...styles.ghostBtn, color: clipMode ? "var(--text-primary)" : "var(--text-muted)"}}>
                 <Scissors size={14} /> Clip
-              </button>
-              <button style={styles.ghostBtn}>
-                APM <ChevronRight size={14} style={{transform: "rotate(90deg)"}}/>
               </button>
             </div>
           </div>

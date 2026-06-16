@@ -128,7 +128,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
   const [showTracker, setShowTracker] = useState<boolean>(true);
-  const [showClipModal, setShowClipModal] = useState<boolean>(false);
+  const [isClippingMode, setIsClippingMode] = useState<boolean>(false);
+  const [clipDragThumb, setClipDragThumb] = useState<"start" | "end" | null>(null);
   const [clipStart, setClipStart] = useState<number>(0);
   const [clipEnd, setClipEnd] = useState<number>(0);
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -219,8 +220,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
-    updateScrub(e.clientX, true);
+    if (!isClippingMode) {
+      setIsDragging(true);
+      updateScrub(e.clientX, true);
+    } else {
+      // Si hacen clic fuera de los thumbs en modo clip, mover el playhead pero no arrastrar el clip
+      setIsDragging(true);
+      updateScrub(e.clientX, true);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -228,15 +235,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       const rect = progressBarRef.current.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       setHoverPct(pct);
-    }
-    if (isDragging) {
-      updateScrub(e.clientX, false);
+      
+      if (clipDragThumb) {
+        const newTime = pct * duration;
+        if (clipDragThumb === "start") setClipStart(Math.min(newTime, clipEnd - 1));
+        else setClipEnd(Math.max(newTime, clipStart + 1));
+      } else if (isDragging) {
+        updateScrub(e.clientX, false);
+      }
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.releasePointerCapture(e.pointerId);
-    setIsDragging(false);
+    if (clipDragThumb) {
+      setClipDragThumb(null);
+    } else if (isDragging) {
+      setIsDragging(false);
+    }
     setHoverPct(null);
   };
 
@@ -244,10 +260,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     if (!isDragging) setHoverPct(null);
   };
 
-  const openClipModal = () => {
+  const startClippingMode = () => {
     setClipStart(Math.max(0, currentTime - 10));
     setClipEnd(Math.min(duration, currentTime + 10));
-    setShowClipModal(true);
+    setIsClippingMode(true);
+  };
+
+  const handleThumbPointerDown = (e: React.PointerEvent<HTMLDivElement>, type: "start" | "end") => {
+    e.stopPropagation();
+    if (progressBarRef.current) {
+      progressBarRef.current.setPointerCapture(e.pointerId);
+    }
+    setClipDragThumb(type);
   };
 
   const updateScrub = (clientX: number, playAfter: boolean) => {
@@ -456,7 +480,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <div style={styles.timelineHeaderRow}>
             <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
             <div style={styles.timelineHeaderRight}>
-              <button onClick={openClipModal} style={{...styles.ghostBtn, color: "var(--text-primary)"}}>
+              <button onClick={startClippingMode} style={{...styles.ghostBtn, color: isClippingMode ? "var(--accent-violet)" : "var(--text-primary)"}}>
                 <Scissors size={14} /> Clip
               </button>
             </div>
@@ -519,6 +543,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 </span>
               ))}
             </div>
+
+            {/* Clipping Overlay */}
+            {isClippingMode && duration > 0 && (
+              <div style={{
+                position: "absolute",
+                top: 0, bottom: 0,
+                left: `${(clipStart / duration) * 100}%`,
+                width: `${((clipEnd - clipStart) / duration) * 100}%`,
+                backgroundColor: "rgba(178, 92, 255, 0.4)",
+                borderLeft: "2px solid var(--accent-violet)",
+                borderRight: "2px solid var(--accent-violet)",
+                zIndex: 10,
+              }}>
+                <div 
+                  onPointerDown={(e) => handleThumbPointerDown(e, "start")}
+                  style={{ position: "absolute", left: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }} 
+                />
+                <div 
+                  onPointerDown={(e) => handleThumbPointerDown(e, "end")}
+                  style={{ position: "absolute", right: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }} 
+                />
+              </div>
+            )}
           </div>
         </div>
         )}
@@ -582,45 +629,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       </div>
       )}
 
-      {/* Clip Modal */}
-      {showClipModal && (
-        <div style={{...styles.centerOverlay, zIndex: 100}}>
-          <div style={{ background: "var(--bg-card)", padding: "20px", borderRadius: "10px", width: "400px", border: "1px solid var(--border-subtle)" }}>
-            <h3 style={{ color: "white", marginTop: 0 }}>Crear Clip</h3>
-            <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>Selecciona el tiempo de inicio y fin para exportar el clip sin recodificar (súper rápido).</p>
-            
-            <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: "block", color: "white", fontSize: "12px", marginBottom: "5px" }}>Inicio (segundos)</label>
-                <input type="number" step="0.1" value={clipStart} onChange={e => setClipStart(parseFloat(e.target.value) || 0)} style={{ width: "100%", background: "var(--bg-app)", color: "white", border: "1px solid var(--border-subtle)", padding: "8px", borderRadius: "4px" }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: "block", color: "white", fontSize: "12px", marginBottom: "5px" }}>Fin (segundos)</label>
-                <input type="number" step="0.1" value={clipEnd} onChange={e => setClipEnd(parseFloat(e.target.value) || 0)} style={{ width: "100%", background: "var(--bg-app)", color: "white", border: "1px solid var(--border-subtle)", padding: "8px", borderRadius: "4px" }} />
-              </div>
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setShowClipModal(false)} style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}>Cancelar</button>
-              <button 
-                onClick={async () => {
-                  setIsExporting(true);
-                  try {
-                    const dur = Math.max(0.1, clipEnd - clipStart);
-                    await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
-                    setShowClipModal(false);
-                    alert("¡Clip exportado con éxito en la carpeta del video!");
-                  } catch (e) {
-                    alert("Error exportando clip: " + e);
-                  } finally {
-                    setIsExporting(false);
-                  }
-                }} 
-                disabled={isExporting}
-                style={{ padding: "8px 16px", background: "var(--accent-violet)", border: "none", color: "white", borderRadius: "5px", cursor: isExporting ? "not-allowed" : "pointer", fontWeight: "bold" }}>
-                {isExporting ? "Exportando..." : "Exportar Clip"}
-              </button>
-            </div>
+      {/* Clipping Actions Bar */}
+      {isClippingMode && (
+        <div style={{
+          position: "absolute", bottom: "80px", left: "50%", transform: "translateX(-50%)",
+          background: "var(--bg-card)", padding: "12px 24px", borderRadius: "8px", border: "1px solid var(--border-subtle)",
+          display: "flex", alignItems: "center", gap: "20px", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
+        }}>
+          <span style={{ color: "var(--text-primary)", fontSize: "14px" }}>
+            Clip: <b>{formatTime(clipStart)}</b> - <b>{formatTime(clipEnd)}</b> ({Math.max(0.1, clipEnd - clipStart).toFixed(1)}s)
+          </span>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button onClick={() => setIsClippingMode(false)} style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}>Cancelar</button>
+            <button 
+              onClick={async () => {
+                setIsExporting(true);
+                try {
+                  const dur = Math.max(0.1, clipEnd - clipStart);
+                  await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
+                  setIsClippingMode(false);
+                  alert("¡Clip exportado con éxito en la carpeta del video!");
+                } catch (e) {
+                  alert("Error exportando clip: " + e);
+                } finally {
+                  setIsExporting(false);
+                }
+              }} 
+              disabled={isExporting}
+              style={{ padding: "6px 16px", background: "var(--accent-violet)", border: "none", color: "white", borderRadius: "5px", cursor: isExporting ? "not-allowed" : "pointer", fontWeight: "bold" }}>
+              {isExporting ? "Exportando..." : "Exportar Clip"}
+            </button>
           </div>
         </div>
       )}

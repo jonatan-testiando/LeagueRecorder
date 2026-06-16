@@ -432,10 +432,10 @@ async fn finalize_match(
     let match_id_str = match_id.clone();
     let dir = crate::storage::get_match_dir(&match_id_str);
     
-    // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 8 segundos (o 4s) 
+    // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 10 segundos 
     // y recortamos físicamente el video para que no se vea el escritorio.
     if !has_game_end && is_auto {
-        final_duration = (duration - 8.0).max(1.0);
+        final_duration = (duration - 10.0).max(1.0);
         let final_path = dir.join(format!("{}.mp4", match_id_str));
         let tmp_path = dir.join(format!("{}_trim.mp4", match_id_str));
         

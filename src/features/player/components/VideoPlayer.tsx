@@ -344,7 +344,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           ctx.beginPath();
           ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
           ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
-          ctx.lineWidth = 2 + ageRatio * 3;
+          ctx.lineWidth = 3 + ageRatio * 5;
           const r = Math.floor(255 + ageRatio * (0 - 255));
           const g = Math.floor(200 + ageRatio * (150 - 200));
           const b = Math.floor(50 + ageRatio * (255 - 50));
@@ -355,16 +355,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       const clicks = recentEvents.filter(e => e.evt === "left_click" || e.evt === "right_click");
       for (const click of clicks) {
         const age = adjustedCt - click.t;
-        if (age > 0.5) continue;
-        const ageRatio = age / 0.5;
-        const radius = 5 + ageRatio * 25;
-        const opacity = 1 - ageRatio;
+        if (age > 0.6) continue;
+        const ageRatio = Math.max(0, 1 - (age / 0.6));
+        const radius = 8 + (1 - ageRatio) * 15;
+        const opacity = ageRatio;
+
+        const r = Math.floor(255 + ageRatio * (0 - 255));
+        const g = Math.floor(200 + ageRatio * (150 - 200));
+        const b = Math.floor(50 + ageRatio * (255 - 50));
+        
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        
+        // Anillo exterior
         ctx.beginPath();
         ctx.arc(click.x * scaleX, click.y * scaleY, radius, 0, Math.PI * 2);
-        ctx.lineWidth = 2;
-        if (click.evt === "left_click") ctx.strokeStyle = `rgba(0, 255, 100, ${opacity})`;
-        else ctx.strokeStyle = `rgba(255, 50, 50, ${opacity})`;
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity * 0.8})`;
         ctx.stroke();
+
+        // Núcleo interior brillante
+        ctx.beginPath();
+        ctx.arc(click.x * scaleX, click.y * scaleY, radius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.fill();
+        ctx.restore();
       }
     };
     rafRef.current = requestAnimationFrame(render);

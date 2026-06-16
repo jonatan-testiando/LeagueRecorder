@@ -758,10 +758,13 @@ pub async fn upload_to_catbox(path: String) -> Result<String, String> {
 
     let form = multipart::Form::new()
         .text("reqtype", "fileupload")
-        .text("userhash", "")
         .part("fileToUpload", part);
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .map_err(|e| format!("Error construyendo cliente: {}", e))?;
+
     let res = client.post("https://catbox.moe/user/api.php")
         .multipart(form)
         .send()

@@ -20,6 +20,7 @@ pub struct ActiveMatchState {
     pub is_auto_recording: Mutex<bool>,
     pub apm_samples: Mutex<Vec<(f64, u64)>>,              // (tiempo de juego, acciones acumuladas)
     pub mouse_events: Mutex<Vec<MouseEventData>>,
+    pub recording_start: Mutex<Option<std::time::Instant>>,
 }
 
 impl Default for ActiveMatchState {
@@ -34,6 +35,7 @@ impl Default for ActiveMatchState {
             is_auto_recording: Mutex::new(false),
             apm_samples: Mutex::new(Vec::new()),
             mouse_events: Mutex::new(Vec::new()),
+            recording_start: Mutex::new(None),
         }
     }
 }
@@ -116,6 +118,7 @@ pub async fn start_manual_recording(
     active_match.events.lock().await.clear();
     active_match.mouse_events.lock().await.clear();
     *active_match.is_auto_recording.lock().await = false;
+    *active_match.recording_start.lock().await = Some(std::time::Instant::now());
     
     Ok(path)
 }
@@ -189,7 +192,7 @@ pub fn spawn_background_monitor(
             let mut last_ult_time: f64 = -100.0;
 
             loop {
-                tokio::time::sleep(Duration::from_secs(3)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
 
                 // Comprobar si el servidor local está vivo llamando a get_events().
                 // Si responde Ok, significa que el juego está activo (independiente de si algún endpoint da 404 momentáneo).
@@ -235,6 +238,8 @@ pub fn spawn_background_monitor(
                     // Iniciar grabación
                     if let Err(e) = start_recording(&match_id, &recorder_state) {
                         eprintln!("Error al iniciar grabación automática: {}", e);
+                    } else {
+                        *active_match.recording_start.lock().await = Some(std::time::Instant::now());
                     }
                 } else if !lol_running && recording {
                     // Salida brusca SIN evento GameEnd (cierre/crash). Usamos ticks de gracia
@@ -319,15 +324,18 @@ pub fn spawn_background_monitor(
                     };
                     if !raw_mouse_events.is_empty() {
                         let mut me_guard = active_match.mouse_events.lock().await;
-                        for (inst, x, y, evt_str) in raw_mouse_events {
-                            let ago = last_game_time_at.saturating_duration_since(inst).as_secs_f64();
-                            let gt = (last_game_time - ago).max(0.0);
-                            me_guard.push(MouseEventData {
-                                t: gt,
-                                x,
-                                y,
-                                evt: evt_str,
-                            });
+                        let rec_start_guard = active_match.recording_start.lock().await;
+                        if let Some(rec_start) = *rec_start_guard {
+                            for (inst, x, y, evt_str) in raw_mouse_events {
+                                // Usamos el instante relativo al momento en que empezó el video
+                                let gt = inst.saturating_duration_since(rec_start).as_secs_f64();
+                                me_guard.push(MouseEventData {
+                                    t: gt,
+                                    x,
+                                    y,
+                                    evt: evt_str,
+                                });
+                            }
                         }
                     }
 

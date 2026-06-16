@@ -7,6 +7,7 @@ export const ClipsGallery: React.FC = () => {
   const [clips, setClips] = useState<ClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
+  const [links, setLinks] = useState<Record<string, string>>({});
 
   const fetchClips = async () => {
     try {
@@ -27,8 +28,9 @@ export const ClipsGallery: React.FC = () => {
     setUploading(clip.path);
     try {
       const link = await invoke<string>("upload_to_catbox", { path: clip.path });
+      setLinks(prev => ({ ...prev, [clip.path]: link }));
       await navigator.clipboard.writeText(link);
-      alert("¡Subido con éxito! El link se ha copiado a tu portapapeles:\n" + link);
+      alert("¡Subido con éxito! El link se ha copiado a tu portapapeles.");
     } catch (e) {
       alert("Error al subir: " + e);
     } finally {
@@ -77,14 +79,21 @@ export const ClipsGallery: React.FC = () => {
               <span style={styles.clipName}>{clip.name}</span>
               <span style={styles.clipMatch}>De: {clip.match_id}</span>
               <div style={styles.actions}>
-                <button 
-                  onClick={() => handleUpload(clip)} 
-                  disabled={uploading === clip.path}
-                  style={{...styles.actionBtn, background: "var(--accent-violet)", border: "none", color: "#fff", flex: 1}}
-                >
-                  {uploading === clip.path ? <div className="spinner" style={{width: 14, height: 14, borderWidth: 2}} /> : <UploadCloud size={14} />}
-                  {uploading === clip.path ? "Subiendo..." : "Subir a la nube (Catbox)"}
-                </button>
+                {links[clip.path] ? (
+                  <div style={{ display: "flex", width: "100%", gap: "8px", background: "rgba(0,0,0,0.3)", padding: "4px", borderRadius: "4px" }}>
+                    <input readOnly value={links[clip.path]} style={{ flex: 1, background: "transparent", color: "#fff", border: "none", fontSize: "11px", outline: "none" }} />
+                    <button onClick={() => { navigator.clipboard.writeText(links[clip.path]); alert("Copiado!"); }} style={{ background: "var(--accent-blue)", border: "none", color: "#fff", borderRadius: "4px", padding: "4px 8px", cursor: "pointer", fontSize: "11px" }}>Copiar</button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => handleUpload(clip)} 
+                    disabled={uploading === clip.path}
+                    style={{...styles.actionBtn, background: "var(--accent-violet)", border: "none", color: "#fff", flex: 1}}
+                  >
+                    {uploading === clip.path ? <div className="spinner" style={{width: 14, height: 14, borderWidth: 2}} /> : <UploadCloud size={14} />}
+                    {uploading === clip.path ? "Subiendo..." : "Subir a la nube"}
+                  </button>
+                )}
               </div>
             </div>
           </div>

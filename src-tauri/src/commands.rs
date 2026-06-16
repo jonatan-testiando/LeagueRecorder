@@ -697,6 +697,7 @@ pub async fn export_clip(
             "-i", &video_path,
             "-t", &duration.to_string(),
             "-c", "copy",
+            "-movflags", "faststart",
             &clip_path.to_string_lossy(),
         ])
         .output()
@@ -757,23 +758,26 @@ pub async fn upload_to_catbox(path: String) -> Result<String, String> {
         .map_err(|_| "Error configurando el mime type".to_string())?;
 
     let form = multipart::Form::new()
-        .text("reqtype", "fileupload")
-        .part("fileToUpload", part);
+        .part("files[]", part);
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         .build()
         .map_err(|e| format!("Error construyendo cliente: {}", e))?;
 
-    let res = client.post("https://catbox.moe/user/api.php")
+    let res = client.post("https://uguu.se/api.php?d=upload-tool")
         .multipart(form)
         .send()
         .await
         .map_err(|e| format!("Subida fallida: {}", e))?;
 
     if res.status().is_success() {
-        let text = res.text().await.map_err(|e| e.to_string())?;
-        Ok(text)
+        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+        if let Some(url) = json["files"][0]["url"].as_str() {
+            Ok(url.to_string())
+        } else {
+            Err("Error parseando URL de Uguu".to_string())
+        }
     } else {
         Err(format!("Error en el servidor: {}", res.status()))
     }

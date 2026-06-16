@@ -757,28 +757,35 @@ pub async fn upload_to_catbox(path: String) -> Result<String, String> {
         .mime_str("video/mp4")
         .map_err(|_| "Error configurando el mime type".to_string())?;
 
-    let form = multipart::Form::new()
-        .part("files[]", part);
-
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
         .build()
         .map_err(|e| format!("Error construyendo cliente: {}", e))?;
 
-    let res = client.post("https://uguu.se/api.php?d=upload-tool")
+    let servers_res = client.get("https://api.gofile.io/servers").send().await
+        .map_err(|e| format!("Error obteniendo servidor GoFile: {}", e))?;
+    let servers_json: serde_json::Value = servers_res.json().await.map_err(|e| e.to_string())?;
+    
+    let server_name = servers_json["data"]["servers"][0]["name"].as_str()
+        .ok_or_else(|| "No se encontró servidor de GoFile".to_string())?;
+
+    let upload_url = format!("https://{}.gofile.io/contents/upload", server_name);
+    let form = multipart::Form::new().part("file", part);
+
+    let res = client.post(&upload_url)
         .multipart(form)
         .send()
         .await
-        .map_err(|e| format!("Subida fallida: {}", e))?;
+        .map_err(|e| format!("Subida fallida a GoFile: {}", e))?;
 
     if res.status().is_success() {
         let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        if let Some(url) = json["files"][0]["url"].as_str() {
+        if let Some(url) = json["data"]["downloadPage"].as_str() {
             Ok(url.to_string())
         } else {
-            Err("Error parseando URL de Uguu".to_string())
+            Err("Error parseando URL de GoFile".to_string())
         }
     } else {
-        Err(format!("Error en el servidor: {}", res.status()))
+        Err(format!("Error en el servidor GoFile: {}", res.status()))
     }
 }

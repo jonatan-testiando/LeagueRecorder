@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { Film, UploadCloud } from "lucide-react";
 import { ClipMetadata } from "../../../types";
 
 export const ClipsGallery: React.FC = () => {
+  const streamUrl = (path: string): string => 
+    `stream://localhost/${encodeURIComponent(path)}`;
+
   const [clips, setClips] = useState<ClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -69,10 +72,10 @@ export const ClipsGallery: React.FC = () => {
           <div key={clip.path} style={styles.card}>
             <div style={styles.thumbnailWrapper}>
               <video 
-                src={convertFileSrc(clip.path)} 
+                src={streamUrl(clip.path)} 
                 style={styles.videoPreview} 
                 controls
-                preload="auto"
+                preload="metadata"
               />
             </div>
             <div style={styles.cardInfo}>

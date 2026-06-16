@@ -136,7 +136,7 @@ pub async fn stop_manual_recording(
         let metadata = MatchMetadata {
             id: id.clone(),
             game_duration: 30.0, // Simulado
-            video_path: crate::storage::get_videos_dir().join(format!("{}.mp4", id)).to_string_lossy().to_string(),
+            video_path: crate::storage::get_match_dir(&id).join(format!("{}.mp4", id)).to_string_lossy().to_string(),
             result: "Victory".to_string(),
             champion: active_match.champion.lock().await.clone(),
             date: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -429,8 +429,8 @@ async fn finalize_match(
     }
 
     let mut final_duration = duration;
-    let dir = crate::storage::get_videos_dir();
     let match_id_str = match_id.clone();
+    let dir = crate::storage::get_match_dir(&match_id_str);
     
     // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 8 segundos (o 4s) 
     // y recortamos físicamente el video para que no se vea el escritorio.
@@ -677,4 +677,34 @@ fn map_lol_event(
         time: ev.event_time,
         description,
     })
+}
+
+#[tauri::command]
+pub async fn export_clip(
+    match_id: String,
+    video_path: String,
+    start_time: f64,
+    duration: f64,
+) -> Result<String, String> {
+    let dir = crate::storage::get_match_dir(&match_id);
+    let clip_id = format!("{}_clip_{}", match_id, chrono::Local::now().format("%H%M%S"));
+    let clip_path = dir.join(format!("{}.mp4", clip_id));
+
+    let output = std::process::Command::new("ffmpeg")
+        .args(&[
+            "-ss", &start_time.to_string(),
+            "-i", &video_path,
+            "-t", &duration.to_string(),
+            "-c", "copy",
+            &clip_path.to_string_lossy(),
+        ])
+        .output()
+        .map_err(|e| format!("Fallo al ejecutar ffmpeg: {}", e))?;
+
+    if output.status.success() {
+        Ok(clip_path.to_string_lossy().to_string())
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Error en ffmpeg: {}", err))
+    }
 }

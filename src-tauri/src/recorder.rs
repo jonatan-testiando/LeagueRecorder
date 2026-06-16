@@ -1,7 +1,7 @@
 use std::process::{Command, Child, Stdio};
 use std::sync::Mutex;
 use std::io::Write;
-use crate::storage::get_videos_dir;
+use crate::storage::get_match_dir;
 
 pub struct RecorderState {
     pub child_process: Mutex<Option<Child>>,
@@ -243,7 +243,7 @@ pub fn start_recording(match_id: &str, state: &RecorderState) -> Result<String, 
         return Err("La grabación ya está en curso".to_string());
     }
 
-    let dir = get_videos_dir();
+    let dir = get_match_dir(match_id);
     let video_path = dir.join(format!("{}.mp4", match_id));
     let video_path_str = video_path.to_str().ok_or("Ruta de video inválida")?;
     let ffmpeg_exe = get_ffmpeg_executable();

@@ -1,12 +1,13 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent } from "../../../types";
+import { invoke } from "@tauri-apps/api/core";
 import { outcome } from "../../../core/matchStats";
 import { 
   Swords, Skull, Handshake, Flame, Droplet, 
   Orbit, Crown, Eye, TowerControl, BrickWall, 
   Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, 
-  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2
+  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff
 } from "lucide-react";
 
 const streamUrl = (path: string): string =>
@@ -120,13 +121,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [duration, setDuration] = useState<number>(match.game_duration || 0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [volume, setVolume] = useState<number>(1);
+  const [volume, setVolume] = useState<number>(0.5);
   const [muted, setMuted] = useState<boolean>(false);
-  const [clipMode, setClipMode] = useState<boolean>(true);
   const [activeEventTime, setActiveEventTime] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
+  const [showTracker, setShowTracker] = useState<boolean>(true);
+  const [showClipModal, setShowClipModal] = useState<boolean>(false);
+  const [clipStart, setClipStart] = useState<number>(0);
+  const [clipEnd, setClipEnd] = useState<number>(0);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
 
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -176,10 +181,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   }, [duration]);
 
   const jumpToClip = useCallback((eventTime: number) => {
-    clipEndRef.current = clipMode ? eventTime + CLIP_AFTER : null;
+    clipEndRef.current = eventTime + CLIP_AFTER;
     setActiveEventTime(eventTime);
     seekTo(Math.max(0, eventTime - CLIP_BEFORE), true);
-  }, [clipMode, seekTo]);
+  }, [seekTo]);
 
   const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
     const times = match.events
@@ -237,6 +242,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const handlePointerLeave = () => {
     if (!isDragging) setHoverPct(null);
+  };
+
+  const openClipModal = () => {
+    setClipStart(Math.max(0, currentTime - 10));
+    setClipEnd(Math.min(duration, currentTime + 10));
+    setShowClipModal(true);
   };
 
   const updateScrub = (clientX: number, playAfter: boolean) => {
@@ -413,7 +424,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           />
           {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
           {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>No se pudo cargar el video</span></div>}
-          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5 }} />
+          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
           <div style={styles.videoProgressWrapper}>
             <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
               {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
@@ -425,12 +436,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={handleVolumeChange} style={styles.volumeSlider} />
             </div>
             <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "auto", marginRight: "16px" }}>
-              <span style={{ color: "#8b949e", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
-                <MousePointer2 size={12} /> Sync
-              </span>
-              <input type="range" min="-3" max="3" step="0.1" value={mouseSync} onChange={(e) => { const val = parseFloat(e.target.value); setMouseSync(val); localStorage.setItem("mouseSyncOffset", val.toString()); }} style={{...styles.volumeSlider, width: "60px"}} />
-              <span style={{ color: "#8b949e", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", marginRight: "16px" }}>
+              <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Mostrar/Ocultar Ratón">
+                {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
+              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ color: "#8b949e", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                  <MousePointer2 size={12} /> Sync
+                </span>
+                <input type="range" min="-3" max="3" step="0.1" value={mouseSync} onChange={(e) => { const val = parseFloat(e.target.value); setMouseSync(val); localStorage.setItem("mouseSyncOffset", val.toString()); }} style={{...styles.volumeSlider, width: "60px"}} />
+                <span style={{ color: "#8b949e", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
+              </div>
             </div>
             <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
           </div>
@@ -440,7 +456,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <div style={styles.timelineHeaderRow}>
             <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
             <div style={styles.timelineHeaderRight}>
-              <button onClick={() => setClipMode(c => !c)} style={{...styles.ghostBtn, color: clipMode ? "var(--text-primary)" : "var(--text-muted)"}}>
+              <button onClick={openClipModal} style={{...styles.ghostBtn, color: "var(--text-primary)"}}>
                 <Scissors size={14} /> Clip
               </button>
             </div>
@@ -564,6 +580,49 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title="Evento siguiente (N)">Next <ChevronRight size={16} /></button>
         </div>
       </div>
+      )}
+
+      {/* Clip Modal */}
+      {showClipModal && (
+        <div style={{...styles.centerOverlay, zIndex: 100}}>
+          <div style={{ background: "var(--bg-card)", padding: "20px", borderRadius: "10px", width: "400px", border: "1px solid var(--border-subtle)" }}>
+            <h3 style={{ color: "white", marginTop: 0 }}>Crear Clip</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>Selecciona el tiempo de inicio y fin para exportar el clip sin recodificar (súper rápido).</p>
+            
+            <div style={{ display: "flex", gap: "20px", marginBottom: "20px" }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", color: "white", fontSize: "12px", marginBottom: "5px" }}>Inicio (segundos)</label>
+                <input type="number" step="0.1" value={clipStart} onChange={e => setClipStart(parseFloat(e.target.value) || 0)} style={{ width: "100%", background: "var(--bg-app)", color: "white", border: "1px solid var(--border-subtle)", padding: "8px", borderRadius: "4px" }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: "block", color: "white", fontSize: "12px", marginBottom: "5px" }}>Fin (segundos)</label>
+                <input type="number" step="0.1" value={clipEnd} onChange={e => setClipEnd(parseFloat(e.target.value) || 0)} style={{ width: "100%", background: "var(--bg-app)", color: "white", border: "1px solid var(--border-subtle)", padding: "8px", borderRadius: "4px" }} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button onClick={() => setShowClipModal(false)} style={{ padding: "8px 16px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}>Cancelar</button>
+              <button 
+                onClick={async () => {
+                  setIsExporting(true);
+                  try {
+                    const dur = Math.max(0.1, clipEnd - clipStart);
+                    await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
+                    setShowClipModal(false);
+                    alert("¡Clip exportado con éxito en la carpeta del video!");
+                  } catch (e) {
+                    alert("Error exportando clip: " + e);
+                  } finally {
+                    setIsExporting(false);
+                  }
+                }} 
+                disabled={isExporting}
+                style={{ padding: "8px 16px", background: "var(--accent-violet)", border: "none", color: "white", borderRadius: "5px", cursor: isExporting ? "not-allowed" : "pointer", fontWeight: "bold" }}>
+                {isExporting ? "Exportando..." : "Exportar Clip"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -47,8 +47,16 @@ pub fn get_videos_dir() -> PathBuf {
     path
 }
 
+pub fn get_match_dir(id: &str) -> PathBuf {
+    let dir = get_videos_dir().join(id);
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir
+}
+
 pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
-    let dir = get_videos_dir();
+    let dir = get_match_dir(&metadata.id);
     let file_path = dir.join(format!("{}.json", metadata.id));
     let json_content = serde_json::to_string_pretty(metadata)
         .map_err(|e| format!("Error serializando JSON: {}", e))?;
@@ -62,15 +70,27 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
     let dir = get_videos_dir();
     let mut matches = Vec::new();
     
+    let mut process_file = |path: &Path| {
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(metadata) = serde_json::from_str::<MatchMetadata>(&content) {
+                    matches.push(metadata);
+                }
+            }
+        }
+    };
+
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Ok(content) = fs::read_to_string(&path) {
-                    if let Ok(metadata) = serde_json::from_str::<MatchMetadata>(&content) {
-                        matches.push(metadata);
+            if path.is_dir() {
+                if let Ok(sub_entries) = fs::read_dir(&path) {
+                    for sub_entry in sub_entries.flatten() {
+                        process_file(&sub_entry.path());
                     }
                 }
+            } else if path.is_file() {
+                process_file(&path);
             }
         }
     }
@@ -81,15 +101,22 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
 }
 
 pub fn delete_match_files(id: &str) -> Result<(), String> {
-    let dir = get_videos_dir();
-    let json_path = dir.join(format!("{}.json", id));
-    let mp4_path = dir.join(format!("{}.mp4", id));
+    let match_dir = get_match_dir(id);
+    if match_dir.exists() {
+        let _ = fs::remove_dir_all(&match_dir);
+        return Ok(());
+    }
+    
+    // Retrocompatibilidad
+    let root_dir = get_videos_dir();
+    let json_path = root_dir.join(format!("{}.json", id));
+    let mp4_path = root_dir.join(format!("{}.mp4", id));
     
     if json_path.exists() {
-        fs::remove_file(json_path).map_err(|e| format!("No se pudo borrar el JSON: {}", e))?;
+        let _ = fs::remove_file(json_path);
     }
     if mp4_path.exists() {
-        fs::remove_file(mp4_path).map_err(|e| format!("No se pudo borrar el video MP4: {}", e))?;
+        let _ = fs::remove_file(mp4_path);
     }
     Ok(())
 }

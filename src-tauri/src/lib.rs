@@ -13,7 +13,7 @@ use commands::{
     ActiveMatchState, spawn_background_monitor,
     get_recorded_matches, delete_match, get_recorder_status, get_audio_status,
     get_ultimate_settings, set_ultimate_settings,
-    start_manual_recording, stop_manual_recording
+    start_manual_recording, stop_manual_recording, export_clip
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,7 +53,8 @@ pub fn run() {
             get_ultimate_settings,
             set_ultimate_settings,
             start_manual_recording,
-            stop_manual_recording
+            stop_manual_recording,
+            export_clip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

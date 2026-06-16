@@ -24,7 +24,7 @@ export const App: React.FC = () => {
       <div style={styles.sidebar}>
         <div style={styles.logoArea}>
           <Scissors color="var(--accent-violet)" size={28} strokeWidth={2.5} style={{ transform: "rotate(-45deg)" }} />
-          <span style={styles.logoText}>ASCENT</span>
+          <span style={styles.logoText}>My Recorder</span>
         </div>
 
         <div style={styles.navSection}>

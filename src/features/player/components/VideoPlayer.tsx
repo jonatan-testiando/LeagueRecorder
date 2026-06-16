@@ -344,7 +344,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           ctx.beginPath();
           ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
           ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
-          ctx.lineWidth = 3 + ageRatio * 5;
+          ctx.lineWidth = 2.5 + ageRatio * 4;
           const r = Math.floor(255 + ageRatio * (0 - 255));
           const g = Math.floor(200 + ageRatio * (150 - 200));
           const b = Math.floor(50 + ageRatio * (255 - 50));

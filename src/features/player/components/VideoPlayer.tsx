@@ -125,6 +125,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [clipMode, setClipMode] = useState<boolean>(true);
   const [activeEventTime, setActiveEventTime] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [hoverPct, setHoverPct] = useState<number | null>(null);
 
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -210,13 +212,40 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     setLoadState("ready");
   };
 
-  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    updateScrub(e.clientX, true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (progressBarRef.current) {
+      const rect = progressBarRef.current.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      setHoverPct(pct);
+    }
+    if (isDragging) {
+      updateScrub(e.clientX, false);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setIsDragging(false);
+    setHoverPct(null);
+  };
+
+  const handlePointerLeave = () => {
+    if (!isDragging) setHoverPct(null);
+  };
+
+  const updateScrub = (clientX: number, playAfter: boolean) => {
     if (progressBarRef.current && duration > 0) {
       const rect = progressBarRef.current.getBoundingClientRect();
-      const pct = (e.clientX - rect.left) / rect.width;
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
       clipEndRef.current = null;
       setActiveEventTime(null);
-      seekTo(pct * duration, true);
+      seekTo(pct * duration, playAfter);
     }
   };
 
@@ -401,7 +430,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             </div>
           </div>
 
-          <div style={styles.timelineGraph} ref={progressBarRef} onClick={handleProgressBarClick}>
+          <div 
+            style={styles.timelineGraph} 
+            ref={progressBarRef} 
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+          >
             {/* APM Graph */}
             {apmSeries.length >= 2 && (
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={styles.graphSvg}>
@@ -437,6 +473,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
             {/* Current Time Line */}
             <div style={{ ...styles.playhead, left: `${progressPct}%` }} />
+            
+            {/* Hover Scrubber Line */}
+            {hoverPct !== null && (
+              <div style={{ ...styles.playheadHover, left: `${hoverPct * 100}%` }} />
+            )}
             
             {/* Axis marks */}
             <div style={styles.axisMarks}>
@@ -691,7 +732,18 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "#fff",
     pointerEvents: "none",
     zIndex: 20,
-    opacity: 0.7,
+    opacity: 0.9,
+    boxShadow: "0 0 8px rgba(255,255,255,0.8)",
+  },
+  playheadHover: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: "1px",
+    backgroundColor: "var(--accent-violet)",
+    pointerEvents: "none",
+    zIndex: 15,
+    opacity: 0.5,
   },
   axisMarks: {
     position: "absolute",

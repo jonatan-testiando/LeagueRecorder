@@ -1,0 +1,190 @@
+:root {
+  /* =========================================================================
+     Sistema de Diseño — Tema "Hextech" (inspirado en League of Legends)
+     Azules profundos + oro hextech + acento turquesa. Jerarquía y profundidad.
+     ========================================================================= */
+
+  /* Superficies (de más oscura a más elevada) */
+  --bg-app: hsl(222, 47%, 7%);
+  --bg-panel: hsl(222, 40%, 10%);
+  --bg-card: hsl(222, 34%, 13%);
+  --bg-elevated: hsl(222, 30%, 17%);
+  --bg-hover: hsl(222, 28%, 21%);
+
+  /* Bordes */
+  --border-subtle: hsl(222, 25%, 18%);
+  --border-strong: hsl(222, 22%, 28%);
+  --border-focus: hsl(174, 70%, 45%);
+  --border-gold: hsla(41, 50%, 62%, 0.45);
+
+  /* Texto con jerarquía */
+  --text-primary: hsl(210, 30%, 96%);
+  --text-secondary: hsl(215, 18%, 72%);
+  --text-muted: hsl(215, 14%, 50%);
+
+  /* Acentos de marca */
+  --accent-gold: hsl(41, 52%, 62%);      /* oro hextech */
+  --accent-gold-soft: hsl(41, 45%, 70%);
+  --accent-blue: hsl(199, 90%, 52%);
+  --accent-teal: hsl(174, 72%, 46%);     /* turquesa hextech */
+  --accent-violet: hsl(265, 82%, 67%);   /* violeta (acento tipo Ascent) */
+
+  /* Resultados y eventos */
+  --color-victory: hsl(150, 60%, 46%);
+  --color-defeat: hsl(355, 70%, 56%);
+
+  --color-kill: hsl(41, 80%, 60%);
+  --color-death: hsl(355, 72%, 58%);
+  --color-assist: hsl(150, 55%, 48%);
+  --color-objective: hsl(270, 72%, 64%);
+
+  /* Gradientes */
+  --gradient-gold: linear-gradient(135deg, hsl(41, 55%, 66%), hsl(38, 50%, 52%));
+  --gradient-violet: linear-gradient(135deg, hsl(278, 82%, 68%), hsl(255, 78%, 60%));
+  --gradient-teal: linear-gradient(135deg, hsl(186, 80%, 48%), hsl(174, 72%, 42%));
+  --gradient-app: radial-gradient(ellipse at 70% -10%, hsl(220, 45%, 14%) 0%, hsl(222, 47%, 7%) 55%);
+  --gradient-victory: linear-gradient(135deg, hsl(150, 55%, 40%), hsl(160, 50%, 30%));
+  --gradient-defeat: linear-gradient(135deg, hsl(355, 60%, 48%), hsl(345, 55%, 36%));
+
+  /* Sombras (profundidad) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.5);
+  --glow-gold: 0 0 0 1px var(--border-gold), 0 8px 24px hsla(41, 60%, 50%, 0.12);
+
+  /* Espaciado (múltiplos de 4) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Radios */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Tipografía */
+  --font-xs: 12px;
+  --font-sm: 14px;
+  --font-md: 16px;
+  --font-lg: 18px;
+  --font-xl: 20px;
+  --font-2xl: 26px;
+  --font-3xl: 34px;
+
+  color-scheme: dark;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--gradient-app);
+  background-attachment: fixed;
+}
+
+#root {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+}
+
+/* Transiciones suaves globales */
+button, a, input {
+  transition: background-color 0.18s ease, border-color 0.18s ease,
+    color 0.18s ease, box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+}
+
+/* ===== Animaciones ===== */
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.82); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease both;
+}
+
+/* Spinner reutilizable */
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--accent-teal);
+  border-radius: var(--radius-full);
+  animation: spin 0.8s linear infinite;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: padding-box;
+}
+
+::selection {
+  background: hsla(41, 55%, 62%, 0.3);
+}

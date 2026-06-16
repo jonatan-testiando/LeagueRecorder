@@ -2,77 +2,78 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
+import { 
+  Swords, Skull, Handshake, Flame, Droplet, 
+  Orbit, Crown, Eye, TowerControl, BrickWall, 
+  Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
+  SkipBack, SkipForward, VolumeX, Volume1, Volume2, Scissors, AlertTriangle, PlayCircle
+} from "lucide-react";
 
 /**
  * Construye la URL de nuestro protocolo de streaming propio (con soporte de Range).
- * En Windows, los protocolos personalizados de Tauri se sirven en http://<scheme>.localhost/
  */
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
 
-// Ventana de clip por evento (estilo Outplayed/Valorant): 10s antes y 10s después.
 const CLIP_BEFORE = 10;
 const CLIP_AFTER = 10;
 
 type Tone = "good" | "bad" | "neutral";
 interface EvMeta {
-  icon: string;
+  icon: React.ReactNode;
   color: string;
   label: string;
   tone: Tone;
   category: "kills" | "deaths" | "assists" | "objectives" | "structures" | "abilities" | "other";
 }
 
-const ULT_COLOR = "hsl(280, 80%, 66%)";
+const ULT_COLOR = "var(--accent-violet)";
+const MULTIKILL_COLOR = "var(--accent-gold)";
+const BARON_COLOR = "hsl(280, 80%, 70%)";
 
-const MULTIKILL_COLOR = "hsl(25, 92%, 56%)";
-const BARON_COLOR = "hsl(265, 70%, 62%)";
-
-// Para objetivos (dragón/barón/heraldo): "ally" = lo tomó tu equipo (bueno).
 const objTone = (s?: string): Tone => (s === "ally" ? "good" : s === "enemy" ? "bad" : "neutral");
-// Para estructuras (torre/inhib): "ally" = estructura aliada caída (malo).
 const structTone = (s?: string): Tone => (s === "ally" ? "bad" : s === "enemy" ? "good" : "neutral");
 const objColor = (s: string | undefined, base: string) => (s === "enemy" ? "var(--color-death)" : base);
 const structColor = (s?: string) => (s === "ally" ? "var(--color-death)" : "var(--accent-teal)");
 
 function eventMeta(ev: MatchEvent): EvMeta {
+  const size = 16;
   switch (ev.type) {
     case "ChampionKill":
       if (ev.subtype === "kill")
-        return { icon: "⚔️", color: "var(--color-kill)", label: "Asesinato", tone: "good", category: "kills" };
+        return { icon: <Swords size={size} />, color: "var(--color-kill)", label: "Asesinato", tone: "good", category: "kills" };
       if (ev.subtype === "death")
-        return { icon: "💀", color: "var(--color-death)", label: "Muerte", tone: "bad", category: "deaths" };
-      return { icon: "🤝", color: "var(--color-assist)", label: "Asistencia", tone: "good", category: "assists" };
+        return { icon: <Skull size={size} />, color: "var(--color-death)", label: "Muerte", tone: "bad", category: "deaths" };
+      return { icon: <Handshake size={size} />, color: "var(--color-assist)", label: "Asistencia", tone: "good", category: "assists" };
     case "Multikill":
-      return { icon: "🔥", color: MULTIKILL_COLOR, label: "Multi-asesinato", tone: "good", category: "kills" };
+      return { icon: <Flame size={size} />, color: MULTIKILL_COLOR, label: "Multi-asesinato", tone: "good", category: "kills" };
     case "FirstBlood":
-      return { icon: "🩸", color: "var(--color-kill)", label: "Primera sangre", tone: "good", category: "kills" };
+      return { icon: <Droplet size={size} />, color: "var(--color-kill)", label: "Primera sangre", tone: "good", category: "kills" };
     case "DragonKill":
-      return { icon: "🐉", color: objColor(ev.subtype, "var(--color-objective)"), label: "Dragón", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <Orbit size={size} />, color: objColor(ev.subtype, "var(--color-objective)"), label: "Dragón", tone: objTone(ev.subtype), category: "objectives" };
     case "BaronKill":
-      return { icon: "👑", color: objColor(ev.subtype, BARON_COLOR), label: "Barón Nashor", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <Crown size={size} />, color: objColor(ev.subtype, BARON_COLOR), label: "Barón Nashor", tone: objTone(ev.subtype), category: "objectives" };
     case "HeraldKill":
-      return { icon: "👁️", color: objColor(ev.subtype, "var(--accent-blue)"), label: "Heraldo", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <Eye size={size} />, color: objColor(ev.subtype, "var(--accent-blue)"), label: "Heraldo", tone: objTone(ev.subtype), category: "objectives" };
     case "TowerKill":
-      return { icon: "🏰", color: structColor(ev.subtype), label: "Torre", tone: structTone(ev.subtype), category: "structures" };
+      return { icon: <TowerControl size={size} />, color: structColor(ev.subtype), label: "Torre", tone: structTone(ev.subtype), category: "structures" };
     case "InhibKill":
-      return { icon: "🧱", color: structColor(ev.subtype), label: "Inhibidor", tone: structTone(ev.subtype), category: "structures" };
+      return { icon: <BrickWall size={size} />, color: structColor(ev.subtype), label: "Inhibidor", tone: structTone(ev.subtype), category: "structures" };
     case "Ultimate":
-      return { icon: "✨", color: ULT_COLOR, label: "Ultimate (R)", tone: "good", category: "abilities" };
+      return { icon: <Sparkles size={size} />, color: ULT_COLOR, label: "Ultimate (R)", tone: "good", category: "abilities" };
     case "GameStart":
-      return { icon: "🏁", color: "var(--text-muted)", label: "Inicio", tone: "neutral", category: "other" };
+      return { icon: <Flag size={size} />, color: "var(--text-muted)", label: "Inicio", tone: "neutral", category: "other" };
     case "GameEnd":
       return ev.subtype === "win"
-        ? { icon: "🏆", color: "var(--color-victory)", label: "Victoria", tone: "good", category: "other" }
+        ? { icon: <Trophy size={size} />, color: "var(--color-victory)", label: "Victoria", tone: "good", category: "other" }
         : ev.subtype === "lose"
-        ? { icon: "🏳️", color: "var(--color-defeat)", label: "Derrota", tone: "bad", category: "other" }
-        : { icon: "🏁", color: "var(--text-muted)", label: "Fin", tone: "neutral", category: "other" };
+        ? { icon: <FlagOff size={size} />, color: "var(--color-defeat)", label: "Derrota", tone: "bad", category: "other" }
+        : { icon: <Flag size={size} />, color: "var(--text-muted)", label: "Fin", tone: "neutral", category: "other" };
     default:
-      return { icon: "•", color: "var(--accent-blue)", label: ev.type, tone: "neutral", category: "other" };
+      return { icon: <Sparkles size={size} />, color: "var(--accent-blue)", label: ev.type, tone: "neutral", category: "other" };
   }
 }
 
-// Genera un path SVG suave (interpolación Catmull-Rom → curvas de Bézier).
 function smoothLinePath(pts: [number, number][]): string {
   if (pts.length < 2) return "";
   let d = `M${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
@@ -90,14 +91,14 @@ function smoothLinePath(pts: [number, number][]): string {
   return d;
 }
 
-const FILTERS = [
-  { id: "all", label: "Todos" },
-  { id: "kills", label: "⚔️ Kills" },
-  { id: "deaths", label: "💀 Muertes" },
-  { id: "assists", label: "🤝 Asist." },
-  { id: "objectives", label: "🐉 Objetivos" },
-  { id: "structures", label: "🏰 Estructuras" },
-  { id: "abilities", label: "✨ Ultis" },
+const FILTERS: { id: string; label: string; icon: React.ReactNode }[] = [
+  { id: "all", label: "Todos", icon: null },
+  { id: "kills", label: "Kills", icon: <Swords size={14} /> },
+  { id: "deaths", label: "Muertes", icon: <Skull size={14} /> },
+  { id: "assists", label: "Asist.", icon: <Handshake size={14} /> },
+  { id: "objectives", label: "Objetivos", icon: <Orbit size={14} /> },
+  { id: "structures", label: "Estructuras", icon: <TowerControl size={14} /> },
+  { id: "abilities", label: "Ultis", icon: <Sparkles size={14} /> },
 ];
 
 type LoadState = "loading" | "ready" | "error";
@@ -154,7 +155,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const handlePlayPause = useCallback(() => {
     const v = videoRef.current;
     if (!v || loadState === "error") return;
-    clipEndRef.current = null; // reproducción libre cancela el límite de clip
+    clipEndRef.current = null;
     if (v.paused) v.play().catch(() => {});
     else v.pause();
   }, [loadState]);
@@ -168,14 +169,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     if (play && v.paused) v.play().catch(() => {});
   }, [duration]);
 
-  // Salta al INICIO del clip (10s antes del evento) y, en modo clip, se detiene 10s después.
   const jumpToClip = useCallback((eventTime: number) => {
     clipEndRef.current = clipMode ? eventTime + CLIP_AFTER : null;
     setActiveEventTime(eventTime);
     seekTo(Math.max(0, eventTime - CLIP_BEFORE), true);
   }, [clipMode, seekTo]);
 
-  // Navega al evento anterior/siguiente (jugada por jugada).
   const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
     const times = match.events
       .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
@@ -194,7 +193,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const v = videoRef.current;
     if (!v) return;
     setCurrentTime(v.currentTime);
-    // En modo clip, pausar al final de la ventana del evento.
     if (clipEndRef.current !== null && v.currentTime >= clipEndRef.current) {
       v.pause();
       clipEndRef.current = null;
@@ -264,7 +262,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     return eventMeta(ev).category === activeFilter;
   };
 
-  // Eventos con marca de tiempo (excluye inicio/fin para la barra y segmentos).
   const timedEvents = match.events.filter((ev) => ev.type !== "GameStart" && ev.type !== "GameEnd");
   const barEvents = timedEvents.filter(passesFilter);
   const listEvents = match.events.filter(passesFilter);
@@ -277,7 +274,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const resultLabel = result === "victory" ? "VICTORIA" : result === "defeat" ? "DERROTA" : "PARTIDA";
   const apm = Math.round(match.apm ?? 0);
 
-  // Construir el gráfico de APM (curva suave con relleno) alineado con la barra de tiempo.
   const apmSeries = match.apm_series ?? [];
   const apmPeak = apmSeries.length ? Math.round(Math.max(...apmSeries)) : 0;
   let apmLinePath = "";
@@ -287,7 +283,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const n = apmSeries.length;
     const pts: [number, number][] = apmSeries.map((v, i) => {
       const x = (i / (n - 1)) * 100;
-      const y = 38 - (v / maxApm) * 34; // 38 (suelo) .. 4 (techo)
+      const y = 38 - (v / maxApm) * 34;
       return [x, y];
     });
     apmLinePath = smoothLinePath(pts);
@@ -298,10 +294,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   return (
     <div ref={containerRef} style={styles.container}>
-      {/* Cabecera analítica de la partida (oculta en pantalla completa) */}
       {!isFullscreen && (
         <div style={styles.playerHeader}>
-          <ChampionAvatar champion={match.champion} size={42} ring={resultAccent} />
+          <ChampionAvatar champion={match.champion} size={48} ring={resultAccent} />
           <div style={styles.headerInfo}>
             <span style={styles.headerChamp}>{match.champion}</span>
             <span style={styles.headerSub}>{match.date}</span>
@@ -337,11 +332,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <span style={styles.statLabel}>DURACIÓN</span>
             </div>
           </div>
-          <span style={{ ...styles.headerResult, color: resultAccent, borderColor: resultAccent }}>{resultLabel}</span>
+          <span style={{ ...styles.headerResult, color: resultAccent, borderColor: resultAccent, background: `color-mix(in srgb, ${resultAccent} 10%, transparent)` }}>
+            {resultLabel}
+          </span>
         </div>
       )}
 
-      {/* Video */}
       <div style={styles.videoWrapper}>
         <video
           ref={videoRef}
@@ -367,9 +363,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         )}
         {loadState === "error" && (
           <div style={styles.centerOverlay}>
-            <span style={{ fontSize: "44px" }}>⚠️</span>
+            <AlertTriangle size={48} color="var(--color-defeat)" style={{ marginBottom: "var(--space-3)" }} />
             <span style={styles.overlayText}>No se pudo cargar el video</span>
-            <span style={styles.overlaySub}>El archivo podría estar dañado o vacío (una grabación fallida). Ruta:</span>
+            <span style={styles.overlaySub}>El archivo podría estar dañado o vacío.</span>
             <code style={styles.pathCode}>{match.video_path}</code>
           </div>
         )}
@@ -378,23 +374,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         )}
         {!isPlaying && loadState === "ready" && !buffering && (
           <div style={styles.playOverlay} onClick={handlePlayPause}>
-            <div style={styles.bigPlayButton}>▶</div>
+            <div style={styles.bigPlayButton}>
+              <Play fill="currentColor" size={32} />
+            </div>
           </div>
         )}
       </div>
 
-      {/* Controles */}
       <div style={styles.controlsWrapper}>
         <div style={{ ...styles.progressBarWrapper, paddingTop: "66px" }}>
-          <button onClick={() => goToAdjacentEvent(-1)} style={styles.navBtn} title="Evento anterior (P)">⏮</button>
-          <button onClick={handlePlayPause} style={styles.playToggle} title="Reproducir/Pausar (Espacio)">
-            {isPlaying ? "❚❚" : "▶"}
+          <button onClick={() => goToAdjacentEvent(-1)} style={styles.navBtn} title="Evento anterior (P)">
+            <SkipBack size={16} />
           </button>
-          <button onClick={() => goToAdjacentEvent(1)} style={styles.navBtn} title="Evento siguiente (N)">⏭</button>
+          <button onClick={handlePlayPause} style={styles.playToggle} title="Reproducir/Pausar (Espacio)">
+            {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
+          </button>
+          <button onClick={() => goToAdjacentEvent(1)} style={styles.navBtn} title="Evento siguiente (N)">
+            <SkipForward size={16} />
+          </button>
           <span style={styles.timeLabel}>{formatTime(currentTime)}</span>
 
           <div ref={progressBarRef} onClick={handleProgressBarClick} style={styles.progressBar}>
-            {/* Gráfico de APM (curva suave con relleno, estilo Outplayed) */}
             {apmSeries.length >= 2 && (
               <>
                 <svg viewBox="0 0 100 40" preserveAspectRatio="none" style={styles.sparkline}>
@@ -411,7 +411,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </>
             )}
 
-            {/* Iconos de cada evento por encima de la barra */}
             {duration > 0 && barEvents.map((ev, i) => {
               const meta = eventMeta(ev);
               const pos = (ev.time / duration) * 100;
@@ -420,13 +419,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div
                   key={`ic-${i}`}
                   onClick={(e) => { e.stopPropagation(); jumpToClip(ev.time); }}
-                  title={`${meta.label}: ${ev.description} · ${formatTime(ev.time)}  (clip ${CLIP_BEFORE}s/${CLIP_AFTER}s)`}
+                  title={`${meta.label}: ${ev.description} · ${formatTime(ev.time)}`}
                   style={{
                     ...styles.iconMarker,
                     left: `${pos}%`,
                     borderColor: meta.color,
-                    transform: `translateX(-50%) scale(${isActive ? 1.18 : 1})`,
-                    boxShadow: isActive ? `0 0 10px ${meta.color}` : "var(--shadow-sm)",
+                    color: meta.color,
+                    transform: `translateX(-50%) scale(${isActive ? 1.2 : 1})`,
+                    boxShadow: isActive ? `0 0 12px ${meta.color}` : "var(--shadow-sm)",
                     zIndex: isActive ? 9 : 6,
                   }}
                 >
@@ -435,7 +435,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               );
             })}
 
-            {/* Segmentos de clip (10s antes/después) */}
             {duration > 0 && barEvents.map((ev, i) => {
               const meta = eventMeta(ev);
               const segStart = Math.max(0, ev.time - CLIP_BEFORE);
@@ -452,18 +451,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     left: `${left}%`,
                     width: `${width}%`,
                     backgroundColor: meta.color,
-                    opacity: isActive ? 0.5 : 0.2,
-                    borderColor: isActive ? meta.color : "transparent",
+                    opacity: isActive ? 0.6 : 0.25,
                   }}
                 />
               );
             })}
 
-            {/* Relleno de progreso */}
             <div style={{ ...styles.progressFill, width: `${progressPct}%` }} />
             <div style={{ ...styles.progressThumb, left: `${progressPct}%` }} />
 
-            {/* Marca fina en el instante exacto del evento */}
             {duration > 0 && barEvents.map((ev, i) => {
               const meta = eventMeta(ev);
               const pos = (ev.time / duration) * 100;
@@ -475,7 +471,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
           <div style={styles.volumeGroup}>
             <button onClick={() => setMuted((m) => !m)} style={styles.iconBtn} title={muted ? "Activar sonido (M)" : "Silenciar (M)"}>
-              {muted || volume === 0 ? "🔇" : volume < 0.5 ? "🔉" : "🔊"}
+              {muted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
             </button>
             <input
               type="range" min={0} max={1} step={0.05}
@@ -484,7 +480,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               style={styles.volumeSlider} title="Volumen"
             />
           </div>
-          <button onClick={toggleFullscreen} style={styles.iconBtn} title="Pantalla completa (F)">⛶</button>
+          <button onClick={toggleFullscreen} style={styles.iconBtn} title="Pantalla completa (F)">
+            <Maximize size={16} />
+          </button>
         </div>
 
         <div style={styles.bottomControls}>
@@ -497,9 +495,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   ...styles.filterBtn,
                   color: activeFilter === f.id ? "var(--text-primary)" : "var(--text-secondary)",
                   backgroundColor: activeFilter === f.id ? "var(--bg-elevated)" : "transparent",
-                  borderColor: activeFilter === f.id ? "var(--border-strong)" : "var(--border-subtle)",
+                  borderColor: activeFilter === f.id ? "var(--border-focus)" : "var(--border-subtle)",
                 }}
               >
+                {f.icon && <span style={{ marginRight: "6px", display: "inline-flex", alignItems: "center" }}>{f.icon}</span>}
                 {f.label}
               </button>
             ))}
@@ -516,15 +515,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               }}
               title={`En modo clip, al pulsar un evento se reproduce desde ${CLIP_BEFORE}s antes y se pausa ${CLIP_AFTER}s después`}
             >
-              ✂️ Modo clip {clipMode ? "ON" : "OFF"}
+              <Scissors size={14} style={{ marginRight: "6px" }} />
+              Modo clip {clipMode ? "ON" : "OFF"}
             </button>
-            {!hasAudio && <span style={styles.noAudioBadge} title="Esta grabación no contiene pista de audio">🔇 Sin audio</span>}
+            {!hasAudio && (
+              <span style={styles.noAudioBadge} title="Esta grabación no contiene pista de audio">
+                <VolumeX size={12} style={{ marginRight: "4px" }} />
+                Sin audio
+              </span>
+            )}
             <span style={styles.metaValue}>{match.champion}</span>
           </div>
         </div>
       </div>
 
-      {/* Lista de eventos (oculta en pantalla completa para dar más espacio al video) */}
       {!isFullscreen && (
       <div style={styles.timelineList}>
         <div style={styles.timelineHeader}>
@@ -548,13 +552,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   background: isActive ? "var(--bg-elevated)" : "var(--bg-card)",
                 }}
               >
-                <span style={styles.eventIcon}>{meta.icon}</span>
+                <span style={{ ...styles.eventIcon, color: meta.color }}>{meta.icon}</span>
                 <div style={styles.eventBody}>
                   <span style={styles.eventDesc}>{ev.description}</span>
                   <span style={{ ...styles.eventLabel, color: meta.color }}>{meta.label}</span>
                 </div>
                 <span style={styles.eventTime}>{formatTime(ev.time)}</span>
-                {isSelectable && <span style={styles.eventJump}>▶</span>}
+                {isSelectable && <PlayCircle size={14} color="var(--accent-teal)" style={{ flexShrink: 0 }} />}
               </div>
             );
           })}
@@ -570,39 +574,26 @@ const styles: Record<string, React.CSSProperties> = {
   playerHeader: {
     display: "flex",
     alignItems: "center",
-    gap: "var(--space-3)",
-    padding: "var(--space-3) var(--space-5)",
-    background: "linear-gradient(180deg, var(--bg-panel), var(--bg-app))",
+    gap: "var(--space-4)",
+    padding: "var(--space-4) var(--space-5)",
+    background: "var(--bg-panel)",
     borderBottom: "1px solid var(--border-subtle)",
     flexShrink: 0,
   },
-  headerAvatar: {
-    width: "42px",
-    height: "42px",
-    flexShrink: 0,
-    borderRadius: "var(--radius-full)",
-    background: "linear-gradient(160deg, var(--bg-elevated), var(--bg-app))",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "var(--font-sm)",
-    fontWeight: 800,
-    color: "var(--text-primary)",
-  },
-  headerInfo: { display: "flex", flexDirection: "column", gap: "1px", minWidth: 0 },
-  headerChamp: { fontSize: "var(--font-md)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" },
-  headerSub: { fontSize: "var(--font-xs)", color: "var(--text-muted)" },
-  headerStats: { display: "flex", alignItems: "center", gap: "var(--space-4)", marginLeft: "auto" },
-  statItem: { display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" },
-  statValue: { fontSize: "var(--font-md)", fontWeight: 800, fontFamily: "monospace", display: "flex", gap: "3px" },
+  headerInfo: { display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 },
+  headerChamp: { fontSize: "var(--font-lg)", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" },
+  headerSub: { fontSize: "var(--font-sm)", color: "var(--text-muted)", fontWeight: 500 },
+  headerStats: { display: "flex", alignItems: "center", gap: "var(--space-5)", marginLeft: "auto" },
+  statItem: { display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" },
+  statValue: { fontSize: "var(--font-lg)", fontWeight: 800, fontFamily: "monospace", display: "flex", gap: "4px" },
   statSep: { color: "var(--text-muted)", fontWeight: 400 },
-  statLabel: { fontSize: "9px", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "0.1em" },
-  statDivider: { width: "1px", height: "28px", background: "var(--border-subtle)" },
+  statLabel: { fontSize: "10px", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "0.1em", textTransform: "uppercase" },
+  statDivider: { width: "1px", height: "32px", background: "var(--border-strong)" },
   headerResult: {
-    fontSize: "var(--font-xs)",
+    fontSize: "11px",
     fontWeight: 800,
-    letterSpacing: "0.08em",
-    padding: "4px var(--space-3)",
+    letterSpacing: "0.1em",
+    padding: "6px var(--space-4)",
     borderRadius: "var(--radius-full)",
     border: "1px solid currentColor",
     marginLeft: "var(--space-4)",
@@ -610,47 +601,45 @@ const styles: Record<string, React.CSSProperties> = {
   },
   videoWrapper: { position: "relative", flex: 1.8, backgroundColor: "#000", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", minHeight: 0 },
   video: { width: "100%", height: "100%", maxHeight: "calc(100vh - 450px)", objectFit: "contain", cursor: "pointer" },
-  centerOverlay: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", backgroundColor: "rgba(0,0,0,0.55)", padding: "var(--space-6)", textAlign: "center" },
-  overlayText: { fontSize: "var(--font-md)", fontWeight: 700, color: "var(--text-primary)" },
-  overlaySub: { fontSize: "var(--font-xs)", color: "var(--text-muted)", maxWidth: "480px" },
-  pathCode: { fontSize: "11px", fontFamily: "monospace", color: "var(--text-secondary)", backgroundColor: "var(--bg-card)", padding: "var(--space-2) var(--space-3)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-subtle)", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  bufferOverlay: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
-  playOverlay: { position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
-  bigPlayButton: { width: "76px", height: "76px", borderRadius: "var(--radius-full)", background: "linear-gradient(160deg, rgba(20,30,45,0.92), rgba(10,16,26,0.92))", border: "2px solid var(--accent-gold)", color: "var(--text-primary)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "30px", paddingLeft: "6px", boxShadow: "var(--shadow-lg), 0 0 24px hsla(41,60%,55%,0.25)" },
-  controlsWrapper: { backgroundColor: "var(--bg-panel)", borderTop: "1px solid var(--border-subtle)", borderBottom: "1px solid var(--border-subtle)", padding: "var(--space-4) var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
-  progressBarWrapper: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  navBtn: { width: "32px", height: "32px", flexShrink: 0, borderRadius: "var(--radius-full)", border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
-  playToggle: { width: "38px", height: "38px", flexShrink: 0, borderRadius: "var(--radius-full)", border: "1px solid var(--border-strong)", background: "var(--bg-elevated)", color: "var(--text-primary)", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: "var(--space-2)" },
+  centerOverlay: { position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "var(--space-3)", backgroundColor: "rgba(0,0,0,0.7)", padding: "var(--space-6)", textAlign: "center", backdropFilter: "blur(8px)" },
+  overlayText: { fontSize: "var(--font-lg)", fontWeight: 800, color: "var(--text-primary)" },
+  overlaySub: { fontSize: "var(--font-sm)", color: "var(--text-secondary)", maxWidth: "480px" },
+  pathCode: { fontSize: "12px", fontFamily: "monospace", color: "var(--text-secondary)", backgroundColor: "var(--bg-elevated)", padding: "var(--space-2) var(--space-3)", borderRadius: "var(--radius-sm)", border: "1px solid var(--border-strong)", maxWidth: "90%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  bufferOverlay: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" },
+  playOverlay: { position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background 0.3s ease" },
+  bigPlayButton: { width: "80px", height: "80px", borderRadius: "var(--radius-full)", background: "var(--bg-elevated)", border: "2px solid var(--accent-teal)", color: "var(--accent-teal)", display: "flex", alignItems: "center", justifyContent: "center", paddingLeft: "4px", boxShadow: "var(--glow-teal)" },
+  controlsWrapper: { backgroundColor: "var(--bg-panel)", borderTop: "1px solid var(--border-subtle)", borderBottom: "1px solid var(--border-subtle)", padding: "var(--space-4) var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-4)" },
+  progressBarWrapper: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  navBtn: { width: "36px", height: "36px", flexShrink: 0, borderRadius: "var(--radius-full)", border: "1px solid var(--border-strong)", background: "var(--bg-card)", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" },
+  playToggle: { width: "42px", height: "42px", flexShrink: 0, borderRadius: "var(--radius-full)", border: "none", background: "var(--text-primary)", color: "var(--bg-app)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: "var(--space-2)", boxShadow: "var(--shadow-sm)" },
   sparkline: { position: "absolute", left: 0, top: "-62px", width: "100%", height: "56px", overflow: "visible", pointerEvents: "none", zIndex: 1 },
-  apmBadge: { position: "absolute", top: "-62px", right: 0, fontSize: "9px", fontWeight: 700, letterSpacing: "0.04em", color: "var(--accent-violet)", background: "var(--bg-app)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", padding: "1px 6px", pointerEvents: "none", zIndex: 7 },
-  iconMarker: { position: "absolute", top: "-40px", width: "24px", height: "24px", borderRadius: "var(--radius-full)", background: "var(--bg-elevated)", border: "2px solid var(--accent-blue)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", cursor: "pointer", zIndex: 6 },
-  tick: { position: "absolute", top: 0, width: "2px", height: "100%", transform: "translateX(-50%)", borderRadius: "1px", opacity: 0.85, zIndex: 3, pointerEvents: "none" },
-  timeLabel: { fontSize: "var(--font-xs)", fontWeight: 600, fontFamily: "monospace", color: "var(--text-secondary)", width: "46px", textAlign: "center", flexShrink: 0 },
-  progressBar: { flex: 1, height: "14px", backgroundColor: "var(--bg-app)", borderRadius: "var(--radius-full)", position: "relative", cursor: "pointer", border: "1px solid var(--border-subtle)" },
+  apmBadge: { position: "absolute", top: "-62px", right: 0, fontSize: "10px", fontWeight: 800, letterSpacing: "0.04em", color: "var(--text-primary)", background: "var(--accent-violet)", borderRadius: "var(--radius-sm)", padding: "2px 8px", pointerEvents: "none", zIndex: 7, boxShadow: "var(--shadow-sm)" },
+  iconMarker: { position: "absolute", top: "-42px", width: "26px", height: "26px", borderRadius: "var(--radius-full)", background: "var(--bg-elevated)", border: "2px solid", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 6, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)" },
+  tick: { position: "absolute", top: 0, width: "2px", height: "100%", transform: "translateX(-50%)", borderRadius: "1px", opacity: 0.9, zIndex: 3, pointerEvents: "none" },
+  timeLabel: { fontSize: "var(--font-sm)", fontWeight: 700, fontFamily: "monospace", color: "var(--text-secondary)", width: "50px", textAlign: "center", flexShrink: 0 },
+  progressBar: { flex: 1, height: "12px", backgroundColor: "var(--bg-elevated)", borderRadius: "var(--radius-full)", position: "relative", cursor: "pointer", border: "1px solid var(--border-strong)", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.5)" },
   clipBand: { position: "absolute", top: 0, bottom: 0, borderRadius: "var(--radius-sm)", border: "1px solid transparent", cursor: "pointer", zIndex: 1 },
-  progressFill: { height: "100%", background: "var(--gradient-teal)", borderRadius: "var(--radius-full)", position: "absolute", top: 0, left: 0, opacity: 0.9, zIndex: 2, pointerEvents: "none" },
-  progressThumb: { position: "absolute", top: "50%", width: "16px", height: "16px", borderRadius: "var(--radius-full)", background: "var(--text-primary)", border: "2px solid var(--accent-teal)", transform: "translate(-50%, -50%)", boxShadow: "var(--shadow-sm)", zIndex: 4, pointerEvents: "none" },
-  marker: { width: "12px", height: "12px", borderRadius: "var(--radius-full)", position: "absolute", top: "50%", transform: "translate(-50%, -50%)", cursor: "pointer", zIndex: 3, border: "2px solid var(--bg-panel)" },
-  volumeGroup: { display: "flex", alignItems: "center", gap: "var(--space-1)", flexShrink: 0 },
+  progressFill: { height: "100%", background: "var(--gradient-teal)", borderRadius: "var(--radius-full)", position: "absolute", top: 0, left: 0, zIndex: 2, pointerEvents: "none" },
+  progressThumb: { position: "absolute", top: "50%", width: "18px", height: "18px", borderRadius: "var(--radius-full)", background: "var(--text-primary)", border: "3px solid var(--accent-teal)", transform: "translate(-50%, -50%)", boxShadow: "var(--shadow-sm)", zIndex: 4, pointerEvents: "none" },
+  volumeGroup: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0, marginLeft: "var(--space-2)" },
   volumeSlider: { width: "80px", accentColor: "var(--accent-teal)", cursor: "pointer" },
-  iconBtn: { width: "34px", height: "34px", flexShrink: 0, borderRadius: "var(--radius-md)", border: "1px solid var(--border-subtle)", background: "transparent", color: "var(--text-secondary)", fontSize: "15px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" },
+  iconBtn: { width: "36px", height: "36px", flexShrink: 0, borderRadius: "var(--radius-md)", border: "1px solid var(--border-strong)", background: "transparent", color: "var(--text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s" },
   bottomControls: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" },
   filters: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" },
-  filterBtn: { background: "transparent", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", fontSize: "var(--font-xs)", fontWeight: 700, cursor: "pointer" },
-  rightControls: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  clipToggle: { border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", fontSize: "var(--font-xs)", fontWeight: 800, cursor: "pointer" },
-  noAudioBadge: { fontSize: "var(--font-xs)", fontWeight: 700, color: "var(--color-defeat)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-full)", padding: "2px var(--space-2)" },
-  metaValue: { fontWeight: 700, color: "var(--accent-gold)", fontSize: "var(--font-sm)" },
-  timelineList: { flex: 1, padding: "var(--space-4) var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-3)", overflowY: "auto", minHeight: 0 },
+  filterBtn: { display: "flex", alignItems: "center", background: "transparent", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", fontSize: "var(--font-sm)", fontWeight: 700, cursor: "pointer", transition: "all 0.2s" },
+  rightControls: { display: "flex", alignItems: "center", gap: "var(--space-4)" },
+  clipToggle: { display: "flex", alignItems: "center", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-4)", fontSize: "var(--font-sm)", fontWeight: 800, cursor: "pointer", transition: "all 0.2s" },
+  noAudioBadge: { display: "flex", alignItems: "center", fontSize: "var(--font-xs)", fontWeight: 800, color: "var(--color-defeat)", border: "1px solid currentColor", borderRadius: "var(--radius-full)", padding: "2px var(--space-3)" },
+  metaValue: { fontWeight: 800, color: "var(--accent-gold)", fontSize: "var(--font-sm)", letterSpacing: "0.05em" },
+  timelineList: { flex: 1, padding: "var(--space-5) var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-4)", overflowY: "auto", minHeight: 0 },
   timelineHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  timelineTitle: { margin: 0, fontSize: "var(--font-xs)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)" },
-  eventCount: { fontSize: "var(--font-xs)", color: "var(--text-muted)" },
-  eventsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "var(--space-2)" },
-  eventItem: { display: "flex", alignItems: "center", gap: "var(--space-3)", padding: "var(--space-2) var(--space-3)", border: "1px solid var(--border-subtle)", borderLeft: "3px solid var(--border-subtle)", borderRadius: "var(--radius-md)" },
-  eventIcon: { fontSize: "18px", flexShrink: 0, width: "24px", textAlign: "center" },
-  eventBody: { display: "flex", flexDirection: "column", gap: "1px", flex: 1, minWidth: 0 },
-  eventDesc: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  eventLabel: { fontSize: "10px", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" },
-  eventTime: { fontSize: "var(--font-xs)", color: "var(--text-muted)", fontFamily: "monospace", flexShrink: 0 },
-  eventJump: { fontSize: "10px", color: "var(--accent-teal)", flexShrink: 0 },
+  timelineTitle: { margin: 0, fontSize: "var(--font-sm)", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" },
+  eventCount: { fontSize: "var(--font-sm)", fontWeight: 700, color: "var(--text-muted)" },
+  eventsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--space-3)" },
+  eventItem: { display: "flex", alignItems: "center", gap: "var(--space-3)", padding: "var(--space-3) var(--space-4)", border: "1px solid var(--border-subtle)", borderLeft: "4px solid var(--border-subtle)", borderRadius: "var(--radius-md)", transition: "all 0.2s ease" },
+  eventIcon: { display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, width: "32px", height: "32px", borderRadius: "var(--radius-full)", background: "var(--bg-app)" },
+  eventBody: { display: "flex", flexDirection: "column", gap: "2px", flex: 1, minWidth: 0 },
+  eventDesc: { fontSize: "var(--font-sm)", fontWeight: 700, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  eventLabel: { fontSize: "11px", fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase" },
+  eventTime: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-muted)", fontFamily: "monospace", flexShrink: 0, marginRight: "var(--space-2)" },
 };

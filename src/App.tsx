@@ -3,6 +3,7 @@ import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
+import { Scissors, Film, Settings, MonitorPlay } from "lucide-react";
 
 type Tab = "matches" | "settings";
 
@@ -21,7 +22,9 @@ export const App: React.FC = () => {
       {/* Barra de Navegación Lateral (Sidebar) */}
       <div style={styles.sidebar}>
         <div style={styles.logoArea}>
-          <span style={styles.logoIcon}>🛡️</span>
+          <div style={styles.logoIconWrapper}>
+            <Scissors color="var(--accent-teal)" size={26} strokeWidth={2.5} />
+          </div>
           <span style={styles.logoText}>LeagueRecorder</span>
         </div>
 
@@ -33,10 +36,11 @@ export const App: React.FC = () => {
               backgroundColor: activeTab === "matches" ? "var(--bg-elevated)" : "transparent",
               color: activeTab === "matches" ? "var(--text-primary)" : "var(--text-muted)",
               fontWeight: activeTab === "matches" ? 700 : 500,
-              boxShadow: activeTab === "matches" ? "inset 3px 0 0 var(--accent-violet)" : "none",
+              boxShadow: activeTab === "matches" ? "inset 3px 0 0 var(--accent-teal)" : "none",
             }}
           >
-            🎬 Partidas
+            <Film size={18} strokeWidth={activeTab === "matches" ? 2.5 : 2} />
+            Partidas
           </button>
 
           <button
@@ -46,10 +50,11 @@ export const App: React.FC = () => {
               backgroundColor: activeTab === "settings" ? "var(--bg-elevated)" : "transparent",
               color: activeTab === "settings" ? "var(--text-primary)" : "var(--text-muted)",
               fontWeight: activeTab === "settings" ? 700 : 500,
-              boxShadow: activeTab === "settings" ? "inset 3px 0 0 var(--accent-violet)" : "none",
+              boxShadow: activeTab === "settings" ? "inset 3px 0 0 var(--accent-teal)" : "none",
             }}
           >
-            ⚙️ Control
+            <Settings size={18} strokeWidth={activeTab === "settings" ? 2.5 : 2} />
+            Control
           </button>
         </div>
 
@@ -77,9 +82,11 @@ export const App: React.FC = () => {
                 <VideoPlayer match={selectedMatch} />
               ) : (
                 <div style={styles.selectPrompt}>
-                  <span style={styles.promptIcon}>📺</span>
-                  <h3>Ninguna partida seleccionada</h3>
-                  <p>Selecciona una partida de la lista lateral para reproducir el video e interactuar con el timeline de eventos.</p>
+                  <div style={styles.promptIconWrapper}>
+                    <MonitorPlay size={64} color="var(--accent-teal)" strokeWidth={1} />
+                  </div>
+                  <h3 style={styles.promptTitle}>Ninguna partida seleccionada</h3>
+                  <p style={styles.promptText}>Selecciona una partida de la lista lateral para reproducir el video e interactuar con el timeline de eventos.</p>
                 </div>
               )}
             </div>
@@ -101,30 +108,39 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   sidebar: {
-    width: "232px",
-    background: "linear-gradient(180deg, var(--bg-panel), var(--bg-app))",
+    width: "240px",
+    background: "var(--bg-panel)",
+    backdropFilter: "blur(16px)",
     borderRight: "1px solid var(--border-subtle)",
     display: "flex",
     flexDirection: "column",
-    padding: "var(--space-5) var(--space-4)",
+    padding: "var(--space-6) var(--space-4)",
     boxSizing: "border-box",
+    zIndex: 10,
   },
   logoArea: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-3)",
-    padding: "var(--space-1) var(--space-2) var(--space-6) var(--space-2)",
+    paddingBottom: "var(--space-6)",
     borderBottom: "1px solid var(--border-subtle)",
   },
-  logoIcon: {
-    fontSize: "var(--font-2xl)",
-    filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.5))",
+  logoIconWrapper: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "hsla(186, 100%, 69%, 0.15)",
+    borderRadius: "var(--radius-md)",
+    width: "42px",
+    height: "42px",
+    border: "1px solid hsla(186, 100%, 69%, 0.3)",
+    boxShadow: "0 0 16px hsla(186, 100%, 69%, 0.2)",
   },
   logoText: {
     fontWeight: 800,
     fontSize: "var(--font-md)",
-    letterSpacing: "-0.02em",
-    background: "var(--gradient-violet)",
+    letterSpacing: "-0.03em",
+    background: "var(--gradient-teal)",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
     backgroundClip: "text",
@@ -148,6 +164,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-3)",
     letterSpacing: "-0.01em",
+    transition: "all 0.2s ease",
   },
   footerArea: {
     paddingTop: "var(--space-4)",
@@ -157,6 +174,8 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "var(--font-xs)",
     color: "var(--text-muted)",
     textAlign: "center",
+    fontWeight: 600,
+    letterSpacing: "0.05em",
   },
   mainContent: {
     flex: 1,
@@ -177,6 +196,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
+    position: "relative",
   },
   selectPrompt: {
     flex: 1,
@@ -187,12 +207,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-muted)",
     padding: "var(--space-12)",
     textAlign: "center",
+    background: "var(--bg-app)",
   },
-  promptIcon: {
-    fontSize: "72px",
+  promptIconWrapper: {
     marginBottom: "var(--space-5)",
-    opacity: 0.85,
-    filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.5))",
+    opacity: 0.6,
+    filter: "drop-shadow(0 0 32px hsla(186, 100%, 69%, 0.3))",
   },
+  promptTitle: {
+    color: "var(--text-primary)",
+    margin: "0 0 var(--space-3) 0",
+    fontSize: "var(--font-lg)",
+    fontWeight: 700,
+  },
+  promptText: {
+    maxWidth: "360px",
+    lineHeight: 1.5,
+    margin: 0,
+  }
 };
 export default App;

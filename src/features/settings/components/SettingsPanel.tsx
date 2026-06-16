@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings } from "../../../core/tauri-ipc";
 import { AudioStatus, UltimateSettings } from "../../../types";
+import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -95,7 +96,10 @@ export const SettingsPanel: React.FC = () => {
       {/* Detección de ultimate (R) */}
       <div style={styles.card}>
         <div style={styles.cardTitleRow}>
-          <h3 style={styles.cardTitle}>✨ Detección de Ultimate (R)</h3>
+          <h3 style={styles.cardTitle}>
+            <Sparkles size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
+            Detección de Ultimate (R)
+          </h3>
           <button
             onClick={() => ult && saveUlt(!ult.enabled, ult.key)}
             style={{
@@ -130,14 +134,20 @@ export const SettingsPanel: React.FC = () => {
       {/* Estado del audio del juego */}
       <div style={styles.card}>
         <div style={styles.cardTitleRow}>
-          <h3 style={styles.cardTitle}>🔊 Captura de Sonido del Juego</h3>
+          <h3 style={styles.cardTitle}>
+            <Volume2 size={20} color="var(--accent-gold)" style={{ marginRight: "8px" }} />
+            Captura de Sonido del Juego
+          </h3>
           <button onClick={refreshAudio} disabled={audioLoading} style={styles.ghostBtn}>
-            {audioLoading ? "Comprobando…" : "↻ Re-detectar"}
+            <RefreshCw size={14} style={{ marginRight: "6px" }} />
+            {audioLoading ? "Comprobando…" : "Re-detectar"}
           </button>
         </div>
 
         <div style={{ ...styles.audioBanner, borderLeftColor: audioReady ? "var(--color-victory)" : "var(--accent-gold)" }}>
-          <span style={{ fontSize: "22px" }}>{audioReady ? "✅" : "⚠️"}</span>
+          <div style={{ flexShrink: 0, marginTop: "2px" }}>
+            {audioReady ? <CheckCircle2 size={24} color="var(--color-victory)" /> : <AlertTriangle size={24} color="var(--accent-gold)" />}
+          </div>
           <div>
             {audioReady ? (
               <>

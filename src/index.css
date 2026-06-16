@@ -1,58 +1,60 @@
 :root {
   /* =========================================================================
-     Sistema de Diseño — Tema "Hextech" (inspirado en League of Legends)
-     Azules profundos + oro hextech + acento turquesa. Jerarquía y profundidad.
+     Sistema de Diseño — Tema "Hallowed Mist" (Gwen/Ascent style)
      ========================================================================= */
 
-  /* Superficies (de más oscura a más elevada) */
-  --bg-app: hsl(222, 47%, 7%);
-  --bg-panel: hsl(222, 40%, 10%);
-  --bg-card: hsl(222, 34%, 13%);
-  --bg-elevated: hsl(222, 30%, 17%);
-  --bg-hover: hsl(222, 28%, 21%);
+  /* Superficies con más profundidad y oscuridad pura */
+  --bg-app: hsl(230, 25%, 6%);
+  --bg-panel: hsla(230, 25%, 9%, 0.85); /* Para Glassmorphism */
+  --bg-card: hsla(230, 22%, 12%, 0.7);
+  --bg-elevated: hsla(230, 22%, 16%, 0.9);
+  --bg-hover: hsla(230, 20%, 20%, 0.8);
 
-  /* Bordes */
-  --border-subtle: hsl(222, 25%, 18%);
-  --border-strong: hsl(222, 22%, 28%);
-  --border-focus: hsl(174, 70%, 45%);
-  --border-gold: hsla(41, 50%, 62%, 0.45);
+  /* Bordes más sutiles */
+  --border-subtle: hsla(230, 20%, 25%, 0.3);
+  --border-strong: hsla(230, 20%, 35%, 0.5);
+  --border-focus: hsl(186, 100%, 69%);
+  --border-gold: hsla(320, 80%, 70%, 0.45); /* Cambiado a rosa/magenta sutil */
 
-  /* Texto con jerarquía */
-  --text-primary: hsl(210, 30%, 96%);
-  --text-secondary: hsl(215, 18%, 72%);
-  --text-muted: hsl(215, 14%, 50%);
+  /* Texto */
+  --text-primary: hsl(220, 40%, 98%);
+  --text-secondary: hsl(220, 20%, 75%);
+  --text-muted: hsl(220, 15%, 55%);
 
-  /* Acentos de marca */
-  --accent-gold: hsl(41, 52%, 62%);      /* oro hextech */
-  --accent-gold-soft: hsl(41, 45%, 70%);
-  --accent-blue: hsl(199, 90%, 52%);
-  --accent-teal: hsl(174, 72%, 46%);     /* turquesa hextech */
-  --accent-violet: hsl(265, 82%, 67%);   /* violeta (acento tipo Ascent) */
+  /* Acentos de marca (Gwen: Cyan y Magenta/Rosado) */
+  --accent-gold: hsl(320, 80%, 70%);     /* Magenta suave */
+  --accent-gold-soft: hsl(320, 75%, 75%);
+  --accent-blue: hsl(200, 100%, 65%);
+  --accent-teal: hsl(186, 100%, 69%);    /* Hallowed Mist Cyan */
+  --accent-violet: hsl(280, 90%, 75%);   /* Gwen violet */
 
   /* Resultados y eventos */
-  --color-victory: hsl(150, 60%, 46%);
-  --color-defeat: hsl(355, 70%, 56%);
+  --color-victory: hsl(186, 100%, 65%);
+  --color-defeat: hsl(340, 90%, 65%);
 
-  --color-kill: hsl(41, 80%, 60%);
-  --color-death: hsl(355, 72%, 58%);
-  --color-assist: hsl(150, 55%, 48%);
-  --color-objective: hsl(270, 72%, 64%);
+  --color-kill: hsl(320, 80%, 70%);
+  --color-death: hsl(340, 90%, 65%);
+  --color-assist: hsl(186, 100%, 65%);
+  --color-objective: hsl(280, 90%, 75%);
 
-  /* Gradientes */
-  --gradient-gold: linear-gradient(135deg, hsl(41, 55%, 66%), hsl(38, 50%, 52%));
-  --gradient-violet: linear-gradient(135deg, hsl(278, 82%, 68%), hsl(255, 78%, 60%));
-  --gradient-teal: linear-gradient(135deg, hsl(186, 80%, 48%), hsl(174, 72%, 42%));
-  --gradient-app: radial-gradient(ellipse at 70% -10%, hsl(220, 45%, 14%) 0%, hsl(222, 47%, 7%) 55%);
-  --gradient-victory: linear-gradient(135deg, hsl(150, 55%, 40%), hsl(160, 50%, 30%));
-  --gradient-defeat: linear-gradient(135deg, hsl(355, 60%, 48%), hsl(345, 55%, 36%));
+  /* Gradientes Premium */
+  --gradient-gold: linear-gradient(135deg, hsl(320, 80%, 70%), hsl(280, 80%, 65%));
+  --gradient-violet: linear-gradient(135deg, hsl(280, 100%, 75%), hsl(320, 80%, 70%));
+  --gradient-teal: linear-gradient(135deg, hsl(186, 100%, 69%), hsl(200, 100%, 65%));
+  --gradient-app: radial-gradient(ellipse at top right, hsla(280, 50%, 15%, 0.4), transparent 50%),
+                  radial-gradient(ellipse at bottom left, hsla(186, 50%, 15%, 0.3), transparent 50%),
+                  var(--bg-app);
+  --gradient-victory: linear-gradient(135deg, hsl(186, 100%, 40%), hsl(186, 100%, 30%));
+  --gradient-defeat: linear-gradient(135deg, hsl(340, 90%, 45%), hsl(340, 90%, 35%));
 
-  /* Sombras (profundidad) */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.5);
-  --glow-gold: 0 0 0 1px var(--border-gold), 0 8px 24px hsla(41, 60%, 50%, 0.12);
+  /* Sombras (profundidad extrema tipo Ascent) */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.6);
+  --glow-teal: 0 0 0 1px var(--border-focus), 0 8px 32px hsla(186, 100%, 69%, 0.15);
+  --glow-pink: 0 0 0 1px var(--border-gold), 0 8px 32px hsla(320, 80%, 70%, 0.15);
 
-  /* Espaciado (múltiplos de 4) */
+  /* Espaciado */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -62,11 +64,11 @@
   --space-8: 32px;
   --space-12: 48px;
 
-  /* Radios */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  /* Radios (más curvos para modernidad) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
   --radius-full: 9999px;
 
   /* Tipografía */
@@ -81,7 +83,7 @@
   color-scheme: dark;
   background-color: var(--bg-app);
   color: var(--text-primary);
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

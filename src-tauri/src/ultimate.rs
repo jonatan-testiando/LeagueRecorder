@@ -15,6 +15,12 @@ pub struct UltState {
     pub actions: AtomicU64,
     /// Solo se cuentan acciones mientras hay una grabación en curso.
     pub counting: AtomicBool,
+    /// Eventos de ratón guardados temporalmente: (Instant, x, y, evento)
+    pub mouse_events: Mutex<Vec<(Instant, f64, f64, String)>>,
+    /// Tiempo del último movimiento registrado (para downsampling a 30fps)
+    pub last_mouse_move: Mutex<Option<Instant>>,
+    /// Posición actual del ratón para cuando ocurre un clic
+    pub current_mouse_pos: Mutex<(f64, f64)>,
 }
 
 impl Default for UltState {
@@ -25,6 +31,9 @@ impl Default for UltState {
             enabled: Mutex::new(true),
             actions: AtomicU64::new(0),
             counting: AtomicBool::new(false),
+            mouse_events: Mutex::new(Vec::new()),
+            last_mouse_move: Mutex::new(None),
+            current_mouse_pos: Mutex::new((0.0, 0.0)),
         }
     }
 }
@@ -34,12 +43,13 @@ impl Default for UltState {
 /// El monitor decidirá luego si cuenta (solo en partida grabando y con la R disponible).
 pub fn spawn_keyboard_listener(state: Arc<UltState>) {
     std::thread::spawn(move || {
-        use rdev::{listen, EventType};
+        use rdev::{listen, EventType, Button};
         let result = listen(move |event| {
+            let is_counting = state.counting.load(Ordering::Relaxed);
             match event.event_type {
                 EventType::KeyPress(key) => {
                     // Contar acción para el APM (solo mientras se graba).
-                    if state.counting.load(Ordering::Relaxed) {
+                    if is_counting {
                         state.actions.fetch_add(1, Ordering::Relaxed);
                     }
                     // Detección de ultimate.
@@ -50,10 +60,32 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                         }
                     }
                 }
-                EventType::ButtonPress(_) => {
+                EventType::ButtonPress(btn) => {
                     // Los clics también cuentan como acciones para el APM.
-                    if state.counting.load(Ordering::Relaxed) {
+                    if is_counting {
                         state.actions.fetch_add(1, Ordering::Relaxed);
+                        let evt_str = match btn {
+                            Button::Left => "left_click",
+                            Button::Right => "right_click",
+                            _ => return,
+                        };
+                        let (x, y) = *state.current_mouse_pos.lock().unwrap();
+                        state.mouse_events.lock().unwrap().push((Instant::now(), x, y, evt_str.to_string()));
+                    }
+                }
+                EventType::MouseMove { x, y } => {
+                    if is_counting {
+                        *state.current_mouse_pos.lock().unwrap() = (x, y);
+                        let now = Instant::now();
+                        let mut last = state.last_mouse_move.lock().unwrap();
+                        let should_record = match *last {
+                            Some(t) => now.duration_since(t).as_millis() >= 33, // ~30 fps
+                            None => true,
+                        };
+                        if should_record {
+                            *last = Some(now);
+                            state.mouse_events.lock().unwrap().push((now, x, y, "move".to_string()));
+                        }
                     }
                 }
                 _ => {}

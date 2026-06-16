@@ -1,6 +1,6 @@
 use tauri::State;
 use crate::recorder::{RecorderState, start_recording, stop_recording, is_recording, list_audio_devices, detect_system_audio_device};
-use crate::storage::{MatchMetadata, MatchEvent, load_all_matches, delete_match_files, save_match_metadata};
+use crate::storage::{MatchMetadata, MatchEvent, MouseEventData, load_all_matches, delete_match_files, save_match_metadata};
 use crate::api_listener::{LolApiClient, LolEvent, strip_tag};
 use crate::ultimate::UltState;
 use std::sync::Arc;
@@ -19,6 +19,7 @@ pub struct ActiveMatchState {
     pub events: Mutex<Vec<MatchEvent>>,
     pub is_auto_recording: Mutex<bool>,
     pub apm_samples: Mutex<Vec<(f64, u64)>>,              // (tiempo de juego, acciones acumuladas)
+    pub mouse_events: Mutex<Vec<MouseEventData>>,
 }
 
 impl Default for ActiveMatchState {
@@ -32,6 +33,7 @@ impl Default for ActiveMatchState {
             events: Mutex::new(Vec::new()),
             is_auto_recording: Mutex::new(false),
             apm_samples: Mutex::new(Vec::new()),
+            mouse_events: Mutex::new(Vec::new()),
         }
     }
 }
@@ -112,6 +114,7 @@ pub async fn start_manual_recording(
     *active_match.champion.lock().await = "Manual Test".to_string();
     *active_match.active_player.lock().await = "Player".to_string();
     active_match.events.lock().await.clear();
+    active_match.mouse_events.lock().await.clear();
     *active_match.is_auto_recording.lock().await = false;
     
     Ok(path)
@@ -156,6 +159,7 @@ pub async fn stop_manual_recording(
             ],
             apm: 0.0,
             apm_series: Vec::new(),
+            mouse_events: active_match.mouse_events.lock().await.clone(),
         };
         let _ = save_match_metadata(&metadata);
     }
@@ -217,6 +221,8 @@ pub fn spawn_background_monitor(
                     ult_state.actions.store(0, Ordering::Relaxed);
                     ult_state.counting.store(true, Ordering::Relaxed);
                     active_match.apm_samples.lock().await.clear();
+                    active_match.mouse_events.lock().await.clear();
+                    ult_state.mouse_events.lock().unwrap().clear();
 
                     // Registrar evento inicial
                     active_match.events.lock().await.push(MatchEvent {
@@ -303,6 +309,25 @@ pub fn spawn_background_monitor(
                         }
                         if !ult_events.is_empty() {
                             active_match.events.lock().await.extend(ult_events);
+                        }
+                    }
+
+                    // Nuevo: Procesar eventos del ratón
+                    let raw_mouse_events = {
+                        let mut guard = ult_state.mouse_events.lock().unwrap();
+                        guard.drain(..).collect::<Vec<_>>()
+                    };
+                    if !raw_mouse_events.is_empty() {
+                        let mut me_guard = active_match.mouse_events.lock().await;
+                        for (inst, x, y, evt_str) in raw_mouse_events {
+                            let ago = last_game_time_at.saturating_duration_since(inst).as_secs_f64();
+                            let gt = (last_game_time - ago).max(0.0);
+                            me_guard.push(MouseEventData {
+                                t: gt,
+                                x,
+                                y,
+                                evt: evt_str,
+                            });
                         }
                     }
 
@@ -405,6 +430,7 @@ async fn finalize_match(
         events: active_match.events.lock().await.clone(),
         apm,
         apm_series,
+        mouse_events: active_match.mouse_events.lock().await.clone(),
     };
     match save_match_metadata(&metadata) {
         Ok(_) => println!("Metadatos guardados con éxito para la partida {}", match_id),

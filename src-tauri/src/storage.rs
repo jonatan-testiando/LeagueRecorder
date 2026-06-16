@@ -11,6 +11,14 @@ pub struct MatchEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MouseEventData {
+    pub t: f64,
+    pub x: f64,
+    pub y: f64,
+    pub evt: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchMetadata {
     pub id: String,
     pub game_duration: f64,
@@ -25,6 +33,9 @@ pub struct MatchMetadata {
     /// APM por minuto de juego (para el gráfico tipo Outplayed).
     #[serde(default)]
     pub apm_series: Vec<f64>,
+    /// Movimientos y clics del ratón.
+    #[serde(default)]
+    pub mouse_events: Vec<MouseEventData>,
 }
 
 pub fn get_videos_dir() -> PathBuf {

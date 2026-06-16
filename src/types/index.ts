@@ -24,6 +24,13 @@ export interface UltimateSettings {
   key: string;
 }
 
+export interface MouseEventData {
+  t: number;
+  x: number;
+  y: number;
+  evt: string; // "move", "left_click", "right_click"
+}
+
 export interface MatchMetadata {
   id: string;
   game_duration: number;
@@ -34,6 +41,7 @@ export interface MatchMetadata {
   events: MatchEvent[];
   apm?: number; // Acciones por minuto promedio
   apm_series?: number[]; // APM por minuto de juego
+  mouse_events?: MouseEventData[];
 }
 
 export interface AudioStatus {

@@ -107,6 +107,8 @@ interface VideoPlayerProps {
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const clipEndRef = useRef<number | null>(null);
@@ -267,6 +269,95 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const isWin = result === "victory";
   const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
 
+  // Mouse Trail Rendering Loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+    });
+    resizeObserver.observe(canvas);
+    
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Asumimos monitor principal para la escala de captura rdev
+    const screenW = window.screen.width;
+    const screenH = window.screen.height;
+
+    const render = () => {
+      rafRef.current = requestAnimationFrame(render);
+      const v = videoRef.current;
+      if (!isPlaying || !v) return;
+      
+      const ct = v.currentTime;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (!match.mouse_events || match.mouse_events.length === 0) return;
+
+      const TRAIL_DURATION = 1.0;
+      const recentEvents = match.mouse_events.filter(e => e.t <= ct && e.t >= ct - TRAIL_DURATION);
+      if (recentEvents.length === 0) return;
+
+      const scaleX = canvas.width / screenW;
+      const scaleY = canvas.height / screenH;
+
+      const moves = recentEvents.filter(e => e.evt === "move");
+      if (moves.length > 1) {
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        for (let i = 0; i < moves.length - 1; i++) {
+          const p1 = moves[i];
+          const p2 = moves[i+1];
+          const ageRatio = Math.max(0, 1 - (ct - p2.t) / TRAIL_DURATION);
+          
+          ctx.beginPath();
+          ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
+          ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
+          
+          ctx.lineWidth = 2 + ageRatio * 3;
+          
+          // Interpolate color from yellow to bright blue
+          const r = Math.floor(255 + ageRatio * (0 - 255));
+          const g = Math.floor(200 + ageRatio * (150 - 200));
+          const b = Math.floor(50 + ageRatio * (255 - 50));
+          
+          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ageRatio})`;
+          ctx.stroke();
+        }
+      }
+
+      const clicks = recentEvents.filter(e => e.evt === "left_click" || e.evt === "right_click");
+      for (const click of clicks) {
+        const age = ct - click.t;
+        if (age > 0.5) continue;
+        
+        const ageRatio = age / 0.5;
+        const radius = 5 + ageRatio * 25;
+        const opacity = 1 - ageRatio;
+        
+        ctx.beginPath();
+        ctx.arc(click.x * scaleX, click.y * scaleY, radius, 0, Math.PI * 2);
+        ctx.lineWidth = 2;
+        if (click.evt === "left_click") {
+          ctx.strokeStyle = `rgba(0, 255, 100, ${opacity})`;
+        } else {
+          ctx.strokeStyle = `rgba(255, 50, 50, ${opacity})`;
+        }
+        ctx.stroke();
+      }
+    };
+    
+    rafRef.current = requestAnimationFrame(render);
+    
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      resizeObserver.disconnect();
+    };
+  }, [isPlaying, match.mouse_events]);
+
   return (
     <div ref={containerRef} style={styles.container}>
       {/* Left Column: Video & Timeline */}
@@ -308,6 +399,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <span style={{ color: "#fff", marginTop: 8 }}>No se pudo cargar el video</span>
             </div>
           )}
+
+          {/* Canvas for Mouse Trail Overlay */}
+          <canvas
+            ref={canvasRef}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+              zIndex: 5
+            }}
+          />
 
           {/* Overlay Progress Bar at the bottom of video */}
           <div style={styles.videoProgressWrapper}>

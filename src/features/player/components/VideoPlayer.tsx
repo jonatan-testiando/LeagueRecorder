@@ -115,7 +115,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [duration, setDuration] = useState<number>(match.game_duration || 0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [volume] = useState<number>(1);
+  const [volume, setVolume] = useState<number>(1);
   const [muted, setMuted] = useState<boolean>(false);
   const [clipMode, setClipMode] = useState<boolean>(true);
   const [activeEventTime, setActiveEventTime] = useState<number | null>(null);
@@ -168,6 +168,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     seekTo(Math.max(0, eventTime - CLIP_BEFORE), true);
   }, [clipMode, seekTo]);
 
+  const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
+    const times = match.events
+      .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
+      .map((e) => e.time)
+      .sort((a, b) => a - b);
+    if (!times.length) return;
+    const cur = activeEventTime ?? currentTime;
+    let target: number | undefined;
+    if (dir === 1) target = times.find((t) => t > cur + 0.5);
+    else target = [...times].reverse().find((t) => t < cur - 0.5);
+    if (target === undefined) target = dir === 1 ? times[0] : times[times.length - 1];
+    jumpToClip(target);
+  }, [match.events, activeEventTime, currentTime, jumpToClip]);
+
   const handleTimeUpdate = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -202,6 +216,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     else document.exitFullscreen?.().catch(() => {});
   };
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      const v = videoRef.current;
+      if (!v) return;
+      switch (e.key) {
+        case " ":
+        case "k":
+          e.preventDefault();
+          handlePlayPause();
+          break;
+        case "ArrowRight": clipEndRef.current = null; seekTo(v.currentTime + 5, false); break;
+        case "ArrowLeft": clipEndRef.current = null; seekTo(v.currentTime - 5, false); break;
+        case "m": setMuted((m) => !m); break;
+        case "f": toggleFullscreen(); break;
+        case "n": e.preventDefault(); goToAdjacentEvent(1); break;
+        case "p": e.preventDefault(); goToAdjacentEvent(-1); break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handlePlayPause, seekTo, goToAdjacentEvent]);
+
   const formatTime = (seconds: number): string => {
     if (!isFinite(seconds) || seconds < 0) seconds = 0;
     const mins = Math.floor(seconds / 60);
@@ -227,6 +265,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const result = outcome(match.result);
   const isWin = result === "victory";
+  const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
 
   return (
     <div ref={containerRef} style={styles.container}>
@@ -275,9 +314,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
               {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
             </button>
-            <button onClick={() => setMuted(m => !m)} style={styles.videoPlayBtn}>
-              {muted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+              <button onClick={() => setMuted(m => !m)} style={styles.videoPlayBtn} title="Silenciar (M)">
+                {muted || volume === 0 ? <VolumeX size={16} /> : volume < 0.5 ? <Volume1 size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input
+                type="range" min={0} max={1} step={0.05}
+                value={muted ? 0 : volume}
+                onChange={(e) => { setVolume(parseFloat(e.target.value)); setMuted(false); }}
+                style={{ width: "80px", accentColor: "var(--accent-violet)", cursor: "pointer" }}
+                title="Volumen"
+              />
+            </div>
             <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
             
             <div style={{ flex: 1 }} />
@@ -404,9 +452,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         </div>
 
         <div style={styles.reviewFooter}>
-          <button style={styles.ghostBtn}><ChevronLeft size={16} /> Previous</button>
-          <span style={styles.pageInfo}>1 of {timedEvents.length}</span>
-          <button style={styles.ghostBtn}>Next <ChevronRight size={16} /></button>
+          <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title="Evento anterior (P)"><ChevronLeft size={16} /> Previous</button>
+          <span style={styles.pageInfo}>{activeIndex || "-"} of {timedEvents.length}</span>
+          <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title="Evento siguiente (N)">Next <ChevronRight size={16} /></button>
         </div>
       </div>
       )}

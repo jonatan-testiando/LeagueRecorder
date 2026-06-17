@@ -696,7 +696,9 @@ pub async fn export_clip(
             "-ss", &start_time.to_string(),
             "-i", &video_path,
             "-t", &duration.to_string(),
-            "-c", "copy",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-c:a", "aac",
             "-movflags", "faststart",
             &clip_path.to_string_lossy(),
         ])
@@ -769,7 +771,7 @@ pub async fn upload_to_catbox(path: String) -> Result<String, String> {
     let server_name = servers_json["data"]["servers"][0]["name"].as_str()
         .ok_or_else(|| "No se encontró servidor de GoFile".to_string())?;
 
-    let upload_url = format!("https://{}.gofile.io/contents/upload", server_name);
+    let upload_url = format!("https://{}.gofile.io/uploadFile", server_name);
     let form = multipart::Form::new().part("file", part);
 
     let res = client.post(&upload_url)

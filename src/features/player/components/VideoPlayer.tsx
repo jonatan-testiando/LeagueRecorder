@@ -123,6 +123,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [volume, setVolume] = useState<number>(0.5);
   const [muted, setMuted] = useState<boolean>(false);
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [activeEventTime, setActiveEventTime] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -157,6 +158,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       videoRef.current.muted = muted;
     }
   }, [volume, muted]);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   const handlePlayPause = useCallback(() => {
     const v = videoRef.current;
@@ -460,6 +467,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={handleVolumeChange} style={styles.volumeSlider} />
             </div>
             <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+            <select 
+              value={playbackRate} 
+              onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+              style={styles.playbackSelect}
+            >
+              <option value={0.25}>0.25x</option>
+              <option value={0.5}>0.50x</option>
+              <option value={0.75}>0.75x</option>
+              <option value={1}>1.00x</option>
+              <option value={1.5}>1.50x</option>
+              <option value={2}>2.00x</option>
+              <option value={4}>4.00x</option>
+            </select>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", marginRight: "16px" }}>
               <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Mostrar/Ocultar Ratón">
                 {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
@@ -774,7 +794,18 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "4px",
+    padding: "0 var(--space-2)",
+  },
+  playbackSelect: {
+    background: "transparent",
+    color: "var(--text-secondary)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "4px",
+    padding: "2px 4px",
+    fontSize: "12px",
+    outline: "none",
+    cursor: "pointer",
+    marginLeft: "8px",
   },
   videoTime: {
     color: "#fff",

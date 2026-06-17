@@ -718,6 +718,7 @@ pub struct ClipMetadata {
     pub path: String,
     pub name: String,
     pub match_id: String,
+    pub size: u64,
 }
 
 #[tauri::command]
@@ -733,10 +734,12 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
                     while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
                         let name = sub_entry.file_name().to_string_lossy().to_string();
                         if name.starts_with(&match_id) && name.contains("_clip_") && name.ends_with(".mp4") {
+                            let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
                             clips.push(ClipMetadata {
                                 path: sub_entry.path().to_string_lossy().to_string(),
                                 name,
                                 match_id: match_id.clone(),
+                                size,
                             });
                         }
                     }
@@ -749,45 +752,60 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
     clips
 }
 
+/// Sube un clip y devuelve un enlace directo reproducible.
+///
+/// `expiry`:
+///   - "permanent" -> catbox.moe (permanente, hasta 200 MB, sirve desde files.catbox.moe)
+///   - "1h" | "12h" | "24h" | "72h" -> litterbox (temporal, hasta 1 GB, sirve desde litter.catbox.moe)
+///
+/// Ambos servicios devuelven la URL del archivo como texto plano.
 #[tauri::command]
-pub async fn upload_to_catbox(path: String) -> Result<String, String> {
+pub async fn upload_clip(path: String, expiry: String) -> Result<String, String> {
     let bytes = tokio::fs::read(&path).await.map_err(|e| format!("Error leyendo archivo: {}", e))?;
     let file_name = std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy().to_string();
-    
+
     let part = multipart::Part::bytes(bytes)
         .file_name(file_name)
         .mime_str("video/mp4")
         .map_err(|_| "Error configurando el mime type".to_string())?;
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
         .map_err(|e| format!("Error construyendo cliente: {}", e))?;
 
-    let servers_res = client.get("https://api.gofile.io/servers").send().await
-        .map_err(|e| format!("Error obteniendo servidor GoFile: {}", e))?;
-    let servers_json: serde_json::Value = servers_res.json().await.map_err(|e| e.to_string())?;
-    
-    let server_name = servers_json["data"]["servers"][0]["name"].as_str()
-        .ok_or_else(|| "No se encontró servidor de GoFile".to_string())?;
+    let (url, form) = if expiry == "permanent" {
+        (
+            "https://catbox.moe/user/api.php",
+            multipart::Form::new()
+                .text("reqtype", "fileupload")
+                .part("fileToUpload", part),
+        )
+    } else {
+        (
+            "https://litterbox.catbox.moe/resources/internals/api.php",
+            multipart::Form::new()
+                .text("reqtype", "fileupload")
+                .text("time", expiry)
+                .part("fileToUpload", part),
+        )
+    };
 
-    let upload_url = format!("https://{}.gofile.io/uploadFile", server_name);
-    let form = multipart::Form::new().part("file", part);
-
-    let res = client.post(&upload_url)
+    let res = client.post(url)
         .multipart(form)
         .send()
         .await
-        .map_err(|e| format!("Subida fallida a GoFile: {}", e))?;
+        .map_err(|e| format!("No se pudo conectar al servidor de subida: {}", e))?;
 
-    if res.status().is_success() {
-        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        if let Some(url) = json["data"]["downloadPage"].as_str() {
-            Ok(url.to_string())
-        } else {
-            Err("Error parseando URL de GoFile".to_string())
-        }
+    let status = res.status();
+    let body = res.text().await.map_err(|e| e.to_string())?;
+    let body = body.trim().to_string();
+
+    if status.is_success() && body.starts_with("https://") {
+        Ok(body)
+    } else if body.is_empty() {
+        Err(format!("Error en el servidor de subida ({})", status))
     } else {
-        Err(format!("Error en el servidor GoFile: {}", res.status()))
+        Err(format!("Error al subir: {}", body))
     }
 }

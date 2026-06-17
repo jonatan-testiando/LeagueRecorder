@@ -48,6 +48,7 @@ export interface ClipMetadata {
   path: string;
   name: string;
   match_id: string;
+  size: number; // Tamaño del archivo en bytes
 }
 
 export interface AudioStatus {

@@ -14,7 +14,7 @@ use commands::{
     get_recorded_matches, delete_match, get_recorder_status, get_audio_status,
     get_ultimate_settings, set_ultimate_settings,
     start_manual_recording, stop_manual_recording, export_clip,
-    get_all_clips, upload_to_catbox
+    get_all_clips, upload_clip
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -57,7 +57,7 @@ pub fn run() {
             stop_manual_recording,
             export_clip,
             get_all_clips,
-            upload_to_catbox
+            upload_clip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings } from "../../../core/tauri-ipc";
-import { AudioStatus, UltimateSettings } from "../../../types";
-import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings, getVideoSettings, setVideoSettings } from "../../../core/tauri-ipc";
+import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
+import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor } from "lucide-react";
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -11,6 +11,7 @@ export const SettingsPanel: React.FC = () => {
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [ult, setUlt] = useState<UltimateSettings | null>(null);
+  const [video, setVideo] = useState<VideoSettings | null>(null);
 
   const checkStatus = async () => {
     try {
@@ -40,10 +41,19 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
+  const saveVideo = async (fps: number, quality: string) => {
+    try {
+      setVideo(await setVideoSettings(fps, quality));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     checkStatus();
     refreshAudio();
     getUltimateSettings().then(setUlt).catch(console.error);
+    getVideoSettings().then(setVideo).catch(console.error);
     const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);
   }, []);
@@ -183,6 +193,89 @@ export const SettingsPanel: React.FC = () => {
             </ul>
           </details>
         )}
+      </div>
+
+      {/* Configuración de Video */}
+      <div style={styles.card}>
+        <div style={styles.cardTitleRow}>
+          <h3 style={styles.cardTitle}>
+            <Monitor size={20} color="var(--accent-blue)" style={{ marginRight: "8px" }} />
+            Calidad de Grabación de Video
+          </h3>
+        </div>
+        <p style={styles.cardText}>
+          Ajusta los FPS y la nitidez. Si notas que los videos pesan demasiado, baja la calidad a Media o Baja,
+          o usa 30 FPS. Todas las resoluciones se escalan a 1080p.
+        </p>
+        
+        <div style={styles.videoSettingsGrid}>
+          <div style={styles.videoSetCol}>
+            <span style={styles.videoSetLabel}>Tasa de Fotogramas (FPS)</span>
+            <div style={styles.buttonGroup}>
+              <button 
+                onClick={() => video && saveVideo(60, video.quality)}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.fps === 60 ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                60 FPS
+              </button>
+              <button 
+                onClick={() => video && saveVideo(30, video.quality)}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.fps === 30 ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                30 FPS
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.videoSetCol}>
+            <span style={styles.videoSetLabel}>Calidad de Imagen</span>
+            <div style={styles.buttonGroup}>
+              <button 
+                onClick={() => video && saveVideo(video.fps, "High")}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.quality === "High" ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.quality === "High" ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.quality === "High" ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                Alta
+              </button>
+              <button 
+                onClick={() => video && saveVideo(video.fps, "Medium")}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.quality === "Medium" ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.quality === "Medium" ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.quality === "Medium" ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                Media
+              </button>
+              <button 
+                onClick={() => video && saveVideo(video.fps, "Low")}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.quality === "Low" ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.quality === "Low" ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.quality === "Low" ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                Baja
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={styles.card}>
@@ -467,5 +560,41 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "var(--space-1)",
+  },
+  videoSettingsGrid: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "var(--space-6)",
+    marginTop: "var(--space-2)",
+  },
+  videoSetCol: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-2)",
+    flex: 1,
+    minWidth: "200px",
+  },
+  videoSetLabel: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    color: "var(--text-primary)",
+  },
+  buttonGroup: {
+    display: "flex",
+    gap: "var(--space-2)",
+    backgroundColor: "var(--bg-app)",
+    padding: "var(--space-1)",
+    borderRadius: "var(--radius-lg)",
+    border: "1px solid var(--border-subtle)",
+  },
+  selectBtn: {
+    flex: 1,
+    padding: "var(--space-2) var(--space-4)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid transparent",
+    fontSize: "var(--font-sm)",
+    fontWeight: 700,
+    cursor: "pointer",
+    transition: "all 0.2s ease",
   },
 };

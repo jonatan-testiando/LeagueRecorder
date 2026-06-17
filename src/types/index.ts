@@ -56,3 +56,8 @@ export interface AudioStatus {
   all_devices: string[];
   ready_for_game_audio: boolean;
 }
+
+export interface VideoSettings {
+  fps: number;
+  quality: string;
+}

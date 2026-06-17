@@ -113,9 +113,19 @@ enum VideoMode {
     CpuGdigrab, // Captura GDI + codificación por CPU. Compatibilidad máxima.
 }
 
+use crate::commands::VideoSettings;
+
 /// Construye los argumentos de FFmpeg para un modo de vídeo y un dispositivo de audio opcional.
-fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>) -> Vec<String> {
+fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>, settings: &VideoSettings) -> Vec<String> {
     let mut args: Vec<String> = vec!["-y".into()];
+
+    let fps = settings.fps.to_string();
+    let (nvenc_cq, x264_crf) = match settings.quality.as_str() {
+        "High" => ("24", "23"),
+        "Medium" => ("28", "28"),
+        "Low" => ("32", "32"),
+        _ => ("24", "23"),
+    };
 
     match mode {
         VideoMode::GpuNvenc | VideoMode::GpuX264 => {
@@ -132,8 +142,8 @@ fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>) -> 
             // Etiquetamos la salida [v] sólo cuando hay audio (para poder mapear ambos streams).
             let label = if has_audio { "[v]" } else { "" };
             let filter = format!(
-                "ddagrab=0:framerate=60,hwdownload,format=bgra,format={}{}",
-                pix, label
+                "ddagrab=0:framerate={},hwdownload,format=bgra,format={}{}",
+                fps, pix, label
             );
             args.extend(["-filter_complex".into(), filter]);
 
@@ -155,12 +165,12 @@ fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>) -> 
                     "-c:v".into(), "h264_nvenc".into(),
                     "-preset".into(), "p4".into(),
                     "-rc".into(), "vbr".into(),
-                    "-cq".into(), "24".into(),
+                    "-cq".into(), nvenc_cq.into(),
                 ]),
                 _ => args.extend([
                     "-c:v".into(), "libx264".into(),
                     "-preset".into(), "ultrafast".into(),
-                    "-crf".into(), "23".into(),
+                    "-crf".into(), x264_crf.into(),
                 ]),
             }
         }
@@ -169,7 +179,7 @@ fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>) -> 
             args.extend([
                 "-thread_queue_size".into(), "1024".into(),
                 "-f".into(), "gdigrab".into(),
-                "-framerate".into(), "30".into(),
+                "-framerate".into(), fps,
                 "-i".into(), "desktop".into(),
             ]);
 
@@ -188,7 +198,7 @@ fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>) -> 
             args.extend([
                 "-c:v".into(), "libx264".into(),
                 "-preset".into(), "ultrafast".into(),
-                "-crf".into(), "23".into(),
+                "-crf".into(), x264_crf.into(),
             ]);
         }
     }
@@ -237,7 +247,7 @@ fn spawn_ffmpeg_and_verify(ffmpeg_exe: &str, args: &[String]) -> Option<Child> {
 }
 
 /// Inicia la grabación de video+audio en segundo plano con una cascada robusta de fallback.
-pub fn start_recording(match_id: &str, state: &RecorderState) -> Result<String, String> {
+pub fn start_recording(match_id: &str, state: &RecorderState, settings: &VideoSettings) -> Result<String, String> {
     let mut child_guard = state.child_process.lock().unwrap();
     if child_guard.is_some() {
         return Err("La grabación ya está en curso".to_string());
@@ -285,11 +295,12 @@ pub fn start_recording(match_id: &str, state: &RecorderState) -> Result<String, 
             VideoMode::CpuGdigrab => "CPU GDI (compatibilidad)",
         };
         println!(
-            "Grabadora: intentando modo '{}' {}...",
+            "Grabadora: intentando modo '{}' {} a {} FPS (Quality: {})...",
             label,
-            if audio.is_some() { "con audio" } else { "sin audio" }
+            if audio.is_some() { "con audio" } else { "sin audio" },
+            settings.fps, settings.quality
         );
-        let args = build_ffmpeg_args(video_path_str, *mode, audio.as_deref());
+        let args = build_ffmpeg_args(video_path_str, *mode, audio.as_deref(), settings);
         child = spawn_ffmpeg_and_verify(&ffmpeg_exe, &args);
         if child.is_some() {
             println!("Grabadora: arrancó correctamente en modo '{}'.", label);

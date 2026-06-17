@@ -93,6 +93,34 @@ pub fn set_ultimate_settings(enabled: bool, key: String, state: State<'_, Arc<Ul
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct VideoSettings {
+    pub fps: i32,
+    pub quality: String, // "High", "Medium", "Low"
+}
+
+impl Default for VideoSettings {
+    fn default() -> Self {
+        Self {
+            fps: 60,
+            quality: "High".to_string(),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_video_settings(state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>) -> VideoSettings {
+    state.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn set_video_settings(fps: i32, quality: String, state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>) -> VideoSettings {
+    let mut s = state.lock().unwrap();
+    s.fps = fps;
+    s.quality = quality;
+    s.clone()
+}
+
 #[tauri::command]
 pub fn get_audio_status() -> AudioStatus {
     let all_devices = list_audio_devices();
@@ -108,9 +136,11 @@ pub fn get_audio_status() -> AudioStatus {
 pub async fn start_manual_recording(
     id: String,
     state: State<'_, Arc<RecorderState>>,
-    active_match: State<'_, Arc<ActiveMatchState>>
+    active_match: State<'_, Arc<ActiveMatchState>>,
+    video_settings: State<'_, Arc<std::sync::Mutex<VideoSettings>>>
 ) -> Result<String, String> {
-    let path = start_recording(&id, &state)?;
+    let settings = video_settings.lock().unwrap().clone();
+    let path = start_recording(&id, &state, &settings)?;
     
     // Configurar estado manual
     *active_match.id.lock().await = id;
@@ -175,7 +205,8 @@ pub async fn stop_manual_recording(
 pub fn spawn_background_monitor(
     recorder_state: Arc<RecorderState>,
     active_match: Arc<ActiveMatchState>,
-    ult_state: Arc<UltState>
+    ult_state: Arc<UltState>,
+    video_settings_state: Arc<std::sync::Mutex<VideoSettings>>
 ) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -237,8 +268,9 @@ pub fn spawn_background_monitor(
                     });
 
                     // Iniciar grabación
-                    if let Err(e) = start_recording(&match_id, &recorder_state) {
-                        eprintln!("Error al iniciar grabación automática: {}", e);
+                    let settings = video_settings_state.lock().unwrap().clone();
+                    if let Err(e) = start_recording(&match_id, &recorder_state, &settings) {
+                        eprintln!("Fallo al iniciar grabación: {}", e);
                     } else {
                         *active_match.recording_start.lock().await = Some(std::time::Instant::now());
                     }

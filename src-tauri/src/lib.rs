@@ -14,7 +14,8 @@ use commands::{
     get_recorded_matches, delete_match, get_recorder_status, get_audio_status,
     get_ultimate_settings, set_ultimate_settings,
     start_manual_recording, stop_manual_recording, export_clip,
-    get_all_clips, upload_clip
+    get_all_clips, upload_clip,
+    get_video_settings, set_video_settings
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -27,11 +28,14 @@ pub fn run() {
     // Listener global de teclado para detectar la ultimate (best-effort)
     spawn_keyboard_listener(Arc::clone(&ult_state));
 
+    let video_settings = Arc::new(std::sync::Mutex::new(crate::commands::VideoSettings::default()));
+
     // Iniciar monitor de fondo para detección automática de partidas
     spawn_background_monitor(
         Arc::clone(&recorder_state),
         Arc::clone(&active_match_state),
         Arc::clone(&ult_state),
+        Arc::clone(&video_settings),
     );
 
     tauri::Builder::default()
@@ -42,10 +46,10 @@ pub fn run() {
         .register_uri_scheme_protocol("stream", |_ctx, request| {
             streamer::handle(request)
         })
-        // Registrar estados compartidos para inyección de dependencias en comandos
         .manage(recorder_state)
         .manage(active_match_state)
         .manage(ult_state)
+        .manage(video_settings)
         .invoke_handler(tauri::generate_handler![
             get_recorded_matches,
             delete_match,
@@ -57,7 +61,9 @@ pub fn run() {
             stop_manual_recording,
             export_clip,
             get_all_clips,
-            upload_clip
+            upload_clip,
+            get_video_settings,
+            set_video_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

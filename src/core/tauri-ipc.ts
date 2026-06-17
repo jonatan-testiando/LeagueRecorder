@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { MatchMetadata, AudioStatus, UltimateSettings } from "../types";
+import { MatchMetadata, AudioStatus, UltimateSettings, VideoSettings } from "../types";
 
 export const getRecordedMatches = async (): Promise<MatchMetadata[]> => {
   return await invoke<MatchMetadata[]>("get_recorded_matches");
@@ -31,4 +31,12 @@ export const startManualRecording = async (id: string): Promise<string> => {
 
 export const stopManualRecording = async (): Promise<void> => {
   return await invoke<void>("stop_manual_recording");
+};
+
+export const getVideoSettings = async (): Promise<VideoSettings> => {
+  return await invoke<VideoSettings>("get_video_settings");
+};
+
+export const setVideoSettings = async (fps: number, quality: string): Promise<VideoSettings> => {
+  return await invoke<VideoSettings>("set_video_settings", { fps, quality });
 };

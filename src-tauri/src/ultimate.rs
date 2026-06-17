@@ -42,12 +42,17 @@ impl Default for UltState {
 /// configurada y la detección está activa, registra el instante de la pulsación.
 /// El monitor decidirá luego si cuenta (solo en partida grabando y con la R disponible).
 pub fn spawn_keyboard_listener(state: Arc<UltState>) {
+    let ctrl_pressed = Arc::new(AtomicBool::new(false));
+    
     std::thread::spawn(move || {
-        use rdev::{listen, EventType, Button};
+        use rdev::{listen, EventType, Button, Key};
         let result = listen(move |event| {
             let is_counting = state.counting.load(Ordering::Relaxed);
             match event.event_type {
                 EventType::KeyPress(key) => {
+                    if key == Key::ControlLeft || key == Key::ControlRight {
+                        ctrl_pressed.store(true, Ordering::Relaxed);
+                    }
                     // Contar acción para el APM (solo mientras se graba).
                     if is_counting {
                         state.actions.fetch_add(1, Ordering::Relaxed);
@@ -55,9 +60,15 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                     // Detección de ultimate.
                     if *state.enabled.lock().unwrap() {
                         let configured = state.key.lock().unwrap().clone();
-                        if key_matches(key, &configured) {
+                        // Ignorar si CTRL está pulsado (ej. subiendo de nivel la habilidad con CTRL+R)
+                        if key_matches(key, &configured) && !ctrl_pressed.load(Ordering::Relaxed) {
                             state.presses.lock().unwrap().push(Instant::now());
                         }
+                    }
+                }
+                EventType::KeyRelease(key) => {
+                    if key == Key::ControlLeft || key == Key::ControlRight {
+                        ctrl_pressed.store(false, Ordering::Relaxed);
                     }
                 }
                 EventType::ButtonPress(btn) => {

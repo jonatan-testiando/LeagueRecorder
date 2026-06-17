@@ -9,12 +9,18 @@ import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle } from "lucide-react";
 import { ErrorClipMetadata } from "./core/tauri-ipc";
 import { motion, AnimatePresence } from "framer-motion";
+import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "games" | "clips" | "errors" | "review" | "settings";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("games");
   const [selectedError, setSelectedError] = useState<ErrorClipMetadata | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("");
+  
+  React.useEffect(() => {
+    getVersion().then(setAppVersion).catch(console.error);
+  }, []);
   
   const {
     matches,
@@ -99,6 +105,11 @@ export const App: React.FC = () => {
             <Settings size={18} />
             Settings
           </button>
+          {appVersion && (
+            <div style={{ textAlign: "center", marginTop: "var(--space-2)", fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>
+              v{appVersion}
+            </div>
+          )}
         </div>
       </div>
 

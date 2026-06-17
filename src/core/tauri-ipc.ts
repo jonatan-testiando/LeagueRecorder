@@ -41,12 +41,20 @@ export const setVideoSettings = async (fps: number, quality: string): Promise<Vi
   return await invoke<VideoSettings>("set_video_settings", { fps, quality });
 };
 
+export interface ErrorEvent {
+  id: string;
+  time: number;
+  text: string;
+  category: string;
+}
+
 export interface ErrorClipMetadata {
   path: string;
   name: string;
   match_id: string;
   size: number;
   note: string;
+  events: ErrorEvent[];
 }
 
 export const exportErrorClip = async (matchId: string, videoPath: string, startTime: number, duration: number, note: string): Promise<string> => {
@@ -59,6 +67,18 @@ export const getAllErrorClips = async (): Promise<ErrorClipMetadata[]> => {
 
 export const updateErrorNote = async (path: string, note: string): Promise<void> => {
   return await invoke<void>("update_error_note", { path, note });
+};
+
+export const addErrorEvent = async (path: string, time: number, text: string, category: string): Promise<string> => {
+  return await invoke<string>("add_error_event", { path, time, text, category });
+};
+
+export const deleteErrorEvent = async (path: string, eventId: string): Promise<void> => {
+  return await invoke<void>("delete_error_event", { path, eventId });
+};
+
+export const editErrorEvent = async (path: string, eventId: string, text: string, category: string): Promise<void> => {
+  return await invoke<void>("edit_error_event", { path, eventId, text, category });
 };
 
 export const toggleClipFavorite = async (path: string): Promise<boolean> => {

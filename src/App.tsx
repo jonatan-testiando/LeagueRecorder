@@ -4,13 +4,17 @@ import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
 import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
+import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle } from "lucide-react";
+import { ErrorClipMetadata } from "./core/tauri-ipc";
+import { motion, AnimatePresence } from "framer-motion";
 
 type Tab = "games" | "clips" | "errors" | "review" | "settings";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("games");
+  const [selectedError, setSelectedError] = useState<ErrorClipMetadata | null>(null);
   
   const {
     matches,
@@ -100,33 +104,52 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div style={styles.mainContent}>
-        {activeTab === "settings" ? (
-          <SettingsPanel />
-        ) : activeTab === "clips" ? (
-          <ClipsGallery />
-        ) : activeTab === "errors" ? (
-          <ErrorsGallery />
-        ) : selectedMatch ? (
-          <div style={styles.playerWrapper}>
-            <div style={styles.playerTopBar}>
-              <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
-                <ArrowLeft size={20} />
-              </button>
-              <div style={styles.playerTitleBlock}>
-                <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
-                <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={selectedError ? "errorPlayer" : activeTab === "games" && selectedMatch ? "videoPlayer" : activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
+          >
+            {activeTab === "settings" ? (
+              <SettingsPanel />
+            ) : activeTab === "clips" ? (
+              <ClipsGallery />
+            ) : activeTab === "errors" ? (
+              selectedError ? (
+                <ErrorPlayer 
+                  clip={selectedError} 
+                  onUpdate={() => {}} 
+                  onClose={() => setSelectedError(null)} 
+                />
+              ) : (
+                <ErrorsGallery onSelectError={setSelectedError} />
+              )
+            ) : selectedMatch ? (
+              <div style={styles.playerWrapper}>
+                <div style={styles.playerTopBar}>
+                  <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
+                    <ArrowLeft size={20} />
+                  </button>
+                  <div style={styles.playerTitleBlock}>
+                    <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
+                    <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+                  </div>
+                </div>
+                <VideoPlayer match={selectedMatch} />
               </div>
-            </div>
-            <VideoPlayer match={selectedMatch} />
-          </div>
-        ) : (
-          <MatchGallery
-            matches={matches}
-            onSelectMatch={setSelectedMatch}
-            onDeleteMatch={deleteMatch}
-            isRecording={isRecording}
-          />
-        )}
+            ) : (
+              <MatchGallery
+                matches={matches}
+                onSelectMatch={setSelectedMatch}
+                onDeleteMatch={deleteMatch}
+                isRecording={isRecording}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );

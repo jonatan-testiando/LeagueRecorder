@@ -840,6 +840,14 @@ pub async fn toggle_clip_favorite(path: String) -> Result<bool, String> {
     Ok(meta.favorite)
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct ErrorEvent {
+    pub id: String,
+    pub time: f64,
+    pub text: String,
+    pub category: String,
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ErrorClipMetadata {
     pub path: String,
@@ -847,6 +855,8 @@ pub struct ErrorClipMetadata {
     pub match_id: String,
     pub size: u64,
     pub note: String,
+    #[serde(default)]
+    pub events: Vec<ErrorEvent>,
 }
 
 #[tauri::command]
@@ -883,6 +893,7 @@ pub async fn export_error_clip(
             match_id: match_id.clone(),
             size: std::fs::metadata(&error_path).map(|m| m.len()).unwrap_or(0),
             note: note.clone(),
+            events: Vec::new(),
         };
         let _ = tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
         Ok(error_path.to_string_lossy().to_string())
@@ -908,9 +919,11 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                             let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
                             let json_path = sub_entry.path().with_extension("json");
                             let mut note = String::new();
+                            let mut events = Vec::new();
                             if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
                                 if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
                                     note = meta.note;
+                                    events = meta.events;
                                 }
                             }
                             errors.push(ErrorClipMetadata {
@@ -919,6 +932,7 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                                 match_id: match_id.clone(),
                                 size,
                                 note,
+                                events,
                             });
                         }
                     }
@@ -941,6 +955,7 @@ pub async fn update_error_note(path: String, note: String) -> Result<(), String>
         match_id: "".to_string(), // we don't care to parse it just for update if we read it
         size: 0,
         note: note.clone(),
+        events: Vec::new(),
     };
     
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
@@ -952,6 +967,58 @@ pub async fn update_error_note(path: String, note: String) -> Result<(), String>
     
     tokio::fs::write(&json_path, serde_json::to_string(&meta).map_err(|e| e.to_string())?).await.map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn add_error_event(path: String, time: f64, text: String, category: String) -> Result<String, String> {
+    let mp4_path = std::path::Path::new(&path);
+    let json_path = mp4_path.with_extension("json");
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+            let id = uuid::Uuid::new_v4().to_string();
+            meta.events.push(ErrorEvent {
+                id: id.clone(),
+                time,
+                text,
+                category,
+            });
+            meta.events.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            return Ok(id);
+        }
+    }
+    Err("Error metadata not found".into())
+}
+
+#[tauri::command]
+pub async fn delete_error_event(path: String, event_id: String) -> Result<(), String> {
+    let mp4_path = std::path::Path::new(&path);
+    let json_path = mp4_path.with_extension("json");
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+            meta.events.retain(|e| e.id != event_id);
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+    }
+    Err("Error metadata not found".into())
+}
+
+#[tauri::command]
+pub async fn edit_error_event(path: String, event_id: String, text: String, category: String) -> Result<(), String> {
+    let mp4_path = std::path::Path::new(&path);
+    let json_path = mp4_path.with_extension("json");
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+            if let Some(ev) = meta.events.iter_mut().find(|e| e.id == event_id) {
+                ev.text = text;
+                ev.category = category;
+            }
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            return Ok(());
+        }
+    }
+    Err("Error metadata not found".into())
 }
 
 #[tauri::command]

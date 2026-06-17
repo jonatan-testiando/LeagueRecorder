@@ -15,7 +15,7 @@ use commands::{
     get_recorded_matches, delete_match, get_recorder_status, get_audio_status,
     get_ultimate_settings, set_ultimate_settings,
     start_manual_recording, stop_manual_recording, export_clip,
-    export_error_clip, get_all_error_clips, update_error_note,
+    export_error_clip, get_all_error_clips, update_error_note, add_error_event, delete_error_event, edit_error_event,
     get_all_clips, upload_clip, toggle_clip_favorite,
     get_video_settings, set_video_settings,
     get_app_config, set_app_config
@@ -66,6 +66,9 @@ pub fn run() {
             export_error_clip,
             get_all_error_clips,
             update_error_note,
+            add_error_event,
+            delete_error_event,
+            edit_error_event,
             get_all_clips,
             upload_clip,
             toggle_clip_favorite,

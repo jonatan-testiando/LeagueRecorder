@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Save } from "lucide-react";
-import { ErrorClipMetadata, getAllErrorClips, updateErrorNote } from "../../../core/tauri-ipc";
-import { useDialog } from "../../../components/ui/DialogProvider";
+import { AlertTriangle, Play } from "lucide-react";
+import { ErrorClipMetadata, getAllErrorClips } from "../../../core/tauri-ipc";
+
+import { motion, Variants } from "framer-motion";
 
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
@@ -13,12 +14,26 @@ const formatSize = (bytes: number): string => {
   return `${bytes} B`;
 };
 
-export const ErrorsGallery: React.FC = () => {
+interface ErrorsGalleryProps {
+  onSelectError?: (error: ErrorClipMetadata) => void;
+}
+
+export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) => {
   const [errors, setErrors] = useState<ErrorClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingNotePath, setEditingNotePath] = useState<string | null>(null);
-  const [editNoteText, setEditNoteText] = useState<string>("");
-  const { showError, showSuccess } = useDialog();
+
+  const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
 
   const fetchErrors = async () => {
     try {
@@ -35,16 +50,9 @@ export const ErrorsGallery: React.FC = () => {
     fetchErrors();
   }, []);
 
-  const handleSaveNote = async (path: string) => {
-    try {
-      await updateErrorNote(path, editNoteText);
-      setErrors(errs => errs.map(e => e.path === path ? { ...e, note: editNoteText } : e));
-      setEditingNotePath(null);
-      showSuccess("Nota guardada correctamente");
-    } catch (err) {
-      showError("Error al guardar la nota: " + err);
-    }
-  };
+  useEffect(() => {
+    fetchErrors();
+  }, []);
 
   if (loading) {
     return (
@@ -77,18 +85,30 @@ export const ErrorsGallery: React.FC = () => {
         <h2 style={styles.title}>Mis Errores</h2>
         <span style={styles.count}>{errors.length} {errors.length === 1 ? "error" : "errores"}</span>
       </div>
-      <div style={styles.grid}>
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        style={styles.grid}
+      >
         {errors.map((err) => {
-          const isEditing = editingNotePath === err.path;
           return (
-            <div key={err.path} style={styles.card}>
+            <motion.div 
+              variants={itemVariants}
+              key={err.path} 
+              style={{...styles.card, cursor: "pointer"}}
+              onClick={() => onSelectError && onSelectError(err)}
+              whileHover={{ scale: 1.02, borderColor: "var(--color-defeat)" }}
+            >
               <div style={styles.thumbnailWrapper}>
                 <video
                   src={streamUrl(err.path)}
                   style={styles.videoPreview}
-                  controls
                   preload="metadata"
                 />
+                <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
+                  <Play size={32} color="#fff" style={{ opacity: 0.8 }} />
+                </div>
               </div>
               <div style={styles.cardInfo}>
                 <div style={styles.metaRow}>
@@ -97,38 +117,18 @@ export const ErrorsGallery: React.FC = () => {
                 </div>
                 
                 <div style={styles.noteSection}>
-                  <span style={styles.noteLabel}>Nota del Error:</span>
-                  {isEditing ? (
-                    <div style={{ display: "flex", gap: "8px", flexDirection: "column" }}>
-                      <textarea 
-                        autoFocus
-                        value={editNoteText}
-                        onChange={(e) => setEditNoteText(e.target.value)}
-                        style={styles.noteTextarea}
-                        rows={3}
-                      />
-                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                        <button onClick={() => setEditingNotePath(null)} style={styles.cancelBtn}>Cancelar</button>
-                        <button onClick={() => handleSaveNote(err.path)} style={styles.saveBtn}>
-                          <Save size={14} /> Guardar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div 
-                      onClick={() => { setEditingNotePath(err.path); setEditNoteText(err.note); }}
-                      style={styles.noteDisplay}
-                      title="Haz clic para editar la nota"
-                    >
-                      {err.note ? err.note : <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Sin nota. Haz clic para añadir una descripción.</span>}
-                    </div>
-                  )}
+                  <span style={styles.noteLabel}>Anotaciones: {err.events ? err.events.length : 0}</span>
+                  <div style={styles.noteDisplay}>
+                    {err.events && err.events.length > 0 
+                      ? `${err.events[0].category}: ${err.events[0].text}` 
+                      : (err.note ? err.note : <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Sin anotaciones</span>)}
+                  </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     </div>
   );
 };

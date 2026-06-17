@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart } from "lucide-react";
+import { motion, Variants } from "framer-motion";
 import { ClipMetadata } from "../../../types";
 import { toggleClipFavorite } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
@@ -81,6 +82,19 @@ export const ClipsGallery: React.FC = () => {
   const { showSuccess, showError } = useDialog();
   const [expiry, setExpiry] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
+
+  const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
 
   // Persistir los enlaces cada vez que cambian para que sobrevivan a recargas.
   useEffect(() => {
@@ -172,7 +186,12 @@ export const ClipsGallery: React.FC = () => {
         <h2 style={styles.title}>Mis Clips</h2>
         <span style={styles.count}>{clips.length} {clips.length === 1 ? "clip" : "clips"}</span>
       </div>
-      <div style={styles.grid}>
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        style={styles.grid}
+      >
         {clips.map((clip) => {
           const stored = links[clip.path];
           const isUploading = uploading === clip.path;
@@ -183,7 +202,12 @@ export const ClipsGallery: React.FC = () => {
           const remaining = stored ? expiresAt(stored) - Date.now() : 0;
 
           return (
-            <div key={clip.path} style={styles.card}>
+            <motion.div 
+              variants={itemVariants}
+              key={clip.path} 
+              style={styles.card}
+              whileHover={{ scale: 1.02 }}
+            >
               <div style={styles.thumbnailWrapper}>
                 <video
                   src={streamUrl(clip.path)}
@@ -269,10 +293,10 @@ export const ClipsGallery: React.FC = () => {
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     </div>
   );
 };

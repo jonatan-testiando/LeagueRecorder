@@ -38,13 +38,51 @@ pub struct MatchMetadata {
     pub mouse_events: Vec<MouseEventData>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub save_directory: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
+        Self {
+            save_directory: Path::new(&user_profile).join("Videos").join("LeagueRecorder").to_string_lossy().to_string(),
+        }
+    }
+}
+
+pub fn get_config_path() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| "C:".to_string());
+    let dir = Path::new(&appdata).join("LeagueRecorder");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir.join("config.json")
+}
+
+pub fn load_config() -> AppConfig {
+    if let Ok(content) = fs::read_to_string(get_config_path()) {
+        if let Ok(cfg) = serde_json::from_str(&content) {
+            return cfg;
+        }
+    }
+    AppConfig::default()
+}
+
+pub fn save_config(cfg: &AppConfig) {
+    if let Ok(content) = serde_json::to_string_pretty(cfg) {
+        let _ = fs::write(get_config_path(), content);
+    }
+}
+
 pub fn get_videos_dir() -> PathBuf {
-    let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
-    let path = Path::new(&user_profile).join("Videos").join("LeagueRecorder");
+    let cfg = load_config();
+    let path = Path::new(&cfg.save_directory);
     if !path.exists() {
         let _ = fs::create_dir_all(&path);
     }
-    path
+    path.to_path_buf()
 }
 
 pub fn get_match_dir(id: &str) -> PathBuf {
@@ -119,4 +157,45 @@ pub fn delete_match_files(id: &str) -> Result<(), String> {
         let _ = fs::remove_file(mp4_path);
     }
     Ok(())
+}
+
+fn get_dir_size(path: &Path) -> u64 {
+    let mut size = 0;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let meta = entry.metadata().unwrap();
+            if meta.is_dir() {
+                size += get_dir_size(&entry.path());
+            } else {
+                size += meta.len();
+            }
+        }
+    }
+    size
+}
+
+pub fn check_storage_quota() {
+    let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
+    let root_dir = get_videos_dir();
+    let current_size = get_dir_size(&root_dir);
+    
+    if current_size > limit {
+        let mut matches = load_all_matches();
+        // Sort from oldest to newest (ascending)
+        matches.sort_by(|a, b| a.date.cmp(&b.date));
+        
+        let mut freed = 0;
+        let excess = current_size - limit;
+        
+        for m in matches {
+            if freed >= excess {
+                break;
+            }
+            let m_dir = get_match_dir(&m.id);
+            let size = get_dir_size(&m_dir);
+            if delete_match_files(&m.id).is_ok() {
+                freed += size;
+            }
+        }
+    }
 }

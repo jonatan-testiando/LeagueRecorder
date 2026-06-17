@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw } from "lucide-react";
+import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart } from "lucide-react";
 import { ClipMetadata } from "../../../types";
+import { toggleClipFavorite } from "../../../core/tauri-ipc";
 
 // El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
 // en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
@@ -127,6 +128,15 @@ export const ClipsGallery: React.FC = () => {
     });
   };
 
+  const handleToggleFavorite = async (clipPath: string) => {
+    try {
+      const isFav = await toggleClipFavorite(clipPath);
+      setClips(clips.map(c => c.path === clipPath ? { ...c, favorite: isFav } : c));
+    } catch (err) {
+      alert("Error al marcar favorito: " + err);
+    }
+  };
+
   if (loading) {
     return (
       <div style={styles.container}>
@@ -179,7 +189,16 @@ export const ClipsGallery: React.FC = () => {
                 />
               </div>
               <div style={styles.cardInfo}>
-                <span style={styles.clipName} title={clip.name}>{clip.name}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                  <span style={styles.clipName} title={clip.name}>{clip.name}</span>
+                  <button 
+                    onClick={() => handleToggleFavorite(clip.path)}
+                    style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--accent-violet)" : "var(--text-muted)" }}
+                    title={clip.favorite ? "Quitar de favoritos" : "Añadir a favoritos"}
+                  >
+                    <Heart size={16} fill={clip.favorite ? "var(--accent-violet)" : "transparent"} />
+                  </button>
+                </div>
                 <div style={styles.metaRow}>
                   <span style={styles.clipMatch}>De: {clip.match_id}</span>
                   <span style={styles.sizeBadge}>{formatSize(clip.size)}</span>

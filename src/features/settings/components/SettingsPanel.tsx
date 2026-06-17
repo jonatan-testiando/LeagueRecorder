@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings, getVideoSettings, setVideoSettings } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
 import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
-import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor } from "lucide-react";
+import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -10,8 +11,9 @@ export const SettingsPanel: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
-  const [ult, setUlt] = useState<UltimateSettings | null>(null);
-  const [video, setVideo] = useState<VideoSettings | null>(null);
+  const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
+  const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium" });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "" });
 
   const checkStatus = async () => {
     try {
@@ -54,9 +56,28 @@ export const SettingsPanel: React.FC = () => {
     refreshAudio();
     getUltimateSettings().then(setUlt).catch(console.error);
     getVideoSettings().then(setVideo).catch(console.error);
+    getAppConfig().then(setConfig).catch(console.error);
     const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleSaveConfig = async (c: AppConfig) => {
+    setConfig(c);
+    await setAppConfig(c.save_directory).catch(console.error);
+  };
+
+  const handlePickDirectory = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: config.save_directory || undefined,
+    });
+    if (selected === null) {
+      return;
+    } else {
+      handleSaveConfig({ save_directory: selected as string });
+    }
+  };
 
   const handleStartManual = async () => {
     if (!manualId.trim()) {
@@ -135,9 +156,38 @@ export const SettingsPanel: React.FC = () => {
             value={ult?.key ?? "R"}
             onChange={(e) => ult && setUlt({ ...ult, key: e.target.value.toUpperCase() })}
             onBlur={() => ult && saveUlt(ult.enabled, ult.key)}
-            style={styles.keyInput}
+            style={{ width: "30px", textAlign: "center", textTransform: "uppercase", fontWeight: "bold" }}
           />
-          <span style={styles.ultHint}>Por defecto R. Cámbiala si reasignaste tu ultimate.</span>
+        </div>
+      </div>
+
+      {/* Almacenamiento */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <FolderOpen size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
+          <h3 style={styles.cardTitle}>Almacenamiento</h3>
+        </div>
+        <div style={styles.cardBody}>
+          <div style={styles.settingRow}>
+            <div style={styles.settingInfo}>
+              <span style={styles.settingLabel}>Ruta de guardado</span>
+              <span style={styles.settingDesc}>Directorio donde se guardarán los videos y clips</span>
+            </div>
+            <div style={{ display: "flex", gap: "8px", flex: 1, marginLeft: "16px" }}>
+              <input 
+                type="text" 
+                value={config.save_directory} 
+                readOnly
+                style={{
+                  flex: 1, padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
+                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none"
+                }} 
+              />
+              <button onClick={handlePickDirectory} style={{...styles.button, backgroundColor: "var(--accent-violet)", padding: "8px 12px"}}>
+                Cambiar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

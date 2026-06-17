@@ -160,6 +160,7 @@ pub async fn stop_manual_recording(
     active_match: State<'_, Arc<ActiveMatchState>>
 ) -> Result<(), String> {
     stop_recording(&state)?;
+    crate::storage::check_storage_quota();
     
     // Guardar metadata simulada para la prueba manual
     let id = active_match.id.lock().await.clone();
@@ -421,6 +422,7 @@ async fn finalize_match(
 ) {
     let is_auto = *active_match.is_auto_recording.lock().await;
     let _ = stop_recording(recorder_state);
+    crate::storage::check_storage_quota();
     ult_state.counting.store(false, Ordering::Relaxed);
     if !is_auto {
         return;
@@ -745,12 +747,13 @@ pub async fn export_clip(
     }
 }
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct ClipMetadata {
     pub path: String,
     pub name: String,
     pub match_id: String,
     pub size: u64,
+    pub favorite: bool,
 }
 
 #[tauri::command]
@@ -767,11 +770,19 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
                         let name = sub_entry.file_name().to_string_lossy().to_string();
                         if name.starts_with(&match_id) && name.contains("_clip_") && name.ends_with(".mp4") {
                             let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
+                            let json_path = sub_entry.path().with_extension("json");
+                            let mut favorite = false;
+                            if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+                                if let Ok(meta) = serde_json::from_str::<ClipMetadata>(&content) {
+                                    favorite = meta.favorite;
+                                }
+                            }
                             clips.push(ClipMetadata {
                                 path: sub_entry.path().to_string_lossy().to_string(),
                                 name,
                                 match_id: match_id.clone(),
                                 size,
+                                favorite,
                             });
                         }
                     }
@@ -782,6 +793,144 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
     // Sort descending by name
     clips.sort_by(|a, b| b.name.cmp(&a.name));
     clips
+}
+
+#[tauri::command]
+pub async fn toggle_clip_favorite(path: String) -> Result<bool, String> {
+    let mp4_path = std::path::Path::new(&path);
+    let json_path = mp4_path.with_extension("json");
+    
+    let mut meta = ClipMetadata {
+        path: path.clone(),
+        name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        match_id: "".to_string(),
+        size: 0,
+        favorite: false,
+    };
+    
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(existing) = serde_json::from_str::<ClipMetadata>(&content) {
+            meta = existing;
+        }
+    }
+    
+    meta.favorite = !meta.favorite;
+    tokio::fs::write(&json_path, serde_json::to_string(&meta).map_err(|e| e.to_string())?).await.map_err(|e| e.to_string())?;
+    Ok(meta.favorite)
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ErrorClipMetadata {
+    pub path: String,
+    pub name: String,
+    pub match_id: String,
+    pub size: u64,
+    pub note: String,
+}
+
+#[tauri::command]
+pub async fn export_error_clip(
+    match_id: String,
+    video_path: String,
+    start_time: f64,
+    duration: f64,
+    note: String,
+) -> Result<String, String> {
+    let dir = crate::storage::get_match_dir(&match_id);
+    let error_id = format!("{}_error_{}", match_id, chrono::Local::now().format("%H%M%S"));
+    let error_path = dir.join(format!("{}.mp4", error_id));
+    let json_path = dir.join(format!("{}.json", error_id));
+
+    let output = std::process::Command::new("ffmpeg")
+        .args(&[
+            "-ss", &start_time.to_string(),
+            "-i", &video_path,
+            "-t", &duration.to_string(),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-c:a", "aac",
+            "-movflags", "faststart",
+            &error_path.to_string_lossy(),
+        ])
+        .output()
+        .map_err(|e| format!("Fallo al ejecutar ffmpeg: {}", e))?;
+
+    if output.status.success() {
+        let meta = ErrorClipMetadata {
+            path: error_path.to_string_lossy().to_string(),
+            name: error_id.clone() + ".mp4",
+            match_id: match_id.clone(),
+            size: std::fs::metadata(&error_path).map(|m| m.len()).unwrap_or(0),
+            note: note.clone(),
+        };
+        let _ = tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
+        Ok(error_path.to_string_lossy().to_string())
+    } else {
+        let err = String::from_utf8_lossy(&output.stderr);
+        Err(format!("Error en ffmpeg: {}", err))
+    }
+}
+
+#[tauri::command]
+pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
+    let mut errors = Vec::new();
+    let root_dir = crate::storage::get_videos_dir();
+    
+    if let Ok(mut entries) = tokio::fs::read_dir(root_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if entry.path().is_dir() {
+                let match_id = entry.file_name().to_string_lossy().to_string();
+                if let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
+                    while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
+                        let name = sub_entry.file_name().to_string_lossy().to_string();
+                        if name.starts_with(&match_id) && name.contains("_error_") && name.ends_with(".mp4") {
+                            let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
+                            let json_path = sub_entry.path().with_extension("json");
+                            let mut note = String::new();
+                            if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+                                if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+                                    note = meta.note;
+                                }
+                            }
+                            errors.push(ErrorClipMetadata {
+                                path: sub_entry.path().to_string_lossy().to_string(),
+                                name,
+                                match_id: match_id.clone(),
+                                size,
+                                note,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    errors.sort_by(|a, b| b.name.cmp(&a.name));
+    errors
+}
+
+#[tauri::command]
+pub async fn update_error_note(path: String, note: String) -> Result<(), String> {
+    let mp4_path = std::path::Path::new(&path);
+    let json_path = mp4_path.with_extension("json");
+    
+    let mut meta = ErrorClipMetadata {
+        path: path.clone(),
+        name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        match_id: "".to_string(), // we don't care to parse it just for update if we read it
+        size: 0,
+        note: note.clone(),
+    };
+    
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(existing) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+            meta = existing;
+            meta.note = note;
+        }
+    }
+    
+    tokio::fs::write(&json_path, serde_json::to_string(&meta).map_err(|e| e.to_string())?).await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Sube un clip y devuelve un enlace directo reproducible.

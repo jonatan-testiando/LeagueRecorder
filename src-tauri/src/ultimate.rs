@@ -46,6 +46,8 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
     
     std::thread::spawn(move || {
         use rdev::{listen, EventType, Button, Key};
+        let pressed_keys = Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+        
         let result = listen(move |event| {
             let is_counting = state.counting.load(Ordering::Relaxed);
             match event.event_type {
@@ -53,8 +55,11 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                     if key == Key::ControlLeft || key == Key::ControlRight {
                         ctrl_pressed.store(true, Ordering::Relaxed);
                     }
-                    // Contar acción para el APM (solo mientras se graba).
-                    if is_counting {
+                    
+                    let is_new_press = pressed_keys.lock().unwrap().insert(key);
+
+                    // Contar acción para el APM (solo mientras se graba y solo si es pulsación nueva).
+                    if is_counting && is_new_press {
                         state.actions.fetch_add(1, Ordering::Relaxed);
                     }
                     // Detección de ultimate.
@@ -67,6 +72,7 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                     }
                 }
                 EventType::KeyRelease(key) => {
+                    pressed_keys.lock().unwrap().remove(&key);
                     if key == Key::ControlLeft || key == Key::ControlRight {
                         ctrl_pressed.store(false, Ordering::Relaxed);
                     }

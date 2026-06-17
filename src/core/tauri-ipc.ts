@@ -40,3 +40,39 @@ export const getVideoSettings = async (): Promise<VideoSettings> => {
 export const setVideoSettings = async (fps: number, quality: string): Promise<VideoSettings> => {
   return await invoke<VideoSettings>("set_video_settings", { fps, quality });
 };
+
+export interface ErrorClipMetadata {
+  path: string;
+  name: string;
+  match_id: string;
+  size: number;
+  note: string;
+}
+
+export const exportErrorClip = async (matchId: string, videoPath: string, startTime: number, duration: number, note: string): Promise<string> => {
+  return await invoke<string>("export_error_clip", { matchId, videoPath, startTime, duration, note });
+};
+
+export const getAllErrorClips = async (): Promise<ErrorClipMetadata[]> => {
+  return await invoke<ErrorClipMetadata[]>("get_all_error_clips");
+};
+
+export const updateErrorNote = async (path: string, note: string): Promise<void> => {
+  return await invoke<void>("update_error_note", { path, note });
+};
+
+export const toggleClipFavorite = async (path: string): Promise<boolean> => {
+  return await invoke<boolean>("toggle_clip_favorite", { path });
+};
+
+export interface AppConfig {
+  save_directory: string;
+}
+
+export const getAppConfig = async (): Promise<AppConfig> => {
+  return await invoke<AppConfig>("get_app_config");
+};
+
+export const setAppConfig = async (saveDirectory: string): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory });
+};

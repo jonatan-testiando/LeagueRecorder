@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
+import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
-import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft } from "lucide-react";
+import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle } from "lucide-react";
 
-type Tab = "games" | "clips" | "review" | "settings";
+type Tab = "games" | "clips" | "errors" | "review" | "settings";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("games");
@@ -61,6 +62,17 @@ export const App: React.FC = () => {
             Clips
           </button>
           <button
+            onClick={() => setActiveTab("errors")}
+            style={{
+              ...styles.navBtn,
+              backgroundColor: activeTab === "errors" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "errors" ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            <AlertTriangle size={18} />
+            Errors
+          </button>
+          <button
             onClick={() => setActiveTab("review")}
             style={{
               ...styles.navBtn,
@@ -92,6 +104,8 @@ export const App: React.FC = () => {
           <SettingsPanel />
         ) : activeTab === "clips" ? (
           <ClipsGallery />
+        ) : activeTab === "errors" ? (
+          <ErrorsGallery />
         ) : selectedMatch ? (
           <div style={styles.playerWrapper}>
             <div style={styles.playerTopBar}>

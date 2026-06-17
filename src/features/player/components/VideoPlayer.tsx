@@ -9,6 +9,7 @@ import {
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, 
   ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff
 } from "lucide-react";
+import { exportErrorClip } from "../../../core/tauri-ipc";
 
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
@@ -134,6 +135,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [clipStart, setClipStart] = useState<number>(0);
   const [clipEnd, setClipEnd] = useState<number>(0);
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [exportType, setExportType] = useState<"clip" | "error">("clip");
+  const [errorNote, setErrorNote] = useState<string>("");
+  const [hoverClientX, setHoverClientX] = useState<number | null>(null);
 
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -239,9 +243,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (progressBarRef.current) {
-      const rect = progressBarRef.current.getBoundingClientRect();
-      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const rect = progressBarRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const pct = x / rect.width;
       setHoverPct(pct);
+      setHoverClientX(e.clientX);
       
       if (clipDragThumb) {
         const newTime = pct * duration;
@@ -265,12 +272,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const handlePointerLeave = () => {
     if (!isDragging) setHoverPct(null);
-  };
-
-  const startClippingMode = () => {
-    setClipStart(Math.max(0, currentTime - 10));
-    setClipEnd(Math.min(duration, currentTime + 10));
-    setIsClippingMode(true);
   };
 
   const handleThumbPointerDown = (e: React.PointerEvent<HTMLDivElement>, type: "start" | "end") => {
@@ -500,8 +501,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <div style={styles.timelineHeaderRow}>
             <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
             <div style={styles.timelineHeaderRight}>
-              <button onClick={startClippingMode} style={{...styles.ghostBtn, color: isClippingMode ? "var(--accent-violet)" : "var(--text-primary)"}}>
+              <button 
+                onClick={() => {
+                  setExportType("clip");
+                  if (!isClippingMode) {
+                    setClipStart(Math.max(0, currentTime - 10));
+                    setClipEnd(Math.min(duration, currentTime + 10));
+                  }
+                  setIsClippingMode(!isClippingMode);
+                }} 
+                style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
+              >
                 <Scissors size={14} /> Clip
+              </button>
+              <button 
+                onClick={() => {
+                  setExportType("error");
+                  if (!isClippingMode) {
+                    setClipStart(Math.max(0, currentTime - 10));
+                    setClipEnd(Math.min(duration, currentTime + 10));
+                  }
+                  setIsClippingMode(!isClippingMode);
+                }} 
+                style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
+              >
+                <AlertTriangle size={14} /> Error
               </button>
             </div>
           </div>
@@ -563,6 +587,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 </span>
               ))}
             </div>
+
+            {/* Hover Tooltip */}
+            {hoverPct !== null && hoverClientX !== null && (
+              <div style={{
+                position: "fixed",
+                left: hoverClientX,
+                bottom: "160px",
+                transform: "translateX(-50%)",
+                backgroundColor: "var(--bg-card)",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1px solid var(--border-subtle)",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                pointerEvents: "none",
+                zIndex: 100,
+                display: "flex",
+                flexDirection: "column",
+                gap: "4px",
+                minWidth: "120px"
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", color: "#fff" }}>
+                  <span>{formatTime(hoverPct * duration)}</span>
+                  <span style={{ color: "var(--accent-violet)" }}>
+                    {apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0} APM
+                  </span>
+                </div>
+                {timedEvents.filter(ev => Math.abs(ev.time - hoverPct * duration) < (duration * 0.01)).slice(0, 1).map(ev => {
+                  const meta = eventMeta(ev);
+                  return (
+                    <div key={ev.time} style={{ fontSize: "11px", color: meta.color, display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}>
+                      <span style={{ transform: "scale(0.8)" }}>{meta.icon}</span>
+                      {meta.label} {ev.description ? `- ${ev.description}` : ""}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Clipping Overlay */}
             {isClippingMode && duration > 0 && (
@@ -675,28 +736,79 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           background: "var(--bg-card)", padding: "12px 24px", borderRadius: "8px", border: "1px solid var(--border-subtle)",
           display: "flex", alignItems: "center", gap: "20px", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
         }}>
-          <span style={{ color: "var(--text-primary)", fontSize: "14px" }}>
-            Clip: <b>{formatTime(clipStart)}</b> - <b>{formatTime(clipEnd)}</b> ({Math.max(0.1, clipEnd - clipStart).toFixed(1)}s)
-          </span>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={() => setIsClippingMode(false)} style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}>Cancelar</button>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
+            {exportType === "clip" ? (
+              <Scissors size={20} color="var(--accent-violet)" />
+            ) : (
+              <AlertTriangle size={20} color="var(--color-defeat)" />
+            )}
+            <div>
+              <div style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>
+                {exportType === "clip" ? "Exportar Clip de Video" : "Marcar Error"}
+              </div>
+              <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
+                {formatTime(clipStart)} - {formatTime(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
+              </div>
+            </div>
+          </div>
+          
+          <div style={{ display: "flex", gap: "var(--space-3)", flex: 1, alignItems: "center" }}>
+            {exportType === "error" && (
+              <input
+                type="text"
+                placeholder="Escribe una nota sobre este error..."
+                value={errorNote}
+                onChange={(e) => setErrorNote(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: "var(--space-2) var(--space-3)",
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--border-strong)",
+                  backgroundColor: "var(--bg-panel)",
+                  color: "var(--text-primary)",
+                  fontSize: "var(--font-sm)",
+                  outline: "none"
+                }}
+              />
+            )}
             <button 
               onClick={async () => {
+                if (isExporting) return;
                 setIsExporting(true);
                 try {
                   const dur = Math.max(0.1, clipEnd - clipStart);
-                  await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
+                  if (exportType === "clip") {
+                    await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
+                  } else {
+                    await exportErrorClip(match.id, match.video_path, clipStart, dur, errorNote);
+                    setErrorNote("");
+                  }
                   setIsClippingMode(false);
-                  alert("¡Clip exportado con éxito en la carpeta del video!");
-                } catch (e) {
-                  alert("Error exportando clip: " + e);
+                  alert("¡Exportado con éxito!");
+                } catch (err) {
+                  alert("Error: " + err);
                 } finally {
                   setIsExporting(false);
                 }
-              }} 
+              }}
               disabled={isExporting}
-              style={{ padding: "6px 16px", background: "var(--accent-violet)", border: "none", color: "white", borderRadius: "5px", cursor: isExporting ? "not-allowed" : "pointer", fontWeight: "bold" }}>
-              {isExporting ? "Exportando..." : "Exportar Clip"}
+              style={{
+                ...styles.ghostBtn, 
+                backgroundColor: exportType === "clip" ? "var(--accent-violet)" : "var(--color-defeat)", 
+                color: "#fff", 
+                border: "none",
+                marginLeft: exportType === "clip" ? "auto" : 0,
+                padding: "6px 16px",
+                borderRadius: "5px"
+              }}
+            >
+              {isExporting ? "Exportando..." : "Exportar " + (exportType === "clip" ? "Clip" : "Error")}
+            </button>
+            <button 
+              onClick={() => setIsClippingMode(false)} 
+              style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}
+            >
+              Cancelar
             </button>
           </div>
         </div>

@@ -933,6 +933,19 @@ pub async fn update_error_note(path: String, note: String) -> Result<(), String>
     Ok(())
 }
 
+#[tauri::command]
+pub fn get_app_config() -> crate::storage::AppConfig {
+    crate::storage::load_config()
+}
+
+#[tauri::command]
+pub fn set_app_config(save_directory: String) -> Result<(), String> {
+    let mut config = crate::storage::load_config();
+    config.save_directory = save_directory;
+    crate::storage::save_config(&config);
+    Ok(())
+}
+
 /// Sube un clip y devuelve un enlace directo reproducible.
 ///
 /// `expiry`:

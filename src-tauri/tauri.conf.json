@@ -44,7 +44,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/jonatan-testiando/LeagueRecorder/releases/latest/download/updater.json"
+        "https://github.com/jonatan-testiando/LeagueRecorder/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzNjc0NDhGMDE3QzcyNEQKUldSTmNud0JqMFJuOHhuNHRMQ3poY0ZMek5IanpJdi83T2h1SldGaDB4U2VFUjFqZFB1bDhOSE4K"
     }

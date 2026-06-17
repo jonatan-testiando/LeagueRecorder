@@ -14,7 +14,7 @@ export const SettingsPanel: React.FC = () => {
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium" });
-  const [config, setConfig] = useState<AppConfig>({ save_directory: "" });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
   const { showError, showSuccess } = useDialog();
 
   const checkStatus = async () => {
@@ -65,7 +65,7 @@ export const SettingsPanel: React.FC = () => {
 
   const handleSaveConfig = async (c: AppConfig) => {
     setConfig(c);
-    await setAppConfig(c.save_directory).catch(console.error);
+    await setAppConfig(c.save_directory, c.riot_api_key).catch(console.error);
   };
 
   const handlePickDirectory = async () => {
@@ -77,8 +77,16 @@ export const SettingsPanel: React.FC = () => {
     if (selected === null) {
       return;
     } else {
-      handleSaveConfig({ save_directory: selected as string });
+      handleSaveConfig({ ...config, save_directory: selected as string });
     }
+  };
+
+  const handleApiKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfig({ ...config, riot_api_key: e.target.value });
+  };
+
+  const handleApiKeyBlur = () => {
+    handleSaveConfig(config);
   };
 
   const handleStartManual = async () => {
@@ -189,6 +197,37 @@ export const SettingsPanel: React.FC = () => {
               <button onClick={handlePickDirectory} style={{...styles.button, backgroundColor: "var(--accent-violet)", padding: "8px 12px"}}>
                 Cambiar
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Riot API */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔑</span>
+            <h3 style={styles.cardTitle}>Riot Developer API</h3>
+          </div>
+        </div>
+        <div style={styles.cardBody}>
+          <div style={styles.settingRow}>
+            <div style={styles.settingInfo}>
+              <span style={styles.settingLabel}>API Key (Development)</span>
+              <span style={styles.settingDesc}>Necesario para obtener tus estadísticas (KDA, oro, daño). ¡Expira cada 24 horas!</span>
+            </div>
+            <div style={{ flex: 1, marginLeft: "16px" }}>
+              <input 
+                type="password" 
+                placeholder="RGAPI-..."
+                value={config.riot_api_key} 
+                onChange={handleApiKeyChange}
+                onBlur={handleApiKeyBlur}
+                style={{
+                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
+                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none"
+                }} 
+              />
             </div>
           </div>
         </div>

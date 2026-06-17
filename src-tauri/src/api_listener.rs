@@ -40,14 +40,18 @@ pub struct LolEvent {
 fn player_game_name(obj: Option<&serde_json::Value>) -> Option<String> {
     let o = obj?;
     let pick = |k: &str| o.get(k).and_then(|v| v.as_str()).filter(|s| !s.is_empty());
+    
+    if let (Some(n), Some(t)) = (pick("riotIdGameName"), pick("riotIdTagLine")) {
+        return Some(format!("{}#{}", n, t));
+    }
     if let Some(n) = pick("riotIdGameName") {
+        return Some(n.to_string());
+    }
+    if let Some(n) = pick("riotId") {
         return Some(n.to_string());
     }
     if let Some(n) = pick("summonerName") {
         return Some(n.to_string());
-    }
-    if let Some(n) = pick("riotId") {
-        return Some(n.split('#').next().unwrap_or(n).to_string());
     }
     None
 }

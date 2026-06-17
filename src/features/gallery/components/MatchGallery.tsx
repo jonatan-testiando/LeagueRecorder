@@ -122,7 +122,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   <div>
                     <div style={styles.champName}>Ranked Solo/Duo</div>
                     <div style={styles.gameType}>
-                      {match.champion} <span style={styles.localBadge}>Local only</span>
+                      {match.champion} 
+                      {match.riot_match_id ? (
+                        <span style={{...styles.localBadge, borderColor: "var(--accent-violet)", color: "var(--accent-violet)"}}>Riot API Sync</span>
+                      ) : (
+                        <span style={styles.localBadge}>Local only</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -139,9 +144,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
                 <div style={{ ...styles.td, flex: 1.5 }}>
                   <div style={styles.primaryText}>
-                    {kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}
+                    {match.kda ? (
+                      <span>{match.kda.replace(/\//g, " / ")}</span>
+                    ) : (
+                      <>{kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}</>
+                    )}
                   </div>
-                  <div style={styles.secondaryText}>{kdaRatio(kda)} KDA</div>
+                  <div style={styles.secondaryText}>
+                    {match.gold_earned ? `💰 ${(match.gold_earned / 1000).toFixed(1)}k Gold` : `${kdaRatio(kda)} KDA`}
+                  </div>
                 </div>
 
                 <div style={{ ...styles.td, width: "40px", justifyContent: "flex-end" }}>

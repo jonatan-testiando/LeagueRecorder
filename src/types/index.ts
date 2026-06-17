@@ -42,6 +42,10 @@ export interface MatchMetadata {
   apm?: number; // Acciones por minuto promedio
   apm_series?: number[]; // APM por minuto de juego
   mouse_events?: MouseEventData[];
+  riot_match_id?: string;
+  kda?: string;
+  gold_earned?: number;
+  damage_dealt?: number;
 }
 
 export interface ClipMetadata {

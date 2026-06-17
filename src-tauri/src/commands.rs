@@ -195,6 +195,10 @@ pub async fn stop_manual_recording(
             apm: 0.0,
             apm_series: Vec::new(),
             mouse_events: active_match.mouse_events.lock().await.clone(),
+            riot_match_id: None,
+            kda: None,
+            gold_earned: None,
+            damage_dealt: None,
         };
         let _ = save_match_metadata(&metadata);
     }
@@ -509,9 +513,26 @@ async fn finalize_match(
         apm,
         apm_series,
         mouse_events: active_match.mouse_events.lock().await.clone(),
+        riot_match_id: None,
+        kda: None,
+        gold_earned: None,
+        damage_dealt: None,
     };
     match save_match_metadata(&metadata) {
-        Ok(_) => println!("Metadatos guardados con éxito para la partida {}", match_id),
+        Ok(_) => {
+            println!("Metadatos guardados con éxito para la partida {}", match_id);
+            // Iniciar sincronización con Riot API en segundo plano tras 60 segundos
+            let match_id_for_riot = match_id.clone();
+            let active_player_for_riot = active_match.active_player.lock().await.clone();
+            tokio::spawn(async move {
+                println!("Esperando 60 segundos antes de sincronizar con Riot API para la partida {}...", match_id_for_riot);
+                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot).await {
+                    Ok(_) => println!("Sincronización con Riot API completada para {}", match_id_for_riot),
+                    Err(e) => eprintln!("Error al sincronizar con Riot API: {}", e),
+                }
+            });
+        },
         Err(e) => eprintln!("Error al guardar los metadatos de la partida: {}", e),
     }
 }
@@ -939,9 +960,10 @@ pub fn get_app_config() -> crate::storage::AppConfig {
 }
 
 #[tauri::command]
-pub fn set_app_config(save_directory: String) -> Result<(), String> {
+pub fn set_app_config(save_directory: String, riot_api_key: String) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     config.save_directory = save_directory;
+    config.riot_api_key = riot_api_key;
     crate::storage::save_config(&config);
     Ok(())
 }

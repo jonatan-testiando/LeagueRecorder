@@ -5,6 +5,7 @@ mod storage;
 mod commands;
 mod streamer;
 mod ultimate;
+pub mod riot_api;
 
 use std::sync::Arc;
 use recorder::RecorderState;

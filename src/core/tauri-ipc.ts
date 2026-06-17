@@ -67,12 +67,13 @@ export const toggleClipFavorite = async (path: string): Promise<boolean> => {
 
 export interface AppConfig {
   save_directory: string;
+  riot_api_key: string;
 }
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory });
+export const setAppConfig = async (saveDirectory: string, riotApiKey: string): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey });
 };

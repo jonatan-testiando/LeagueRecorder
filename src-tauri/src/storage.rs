@@ -36,11 +36,25 @@ pub struct MatchMetadata {
     /// Movimientos y clics del ratón.
     #[serde(default)]
     pub mouse_events: Vec<MouseEventData>,
+    /// API de Riot: ID real de la partida en el servidor
+    #[serde(default)]
+    pub riot_match_id: Option<String>,
+    /// API de Riot: KDA (Kills/Deaths/Assists) en formato "K/D/A"
+    #[serde(default)]
+    pub kda: Option<String>,
+    /// API de Riot: Oro total ganado
+    #[serde(default)]
+    pub gold_earned: Option<i32>,
+    /// API de Riot: Daño total infligido a campeones
+    #[serde(default)]
+    pub damage_dealt: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub save_directory: String,
+    #[serde(default)]
+    pub riot_api_key: String,
 }
 
 impl Default for AppConfig {
@@ -48,6 +62,7 @@ impl Default for AppConfig {
         let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
         Self {
             save_directory: Path::new(&user_profile).join("Videos").join("LeagueRecorder").to_string_lossy().to_string(),
+            riot_api_key: "".to_string(),
         }
     }
 }
@@ -136,6 +151,16 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
     // Ordenar de más reciente a más antiguo
     matches.sort_by(|a, b| b.date.cmp(&a.date));
     matches
+}
+
+pub fn get_match_metadata(match_id: &str) -> Result<MatchMetadata, String> {
+    let matches = load_all_matches();
+    for m in matches {
+        if m.id == match_id {
+            return Ok(m);
+        }
+    }
+    Err("Match not found".to_string())
 }
 
 pub fn delete_match_files(id: &str) -> Result<(), String> {

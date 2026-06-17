@@ -3,6 +3,9 @@ use std::io::Write;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 pub struct RecorderState {
     pub child_process: Mutex<Option<Child>>,
 }
@@ -31,7 +34,11 @@ fn get_ffmpeg_executable() -> String {
     }
 
     // 2. Comprobar si está disponible en el PATH
-    if Command::new("ffmpeg")
+    let mut cmd = Command::new("ffmpeg");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    if cmd
         .arg("-version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -48,7 +55,11 @@ fn get_ffmpeg_executable() -> String {
 /// Esto evita codificar nombres de dispositivos que pueden no existir en el equipo.
 pub fn list_audio_devices() -> Vec<String> {
     let ffmpeg = get_ffmpeg_executable();
-    let output = Command::new(&ffmpeg)
+    let mut cmd = Command::new(&ffmpeg);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    let output = cmd
         .args([
             "-hide_banner",
             "-list_devices",
@@ -269,7 +280,11 @@ fn build_ffmpeg_args(
 /// Lanza FFmpeg y verifica que siga vivo tras un margen suficiente para detectar
 /// fallos de inicialización del codificador (NVENC puede tardar ~1s en abortar).
 fn spawn_ffmpeg_and_verify(ffmpeg_exe: &str, args: &[String]) -> Option<Child> {
-    match Command::new(ffmpeg_exe)
+    let mut cmd = Command::new(ffmpeg_exe);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+
+    match cmd
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())

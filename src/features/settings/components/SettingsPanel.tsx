@@ -20,6 +20,8 @@ export const SettingsPanel: React.FC = () => {
   const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const { showError, showSuccess } = useDialog();
 
   const checkStatus = async () => {
@@ -137,9 +139,35 @@ export const SettingsPanel: React.FC = () => {
     try {
       const update = await check();
       if (update) {
-        setUpdateMsg(`Descargando versión ${update.version}...`);
-        await update.downloadAndInstall();
-        setUpdateMsg("Actualización instalada. Reiniciando...");
+        setUpdateMsg(`Nueva versión ${update.version} disponible`);
+        setIsDownloading(true);
+        setDownloadProgress(0);
+        
+        let downloaded = 0;
+        let contentLength = 0;
+        
+        await update.downloadAndInstall((event) => {
+          switch (event.event) {
+            case 'Started':
+              contentLength = event.data.contentLength || 0;
+              setUpdateMsg("Iniciando descarga...");
+              break;
+            case 'Progress':
+              downloaded += event.data.chunkLength;
+              if (contentLength > 0) {
+                const percent = Math.round((downloaded / contentLength) * 100);
+                setDownloadProgress(percent);
+                setUpdateMsg(`Descargando... ${percent}%`);
+              }
+              break;
+            case 'Finished':
+              setUpdateMsg("Instalando actualización...");
+              setDownloadProgress(100);
+              break;
+          }
+        });
+        
+        setUpdateMsg("Reiniciando aplicación...");
         await relaunch();
       } else {
         setUpdateMsg("Tu aplicación ya está en la última versión.");
@@ -151,6 +179,7 @@ export const SettingsPanel: React.FC = () => {
       showError("Error al actualizar: " + err);
     } finally {
       setIsUpdating(false);
+      setIsDownloading(false);
     }
   };
 
@@ -292,16 +321,42 @@ export const SettingsPanel: React.FC = () => {
           <p style={styles.cardText}>
             Busca e instala las últimas mejoras de LeagueRecorder de forma automática.
           </p>
-          <div style={{ ...styles.form, marginTop: "16px" }}>
-            <button 
-              onClick={checkForUpdates} 
-              disabled={isUpdating}
-              style={{ ...styles.btn, backgroundColor: "var(--accent-violet)", flex: 1 }}
-            >
-              {isUpdating ? updateMsg || "Actualizando..." : "Buscar Actualizaciones"}
-            </button>
-          </div>
-          {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
+          
+          {isDownloading ? (
+            <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--accent-violet)" }}>
+                  {updateMsg}
+                </span>
+                <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)" }}>
+                  {downloadProgress}%
+                </span>
+              </div>
+              <div style={{ width: "100%", height: "10px", backgroundColor: "var(--bg-app)", borderRadius: "5px", overflow: "hidden", border: "1px solid var(--border-subtle)" }}>
+                <div style={{ 
+                  width: `${downloadProgress}%`, 
+                  height: "100%", 
+                  background: "var(--gradient-violet)",
+                  boxShadow: "0 0 10px rgba(168, 85, 247, 0.5)",
+                  transition: "width 0.2s ease-out",
+                  borderRadius: "5px"
+                }} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ ...styles.form, marginTop: "16px" }}>
+                <button 
+                  onClick={checkForUpdates} 
+                  disabled={isUpdating}
+                  style={{ ...styles.btn, backgroundColor: "var(--accent-violet)", flex: 1, opacity: isUpdating ? 0.7 : 1, transition: "opacity 0.2s" }}
+                >
+                  {isUpdating ? updateMsg || "Buscando..." : "Buscar Actualizaciones"}
+                </button>
+              </div>
+              {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
+            </>
+          )}
         </div>
       </motion.div>
 

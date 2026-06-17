@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -61,7 +61,11 @@ impl Default for AppConfig {
     fn default() -> Self {
         let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
         Self {
-            save_directory: Path::new(&user_profile).join("Videos").join("LeagueRecorder").to_string_lossy().to_string(),
+            save_directory: Path::new(&user_profile)
+                .join("Videos")
+                .join("LeagueRecorder")
+                .to_string_lossy()
+                .to_string(),
             riot_api_key: "".to_string(),
         }
     }
@@ -113,7 +117,7 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
     let file_path = dir.join(format!("{}.json", metadata.id));
     let json_content = serde_json::to_string_pretty(metadata)
         .map_err(|e| format!("Error serializando JSON: {}", e))?;
-    
+
     fs::write(file_path, json_content)
         .map_err(|e| format!("Error guardando archivo JSON: {}", e))?;
     Ok(())
@@ -122,7 +126,7 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
 pub fn load_all_matches() -> Vec<MatchMetadata> {
     let dir = get_videos_dir();
     let mut matches = Vec::new();
-    
+
     let mut process_file = |path: &Path| {
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             if let Ok(content) = fs::read_to_string(&path) {
@@ -147,7 +151,7 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
             }
         }
     }
-    
+
     // Ordenar de más reciente a más antiguo
     matches.sort_by(|a, b| b.date.cmp(&a.date));
     matches
@@ -169,12 +173,12 @@ pub fn delete_match_files(id: &str) -> Result<(), String> {
         let _ = fs::remove_dir_all(&match_dir);
         return Ok(());
     }
-    
+
     // Retrocompatibilidad
     let root_dir = get_videos_dir();
     let json_path = root_dir.join(format!("{}.json", id));
     let mp4_path = root_dir.join(format!("{}.mp4", id));
-    
+
     if json_path.exists() {
         let _ = fs::remove_file(json_path);
     }
@@ -203,15 +207,15 @@ pub fn check_storage_quota() {
     let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
     let root_dir = get_videos_dir();
     let current_size = get_dir_size(&root_dir);
-    
+
     if current_size > limit {
         let mut matches = load_all_matches();
         // Sort from oldest to newest (ascending)
         matches.sort_by(|a, b| a.date.cmp(&b.date));
-        
+
         let mut freed = 0;
         let excess = current_size - limit;
-        
+
         for m in matches {
             if freed >= excess {
                 break;

@@ -1,25 +1,31 @@
-use tauri::State;
-use crate::recorder::{RecorderState, start_recording, stop_recording, is_recording, list_audio_devices, detect_system_audio_device};
-use crate::storage::{MatchMetadata, MatchEvent, MouseEventData, load_all_matches, delete_match_files, save_match_metadata};
-use crate::api_listener::{LolApiClient, LolEvent, strip_tag};
+use crate::api_listener::{strip_tag, LolApiClient, LolEvent};
+use crate::recorder::{
+    detect_system_audio_device, is_recording, list_audio_devices, start_recording, stop_recording,
+    RecorderState,
+};
+use crate::storage::{
+    delete_match_files, load_all_matches, save_match_metadata, MatchEvent, MatchMetadata,
+    MouseEventData,
+};
 use crate::ultimate::UltState;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use std::collections::HashMap;
-use tokio::sync::Mutex;
 use chrono::Local;
 use reqwest::multipart;
+use std::collections::HashMap;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::Mutex;
 
 // Estructura para almacenar el estado de la partida actual en el worker de background
 pub struct ActiveMatchState {
     pub id: Mutex<String>,
     pub champion: Mutex<String>,
     pub active_player: Mutex<String>,
-    pub player_team: Mutex<String>,                       // "ORDER"/"CHAOS"
-    pub team_map: Mutex<HashMap<String, String>>,         // summonerName(lower) -> team
+    pub player_team: Mutex<String>,               // "ORDER"/"CHAOS"
+    pub team_map: Mutex<HashMap<String, String>>, // summonerName(lower) -> team
     pub events: Mutex<Vec<MatchEvent>>,
     pub is_auto_recording: Mutex<bool>,
-    pub apm_samples: Mutex<Vec<(f64, u64)>>,              // (tiempo de juego, acciones acumuladas)
+    pub apm_samples: Mutex<Vec<(f64, u64)>>, // (tiempo de juego, acciones acumuladas)
     pub mouse_events: Mutex<Vec<MouseEventData>>,
     pub recording_start: Mutex<Option<std::time::Instant>>,
 }
@@ -81,7 +87,11 @@ pub fn get_ultimate_settings(state: State<'_, Arc<UltState>>) -> UltimateSetting
 }
 
 #[tauri::command]
-pub fn set_ultimate_settings(enabled: bool, key: String, state: State<'_, Arc<UltState>>) -> UltimateSettings {
+pub fn set_ultimate_settings(
+    enabled: bool,
+    key: String,
+    state: State<'_, Arc<UltState>>,
+) -> UltimateSettings {
     *state.enabled.lock().unwrap() = enabled;
     let k = key.trim().to_uppercase();
     if !k.is_empty() {
@@ -114,7 +124,11 @@ pub fn get_video_settings(state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>
 }
 
 #[tauri::command]
-pub fn set_video_settings(fps: i32, quality: String, state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>) -> VideoSettings {
+pub fn set_video_settings(
+    fps: i32,
+    quality: String,
+    state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>,
+) -> VideoSettings {
     let mut s = state.lock().unwrap();
     s.fps = fps;
     s.quality = quality;
@@ -137,11 +151,11 @@ pub async fn start_manual_recording(
     id: String,
     state: State<'_, Arc<RecorderState>>,
     active_match: State<'_, Arc<ActiveMatchState>>,
-    video_settings: State<'_, Arc<std::sync::Mutex<VideoSettings>>>
+    video_settings: State<'_, Arc<std::sync::Mutex<VideoSettings>>>,
 ) -> Result<String, String> {
     let settings = video_settings.lock().unwrap().clone();
     let path = start_recording(&id, &state, &settings)?;
-    
+
     // Configurar estado manual
     *active_match.id.lock().await = id;
     *active_match.champion.lock().await = "Manual Test".to_string();
@@ -150,25 +164,28 @@ pub async fn start_manual_recording(
     active_match.mouse_events.lock().await.clear();
     *active_match.is_auto_recording.lock().await = false;
     *active_match.recording_start.lock().await = Some(std::time::Instant::now());
-    
+
     Ok(path)
 }
 
 #[tauri::command]
 pub async fn stop_manual_recording(
     state: State<'_, Arc<RecorderState>>,
-    active_match: State<'_, Arc<ActiveMatchState>>
+    active_match: State<'_, Arc<ActiveMatchState>>,
 ) -> Result<(), String> {
     stop_recording(&state)?;
     crate::storage::check_storage_quota();
-    
+
     // Guardar metadata simulada para la prueba manual
     let id = active_match.id.lock().await.clone();
     if !id.is_empty() {
         let metadata = MatchMetadata {
             id: id.clone(),
             game_duration: 30.0, // Simulado
-            video_path: crate::storage::get_match_dir(&id).join(format!("{}.mp4", id)).to_string_lossy().to_string(),
+            video_path: crate::storage::get_match_dir(&id)
+                .join(format!("{}.mp4", id))
+                .to_string_lossy()
+                .to_string(),
             result: "Victory".to_string(),
             champion: active_match.champion.lock().await.clone(),
             date: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -190,7 +207,7 @@ pub async fn stop_manual_recording(
                     subtype: None,
                     time: 25.0,
                     description: "Grabación manual finalizada".to_string(),
-                }
+                },
             ],
             apm: 0.0,
             apm_series: Vec::new(),
@@ -202,7 +219,7 @@ pub async fn stop_manual_recording(
         };
         let _ = save_match_metadata(&metadata);
     }
-    
+
     Ok(())
 }
 
@@ -211,7 +228,7 @@ pub fn spawn_background_monitor(
     recorder_state: Arc<RecorderState>,
     active_match: Arc<ActiveMatchState>,
     ult_state: Arc<UltState>,
-    video_settings_state: Arc<std::sync::Mutex<VideoSettings>>
+    video_settings_state: Arc<std::sync::Mutex<VideoSettings>>,
 ) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -470,27 +487,30 @@ async fn finalize_match(
     let mut final_duration = duration;
     let match_id_str = match_id.clone();
     let dir = crate::storage::get_match_dir(&match_id_str);
-    
-    // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 10 segundos 
+
+    // Si la partida se cerró abruptamente (sin GameEnd de la API), descontamos 10 segundos
     // y recortamos físicamente el video para que no se vea el escritorio.
     if !has_game_end && is_auto {
         final_duration = (duration - 10.0).max(1.0);
         let final_path = dir.join(format!("{}.mp4", match_id_str));
         let tmp_path = dir.join(format!("{}_trim.mp4", match_id_str));
-        
+
         // Esperamos un momento a que ffmpeg libere el archivo tras el kill()
         std::thread::sleep(std::time::Duration::from_millis(1500));
-        
+
         if final_path.exists() {
             let output = std::process::Command::new("ffmpeg")
                 .args(&[
-                    "-i", &final_path.to_string_lossy(),
-                    "-t", &final_duration.to_string(),
-                    "-c", "copy",
-                    &tmp_path.to_string_lossy()
+                    "-i",
+                    &final_path.to_string_lossy(),
+                    "-t",
+                    &final_duration.to_string(),
+                    "-c",
+                    "copy",
+                    &tmp_path.to_string_lossy(),
                 ])
                 .output();
-                
+
             if let Ok(out) = output {
                 if out.status.success() {
                     let _ = std::fs::remove_file(&final_path);
@@ -505,7 +525,10 @@ async fn finalize_match(
     let metadata = MatchMetadata {
         id: match_id.clone(),
         game_duration: final_duration,
-        video_path: dir.join(format!("{}.mp4", match_id_str)).to_string_lossy().to_string(),
+        video_path: dir
+            .join(format!("{}.mp4", match_id_str))
+            .to_string_lossy()
+            .to_string(),
         result,
         champion,
         date: game_start_time.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -525,14 +548,22 @@ async fn finalize_match(
             let match_id_for_riot = match_id.clone();
             let active_player_for_riot = active_match.active_player.lock().await.clone();
             tokio::spawn(async move {
-                println!("Esperando 60 segundos antes de sincronizar con Riot API para la partida {}...", match_id_for_riot);
+                println!(
+                    "Esperando 60 segundos antes de sincronizar con Riot API para la partida {}...",
+                    match_id_for_riot
+                );
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot).await {
-                    Ok(_) => println!("Sincronización con Riot API completada para {}", match_id_for_riot),
+                match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot)
+                    .await
+                {
+                    Ok(_) => println!(
+                        "Sincronización con Riot API completada para {}",
+                        match_id_for_riot
+                    ),
                     Err(e) => eprintln!("Error al sincronizar con Riot API: {}", e),
                 }
             });
-        },
+        }
         Err(e) => eprintln!("Error al guardar los metadatos de la partida: {}", e),
     }
 }
@@ -613,7 +644,11 @@ fn structure_owner_team(name: &str) -> Option<&'static str> {
 
 /// Clasifica un nombre como aliado (Some(true)) o enemigo (Some(false)) respecto al
 /// equipo del jugador; None si no se conoce el equipo de ese nombre.
-fn classify_ally(name: &str, player_team: &str, team_map: &HashMap<String, String>) -> Option<bool> {
+fn classify_ally(
+    name: &str,
+    player_team: &str,
+    team_map: &HashMap<String, String>,
+) -> Option<bool> {
     team_map.get(&strip_tag(name)).map(|t| t == player_team)
 }
 
@@ -626,7 +661,10 @@ fn map_lol_event(
     team_map: &HashMap<String, String>,
 ) -> Option<MatchEvent> {
     let an = strip_tag(active_name);
-    let stolen = ev.stolen.as_deref().map_or(false, |s| s.eq_ignore_ascii_case("true"));
+    let stolen = ev
+        .stolen
+        .as_deref()
+        .map_or(false, |s| s.eq_ignore_ascii_case("true"));
     let stolen_txt = if stolen { " (¡robado!)" } else { "" };
 
     // (tipo, subtype, descripción)
@@ -645,7 +683,11 @@ fn map_lol_event(
         "FirstBlood" => {
             let recip = ev.recipient.as_deref().unwrap_or("");
             if strip_tag(recip) == an {
-                ("FirstBlood", Some("kill"), "¡Primera sangre! La conseguiste tú".to_string())
+                (
+                    "FirstBlood",
+                    Some("kill"),
+                    "¡Primera sangre! La conseguiste tú".to_string(),
+                )
             } else {
                 return None; // primera sangre ajena: no nos interesa
             }
@@ -654,11 +696,23 @@ fn map_lol_event(
             let killer = ev.killer_name.as_deref().unwrap_or("");
             let victim = ev.victim_name.as_deref().unwrap_or("Enemigo");
             if strip_tag(killer) == an {
-                ("ChampionKill", Some("kill"), format!("Mataste a {}", victim))
+                (
+                    "ChampionKill",
+                    Some("kill"),
+                    format!("Mataste a {}", victim),
+                )
             } else if strip_tag(victim) == an {
                 ("ChampionKill", Some("death"), format!("Te mató {}", killer))
-            } else if ev.assisters.as_ref().map_or(false, |a| a.iter().any(|n| strip_tag(n) == an)) {
-                ("ChampionKill", Some("assist"), format!("Asististe en la muerte de {}", victim))
+            } else if ev
+                .assisters
+                .as_ref()
+                .map_or(false, |a| a.iter().any(|n| strip_tag(n) == an))
+            {
+                (
+                    "ChampionKill",
+                    Some("assist"),
+                    format!("Asististe en la muerte de {}", victim),
+                )
             } else {
                 return None; // kill que no te involucra
             }
@@ -680,22 +734,42 @@ fn map_lol_event(
         "TurretKilled" => {
             let turret = ev.turret_killed.as_deref().unwrap_or("");
             match structure_owner_team(turret) {
-                Some(owner) if owner == player_team => ("TowerKill", Some("ally"), "Perdiste una torre aliada".to_string()),
-                Some(_) => ("TowerKill", Some("enemy"), "Tu equipo destruyó una torre enemiga".to_string()),
+                Some(owner) if owner == player_team => (
+                    "TowerKill",
+                    Some("ally"),
+                    "Perdiste una torre aliada".to_string(),
+                ),
+                Some(_) => (
+                    "TowerKill",
+                    Some("enemy"),
+                    "Tu equipo destruyó una torre enemiga".to_string(),
+                ),
                 None => ("TowerKill", None, "Torre destruida".to_string()),
             }
         }
         "InhibKilled" => {
             let inhib = ev.inhib_killed.as_deref().unwrap_or("");
             match structure_owner_team(inhib) {
-                Some(owner) if owner == player_team => ("InhibKill", Some("ally"), "Perdiste un inhibidor".to_string()),
-                Some(_) => ("InhibKill", Some("enemy"), "Tu equipo destruyó un inhibidor".to_string()),
+                Some(owner) if owner == player_team => (
+                    "InhibKill",
+                    Some("ally"),
+                    "Perdiste un inhibidor".to_string(),
+                ),
+                Some(_) => (
+                    "InhibKill",
+                    Some("enemy"),
+                    "Tu equipo destruyó un inhibidor".to_string(),
+                ),
                 None => ("InhibKill", None, "Inhibidor destruido".to_string()),
             }
         }
         "DragonKill" => {
             let dtype = translate_dragon(ev.dragon_type.as_deref().unwrap_or(""));
-            let ally = classify_ally(ev.killer_name.as_deref().unwrap_or(""), player_team, team_map);
+            let ally = classify_ally(
+                ev.killer_name.as_deref().unwrap_or(""),
+                player_team,
+                team_map,
+            );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
             let desc = match ally {
                 Some(true) => format!("Tu equipo tomó el Dragón {}{}", dtype, stolen_txt),
@@ -705,7 +779,11 @@ fn map_lol_event(
             ("DragonKill", sub, desc)
         }
         "HeraldKill" => {
-            let ally = classify_ally(ev.killer_name.as_deref().unwrap_or(""), player_team, team_map);
+            let ally = classify_ally(
+                ev.killer_name.as_deref().unwrap_or(""),
+                player_team,
+                team_map,
+            );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
             let desc = match ally {
                 Some(true) => format!("Tu equipo tomó el Heraldo de la Grieta{}", stolen_txt),
@@ -715,7 +793,11 @@ fn map_lol_event(
             ("HeraldKill", sub, desc)
         }
         "BaronKill" => {
-            let ally = classify_ally(ev.killer_name.as_deref().unwrap_or(""), player_team, team_map);
+            let ally = classify_ally(
+                ev.killer_name.as_deref().unwrap_or(""),
+                player_team,
+                team_map,
+            );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
             let desc = match ally {
                 Some(true) => format!("Tu equipo mató al Barón Nashor{}", stolen_txt),
@@ -743,18 +825,29 @@ pub async fn export_clip(
     duration: f64,
 ) -> Result<String, String> {
     let dir = crate::storage::get_match_dir(&match_id);
-    let clip_id = format!("{}_clip_{}", match_id, chrono::Local::now().format("%H%M%S"));
+    let clip_id = format!(
+        "{}_clip_{}",
+        match_id,
+        chrono::Local::now().format("%H%M%S")
+    );
     let clip_path = dir.join(format!("{}.mp4", clip_id));
 
     let output = std::process::Command::new("ffmpeg")
         .args(&[
-            "-ss", &start_time.to_string(),
-            "-i", &video_path,
-            "-t", &duration.to_string(),
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-c:a", "aac",
-            "-movflags", "faststart",
+            "-ss",
+            &start_time.to_string(),
+            "-i",
+            &video_path,
+            "-t",
+            &duration.to_string(),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "faststart",
             &clip_path.to_string_lossy(),
         ])
         .output()
@@ -781,7 +874,7 @@ pub struct ClipMetadata {
 pub async fn get_all_clips() -> Vec<ClipMetadata> {
     let mut clips = Vec::new();
     let root_dir = crate::storage::get_videos_dir();
-    
+
     if let Ok(mut entries) = tokio::fs::read_dir(root_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if entry.path().is_dir() {
@@ -789,7 +882,10 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
                 if let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
                     while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
                         let name = sub_entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with(&match_id) && name.contains("_clip_") && name.ends_with(".mp4") {
+                        if name.starts_with(&match_id)
+                            && name.contains("_clip_")
+                            && name.ends_with(".mp4")
+                        {
                             let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
                             let json_path = sub_entry.path().with_extension("json");
                             let mut favorite = false;
@@ -820,23 +916,32 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
 pub async fn toggle_clip_favorite(path: String) -> Result<bool, String> {
     let mp4_path = std::path::Path::new(&path);
     let json_path = mp4_path.with_extension("json");
-    
+
     let mut meta = ClipMetadata {
         path: path.clone(),
-        name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        name: mp4_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
         match_id: "".to_string(),
         size: 0,
         favorite: false,
     };
-    
+
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(existing) = serde_json::from_str::<ClipMetadata>(&content) {
             meta = existing;
         }
     }
-    
+
     meta.favorite = !meta.favorite;
-    tokio::fs::write(&json_path, serde_json::to_string(&meta).map_err(|e| e.to_string())?).await.map_err(|e| e.to_string())?;
+    tokio::fs::write(
+        &json_path,
+        serde_json::to_string(&meta).map_err(|e| e.to_string())?,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(meta.favorite)
 }
 
@@ -868,19 +973,30 @@ pub async fn export_error_clip(
     note: String,
 ) -> Result<String, String> {
     let dir = crate::storage::get_match_dir(&match_id);
-    let error_id = format!("{}_error_{}", match_id, chrono::Local::now().format("%H%M%S"));
+    let error_id = format!(
+        "{}_error_{}",
+        match_id,
+        chrono::Local::now().format("%H%M%S")
+    );
     let error_path = dir.join(format!("{}.mp4", error_id));
     let json_path = dir.join(format!("{}.json", error_id));
 
     let output = std::process::Command::new("ffmpeg")
         .args(&[
-            "-ss", &start_time.to_string(),
-            "-i", &video_path,
-            "-t", &duration.to_string(),
-            "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-c:a", "aac",
-            "-movflags", "faststart",
+            "-ss",
+            &start_time.to_string(),
+            "-i",
+            &video_path,
+            "-t",
+            &duration.to_string(),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-c:a",
+            "aac",
+            "-movflags",
+            "faststart",
             &error_path.to_string_lossy(),
         ])
         .output()
@@ -895,7 +1011,8 @@ pub async fn export_error_clip(
             note: note.clone(),
             events: Vec::new(),
         };
-        let _ = tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
+        let _ =
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
         Ok(error_path.to_string_lossy().to_string())
     } else {
         let err = String::from_utf8_lossy(&output.stderr);
@@ -907,7 +1024,7 @@ pub async fn export_error_clip(
 pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
     let mut errors = Vec::new();
     let root_dir = crate::storage::get_videos_dir();
-    
+
     if let Ok(mut entries) = tokio::fs::read_dir(root_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if entry.path().is_dir() {
@@ -915,13 +1032,18 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                 if let Ok(mut sub_entries) = tokio::fs::read_dir(entry.path()).await {
                     while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
                         let name = sub_entry.file_name().to_string_lossy().to_string();
-                        if name.starts_with(&match_id) && name.contains("_error_") && name.ends_with(".mp4") {
+                        if name.starts_with(&match_id)
+                            && name.contains("_error_")
+                            && name.ends_with(".mp4")
+                        {
                             let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
                             let json_path = sub_entry.path().with_extension("json");
                             let mut note = String::new();
                             let mut events = Vec::new();
                             if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-                                if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+                                if let Ok(meta) =
+                                    serde_json::from_str::<ErrorClipMetadata>(&content)
+                                {
                                     note = meta.note;
                                     events = meta.events;
                                 }
@@ -948,29 +1070,43 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
 pub async fn update_error_note(path: String, note: String) -> Result<(), String> {
     let mp4_path = std::path::Path::new(&path);
     let json_path = mp4_path.with_extension("json");
-    
+
     let mut meta = ErrorClipMetadata {
         path: path.clone(),
-        name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        name: mp4_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
         match_id: "".to_string(), // we don't care to parse it just for update if we read it
         size: 0,
         note: note.clone(),
         events: Vec::new(),
     };
-    
+
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(existing) = serde_json::from_str::<ErrorClipMetadata>(&content) {
             meta = existing;
             meta.note = note;
         }
     }
-    
-    tokio::fs::write(&json_path, serde_json::to_string(&meta).map_err(|e| e.to_string())?).await.map_err(|e| e.to_string())?;
+
+    tokio::fs::write(
+        &json_path,
+        serde_json::to_string(&meta).map_err(|e| e.to_string())?,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub async fn add_error_event(path: String, time: f64, text: String, category: String) -> Result<String, String> {
+pub async fn add_error_event(
+    path: String,
+    time: f64,
+    text: String,
+    category: String,
+) -> Result<String, String> {
     let mp4_path = std::path::Path::new(&path);
     let json_path = mp4_path.with_extension("json");
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
@@ -982,8 +1118,14 @@ pub async fn add_error_event(path: String, time: f64, text: String, category: St
                 text,
                 category,
             });
-            meta.events.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
-            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            meta.events.sort_by(|a, b| {
+                a.time
+                    .partial_cmp(&b.time)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default())
+                .await
+                .map_err(|e| e.to_string())?;
             return Ok(id);
         }
     }
@@ -997,7 +1139,9 @@ pub async fn delete_error_event(path: String, event_id: String) -> Result<(), St
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
         if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
             meta.events.retain(|e| e.id != event_id);
-            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default())
+                .await
+                .map_err(|e| e.to_string())?;
             return Ok(());
         }
     }
@@ -1005,7 +1149,12 @@ pub async fn delete_error_event(path: String, event_id: String) -> Result<(), St
 }
 
 #[tauri::command]
-pub async fn edit_error_event(path: String, event_id: String, text: String, category: String) -> Result<(), String> {
+pub async fn edit_error_event(
+    path: String,
+    event_id: String,
+    text: String,
+    category: String,
+) -> Result<(), String> {
     let mp4_path = std::path::Path::new(&path);
     let json_path = mp4_path.with_extension("json");
     if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
@@ -1014,7 +1163,9 @@ pub async fn edit_error_event(path: String, event_id: String, text: String, cate
                 ev.text = text;
                 ev.category = category;
             }
-            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await.map_err(|e| e.to_string())?;
+            tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default())
+                .await
+                .map_err(|e| e.to_string())?;
             return Ok(());
         }
     }
@@ -1044,8 +1195,14 @@ pub fn set_app_config(save_directory: String, riot_api_key: String) -> Result<()
 /// Ambos servicios devuelven la URL del archivo como texto plano.
 #[tauri::command]
 pub async fn upload_clip(path: String, expiry: String) -> Result<String, String> {
-    let bytes = tokio::fs::read(&path).await.map_err(|e| format!("Error leyendo archivo: {}", e))?;
-    let file_name = std::path::Path::new(&path).file_name().unwrap_or_default().to_string_lossy().to_string();
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| format!("Error leyendo archivo: {}", e))?;
+    let file_name = std::path::Path::new(&path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
 
     let part = multipart::Part::bytes(bytes)
         .file_name(file_name)
@@ -1074,7 +1231,8 @@ pub async fn upload_clip(path: String, expiry: String) -> Result<String, String>
         )
     };
 
-    let res = client.post(url)
+    let res = client
+        .post(url)
         .multipart(form)
         .send()
         .await

@@ -1,7 +1,7 @@
-use std::process::{Command, Child, Stdio};
-use std::sync::Mutex;
-use std::io::Write;
 use crate::storage::get_match_dir;
+use std::io::Write;
+use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 
 pub struct RecorderState {
     pub child_process: Mutex<Option<Child>>,
@@ -31,7 +31,13 @@ fn get_ffmpeg_executable() -> String {
     }
 
     // 2. Comprobar si está disponible en el PATH
-    if Command::new("ffmpeg").arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok() {
+    if Command::new("ffmpeg")
+        .arg("-version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok()
+    {
         return "ffmpeg".to_string();
     }
 
@@ -43,7 +49,15 @@ fn get_ffmpeg_executable() -> String {
 pub fn list_audio_devices() -> Vec<String> {
     let ffmpeg = get_ffmpeg_executable();
     let output = Command::new(&ffmpeg)
-        .args(["-hide_banner", "-list_devices", "true", "-f", "dshow", "-i", "dummy"])
+        .args([
+            "-hide_banner",
+            "-list_devices",
+            "true",
+            "-f",
+            "dshow",
+            "-i",
+            "dummy",
+        ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -85,8 +99,8 @@ pub fn detect_system_audio_device() -> Option<String> {
         "mezcla estereo",
         "what u hear",
         "wave out mix",
-        "voicemeeter out",        // VoiceMeeter (si el usuario lo usa)
-        "cable output",           // VB-CABLE (requiere reenrutar la salida hacia el cable)
+        "voicemeeter out", // VoiceMeeter (si el usuario lo usa)
+        "cable output",    // VB-CABLE (requiere reenrutar la salida hacia el cable)
     ];
 
     for needle in priorities {
@@ -108,15 +122,20 @@ fn detect_microphone_device() -> Option<String> {
 
 #[derive(Clone, Copy)]
 enum VideoMode {
-    GpuNvenc, // Captura DirectX (ddagrab) + codificación por GPU (NVENC). Cero impacto de CPU.
-    GpuX264,  // Captura DirectX (ddagrab) + codificación por CPU (x264). Captura sin coste, encode ligero.
+    GpuNvenc,   // Captura DirectX (ddagrab) + codificación por GPU (NVENC). Cero impacto de CPU.
+    GpuX264, // Captura DirectX (ddagrab) + codificación por CPU (x264). Captura sin coste, encode ligero.
     CpuGdigrab, // Captura GDI + codificación por CPU. Compatibilidad máxima.
 }
 
 use crate::commands::VideoSettings;
 
 /// Construye los argumentos de FFmpeg para un modo de vídeo y un dispositivo de audio opcional.
-fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>, settings: &VideoSettings) -> Vec<String> {
+fn build_ffmpeg_args(
+    video_path: &str,
+    mode: VideoMode,
+    audio: Option<&str>,
+    settings: &VideoSettings,
+) -> Vec<String> {
     let mut args: Vec<String> = vec!["-y".into()];
 
     let fps = settings.fps.to_string();
@@ -150,72 +169,97 @@ fn build_ffmpeg_args(video_path: &str, mode: VideoMode, audio: Option<&str>, set
             // Cuando hay audio, el dshow es el ÚNICO input real, por tanto índice 0.
             if let Some(dev) = audio {
                 args.extend([
-                    "-thread_queue_size".into(), "1024".into(),
-                    "-f".into(), "dshow".into(),
-                    "-rtbufsize".into(), "256M".into(),
-                    "-i".into(), format!("audio={}", dev),
-                    "-map".into(), "[v]".into(),
-                    "-map".into(), "0:a".into(),
+                    "-thread_queue_size".into(),
+                    "1024".into(),
+                    "-f".into(),
+                    "dshow".into(),
+                    "-rtbufsize".into(),
+                    "256M".into(),
+                    "-i".into(),
+                    format!("audio={}", dev),
+                    "-map".into(),
+                    "[v]".into(),
+                    "-map".into(),
+                    "0:a".into(),
                 ]);
             }
 
             // Codificador de vídeo
             match mode {
                 VideoMode::GpuNvenc => args.extend([
-                    "-c:v".into(), "h264_nvenc".into(),
-                    "-preset".into(), "p4".into(),
-                    "-rc".into(), "vbr".into(),
-                    "-cq".into(), nvenc_cq.into(),
+                    "-c:v".into(),
+                    "h264_nvenc".into(),
+                    "-preset".into(),
+                    "p4".into(),
+                    "-rc".into(),
+                    "vbr".into(),
+                    "-cq".into(),
+                    nvenc_cq.into(),
                 ]),
                 _ => args.extend([
-                    "-c:v".into(), "libx264".into(),
-                    "-preset".into(), "ultrafast".into(),
-                    "-crf".into(), x264_crf.into(),
+                    "-c:v".into(),
+                    "libx264".into(),
+                    "-preset".into(),
+                    "ultrafast".into(),
+                    "-crf".into(),
+                    x264_crf.into(),
                 ]),
             }
         }
         VideoMode::CpuGdigrab => {
             // Captura GDI del escritorio (input #0)
             args.extend([
-                "-thread_queue_size".into(), "1024".into(),
-                "-f".into(), "gdigrab".into(),
-                "-framerate".into(), fps,
-                "-i".into(), "desktop".into(),
+                "-thread_queue_size".into(),
+                "1024".into(),
+                "-f".into(),
+                "gdigrab".into(),
+                "-framerate".into(),
+                fps,
+                "-i".into(),
+                "desktop".into(),
             ]);
 
             if let Some(dev) = audio {
                 // dshow audio = input #1
                 args.extend([
-                    "-thread_queue_size".into(), "1024".into(),
-                    "-f".into(), "dshow".into(),
-                    "-rtbufsize".into(), "256M".into(),
-                    "-i".into(), format!("audio={}", dev),
-                    "-map".into(), "0:v".into(),
-                    "-map".into(), "1:a".into(),
+                    "-thread_queue_size".into(),
+                    "1024".into(),
+                    "-f".into(),
+                    "dshow".into(),
+                    "-rtbufsize".into(),
+                    "256M".into(),
+                    "-i".into(),
+                    format!("audio={}", dev),
+                    "-map".into(),
+                    "0:v".into(),
+                    "-map".into(),
+                    "1:a".into(),
                 ]);
             }
 
             args.extend([
-                "-c:v".into(), "libx264".into(),
-                "-preset".into(), "ultrafast".into(),
-                "-crf".into(), x264_crf.into(),
+                "-c:v".into(),
+                "libx264".into(),
+                "-preset".into(),
+                "ultrafast".into(),
+                "-crf".into(),
+                x264_crf.into(),
             ]);
         }
     }
 
     // Codificador de audio común (sólo si hay audio)
     if audio.is_some() {
-        args.extend([
-            "-c:a".into(), "aac".into(),
-            "-b:a".into(), "160k".into(),
-        ]);
+        args.extend(["-c:a".into(), "aac".into(), "-b:a".into(), "160k".into()]);
     }
 
     // Compatibilidad de reproducción en el WebView (H.264 yuv420p) y faststart para
     // que el reproductor pueda buscar/seek aunque el archivo crezca.
     args.extend([
-        "-pix_fmt".into(), "yuv420p".into(),
-        "-movflags".into(), "+faststart".into(),
+        "-pix_fmt".into(),
+        "yuv420p".into(),
+        "-movflags".into(),
+        "+faststart".into(),
         video_path.into(),
     ]);
 
@@ -247,7 +291,11 @@ fn spawn_ffmpeg_and_verify(ffmpeg_exe: &str, args: &[String]) -> Option<Child> {
 }
 
 /// Inicia la grabación de video+audio en segundo plano con una cascada robusta de fallback.
-pub fn start_recording(match_id: &str, state: &RecorderState, settings: &VideoSettings) -> Result<String, String> {
+pub fn start_recording(
+    match_id: &str,
+    state: &RecorderState,
+    settings: &VideoSettings,
+) -> Result<String, String> {
     let mut child_guard = state.child_process.lock().unwrap();
     if child_guard.is_some() {
         return Err("La grabación ya está en curso".to_string());
@@ -266,8 +314,13 @@ pub fn start_recording(match_id: &str, state: &RecorderState, settings: &VideoSe
     match &system_audio {
         Some(d) => println!("Grabadora: audio del sistema detectado -> '{}'", d),
         None => match &audio_device {
-            Some(d) => println!("Grabadora: sin audio de sistema; usando micrófono -> '{}'", d),
-            None => println!("Grabadora: no se detectó ningún dispositivo de audio; se grabará sin sonido."),
+            Some(d) => println!(
+                "Grabadora: sin audio de sistema; usando micrófono -> '{}'",
+                d
+            ),
+            None => println!(
+                "Grabadora: no se detectó ningún dispositivo de audio; se grabará sin sonido."
+            ),
         },
     }
 
@@ -275,7 +328,11 @@ pub fn start_recording(match_id: &str, state: &RecorderState, settings: &VideoSe
     // Orden por FIABILIDAD comprobada: la captura por GPU (ddagrab) + x264 ultrafast es la más
     // estable y de bajo impacto (la captura, lo costoso, va por GPU). NVENC+ddagrab puede fallar
     // según el driver/GPU, así que va después. gdigrab es el comodín de compatibilidad total.
-    let modes = [VideoMode::GpuX264, VideoMode::GpuNvenc, VideoMode::CpuGdigrab];
+    let modes = [
+        VideoMode::GpuX264,
+        VideoMode::GpuNvenc,
+        VideoMode::CpuGdigrab,
+    ];
     let mut attempts: Vec<(VideoMode, Option<String>)> = Vec::new();
     if audio_device.is_some() {
         for m in modes {
@@ -297,8 +354,13 @@ pub fn start_recording(match_id: &str, state: &RecorderState, settings: &VideoSe
         println!(
             "Grabadora: intentando modo '{}' {} a {} FPS (Quality: {})...",
             label,
-            if audio.is_some() { "con audio" } else { "sin audio" },
-            settings.fps, settings.quality
+            if audio.is_some() {
+                "con audio"
+            } else {
+                "sin audio"
+            },
+            settings.fps,
+            settings.quality
         );
         let args = build_ffmpeg_args(video_path_str, *mode, audio.as_deref(), settings);
         child = spawn_ffmpeg_and_verify(&ffmpeg_exe, &args);

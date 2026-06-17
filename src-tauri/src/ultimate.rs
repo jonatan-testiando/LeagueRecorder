@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 /// Estado compartido para la detección (best-effort) del uso de la ultimate por tecla
@@ -43,11 +43,11 @@ impl Default for UltState {
 /// El monitor decidirá luego si cuenta (solo en partida grabando y con la R disponible).
 pub fn spawn_keyboard_listener(state: Arc<UltState>) {
     let ctrl_pressed = Arc::new(AtomicBool::new(false));
-    
+
     std::thread::spawn(move || {
-        use rdev::{listen, EventType, Button, Key};
+        use rdev::{listen, Button, EventType, Key};
         let pressed_keys = Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
-        
+
         let result = listen(move |event| {
             let is_counting = state.counting.load(Ordering::Relaxed);
             match event.event_type {
@@ -55,7 +55,7 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                     if key == Key::ControlLeft || key == Key::ControlRight {
                         ctrl_pressed.store(true, Ordering::Relaxed);
                     }
-                    
+
                     let is_new_press = pressed_keys.lock().unwrap().insert(key);
 
                     // Contar acción para el APM (solo mientras se graba y solo si es pulsación nueva).
@@ -87,7 +87,12 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                             _ => return,
                         };
                         let (x, y) = *state.current_mouse_pos.lock().unwrap();
-                        state.mouse_events.lock().unwrap().push((Instant::now(), x, y, evt_str.to_string()));
+                        state.mouse_events.lock().unwrap().push((
+                            Instant::now(),
+                            x,
+                            y,
+                            evt_str.to_string(),
+                        ));
                     }
                 }
                 EventType::MouseMove { x, y } => {
@@ -101,7 +106,12 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                         };
                         if should_record {
                             *last = Some(now);
-                            state.mouse_events.lock().unwrap().push((now, x, y, "move".to_string()));
+                            state.mouse_events.lock().unwrap().push((
+                                now,
+                                x,
+                                y,
+                                "move".to_string(),
+                            ));
                         }
                     }
                 }
@@ -109,7 +119,10 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
             }
         });
         if let Err(e) = result {
-            eprintln!("Ultimate: no se pudo iniciar el listener de teclado: {:?}", e);
+            eprintln!(
+                "Ultimate: no se pudo iniciar el listener de teclado: {:?}",
+                e
+            );
         }
     });
 }
@@ -118,13 +131,42 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
 fn key_matches(key: rdev::Key, configured: &str) -> bool {
     use rdev::Key::*;
     let target = match configured.trim().to_uppercase().as_str() {
-        "A" => KeyA, "B" => KeyB, "C" => KeyC, "D" => KeyD, "E" => KeyE, "F" => KeyF,
-        "G" => KeyG, "H" => KeyH, "I" => KeyI, "J" => KeyJ, "K" => KeyK, "L" => KeyL,
-        "M" => KeyM, "N" => KeyN, "O" => KeyO, "P" => KeyP, "Q" => KeyQ, "R" => KeyR,
-        "S" => KeyS, "T" => KeyT, "U" => KeyU, "V" => KeyV, "W" => KeyW, "X" => KeyX,
-        "Y" => KeyY, "Z" => KeyZ,
-        "1" => Num1, "2" => Num2, "3" => Num3, "4" => Num4, "5" => Num5,
-        "6" => Num6, "7" => Num7, "8" => Num8, "9" => Num9, "0" => Num0,
+        "A" => KeyA,
+        "B" => KeyB,
+        "C" => KeyC,
+        "D" => KeyD,
+        "E" => KeyE,
+        "F" => KeyF,
+        "G" => KeyG,
+        "H" => KeyH,
+        "I" => KeyI,
+        "J" => KeyJ,
+        "K" => KeyK,
+        "L" => KeyL,
+        "M" => KeyM,
+        "N" => KeyN,
+        "O" => KeyO,
+        "P" => KeyP,
+        "Q" => KeyQ,
+        "R" => KeyR,
+        "S" => KeyS,
+        "T" => KeyT,
+        "U" => KeyU,
+        "V" => KeyV,
+        "W" => KeyW,
+        "X" => KeyX,
+        "Y" => KeyY,
+        "Z" => KeyZ,
+        "1" => Num1,
+        "2" => Num2,
+        "3" => Num3,
+        "4" => Num4,
+        "5" => Num5,
+        "6" => Num6,
+        "7" => Num7,
+        "8" => Num8,
+        "9" => Num9,
+        "0" => Num0,
         _ => return false,
     };
     key == target

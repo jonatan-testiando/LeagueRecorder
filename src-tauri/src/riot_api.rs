@@ -54,7 +54,11 @@ impl RiotApiClient {
     }
 
     /// Obtiene el PUUID del jugador usando su Riot ID (GameName y TagLine)
-    pub async fn get_puuid_by_riot_id(&self, game_name: &str, tag_line: &str) -> Result<String, String> {
+    pub async fn get_puuid_by_riot_id(
+        &self,
+        game_name: &str,
+        tag_line: &str,
+    ) -> Result<String, String> {
         let url = format!(
             "https://{}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{}/{}",
             self.region,
@@ -62,7 +66,9 @@ impl RiotApiClient {
             urlencoding::encode(tag_line)
         );
 
-        let resp = self.client.get(&url)
+        let resp = self
+            .client
+            .get(&url)
             .header("X-Riot-Token", &self.api_key)
             .send()
             .await
@@ -77,13 +83,19 @@ impl RiotApiClient {
     }
 
     /// Obtiene los últimos Match IDs de un PUUID
-    pub async fn get_match_ids_by_puuid(&self, puuid: &str, count: i32) -> Result<Vec<String>, String> {
+    pub async fn get_match_ids_by_puuid(
+        &self,
+        puuid: &str,
+        count: i32,
+    ) -> Result<Vec<String>, String> {
         let url = format!(
             "https://{}.api.riotgames.com/lol/match/v5/matches/by-puuid/{}/ids?start=0&count={}",
             self.region, puuid, count
         );
 
-        let resp = self.client.get(&url)
+        let resp = self
+            .client
+            .get(&url)
             .header("X-Riot-Token", &self.api_key)
             .send()
             .await
@@ -104,7 +116,9 @@ impl RiotApiClient {
             self.region, match_id
         );
 
-        let resp = self.client.get(&url)
+        let resp = self
+            .client
+            .get(&url)
             .header("X-Riot-Token", &self.api_key)
             .send()
             .await
@@ -119,7 +133,10 @@ impl RiotApiClient {
     }
 }
 
-pub async fn sync_riot_data(match_id: &str, active_player: &str) -> Result<crate::storage::MatchMetadata, String> {
+pub async fn sync_riot_data(
+    match_id: &str,
+    active_player: &str,
+) -> Result<crate::storage::MatchMetadata, String> {
     let config = crate::storage::load_config();
     if config.riot_api_key.is_empty() {
         return Err("No Riot API Key configured".to_string());
@@ -138,13 +155,13 @@ pub async fn sync_riot_data(match_id: &str, active_player: &str) -> Result<crate
     let tag_line = if parts.len() > 1 { parts[1] } else { "LAN" };
 
     let api = RiotApiClient::new(config.riot_api_key);
-    
+
     // 1. Obtener PUUID
     let puuid = api.get_puuid_by_riot_id(game_name, tag_line).await?;
 
     // 2. Obtener últimas 5 partidas (puede que no sea la ultimísima si es muy reciente, pero revisamos)
     let recent_matches = api.get_match_ids_by_puuid(&puuid, 5).await?;
-    
+
     if recent_matches.is_empty() {
         return Err("No recent matches found".to_string());
     }
@@ -166,12 +183,19 @@ pub async fn sync_riot_data(match_id: &str, active_player: &str) -> Result<crate
 
     if let Some((riot_id, participant)) = found_match {
         metadata.riot_match_id = Some(riot_id);
-        metadata.kda = Some(format!("{}/{}/{}", participant.kills, participant.deaths, participant.assists));
+        metadata.kda = Some(format!(
+            "{}/{}/{}",
+            participant.kills, participant.deaths, participant.assists
+        ));
         metadata.gold_earned = Some(participant.goldEarned);
         metadata.damage_dealt = Some(participant.totalDamageDealtToChampions);
-        
+
         // Actualizamos el result usando Riot's truth
-        metadata.result = if participant.win { "Victory".to_string() } else { "Defeat".to_string() };
+        metadata.result = if participant.win {
+            "Victory".to_string()
+        } else {
+            "Defeat".to_string()
+        };
 
         let _ = crate::storage::save_match_metadata(&metadata);
     }

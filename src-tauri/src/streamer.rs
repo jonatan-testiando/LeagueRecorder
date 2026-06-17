@@ -66,7 +66,10 @@ pub fn handle(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
         .status(StatusCode::PARTIAL_CONTENT)
         .header(header::CONTENT_TYPE, content_type(&decoded))
         .header(header::ACCEPT_RANGES, "bytes")
-        .header(header::CONTENT_RANGE, format!("bytes {}-{}/{}", start, end, total))
+        .header(
+            header::CONTENT_RANGE,
+            format!("bytes {}-{}/{}", start, end, total),
+        )
         .header(header::CONTENT_LENGTH, len.to_string())
         .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
         .body(buf)
@@ -82,7 +85,11 @@ fn parse_range(value: &str) -> Option<(u64, Option<u64>)> {
     let start = parts.next()?.trim().parse::<u64>().ok()?;
     let end = parts.next().and_then(|e| {
         let e = e.trim();
-        if e.is_empty() { None } else { e.parse::<u64>().ok() }
+        if e.is_empty() {
+            None
+        } else {
+            e.parse::<u64>().ok()
+        }
     });
     Some((start, end))
 }

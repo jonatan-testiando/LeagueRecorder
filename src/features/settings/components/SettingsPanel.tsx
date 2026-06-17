@@ -4,6 +4,8 @@ import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
 import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { motion, Variants } from "framer-motion";
 
 export const SettingsPanel: React.FC = () => {
@@ -16,6 +18,8 @@ export const SettingsPanel: React.FC = () => {
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium" });
   const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
+  const [updateMsg, setUpdateMsg] = useState<string>("");
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const { showError, showSuccess } = useDialog();
 
   const checkStatus = async () => {
@@ -124,6 +128,29 @@ export const SettingsPanel: React.FC = () => {
       showError("No se pudo detener: " + err);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    setIsUpdating(true);
+    setUpdateMsg("Buscando actualizaciones...");
+    try {
+      const update = await check();
+      if (update) {
+        setUpdateMsg(`Descargando versión ${update.version}...`);
+        await update.downloadAndInstall();
+        setUpdateMsg("Actualización instalada. Reiniciando...");
+        await relaunch();
+      } else {
+        setUpdateMsg("Tu aplicación ya está en la última versión.");
+        showSuccess("Tu aplicación ya está actualizada.");
+      }
+    } catch (err) {
+      console.error(err);
+      setUpdateMsg("Error al buscar actualizaciones.");
+      showError("Error al actualizar: " + err);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -250,6 +277,31 @@ export const SettingsPanel: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+      </motion.div>
+
+      {/* Sistema de Actualizaciones */}
+      <motion.div variants={itemVariants} style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>🚀</span>
+            <h3 style={styles.cardTitle}>Actualizaciones</h3>
+          </div>
+        </div>
+        <div style={styles.cardBody}>
+          <p style={styles.cardText}>
+            Busca e instala las últimas mejoras de LeagueRecorder de forma automática.
+          </p>
+          <div style={{ ...styles.form, marginTop: "16px" }}>
+            <button 
+              onClick={checkForUpdates} 
+              disabled={isUpdating}
+              style={{ ...styles.btn, backgroundColor: "var(--accent-violet)", flex: 1 }}
+            >
+              {isUpdating ? updateMsg || "Actualizando..." : "Buscar Actualizaciones"}
+            </button>
+          </div>
+          {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
         </div>
       </motion.div>
 

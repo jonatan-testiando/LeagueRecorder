@@ -1,6 +1,6 @@
 use reqwest::Client;
-use std::time::Duration;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LolEvent {
@@ -18,21 +18,21 @@ pub struct LolEvent {
     pub assisters: Option<Vec<String>>,
     // Campos adicionales según el tipo de evento
     #[serde(rename = "Recipient")]
-    pub recipient: Option<String>,          // FirstBlood
+    pub recipient: Option<String>, // FirstBlood
     #[serde(rename = "DragonType")]
-    pub dragon_type: Option<String>,        // DragonKill: Fire/Water/Air/Earth/Hextech/Chemtech/Elder
+    pub dragon_type: Option<String>, // DragonKill: Fire/Water/Air/Earth/Hextech/Chemtech/Elder
     #[serde(rename = "Stolen")]
-    pub stolen: Option<String>,             // "True"/"False" en objetivos
+    pub stolen: Option<String>, // "True"/"False" en objetivos
     #[serde(rename = "TurretKilled")]
-    pub turret_killed: Option<String>,      // p.ej. "Turret_T1_C_07_A"
+    pub turret_killed: Option<String>, // p.ej. "Turret_T1_C_07_A"
     #[serde(rename = "InhibKilled")]
-    pub inhib_killed: Option<String>,       // p.ej. "Barracks_T2_L1"
+    pub inhib_killed: Option<String>, // p.ej. "Barracks_T2_L1"
     #[serde(rename = "KillStreak")]
-    pub kill_streak: Option<i32>,           // Multikill
+    pub kill_streak: Option<i32>, // Multikill
     #[serde(rename = "Acer")]
-    pub acer: Option<String>,               // Ace
+    pub acer: Option<String>, // Ace
     #[serde(rename = "Result")]
-    pub result: Option<String>,             // GameEnd: "Win"/"Lose"
+    pub result: Option<String>, // GameEnd: "Win"/"Lose"
 }
 
 /// Devuelve el nombre de juego de un objeto jugador (activePlayer o entrada de allPlayers),
@@ -40,7 +40,7 @@ pub struct LolEvent {
 fn player_game_name(obj: Option<&serde_json::Value>) -> Option<String> {
     let o = obj?;
     let pick = |k: &str| o.get(k).and_then(|v| v.as_str()).filter(|s| !s.is_empty());
-    
+
     if let (Some(n), Some(t)) = (pick("riotIdGameName"), pick("riotIdTagLine")) {
         return Some(format!("{}#{}", n, t));
     }
@@ -67,8 +67,8 @@ pub fn strip_tag(name: &str) -> String {
 pub struct GameContext {
     pub active_player: String,
     pub champion: String,
-    pub team: String,                       // "ORDER" o "CHAOS"
-    pub players: Vec<(String, String)>,     // (summonerName, team)
+    pub team: String,                   // "ORDER" o "CHAOS"
+    pub players: Vec<(String, String)>, // (summonerName, team)
 }
 
 #[derive(Debug, Deserialize)]
@@ -105,10 +105,16 @@ impl LolApiClient {
     /// el mapa de equipos de todos los jugadores (para clasificar objetivos como aliados/enemigos).
     pub async fn get_game_context(&self) -> Result<GameContext, String> {
         let url = format!("{}/allgamedata", self.base_url);
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Fallo al conectar con la API de LoL: {}", e))?;
 
-        let all_data: serde_json::Value = resp.json().await
+        let all_data: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| format!("Error parseando allgamedata: {}", e))?;
 
         // Riot deprecó `summonerName` (ahora usa Riot IDs "Nombre#TAG"). Identificamos al
@@ -127,7 +133,11 @@ impl LolApiClient {
                     Some(n) => n,
                     None => continue,
                 };
-                let p_team = player.get("team").and_then(|v| v.as_str()).unwrap_or("ORDER").to_string();
+                let p_team = player
+                    .get("team")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("ORDER")
+                    .to_string();
                 players.push((name.clone(), p_team.clone()));
                 if strip_tag(&name) == active_norm {
                     if let Some(champ) = player.get("championName").and_then(|v| v.as_str()) {
@@ -138,22 +148,33 @@ impl LolApiClient {
             }
         }
 
-        Ok(GameContext { active_player: active_player_name, champion: champion_name, team, players })
+        Ok(GameContext {
+            active_player: active_player_name,
+            champion: champion_name,
+            team,
+            players,
+        })
     }
 
     /// Devuelve (tiempo de juego en segundos, nivel de la ultimate R) en una sola llamada.
     /// Se usa para alinear los eventos de ultimate y comprobar si la R ya está disponible.
     pub async fn get_live_state(&self) -> Result<(f64, i32), String> {
         let url = format!("{}/allgamedata", self.base_url);
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Fallo al conectar con la API de LoL: {}", e))?;
         let v: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
 
-        let game_time = v.get("gameData")
+        let game_time = v
+            .get("gameData")
             .and_then(|g| g.get("gameTime"))
             .and_then(|t| t.as_f64())
             .unwrap_or(0.0);
-        let r_level = v.get("activePlayer")
+        let r_level = v
+            .get("activePlayer")
             .and_then(|a| a.get("abilities"))
             .and_then(|ab| ab.get("R"))
             .and_then(|r| r.get("abilityLevel"))
@@ -164,7 +185,11 @@ impl LolApiClient {
 
     pub async fn get_events(&self) -> Result<Vec<LolEvent>, String> {
         let url = format!("{}/eventdata", self.base_url);
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Fallo al conectar con la API de LoL: {}", e))?;
         let data: LolEventResponse = resp.json().await.map_err(|e| e.to_string())?;
         Ok(data.events)

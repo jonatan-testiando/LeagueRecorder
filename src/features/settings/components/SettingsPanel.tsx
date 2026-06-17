@@ -4,6 +4,7 @@ import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
 import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { motion, Variants } from "framer-motion";
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -128,6 +129,19 @@ export const SettingsPanel: React.FC = () => {
 
   const audioReady = audio?.ready_for_game_audio ?? false;
 
+  const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.1 }
+    }
+  };
+
+  const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  };
+
   return (
     <div style={styles.container}>
       <div>
@@ -135,8 +149,14 @@ export const SettingsPanel: React.FC = () => {
         <p style={styles.subtitle}>Estado de la grabadora, captura de audio y detección automática de partidas.</p>
       </div>
 
+      <motion.div 
+        style={styles.settingsGrid}
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+      >
       {/* Detección de ultimate (R) */}
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Sparkles size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
@@ -170,10 +190,10 @@ export const SettingsPanel: React.FC = () => {
             style={{ width: "30px", textAlign: "center", textTransform: "uppercase", fontWeight: "bold" }}
           />
         </div>
-      </div>
+      </motion.div>
 
       {/* Almacenamiento */}
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <FolderOpen size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
           <h3 style={styles.cardTitle}>Almacenamiento</h3>
@@ -200,10 +220,10 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Riot API */}
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <span style={{ fontSize: "20px", marginRight: "8px" }}>🔑</span>
@@ -231,10 +251,10 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Estado del audio del juego */}
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Volume2 size={20} color="var(--accent-gold)" style={{ marginRight: "8px" }} />
@@ -285,10 +305,10 @@ export const SettingsPanel: React.FC = () => {
             </ul>
           </details>
         )}
-      </div>
+      </motion.div>
 
       {/* Configuración de Video */}
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Monitor size={20} color="var(--accent-blue)" style={{ marginRight: "8px" }} />
@@ -368,9 +388,9 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <h3 style={styles.cardTitle}>Grabación Manual de Prueba</h3>
         <p style={styles.cardText}>
           Utiliza esta herramienta para comprobar que FFmpeg y la aceleración de video por hardware (GPU) funcionan correctamente antes de entrar a una partida real.
@@ -423,9 +443,9 @@ export const SettingsPanel: React.FC = () => {
             </button>
           )}
         </div>
-      </div>
+      </motion.div>
 
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <h3 style={styles.cardTitle}>Detección de Partidas</h3>
         <p style={styles.cardText}>
           El sistema en segundo plano está en ejecución constante. Cuando abres League of Legends y entras en partida:
@@ -436,9 +456,9 @@ export const SettingsPanel: React.FC = () => {
           <li>Registra marcas de tiempo para kills, deaths, asistencias y objetivos.</li>
           <li>Guarda todo al finalizar el match de manera 100% automatizada.</li>
         </ul>
-      </div>
+      </motion.div>
 
-      <div style={styles.card}>
+      <motion.div variants={itemVariants} style={styles.card}>
         <h3 style={styles.cardTitle}>Requisitos de Sistema</h3>
         <ul style={styles.list}>
           <li>
@@ -448,7 +468,8 @@ export const SettingsPanel: React.FC = () => {
             <strong>Resolución de Juego:</strong> La captura se escala automáticamente a 1080p 60fps usando codificación por hardware en la GPU para no afectar tus FPS.
           </li>
         </ul>
-      </div>
+      </motion.div>
+      </motion.div>
     </div>
   );
 };
@@ -463,6 +484,11 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: "auto",
     backgroundColor: "var(--bg-app)",
     boxSizing: "border-box",
+  },
+  settingsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
+    gap: "var(--space-6)",
   },
   title: {
     margin: 0,

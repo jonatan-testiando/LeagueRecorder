@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AlertTriangle, Save } from "lucide-react";
 import { ErrorClipMetadata, getAllErrorClips, updateErrorNote } from "../../../core/tauri-ipc";
+import { useDialog } from "../../../components/ui/DialogProvider";
 
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
@@ -17,6 +18,7 @@ export const ErrorsGallery: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingNotePath, setEditingNotePath] = useState<string | null>(null);
   const [editNoteText, setEditNoteText] = useState<string>("");
+  const { showError, showSuccess } = useDialog();
 
   const fetchErrors = async () => {
     try {
@@ -38,8 +40,9 @@ export const ErrorsGallery: React.FC = () => {
       await updateErrorNote(path, editNoteText);
       setErrors(errs => errs.map(e => e.path === path ? { ...e, note: editNoteText } : e));
       setEditingNotePath(null);
+      showSuccess("Nota guardada correctamente");
     } catch (err) {
-      alert("Error al guardar la nota: " + err);
+      showError("Error al guardar la nota: " + err);
     }
   };
 

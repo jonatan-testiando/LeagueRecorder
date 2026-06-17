@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { MatchMetadata } from "../../types";
-import { getRecordedMatches, deleteMatch, getRecorderStatus } from "../../core/tauri-ipc";
+import { useDialog } from "../../components/ui/DialogProvider";
+import { getRecordedMatches, deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
 
 export const useGallery = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
@@ -8,6 +9,8 @@ export const useGallery = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const { showConfirm, showError } = useDialog();
 
   const fetchMatches = useCallback(async () => {
     try {
@@ -39,16 +42,24 @@ export const useGallery = () => {
     }
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (confirm("¿Estás seguro de que quieres borrar esta grabación? Se eliminarán permanentemente el video y los eventos.")) {
+  const handleDelete = useCallback(async (id: string) => {
+    const isConfirmed = await showConfirm({
+      title: "Eliminar partida",
+      message: "¿Estás seguro de que quieres borrar esta grabación? Se eliminarán permanentemente el video y los eventos.",
+      confirmText: "Eliminar",
+      cancelText: "Cancelar",
+      type: "error"
+    });
+    
+    if (isConfirmed) {
       try {
-        await deleteMatch(id);
+        await deleteMatchIpc(id);
         await fetchMatches();
       } catch (err) {
-        alert("Error al borrar la partida: " + err);
+        showError("Error al borrar la partida: " + err);
       }
     }
-  };
+  }, [showConfirm, showError]);
 
   useEffect(() => {
     fetchMatches();

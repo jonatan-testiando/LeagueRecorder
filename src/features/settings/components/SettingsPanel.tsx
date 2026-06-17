@@ -3,6 +3,7 @@ import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioS
 import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
 import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useDialog } from "../../../components/ui/DialogProvider";
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -14,6 +15,7 @@ export const SettingsPanel: React.FC = () => {
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium" });
   const [config, setConfig] = useState<AppConfig>({ save_directory: "" });
+  const { showError, showSuccess } = useDialog();
 
   const checkStatus = async () => {
     try {
@@ -81,7 +83,7 @@ export const SettingsPanel: React.FC = () => {
 
   const handleStartManual = async () => {
     if (!manualId.trim()) {
-      alert("Por favor introduce un ID o nombre para la prueba manual");
+      showError("Por favor introduce un ID o nombre para la prueba manual");
       return;
     }
     
@@ -93,7 +95,7 @@ export const SettingsPanel: React.FC = () => {
       setStatusMsg("Grabación en curso. Puedes interactuar con tu PC.");
     } catch (err) {
       setStatusMsg("Error: " + err);
-      alert("No se pudo iniciar: " + err);
+      showError("No se pudo iniciar: " + err);
     } finally {
       setIsProcessing(false);
     }
@@ -107,9 +109,10 @@ export const SettingsPanel: React.FC = () => {
       setIsRecording(false);
       setStatusMsg("Clip guardado con éxito. Revisa la sección 'Tus Partidas'.");
       setManualId("");
+      showSuccess("Clip guardado con éxito.");
     } catch (err) {
       setStatusMsg("Error al detener: " + err);
-      alert("No se pudo detener: " + err);
+      showError("No se pudo detener: " + err);
     } finally {
       setIsProcessing(false);
     }

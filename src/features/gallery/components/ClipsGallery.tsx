@@ -4,6 +4,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart } from "lucide-react";
 import { ClipMetadata } from "../../../types";
 import { toggleClipFavorite } from "../../../core/tauri-ipc";
+import { useDialog } from "../../../components/ui/DialogProvider";
 
 // El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
 // en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
@@ -77,6 +78,7 @@ export const ClipsGallery: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
   const [links, setLinks] = useState<Record<string, StoredLink>>(() => loadStoredLinks());
+  const { showSuccess, showError } = useDialog();
   const [expiry, setExpiry] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -112,9 +114,11 @@ export const ClipsGallery: React.FC = () => {
     try {
       const url = await invoke<string>("upload_clip", { path: clip.path, expiry: exp });
       setLinks(prev => ({ ...prev, [clip.path]: { url, expiry: exp, uploadedAt: Date.now() } }));
+      showSuccess("Clip subido exitosamente");
       await copyLink(url);
     } catch (e) {
-      alert("Error al subir: " + e);
+      console.error(e);
+      showError("Error al subir: " + e);
     } finally {
       setUploading(null);
     }
@@ -133,7 +137,7 @@ export const ClipsGallery: React.FC = () => {
       const isFav = await toggleClipFavorite(clipPath);
       setClips(clips.map(c => c.path === clipPath ? { ...c, favorite: isFav } : c));
     } catch (err) {
-      alert("Error al marcar favorito: " + err);
+      showError("Error al marcar favorito: " + err);
     }
   };
 

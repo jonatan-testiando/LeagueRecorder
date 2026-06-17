@@ -10,6 +10,7 @@ import {
   ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff
 } from "lucide-react";
 import { exportErrorClip } from "../../../core/tauri-ipc";
+import { useDialog } from "../../../components/ui/DialogProvider";
 
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
@@ -139,6 +140,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [errorNote, setErrorNote] = useState<string>("");
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
 
+  const { showSuccess, showError } = useDialog();
+
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFs);
@@ -235,7 +238,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setIsDragging(true);
       updateScrub(e.clientX, true);
     } else {
-      // Si hacen clic fuera de los thumbs en modo clip, mover el playhead pero no arrastrar el clip
       setIsDragging(true);
       updateScrub(e.clientX, true);
     }
@@ -784,9 +786,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     setErrorNote("");
                   }
                   setIsClippingMode(false);
-                  alert("¡Exportado con éxito!");
+                  showSuccess("¡Exportado con éxito!");
                 } catch (err) {
-                  alert("Error: " + err);
+                  showError("Error: " + err);
                 } finally {
                   setIsExporting(false);
                 }

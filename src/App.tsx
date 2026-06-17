@@ -206,6 +206,8 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     boxSizing: "border-box",
     backgroundColor: "var(--bg-app)",
+    display: "flex",
+    flexDirection: "column",
   },
   playerWrapper: {
     display: "flex",

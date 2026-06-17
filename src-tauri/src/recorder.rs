@@ -19,7 +19,33 @@ impl Default for RecorderState {
 }
 
 fn get_ffmpeg_executable() -> String {
-    // 1. Probar en la ruta de links de WinGet
+    // 1. Verificar si existe empaquetado junto al ejecutable (Producción)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(parent) = exe_path.parent() {
+            // Tauri lo coloca en la subcarpeta bin si se especifica así en resources, o en la raíz
+            let bundled_bin = parent.join("bin").join("ffmpeg.exe");
+            if bundled_bin.exists() {
+                if let Some(path_str) = bundled_bin.to_str() {
+                    return path_str.to_string();
+                }
+            }
+            let bundled_root = parent.join("ffmpeg.exe");
+            if bundled_root.exists() {
+                if let Some(path_str) = bundled_root.to_str() {
+                    return path_str.to_string();
+                }
+            }
+            // En desarrollo local (cargo run), probamos subir un par de niveles y buscar en src-tauri/bin
+            let local_dev = parent.join("../../bin/ffmpeg.exe");
+            if local_dev.exists() {
+                if let Some(path_str) = local_dev.to_str() {
+                    return path_str.to_string();
+                }
+            }
+        }
+    }
+
+    // 2. Probar en la ruta de links de WinGet (Fallback)
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
         let winget_path = std::path::Path::new(&local_app_data)
             .join("Microsoft")

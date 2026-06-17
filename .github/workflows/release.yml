@@ -37,6 +37,14 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Download FFmpeg
+        run: |
+          mkdir -p src-tauri/bin
+          Invoke-WebRequest -Uri "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip" -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg-extracted"
+          $ffmpeg_exe = Get-ChildItem -Path "ffmpeg-extracted" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
+          Copy-Item -Path $ffmpeg_exe.FullName -Destination "src-tauri/bin/ffmpeg.exe"
+
       - name: Build and Release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

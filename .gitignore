@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 *.key
 *.key.pub
+
+# Bundled binaries
+src-tauri/bin/

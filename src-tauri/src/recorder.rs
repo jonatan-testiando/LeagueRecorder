@@ -370,8 +370,8 @@ pub fn start_recording(
     // estable y de bajo impacto (la captura, lo costoso, va por GPU). NVENC+ddagrab puede fallar
     // según el driver/GPU, así que va después. gdigrab es el comodín de compatibilidad total.
     let modes = [
-        VideoMode::GpuX264,
         VideoMode::GpuNvenc,
+        VideoMode::GpuX264,
         VideoMode::CpuGdigrab,
     ];
     let mut attempts: Vec<(VideoMode, Option<String>)> = Vec::new();

@@ -5,7 +5,7 @@ import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, Fol
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { exit } from "@tauri-apps/plugin-process";
 import { motion, Variants } from "framer-motion";
 
 export const SettingsPanel: React.FC = () => {
@@ -167,8 +167,8 @@ export const SettingsPanel: React.FC = () => {
           }
         });
         
-        setUpdateMsg("Reiniciando aplicación...");
-        await relaunch();
+        setUpdateMsg("Iniciando instalador...");
+        await exit(0);
       } else {
         setUpdateMsg("Tu aplicación ya está en la última versión.");
         showSuccess("Tu aplicación ya está actualizada.");

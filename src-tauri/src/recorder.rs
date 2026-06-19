@@ -314,9 +314,12 @@ fn build_ffmpeg_args(
 
     // Compatibilidad de reproducción en el WebView (H.264 yuv420p) y faststart para
     // que el reproductor pueda buscar/seek aunque el archivo crezca.
+    // faststart para que el reproductor pueda buscar/seek aunque el archivo crezca.
+    if !matches!(mode, VideoMode::GpuNvenc) {
+        args.extend(["-pix_fmt".into(), "yuv420p".into()]);
+    }
+
     args.extend([
-        "-pix_fmt".into(),
-        "yuv420p".into(),
         "-movflags".into(),
         "+faststart".into(),
         video_path.into(),

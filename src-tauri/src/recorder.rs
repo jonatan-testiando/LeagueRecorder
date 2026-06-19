@@ -201,10 +201,20 @@ fn build_ffmpeg_args(
                 "720p" => "720",
                 _ => "1080",
             };
-            let filter = format!(
-                "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format={}{}",
-                fps, scale_y, pix, label
-            );
+            let filter = match mode {
+                VideoMode::GpuNvenc => {
+                    format!(
+                        "ddagrab=0:framerate={},scale_d3d11=width=-2:height={}:format=nv12{}",
+                        fps, scale_y, label
+                    )
+                }
+                _ => {
+                    format!(
+                        "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format={}{}",
+                        fps, scale_y, pix, label
+                    )
+                }
+            };
             args.extend(["-filter_complex".into(), filter]);
 
             // Cuando hay audio, el dshow es el ÚNICO input real, por tanto índice 0.
@@ -236,6 +246,8 @@ fn build_ffmpeg_args(
                     "vbr".into(),
                     "-cq".into(),
                     nvenc_cq.into(),
+                    "-b:v".into(),
+                    "0".into(),
                 ]),
                 _ => args.extend([
                     "-c:v".into(),

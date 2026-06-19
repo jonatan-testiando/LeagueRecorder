@@ -16,7 +16,7 @@ export const SettingsPanel: React.FC = () => {
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
-  const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium", resolution: "1080p" });
+  const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "High" });
   const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -52,9 +52,9 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
-  const saveVideo = async (fps: number, quality: string, resolution: string) => {
+  const saveVideo = async (fps: number, quality: string) => {
     try {
-      setVideo(await setVideoSettings(fps, quality, resolution));
+      setVideo(await setVideoSettings(fps, quality));
     } catch (err) {
       console.error(err);
     }
@@ -423,8 +423,9 @@ export const SettingsPanel: React.FC = () => {
           </h3>
         </div>
         <p style={styles.cardText}>
-          Ajusta la resolución, los FPS y la nitidez. Bajar la resolución o la calidad ayuda a reducir
-          el tamaño de los videos generados.
+          El video se graba a la resolución nativa de tu monitor por NVENC (GPU), sin perder FPS.
+          Elige los FPS y la calidad: la calidad define el bitrate, es decir la nitidez del video
+          frente al tamaño del archivo.
         </p>
         
         <div style={styles.videoSettingsGrid}>
@@ -432,7 +433,7 @@ export const SettingsPanel: React.FC = () => {
             <span style={styles.videoSetLabel}>Tasa de Fotogramas (FPS)</span>
             <div style={styles.buttonGroup}>
               <button 
-                onClick={() => video && saveVideo(60, video.quality, video.resolution)}
+                onClick={() => video && saveVideo(60, video.quality)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--bg-app)",
@@ -443,7 +444,7 @@ export const SettingsPanel: React.FC = () => {
                 60 FPS
               </button>
               <button 
-                onClick={() => video && saveVideo(30, video.quality, video.resolution)}
+                onClick={() => video && saveVideo(30, video.quality)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--bg-app)",
@@ -457,71 +458,40 @@ export const SettingsPanel: React.FC = () => {
           </div>
 
           <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Calidad de Imagen</span>
+            <span style={styles.videoSetLabel}>Calidad (bitrate)</span>
             <div style={styles.buttonGroup}>
-              <button 
-                onClick={() => video && saveVideo(video.fps, "High", video.resolution)}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.quality === "High" ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.quality === "High" ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.quality === "High" ? "#fff" : "var(--text-secondary)"
-                }}
-              >
-                Alta
-              </button>
-              <button 
-                onClick={() => video && saveVideo(video.fps, "Medium", video.resolution)}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.quality === "Medium" ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.quality === "Medium" ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.quality === "Medium" ? "#fff" : "var(--text-secondary)"
-                }}
-              >
-                Media
-              </button>
-              <button 
-                onClick={() => video && saveVideo(video.fps, "Low", video.resolution)}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.quality === "Low" ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.quality === "Low" ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.quality === "Low" ? "#fff" : "var(--text-secondary)"
-                }}
-              >
-                Baja
-              </button>
+              {([
+                { key: "High", label: "Alta", hint: "22 Mbps" },
+                { key: "Medium", label: "Media", hint: "14 Mbps" },
+                { key: "Low", label: "Baja", hint: "8 Mbps" },
+              ] as const).map((q) => {
+                const sel = video?.quality === q.key;
+                return (
+                  <button
+                    key={q.key}
+                    onClick={() => video && saveVideo(video.fps, q.key)}
+                    style={{
+                      ...styles.qualityBtn,
+                      backgroundColor: sel ? "var(--accent-blue)" : "var(--bg-app)",
+                      borderColor: sel ? "var(--accent-blue)" : "var(--border-strong)",
+                      color: sel ? "#fff" : "var(--text-secondary)",
+                    }}
+                  >
+                    <span>{q.label}</span>
+                    <span style={styles.btnHint}>{q.hint}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
+        </div>
 
-          <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Resolución</span>
-            <div style={styles.buttonGroup}>
-              <button 
-                onClick={() => video && saveVideo(video.fps, video.quality, "1080p")}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.resolution === "1080p" ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.resolution === "1080p" ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.resolution === "1080p" ? "#fff" : "var(--text-secondary)"
-                }}
-              >
-                1080p
-              </button>
-              <button 
-                onClick={() => video && saveVideo(video.fps, video.quality, "720p")}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.resolution === "720p" ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.resolution === "720p" ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.resolution === "720p" ? "#fff" : "var(--text-secondary)"
-                }}
-              >
-                720p
-              </button>
-            </div>
-          </div>
+        <div style={styles.infoNote}>
+          <Monitor size={14} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: "2px" }} />
+          <span>
+            Se captura a la resolución nativa de tu juego (no se reescala, así no baja FPS). A mayor
+            bitrate, más nítido el movimiento pero más pesa el archivo.
+          </span>
         </div>
       </motion.div>
 
@@ -849,5 +819,36 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
     transition: "all 0.2s ease",
+  },
+  qualityBtn: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "2px",
+    padding: "var(--space-2) var(--space-3)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid transparent",
+    fontSize: "var(--font-sm)",
+    fontWeight: 700,
+    cursor: "pointer",
+    transition: "all 0.2s ease",
+  },
+  btnHint: {
+    fontSize: "11px",
+    fontWeight: 500,
+    opacity: 0.75,
+  },
+  infoNote: {
+    display: "flex",
+    gap: "var(--space-2)",
+    marginTop: "var(--space-4)",
+    padding: "var(--space-3)",
+    borderRadius: "var(--radius-md)",
+    backgroundColor: "var(--bg-app)",
+    border: "1px solid var(--border-subtle)",
+    fontSize: "var(--font-sm)",
+    color: "var(--text-secondary)",
+    lineHeight: 1.4,
   },
 };

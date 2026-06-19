@@ -37,8 +37,8 @@ export const getVideoSettings = async (): Promise<VideoSettings> => {
   return await invoke<VideoSettings>("get_video_settings");
 };
 
-export const setVideoSettings = async (fps: number, quality: string, resolution: string): Promise<VideoSettings> => {
-  return await invoke<VideoSettings>("set_video_settings", { fps, quality, resolution });
+export const setVideoSettings = async (fps: number, quality: string): Promise<VideoSettings> => {
+  return await invoke<VideoSettings>("set_video_settings", { fps, quality });
 };
 
 export interface ErrorEvent {

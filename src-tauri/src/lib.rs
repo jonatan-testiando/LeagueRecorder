@@ -6,6 +6,7 @@ pub mod riot_api;
 mod storage;
 mod streamer;
 mod ultimate;
+mod wgc_recorder;
 
 use commands::{
     add_error_event, delete_error_event, delete_match, edit_error_event, export_clip,

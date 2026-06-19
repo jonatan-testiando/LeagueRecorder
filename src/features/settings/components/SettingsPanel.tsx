@@ -16,7 +16,7 @@ export const SettingsPanel: React.FC = () => {
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
-  const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium" });
+  const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "Medium", resolution: "1080p" });
   const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
@@ -52,9 +52,9 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
-  const saveVideo = async (fps: number, quality: string) => {
+  const saveVideo = async (fps: number, quality: string, resolution: string) => {
     try {
-      setVideo(await setVideoSettings(fps, quality));
+      setVideo(await setVideoSettings(fps, quality, resolution));
     } catch (err) {
       console.error(err);
     }
@@ -423,8 +423,8 @@ export const SettingsPanel: React.FC = () => {
           </h3>
         </div>
         <p style={styles.cardText}>
-          Ajusta los FPS y la nitidez. Si notas que los videos pesan demasiado, baja la calidad a Media o Baja,
-          o usa 30 FPS. Todas las resoluciones se escalan a 1080p.
+          Ajusta la resolución, los FPS y la nitidez. Bajar la resolución o la calidad ayuda a reducir
+          el tamaño de los videos generados.
         </p>
         
         <div style={styles.videoSettingsGrid}>
@@ -432,7 +432,7 @@ export const SettingsPanel: React.FC = () => {
             <span style={styles.videoSetLabel}>Tasa de Fotogramas (FPS)</span>
             <div style={styles.buttonGroup}>
               <button 
-                onClick={() => video && saveVideo(60, video.quality)}
+                onClick={() => video && saveVideo(60, video.quality, video.resolution)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--bg-app)",
@@ -443,7 +443,7 @@ export const SettingsPanel: React.FC = () => {
                 60 FPS
               </button>
               <button 
-                onClick={() => video && saveVideo(30, video.quality)}
+                onClick={() => video && saveVideo(30, video.quality, video.resolution)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--bg-app)",
@@ -460,7 +460,7 @@ export const SettingsPanel: React.FC = () => {
             <span style={styles.videoSetLabel}>Calidad de Imagen</span>
             <div style={styles.buttonGroup}>
               <button 
-                onClick={() => video && saveVideo(video.fps, "High")}
+                onClick={() => video && saveVideo(video.fps, "High", video.resolution)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.quality === "High" ? "var(--accent-blue)" : "var(--bg-app)",
@@ -471,7 +471,7 @@ export const SettingsPanel: React.FC = () => {
                 Alta
               </button>
               <button 
-                onClick={() => video && saveVideo(video.fps, "Medium")}
+                onClick={() => video && saveVideo(video.fps, "Medium", video.resolution)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.quality === "Medium" ? "var(--accent-blue)" : "var(--bg-app)",
@@ -482,7 +482,7 @@ export const SettingsPanel: React.FC = () => {
                 Media
               </button>
               <button 
-                onClick={() => video && saveVideo(video.fps, "Low")}
+                onClick={() => video && saveVideo(video.fps, "Low", video.resolution)}
                 style={{
                   ...styles.selectBtn,
                   backgroundColor: video?.quality === "Low" ? "var(--accent-blue)" : "var(--bg-app)",
@@ -491,6 +491,34 @@ export const SettingsPanel: React.FC = () => {
                 }}
               >
                 Baja
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.videoSetCol}>
+            <span style={styles.videoSetLabel}>Resolución</span>
+            <div style={styles.buttonGroup}>
+              <button 
+                onClick={() => video && saveVideo(video.fps, video.quality, "1080p")}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.resolution === "1080p" ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.resolution === "1080p" ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.resolution === "1080p" ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                1080p
+              </button>
+              <button 
+                onClick={() => video && saveVideo(video.fps, video.quality, "720p")}
+                style={{
+                  ...styles.selectBtn,
+                  backgroundColor: video?.resolution === "720p" ? "var(--accent-blue)" : "var(--bg-app)",
+                  borderColor: video?.resolution === "720p" ? "var(--accent-blue)" : "var(--border-strong)",
+                  color: video?.resolution === "720p" ? "#fff" : "var(--text-secondary)"
+                }}
+              >
+                720p
               </button>
             </div>
           </div>

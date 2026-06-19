@@ -197,9 +197,13 @@ fn build_ffmpeg_args(
             };
             // Etiquetamos la salida [v] sólo cuando hay audio (para poder mapear ambos streams).
             let label = if has_audio { "[v]" } else { "" };
+            let scale_y = match settings.resolution.as_str() {
+                "720p" => "720",
+                _ => "1080",
+            };
             let filter = format!(
-                "ddagrab=0:framerate={},hwdownload,format=bgra,format={}{}",
-                fps, pix, label
+                "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format={}{}",
+                fps, scale_y, pix, label
             );
             args.extend(["-filter_complex".into(), filter]);
 
@@ -274,7 +278,13 @@ fn build_ffmpeg_args(
                 ]);
             }
 
+            let scale_y = match settings.resolution.as_str() {
+                "720p" => "720",
+                _ => "1080",
+            };
             args.extend([
+                "-vf".into(),
+                format!("scale=-2:{}", scale_y),
                 "-c:v".into(),
                 "libx264".into(),
                 "-preset".into(),
@@ -310,11 +320,22 @@ fn spawn_ffmpeg_and_verify(ffmpeg_exe: &str, args: &[String]) -> Option<Child> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
+    let log_path = std::env::temp_dir().join("leaguerecorder_ffmpeg.log");
+    let stderr_dest = match std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(&log_path)
+    {
+        Ok(file) => Stdio::from(file),
+        Err(_) => Stdio::null(),
+    };
+
     match cmd
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(stderr_dest)
         .spawn()
     {
         Ok(mut child) => {

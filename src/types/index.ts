@@ -65,4 +65,5 @@ export interface AudioStatus {
 export interface VideoSettings {
   fps: number;
   quality: string;
+  resolution: string;
 }

@@ -107,6 +107,7 @@ pub fn set_ultimate_settings(
 pub struct VideoSettings {
     pub fps: i32,
     pub quality: String, // "High", "Medium", "Low"
+    pub resolution: String, // "1080p", "720p"
 }
 
 impl Default for VideoSettings {
@@ -114,6 +115,7 @@ impl Default for VideoSettings {
         Self {
             fps: 60,
             quality: "High".to_string(),
+            resolution: "1080p".to_string(),
         }
     }
 }
@@ -127,11 +129,13 @@ pub fn get_video_settings(state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>
 pub fn set_video_settings(
     fps: i32,
     quality: String,
+    resolution: String,
     state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>,
 ) -> VideoSettings {
     let mut s = state.lock().unwrap();
     s.fps = fps;
     s.quality = quality;
+    s.resolution = resolution;
     s.clone()
 }
 

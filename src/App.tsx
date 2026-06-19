@@ -39,13 +39,7 @@ export const App: React.FC = () => {
           <span style={styles.logoText}>My Recorder</span>
         </div>
 
-        <div style={styles.navSection}>
-          <span style={styles.navHeader}>COMMUNITIES</span>
-          <div style={styles.navItem}>
-            <div style={styles.commIcon}>WTL</div>
-            <span style={styles.navText}>We Teach League</span>
-          </div>
-        </div>
+
 
         <div style={styles.navLinks}>
           <button

@@ -167,16 +167,16 @@ pub async fn sync_riot_data(
     }
 
     // Buscamos la partida que coincida con el campeón y resultado aproximado.
-    // Como simplificación, tomamos la más reciente que coincida con el campeón
     let mut found_match = None;
     for r_match_id in recent_matches {
         if let Ok(details) = api.get_match_details(&r_match_id).await {
-            if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
-                // Riot no provee el nombre del campeón directo en esta estructura simple,
-                // Pero podemos guardar el KDA de la más reciente. Idealmente compararíamos tiempo de juego o campeón.
-                // Para no hacer el modelo muy complejo, asumo que es la correcta.
-                found_match = Some((r_match_id, participant.clone()));
-                break;
+            let duration_diff = (details.info.gameDuration as f64 - metadata.game_duration).abs();
+            // Comparamos si la duración de la partida difiere por menos de 180 segundos (3 minutos)
+            if duration_diff <= 180.0 {
+                if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
+                    found_match = Some((r_match_id, participant.clone()));
+                    break;
+                }
             }
         }
     }

@@ -1,8 +1,14 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { HardDrive, Cloud, Search, Trash2 } from "lucide-react";
+import { HardDrive, Search, Trash2 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+
+interface DiskSpaceInfo {
+  used_bytes: number;
+  total_bytes: number;
+}
 
 interface MatchGalleryProps {
   matches: MatchMetadata[];
@@ -17,6 +23,18 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   onDeleteMatch,
   isRecording,
 }) => {
+  const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
+
+  useEffect(() => {
+    invoke<DiskSpaceInfo>("get_disk_usage")
+      .then(setDiskSpace)
+      .catch(console.error);
+  }, [matches]);
+
+  const usedGb = (diskSpace.used_bytes / (1024 * 1024 * 1024)).toFixed(1);
+  const totalGb = (diskSpace.total_bytes / (1024 * 1024 * 1024)).toFixed(0);
+  const pct = Math.min(100, Math.round((diskSpace.used_bytes / diskSpace.total_bytes) * 100));
+
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -34,34 +52,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               <div style={styles.storageTitle}>Local Storage</div>
               <div style={styles.storageSubtitle}>LeagueRecorder Folder</div>
             </div>
-            <div style={styles.storagePercent}>10%</div>
+            <div style={styles.storagePercent}>{pct}%</div>
           </div>
           <div style={styles.storageBarBg}>
-            <div style={{ ...styles.storageBarFill, width: "10%", background: "var(--accent-violet)" }} />
+            <div style={{ ...styles.storageBarFill, width: `${pct}%`, background: "var(--accent-violet)" }} />
           </div>
           <div style={styles.storageFooter}>
             <span>Used Space</span>
-            <span>10 GB of 100 GB</span>
-          </div>
-        </div>
-
-        <div style={{ ...styles.storageCard, opacity: 0.6 }}>
-          <div style={styles.storageHeader}>
-            <div style={styles.storageIconWrapper}>
-              <Cloud size={18} color="var(--text-muted)" />
-            </div>
-            <div>
-              <div style={styles.storageTitle}>Cloud Storage <span style={styles.proBadge}>Pro</span></div>
-              <div style={styles.storageSubtitle}>Not connected</div>
-            </div>
-            <div style={styles.storagePercent}>0%</div>
-          </div>
-          <div style={styles.storageBarBg}>
-            <div style={{ ...styles.storageBarFill, width: "0%" }} />
-          </div>
-          <div style={styles.storageFooter}>
-            <span>Used Space</span>
-            <span>0 GB</span>
+            <span>{usedGb} GB of {totalGb} GB</span>
           </div>
         </div>
       </div>
@@ -75,9 +73,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
       <div style={styles.tabsRow}>
         <button style={styles.tabBtnActive}>
-          All Games <span style={styles.tabBadge}>{matches.length}</span>
-        </button>
-        <button style={styles.tabBtnDefault}>
           League of Legends <span style={styles.tabBadge}>{matches.length}</span>
         </button>
         {isRecording && (
@@ -120,13 +115,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                     <div style={{ ...styles.resultDot, background: isWin ? "var(--color-victory)" : "var(--color-defeat)" }} />
                   </div>
                   <div>
-                    <div style={styles.champName}>Ranked Solo/Duo</div>
+                    <div style={styles.champName}>{match.champion}</div>
                     <div style={styles.gameType}>
-                      {match.champion} 
                       {match.riot_match_id ? (
-                        <span style={{...styles.localBadge, borderColor: "var(--accent-violet)", color: "var(--accent-violet)"}}>Riot API Sync</span>
+                        <span style={{...styles.localBadge, borderColor: "var(--accent-violet)", color: "var(--accent-violet)"}}>Ranked / Normal Sync</span>
                       ) : (
-                        <span style={styles.localBadge}>Local only</span>
+                        <span style={styles.localBadge}>Custom Game</span>
                       )}
                     </div>
                   </div>

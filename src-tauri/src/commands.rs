@@ -16,6 +16,22 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+#[derive(serde::Serialize)]
+pub struct DiskSpaceInfo {
+    pub used_bytes: u64,
+    pub total_bytes: u64,
+}
+
+#[tauri::command]
+pub fn get_disk_usage() -> DiskSpaceInfo {
+    let root_dir = crate::storage::get_videos_dir();
+    let used_bytes = crate::storage::get_dir_size(&root_dir);
+    let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
+    DiskSpaceInfo {
+        used_bytes,
+        total_bytes: limit,
+    }
+}
 // Estructura para almacenar el estado de la partida actual en el worker de background
 pub struct ActiveMatchState {
     pub id: Mutex<String>,

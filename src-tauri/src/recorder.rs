@@ -204,7 +204,7 @@ fn build_ffmpeg_args(
             let filter = match mode {
                 VideoMode::GpuNvenc => {
                     format!(
-                        "ddagrab=0:framerate={},scale_d3d11=width=-2:height={}:format=nv12{}",
+                        "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format=nv12{}",
                         fps, scale_y, label
                     )
                 }

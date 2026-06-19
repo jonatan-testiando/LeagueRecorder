@@ -188,7 +188,7 @@ pub fn delete_match_files(id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn get_dir_size(path: &Path) -> u64 {
+pub fn get_dir_size(path: &Path) -> u64 {
     let mut size = 0;
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {

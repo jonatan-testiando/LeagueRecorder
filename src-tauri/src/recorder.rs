@@ -187,14 +187,7 @@ fn build_ffmpeg_args(
         VideoMode::GpuNvenc | VideoMode::GpuX264 => {
             args.extend(["-init_hw_device".into(), "d3d11va".into()]);
 
-            // El filtro de captura: ddagrab entrega frames BGRA en la GPU; los bajamos a RAM
-            // (format=bgra es obligatorio porque es el formato nativo de DDA en FFmpeg 8.x)
-            // y luego convertimos al formato que necesita el codificador.
             let has_audio = audio.is_some();
-            let pix = match mode {
-                VideoMode::GpuNvenc => "nv12",
-                _ => "yuv420p",
-            };
             // Etiquetamos la salida [v] sólo cuando hay audio (para poder mapear ambos streams).
             let label = if has_audio { "[v]" } else { "" };
             let scale_y = match settings.resolution.as_str() {
@@ -202,16 +195,21 @@ fn build_ffmpeg_args(
                 _ => "1080",
             };
             let filter = match mode {
+                // NVENC: path ZERO-COPY. ddagrab entrega frames BGRA que viven en la GPU (D3D11)
+                // y h264_nvenc los consume DIRECTAMENTE (sin hwdownload ni escalado por CPU). Esto
+                // captura a resolución nativa con coste de CPU prácticamente nulo => no baja FPS en
+                // el juego. No se escala porque scale_d3d11 está roto en este build/driver y bajar a
+                // RAM para escalar (lo que hacía antes) era justo lo que comía CPU. NVENC convierte
+                // BGRA->yuv420p internamente, así que el MP4 sigue siendo reproducible en el WebView.
                 VideoMode::GpuNvenc => {
-                    format!(
-                        "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format=nv12{}",
-                        fps, scale_y, label
-                    )
+                    format!("ddagrab=0:framerate={}{}", fps, label)
                 }
+                // x264 (fallback por CPU): aquí sí bajamos a RAM y escalamos, porque el encode es
+                // por software de todas formas. format=bgra es el formato nativo de DDA en FFmpeg 8.x.
                 _ => {
                     format!(
-                        "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format={}{}",
-                        fps, scale_y, pix, label
+                        "ddagrab=0:framerate={},hwdownload,format=bgra,scale=-2:{},format=yuv420p{}",
+                        fps, scale_y, label
                     )
                 }
             };
@@ -240,14 +238,26 @@ fn build_ffmpeg_args(
                 VideoMode::GpuNvenc => args.extend([
                     "-c:v".into(),
                     "h264_nvenc".into(),
+                    // Preset de baja latencia (ll) y sin B-frames: reduce la presión sobre el
+                    // encoder y evita el fallo "CreateInputBuffer failed: invalid param" que
+                    // aparece en algunos drivers/GPU (Blackwell) cuando hay un juego acaparando
+                    // recursos de la GPU. -surfaces acotado limita la memoria de buffers de entrada.
                     "-preset".into(),
-                    "p4".into(),
+                    "p5".into(),
+                    "-tune".into(),
+                    "ll".into(),
                     "-rc".into(),
                     "vbr".into(),
                     "-cq".into(),
                     nvenc_cq.into(),
                     "-b:v".into(),
                     "0".into(),
+                    "-bf".into(),
+                    "0".into(),
+                    "-g".into(),
+                    "120".into(),
+                    "-surfaces".into(),
+                    "16".into(),
                 ]),
                 _ => args.extend([
                     "-c:v".into(),
@@ -401,49 +411,58 @@ pub fn start_recording(
         },
     }
 
-    // Cascada de intentos: primero con audio (mejor calidad/compatibilidad), luego sin audio.
-    // Orden por FIABILIDAD comprobada: la captura por GPU (ddagrab) + x264 ultrafast es la más
-    // estable y de bajo impacto (la captura, lo costoso, va por GPU). NVENC+ddagrab puede fallar
-    // según el driver/GPU, así que va después. gdigrab es el comodín de compatibilidad total.
+    // Cascada de intentos. PRIORIDAD: codificación por GPU (NVENC) ante todo, porque es la que
+    // no consume CPU y no baja FPS en el juego. Agotamos TODAS las variantes de NVENC (con y sin
+    // audio) ANTES de caer a x264; de lo contrario un fallo puntual de NVENC+audio degradaba la
+    // grabación a x264 por CPU (que tira los FPS). x264 y luego gdigrab quedan solo como red de
+    // seguridad de compatibilidad. Para cada modo probamos primero con audio y luego sin audio.
     let modes = [
         VideoMode::GpuNvenc,
         VideoMode::GpuX264,
         VideoMode::CpuGdigrab,
     ];
     let mut attempts: Vec<(VideoMode, Option<String>)> = Vec::new();
-    if audio_device.is_some() {
-        for m in modes {
+    for m in modes {
+        if audio_device.is_some() {
             attempts.push((m, audio_device.clone()));
         }
-    }
-    // Fallbacks sin audio por si el dispositivo elegido falla al abrir.
-    for m in modes {
+        // Fallback sin audio por si el dispositivo elegido falla al abrir.
         attempts.push((m, None));
     }
 
     let mut child: Option<Child> = None;
-    for (mode, audio) in &attempts {
+    'outer: for (mode, audio) in &attempts {
         let label = match mode {
             VideoMode::GpuNvenc => "GPU/NVENC (DirectX)",
             VideoMode::GpuX264 => "GPU captura + CPU x264",
             VideoMode::CpuGdigrab => "CPU GDI (compatibilidad)",
         };
-        println!(
-            "Grabadora: intentando modo '{}' {} a {} FPS (Quality: {})...",
-            label,
-            if audio.is_some() {
-                "con audio"
-            } else {
-                "sin audio"
-            },
-            settings.fps,
-            settings.quality
-        );
-        let args = build_ffmpeg_args(video_path_str, *mode, audio.as_deref(), settings);
-        child = spawn_ffmpeg_and_verify(&ffmpeg_exe, &args);
-        if child.is_some() {
-            println!("Grabadora: arrancó correctamente en modo '{}'.", label);
-            break;
+        // NVENC puede fallar de forma transitoria al abrir el encoder (CreateInputBuffer) si la GPU
+        // está bajo carga del juego; le damos un reintento antes de degradar a CPU.
+        let tries = if matches!(mode, VideoMode::GpuNvenc) { 2 } else { 1 };
+        for attempt_n in 1..=tries {
+            println!(
+                "Grabadora: intentando modo '{}' {} a {} FPS (Quality: {}) [intento {}/{}]...",
+                label,
+                if audio.is_some() {
+                    "con audio"
+                } else {
+                    "sin audio"
+                },
+                settings.fps,
+                settings.quality,
+                attempt_n,
+                tries
+            );
+            let args = build_ffmpeg_args(video_path_str, *mode, audio.as_deref(), settings);
+            child = spawn_ffmpeg_and_verify(&ffmpeg_exe, &args);
+            if child.is_some() {
+                println!("Grabadora: arrancó correctamente en modo '{}'.", label);
+                break 'outer;
+            }
+            if attempt_n < tries {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
         }
     }
 

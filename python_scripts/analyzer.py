@@ -31,6 +31,9 @@ def load_template(path):
     return img, None
 
 def analyze(video_path):
+    # Activar Aceleración por GPU (OpenCL Transparente)
+    cv2.ocl.setUseOpenCL(True)
+
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cursors_dir = os.path.join(base_dir, "assets", "cursors")
     
@@ -43,17 +46,28 @@ def analyze(video_path):
         ("singletargetenemy_colorblind.png", "attack", 23, 24),
         ("hoverenemy.png", "attack", 2, 2),
         ("hovershop.png", "move", 24, 26),
-        ("singletargetally.png", "move", 23, 23)
+        ("singletargetally.png", "move", 23, 23),
+        # Cursores Precise añadidos por el usuario (redimensionados a 48x48 nativo)
+        ("hover_precise.png", "move", 24, 24),
+        ("hover_ally_precise.png", "move", 24, 24),
+        ("hover_enemy_precise.png", "attack", 24, 24),
+        ("hover_enemy_precise_colorblind.png", "attack", 24, 24)
     ]
     
     templates = []
+    templates_half = []
     for fname, evt_type, h_x, h_y in target_files:
         for folder in [cursors_dir, os.path.join(cursors_dir, "upscaled")]:
             path = os.path.join(folder, fname)
             if os.path.exists(path):
                 b, m = load_template(path)
                 if b is not None:
-                    templates.append((b, m, evt_type, h_x, h_y))
+                    templates.append((cv2.UMat(b), cv2.UMat(m), evt_type, h_x, h_y))
+                    
+                    # Generar versión pequeña para el Escaneo Global Ultrarápido
+                    b_half = cv2.resize(b, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+                    m_half = cv2.resize(m, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+                    templates_half.append((cv2.UMat(b_half), cv2.UMat(m_half), evt_type, h_x/2.0, h_y/2.0))
     
     # ------------------ UMBRALES DE COLOR (HSV) ------------------
     # Definimos los rangos de color de las partículas del juego
@@ -90,6 +104,18 @@ def analyze(video_path):
     
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     sys.stderr.write(f"Iniciando analisis... Total frames: {total_frames}\n")
+    
+    # Imprimir info de diagnóstico de GPU
+    has_ocl = cv2.ocl.haveOpenCL()
+    uses_ocl = cv2.ocl.useOpenCL()
+    sys.stderr.write(f"[HARDWARE] Aceleracion GPU Activa: {uses_ocl}\n")
+    if uses_ocl:
+        try:
+            device = cv2.ocl.Device.getDefault()
+            sys.stderr.write(f"[HARDWARE] Dispositivo: {device.name()} ({device.vendorName()})\n")
+        except:
+            pass
+            
     sys.stderr.flush()
     
     # Asumimos resoluciones similares, o podemos escalar la imagen
@@ -125,8 +151,8 @@ def analyze(video_path):
         # Determinar el área de búsqueda (ROI - Region Of Interest)
         roi_offset_x = 0
         roi_offset_y = 0
-        search_frame = frame
         
+        is_global_search = False
         if last_loc is not None:
             lx, ly = int(last_loc[0]), int(last_loc[1])
             # Crear un cuadro de búsqueda delimitado a los bordes de la pantalla
@@ -138,15 +164,25 @@ def analyze(video_path):
             search_frame = frame[y_min:y_max, x_min:x_max]
             roi_offset_x = x_min
             roi_offset_y = y_min
+            search_frame_umat = cv2.UMat(search_frame)
+            active_templates = templates
+        else:
+            # Scaled Global Search: Buscar a mitad de tamaño es 4x más rápido matemáticamente
+            is_global_search = True
+            frame_half = cv2.resize(frame, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+            search_frame_umat = cv2.UMat(frame_half)
+            active_templates = templates_half
+            search_frame = frame
         
         best_val = 0
         best_loc = (0, 0)
         best_type = "move"
         best_hotspot = (9, 9)
         
-        for t_bgr, t_mask, t_type, h_x, h_y in templates:
-            res = cv2.matchTemplate(search_frame, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
-            _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        for t_bgr, t_mask, t_type, h_x, h_y in active_templates:
+            res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
+            res_cpu = res.get() if hasattr(res, 'get') else res
+            _, max_val, _, max_loc = cv2.minMaxLoc(res_cpu)
             if max_val > best_val:
                 best_val = max_val
                 best_loc = max_loc
@@ -157,6 +193,11 @@ def analyze(video_path):
             # paramos de buscar en el resto de los PNGs para no perder tiempo.
             if best_val > 0.95:
                 break
+                
+        if is_global_search:
+            # Restaurar la coordenada encontrada a la escala de video nativo 1080p/1440p
+            best_loc = (int(best_loc[0] * 2), int(best_loc[1] * 2))
+            best_hotspot = (int(best_hotspot[0] * 2), int(best_hotspot[1] * 2))
         
         # Umbral estricto para evitar falsos positivos
         if best_val > 0.85:
@@ -183,7 +224,8 @@ def analyze(video_path):
             evt_to_register = "move"
             
             if particle_roi.size > 0:
-                hsv_roi = cv2.cvtColor(particle_roi, cv2.COLOR_BGR2HSV)
+                particle_roi_umat = cv2.UMat(particle_roi)
+                hsv_roi = cv2.cvtColor(particle_roi_umat, cv2.COLOR_BGR2HSV)
                 
                 # Crear las máscaras
                 mask_green = cv2.inRange(hsv_roi, lower_green, upper_green)
@@ -192,11 +234,13 @@ def analyze(video_path):
                 mask_red2 = cv2.inRange(hsv_roi, lower_red2, upper_red2)
                 mask_red = cv2.bitwise_or(mask_red1, mask_red2)
                 
-                # Juntar todas las máscaras luminosas
-                combined_mask = mask_green | mask_cyan | mask_red
+                # Juntar todas las máscaras luminosas de forma segura para UMat
+                combined_mask = cv2.bitwise_or(cv2.bitwise_or(mask_green, mask_cyan), mask_red)
                 bright_pixels = cv2.countNonZero(combined_mask)
                 
                 # --- 3. DETECCIÓN INERCIAL Y DE ASSET (TRACKING HÍBRIDO) ---
+                frames_since_last_click += 1
+                
                 is_brake = False
                 speed = 0
                 if prev_x != -1:
@@ -219,7 +263,7 @@ def analyze(video_path):
                 # TRIPLE REDUNDANCIA: Clic por Color OR Clic por Freno Físico OR Clic por Asset
                 if (bright_pixels > 30 or is_brake or asset_is_click) and frames_since_last_click >= COOLDOWN_FRAMES:
                     # Determinar si fue clic normal o ataque
-                    green_cyan_pixels = cv2.countNonZero(mask_green | mask_cyan)
+                    green_cyan_pixels = cv2.countNonZero(cv2.bitwise_or(mask_green, mask_cyan))
                     red_pixels = cv2.countNonZero(mask_red)
                     
                     if red_pixels > green_cyan_pixels or best_type == "attack":

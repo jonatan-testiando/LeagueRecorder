@@ -14,6 +14,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   const [vods, setVods] = useState<MatchMetadata[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [hardwareInfo, setHardwareInfo] = useState("");
 
   useEffect(() => {
     // Cargar historial persistido del disco
@@ -24,8 +25,14 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
     const unlisten = listen<string>("vod_progress", (event) => {
       setStatusText(event.payload);
     });
+    
+    const unlistenHardware = listen<string>("hardware_info", (event) => {
+      setHardwareInfo(event.payload);
+    });
+    
     return () => {
       unlisten.then(f => f());
+      unlistenHardware.then(f => f());
     };
   }, []);
 
@@ -40,6 +47,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       if (!selectedVideo) return;
 
       setIsProcessing(true);
+      setHardwareInfo("");
       setStatusText("Analizando VOD con Inteligencia Artificial...");
       
       const res = await processVod(selectedVideo as string, "");
@@ -76,10 +84,27 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       </div>
 
       <div style={styles.actionRow}>
-        <button onClick={handleImport} disabled={isProcessing} style={styles.importBtn}>
-          {isProcessing ? <Loader size={18} className="spin" /> : <Upload size={18} />}
-          {isProcessing ? "Procesando VOD..." : "Importar VOD (.mp4)"}
-        </button>
+        <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+          <button onClick={handleImport} disabled={isProcessing} style={{...styles.importBtn, opacity: isProcessing ? 0.6 : 1}}>
+            {isProcessing ? <Loader size={18} className="spin" /> : <Upload size={18} />}
+            {isProcessing ? "Procesando VOD..." : "Importar VOD (.mp4)"}
+          </button>
+          
+          {hardwareInfo && isProcessing && (
+            <span style={{ 
+              color: "#10b981", 
+              fontSize: "12px", 
+              backgroundColor: "rgba(16, 185, 129, 0.1)", 
+              padding: "4px 8px", 
+              borderRadius: "4px", 
+              display: "inline-block", 
+              fontWeight: 600 
+            }}>
+              ⚡ GPU Activa: {hardwareInfo}
+            </span>
+          )}
+        </div>
+        
         {isProcessing && <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>{statusText}</span>}
       </div>
 

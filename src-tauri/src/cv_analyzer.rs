@@ -3,9 +3,20 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
+use std::sync::atomic::{AtomicBool, Ordering};
 use uuid::Uuid;
 use chrono::Local;
 use tauri::Emitter;
+
+pub struct AnalyzerState {
+    pub is_running: AtomicBool,
+}
+
+impl Default for AnalyzerState {
+    fn default() -> Self {
+        Self { is_running: AtomicBool::new(false) }
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct ProcessVodResponse {
@@ -17,16 +28,26 @@ pub struct ProcessVodResponse {
 #[tauri::command]
 pub async fn process_vod(
     app: tauri::AppHandle,
+    state: tauri::State<'_, AnalyzerState>,
     video_path: String,
     model_path: String, // Mantenemos la firma para que el Frontend no rompa
-) -> ProcessVodResponse {
+) -> Result<ProcessVodResponse, String> {
+    if state.is_running.swap(true, Ordering::SeqCst) {
+        return Ok(ProcessVodResponse {
+            success: false,
+            message: "Ya hay un análisis de IA en curso. Por favor espera a que termine para evitar problemas de rendimiento.".to_string(),
+            metadata: None,
+        });
+    }
+
     let video_p = Path::new(&video_path);
     if !video_p.exists() {
-        return ProcessVodResponse {
+        state.is_running.store(false, Ordering::SeqCst);
+        return Ok(ProcessVodResponse {
             success: false,
             message: "Video file not found".to_string(),
             metadata: None,
-        };
+        });
     }
 
     println!("Iniciando procesamiento del VOD con Python: {}", video_path);
@@ -60,8 +81,13 @@ pub async fn process_vod(
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(l) = line {
-                    // Enviar CUALQUIER output de stderr al frontend (errores, tracebacks o progreso)
-                    let _ = app_clone.emit("vod_progress", format!("AI Log: {}", l));
+                    if l.starts_with("[HARDWARE]") {
+                        let msg = l.replace("[HARDWARE]", "");
+                        let _ = app_clone.emit("hardware_info", msg.trim().to_string());
+                    } else {
+                        // Enviar output normal de stderr al frontend como progreso
+                        let _ = app_clone.emit("vod_progress", format!("AI Log: {}", l));
+                    }
                 }
             }
         });
@@ -85,7 +111,10 @@ pub async fn process_vod(
 
     let (detected_clicks, v_path) = match result {
         Ok(res) => res,
-        Err(e) => return ProcessVodResponse { success: false, message: e, metadata: None },
+        Err(e) => {
+            state.is_running.store(false, Ordering::SeqCst);
+            return Ok(ProcessVodResponse { success: false, message: e, metadata: None });
+        }
     };
 
     let match_id = format!("vod_{}", Uuid::new_v4().to_string());
@@ -117,9 +146,11 @@ pub async fn process_vod(
     // Guardar en el disco (en la carpeta VODsReviews)
     let _ = crate::storage::save_match_metadata(&new_metadata);
 
-    ProcessVodResponse {
+    state.is_running.store(false, Ordering::SeqCst);
+
+    Ok(ProcessVodResponse {
         success: true,
         message: format!("VOD analizado. Clics y tracking detectados: {}", new_metadata.mouse_events.len()),
         metadata: Some(new_metadata),
-    }
+    })
 }

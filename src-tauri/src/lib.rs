@@ -47,6 +47,7 @@ pub fn run() {
     );
 
     tauri::Builder::default()
+        .manage(cv_analyzer::AnalyzerState::default())
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;

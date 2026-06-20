@@ -41,16 +41,9 @@ def analyze(video_path):
     target_files = [
         # (filename, event_type, hotspot_x, hotspot_y)
         ("hand1.png", "move", 9, 9),
-        ("singletarget.png", "right_click", 23, 24),
-        ("singletargetenemy.png", "attack", 23, 24),
-        ("singletargetenemy_colorblind.png", "attack", 23, 24),
+        ("hand2.png", "move", 9, 9),
         ("hoverenemy.png", "attack", 2, 2),
-        ("hovershop.png", "move", 24, 26),
-        ("singletargetally.png", "move", 23, 23),
-        # Cursores Precise añadidos por el usuario (redimensionados a 48x48 nativo)
         ("hover_precise.png", "move", 24, 24),
-        ("hover_ally_precise.png", "move", 24, 24),
-        ("hover_enemy_precise.png", "attack", 24, 24),
         ("hover_enemy_precise_colorblind.png", "attack", 24, 24)
     ]
     
@@ -130,6 +123,7 @@ def analyze(video_path):
     
     last_loc = None
     SEARCH_PADDING = 150 # Cuántos píxeles buscar alrededor del último punto conocido
+    last_best_template_idx = 0 # Sticky Template Index
     
     while True:
         # Usar grab() para saltar frames MUCHO más rápido sin decodificarlos
@@ -174,25 +168,38 @@ def analyze(video_path):
             active_templates = templates_half
             search_frame = frame
         
-        best_val = 0
-        best_loc = (0, 0)
-        best_type = "move"
-        best_hotspot = (9, 9)
+        # --- FASE 1: STICKY TEMPLATE MATCHING ---
+        # Solo comparamos con el cursor que estaba activo en el frame anterior
+        t_bgr, t_mask, t_type, h_x, h_y = active_templates[last_best_template_idx]
+        res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
+        res_cpu = res.get() if hasattr(res, 'get') else res
+        _, best_val, _, best_loc = cv2.minMaxLoc(res_cpu)
+        best_type = t_type
+        best_hotspot = (h_x, h_y)
         
-        for t_bgr, t_mask, t_type, h_x, h_y in active_templates:
-            res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
-            res_cpu = res.get() if hasattr(res, 'get') else res
-            _, max_val, _, max_loc = cv2.minMaxLoc(res_cpu)
-            if max_val > best_val:
-                best_val = max_val
-                best_loc = max_loc
-                best_type = t_type
-                best_hotspot = (h_x, h_y)
-            
-            # Optimización matemática: Si hallamos una coincidencia altísima (95%), 
-            # paramos de buscar en el resto de los PNGs para no perder tiempo.
-            if best_val > 0.95:
-                break
+        # --- FASE 2: CLASIFICACIÓN (Solo si el cursor cambió de forma o perdimos calidad) ---
+        # Si la similitud cae por debajo de nuestro umbral de "clic válido" (0.85),
+        # estamos obligados a buscar en toda la librería de cursores.
+        if best_val < 0.88:
+            best_val = 0
+            for i, (t_bgr, t_mask, t_type, h_x, h_y) in enumerate(active_templates):
+                if i == last_best_template_idx:
+                    continue # Ya lo probamos
+                    
+                res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
+                res_cpu = res.get() if hasattr(res, 'get') else res
+                _, max_val, _, max_loc = cv2.minMaxLoc(res_cpu)
+                
+                if max_val > best_val:
+                    best_val = max_val
+                    best_loc = max_loc
+                    best_type = t_type
+                    best_hotspot = (h_x, h_y)
+                    last_best_template_idx = i # Memorizar el nuevo cursor
+                
+                # Optimización matemática: Si hallamos una coincidencia altísima (95%)
+                if best_val > 0.95:
+                    break
                 
         if is_global_search:
             # Restaurar la coordenada encontrada a la escala de video nativo 1080p/1440p

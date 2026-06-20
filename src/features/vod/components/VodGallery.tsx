@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { processVod } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
-import { Film, Upload, Play, Loader } from "lucide-react";
+import { Film, Upload, Play, Loader, Trash2 } from "lucide-react";
 
 interface VodGalleryProps {
   onSelectMatch: (match: MatchMetadata) => void;
@@ -15,6 +16,11 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   const [statusText, setStatusText] = useState("");
 
   useEffect(() => {
+    // Cargar historial persistido del disco
+    invoke<MatchMetadata[]>("get_vod_reviews")
+      .then((savedVods) => setVods(savedVods))
+      .catch(console.error);
+
     const unlisten = listen<string>("vod_progress", (event) => {
       setStatusText(event.payload);
     });
@@ -47,6 +53,16 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
     } finally {
       setIsProcessing(false);
       setStatusText("");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("¿Estás seguro de eliminar este VOD Review de manera permanente?")) return;
+    try {
+      await invoke("delete_match", { id });
+      setVods((prev) => prev.filter((v) => v.id !== id));
+    } catch (err: any) {
+      alert("Error eliminando VOD: " + err.toString());
     }
   };
 
@@ -83,9 +99,18 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
               <h4 style={{ margin: 0, color: "#fff" }}>{vod.champion}</h4>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{vod.date}</span>
             </div>
-            <button style={styles.playBtn} onClick={() => onSelectMatch(vod)}>
-              <Play size={16} /> Reproducir
-            </button>
+            <div style={{display: "flex", alignItems: "center"}}>
+              <button style={styles.playBtn} onClick={() => onSelectMatch(vod)}>
+                <Play size={16} /> Reproducir
+              </button>
+              <button 
+                style={{...styles.playBtn, borderColor: "var(--color-defeat)", color: "var(--color-defeat)", marginLeft: "var(--space-2)"}} 
+                onClick={() => handleDelete(vod.id)}
+                title="Eliminar permanentemente"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
         ))}
       </div>

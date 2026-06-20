@@ -129,6 +129,7 @@ pub fn run() {
             get_app_config,
             set_app_config,
             get_disk_usage,
+            storage::get_vod_reviews,
             cv_analyzer::process_vod
         ])
         .run(tauri::generate_context!())

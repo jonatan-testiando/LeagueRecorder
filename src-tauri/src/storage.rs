@@ -108,8 +108,21 @@ pub fn get_videos_dir() -> PathBuf {
     path.to_path_buf()
 }
 
+pub fn get_reviews_dir() -> PathBuf {
+    let dir = get_videos_dir().join("VODsReviews");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir
+}
+
 pub fn get_match_dir(id: &str) -> PathBuf {
-    let dir = get_videos_dir().join(id);
+    let dir = if id.starts_with("vod_") {
+        get_reviews_dir().join(id)
+    } else {
+        get_videos_dir().join(id)
+    };
+    
     if !dir.exists() {
         let _ = fs::create_dir_all(&dir);
     }
@@ -157,6 +170,42 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
     }
 
     // Ordenar de más reciente a más antiguo
+    matches.sort_by(|a, b| b.date.cmp(&a.date));
+    matches
+}
+
+#[tauri::command]
+pub fn get_vod_reviews() -> Vec<MatchMetadata> {
+    let dir = get_reviews_dir();
+    let mut matches = Vec::new();
+
+    let mut process_file = |path: &Path| {
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(metadata) = serde_json::from_str::<MatchMetadata>(&content) {
+                    if metadata.id.starts_with("vod_") {
+                        matches.push(metadata);
+                    }
+                }
+            }
+        }
+    };
+
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Ok(sub_entries) = fs::read_dir(&path) {
+                    for sub_entry in sub_entries.flatten() {
+                        process_file(&sub_entry.path());
+                    }
+                }
+            } else if path.is_file() {
+                process_file(&path);
+            }
+        }
+    }
+
     matches.sort_by(|a, b| b.date.cmp(&a.date));
     matches
 }

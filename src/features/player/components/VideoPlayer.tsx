@@ -362,8 +362,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     resizeObserver.observe(canvas);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const screenW = window.screen.width;
-    const screenH = window.screen.height;
     const render = () => {
       rafRef.current = requestAnimationFrame(render);
       const v = videoRef.current;
@@ -372,12 +370,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (!match.mouse_events || match.mouse_events.length === 0) return;
+      
+      const videoW = v.videoWidth || 1920;
+      const videoH = v.videoHeight || 1080;
+      const scaleX = canvas.width / videoW;
+      const scaleY = canvas.height / videoH;
+      
       const TRAIL_DURATION = 1.0;
       const adjustedCt = ct - mouseSync;
       const recentEvents = match.mouse_events.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
       if (recentEvents.length === 0) return;
-      const scaleX = canvas.width / screenW;
-      const scaleY = canvas.height / screenH;
       const moves = recentEvents.filter(e => e.evt === "move");
       if (moves.length > 1) {
         ctx.lineCap = "round";

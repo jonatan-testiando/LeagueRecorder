@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import json
 import os
+import math
 
 def load_template(path):
     # Leer imagen con canal alfa
@@ -33,10 +34,51 @@ def analyze(video_path):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cursors_dir = os.path.join(base_dir, "assets", "cursors")
     
-    # Cargar las diferentes variantes de cursor
-    hand_bgr, hand_mask = load_template(os.path.join(cursors_dir, "hand1.png"))
-    attack_bgr, attack_mask = load_template(os.path.join(cursors_dir, "singletarget.png"))
-    attack_enemy_bgr, attack_enemy_mask = load_template(os.path.join(cursors_dir, "singletargetenemy.png"))
+    # Cargar las diferentes variantes de cursor (base y upscaled)
+    target_files = [
+        # (filename, event_type, hotspot_x, hotspot_y)
+        ("hand1.png", "move", 9, 9),
+        ("singletarget.png", "right_click", 23, 24),
+        ("singletargetenemy.png", "attack", 23, 24),
+        ("singletargetenemy_colorblind.png", "attack", 23, 24),
+        ("hoverenemy.png", "attack", 2, 2),
+        ("hovershop.png", "move", 24, 26),
+        ("singletargetally.png", "move", 23, 23)
+    ]
+    
+    templates = []
+    for fname, evt_type, h_x, h_y in target_files:
+        for folder in [cursors_dir, os.path.join(cursors_dir, "upscaled")]:
+            path = os.path.join(folder, fname)
+            if os.path.exists(path):
+                b, m = load_template(path)
+                if b is not None:
+                    templates.append((b, m, evt_type, h_x, h_y))
+    
+    # ------------------ UMBRALES DE COLOR (HSV) ------------------
+    # Definimos los rangos de color de las partículas del juego
+    # Verde fluorescente (clic de movimiento normal)
+    lower_green = np.array([40, 150, 150])
+    upper_green = np.array([85, 255, 255])
+    
+    # Cian / Azul Claro (clic de movimiento modo daltónico)
+    lower_cyan = np.array([85, 150, 150])
+    upper_cyan = np.array([105, 255, 255])
+    
+    # Rojo Intenso y Naranja Fuerte (clic de ataque normal y daltónico)
+    # El rojo en HSV cruza el valor 0, así que necesitamos dos rangos (rojo bajo y rojo alto)
+    lower_red1 = np.array([0, 180, 180])
+    upper_red1 = np.array([15, 255, 255])
+    lower_red2 = np.array([165, 180, 180])
+    upper_red2 = np.array([180, 255, 255])
+    
+    # Contador anti-spam (debounce)
+    frames_since_last_click = 0
+    COOLDOWN_FRAMES = 8 # ~260ms a 30 FPS
+    
+    # ------------------ TRACKING INERCIAL ------------------
+    prev_x, prev_y = -1, -1
+    velocities = []
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -57,8 +99,11 @@ def analyze(video_path):
     events = []
     frame_count = 0
     
-    # Procesar 5 frames por segundo (suficiente para una estela fluida, el doble de rapido)
-    skip_frames = max(1, int(fps / 5))
+    # Procesar 30 frames por segundo para una estela perfectamente fluida (el estándar de oro)
+    skip_frames = max(1, int(fps / 30))
+    
+    last_loc = None
+    SEARCH_PADDING = 150 # Cuántos píxeles buscar alrededor del último punto conocido
     
     while True:
         # Usar grab() para saltar frames MUCHO más rápido sin decodificarlos
@@ -77,48 +122,137 @@ def analyze(video_path):
             
         time_sec = frame_count / fps
         
+        # Determinar el área de búsqueda (ROI - Region Of Interest)
+        roi_offset_x = 0
+        roi_offset_y = 0
+        search_frame = frame
+        
+        if last_loc is not None:
+            lx, ly = int(last_loc[0]), int(last_loc[1])
+            # Crear un cuadro de búsqueda delimitado a los bordes de la pantalla
+            x_min = max(0, lx - SEARCH_PADDING)
+            y_min = max(0, ly - SEARCH_PADDING)
+            x_max = min(frame_width, lx + 50 + SEARCH_PADDING)
+            y_max = min(frame_height, ly + 50 + SEARCH_PADDING)
+            
+            search_frame = frame[y_min:y_max, x_min:x_max]
+            roi_offset_x = x_min
+            roi_offset_y = y_min
+        
         best_val = 0
         best_loc = (0, 0)
         best_type = "move"
+        best_hotspot = (9, 9)
         
-        # Método 1: Cursor normal (movimiento)
-        if hand_bgr is not None:
-            res = cv2.matchTemplate(frame, hand_bgr, cv2.TM_CCORR_NORMED, mask=hand_mask)
+        for t_bgr, t_mask, t_type, h_x, h_y in templates:
+            res = cv2.matchTemplate(search_frame, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
             _, max_val, _, max_loc = cv2.minMaxLoc(res)
             if max_val > best_val:
                 best_val = max_val
                 best_loc = max_loc
-                best_type = "move"
-                
-        # Método 2: Cursor ataque
-        if attack_bgr is not None:
-            res = cv2.matchTemplate(frame, attack_bgr, cv2.TM_CCORR_NORMED, mask=attack_mask)
-            _, max_val, _, max_loc = cv2.minMaxLoc(res)
-            if max_val > best_val:
-                best_val = max_val
-                best_loc = max_loc
-                best_type = "right_click"
-                
-        # Método 3: Cursor ataque a enemigo (rojo)
-        if attack_enemy_bgr is not None:
-            res = cv2.matchTemplate(frame, attack_enemy_bgr, cv2.TM_CCORR_NORMED, mask=attack_enemy_mask)
-            _, max_val, _, max_loc = cv2.minMaxLoc(res)
-            if max_val > best_val:
-                best_val = max_val
-                best_loc = max_loc
-                best_type = "attack"
+                best_type = t_type
+                best_hotspot = (h_x, h_y)
+            
+            # Optimización matemática: Si hallamos una coincidencia altísima (95%), 
+            # paramos de buscar en el resto de los PNGs para no perder tiempo.
+            if best_val > 0.95:
+                break
         
-        # Umbral estricto para evitar falsos positivos en el ruido del mapa
+        # Umbral estricto para evitar falsos positivos
         if best_val > 0.85:
-            # Los cursores en LoL apuntan con la punta superior izquierda, o el centro dependiendo del cursor
-            # El template matching devuelve la esquina superior izquierda del recorte.
-            # Como recortamos los bordes, best_loc está bastante cerca del "hotspot".
+            # Reajustar coordenadas si estábamos usando un recorte pequeño
+            real_x = float(best_loc[0]) + roi_offset_x
+            real_y = float(best_loc[1]) + roi_offset_y
+            
+            # --- 2. DETECCIÓN HSV (EXPLOSIÓN DE COLOR PARA CLICS) ---
+            # En lugar de usar toda la pantalla, aplicamos el filtro de color
+            # SOLO en un cuadrado muy pequeño debajo de la punta del cursor
+            
+            # Coordenadas donde se dibuja el evento visual del click
+            click_x = int(real_x + best_hotspot[0])
+            click_y = int(real_y + best_hotspot[1])
+            
+            # Recortamos 60x60 píxeles alrededor de la punta del cursor (HotSpot)
+            cy1 = max(0, click_y - 30)
+            cy2 = min(frame.shape[0], click_y + 30)
+            cx1 = max(0, click_x - 30)
+            cx2 = min(frame.shape[1], click_x + 30)
+            
+            particle_roi = frame[cy1:cy2, cx1:cx2]
+            
+            evt_to_register = "move"
+            
+            if particle_roi.size > 0:
+                hsv_roi = cv2.cvtColor(particle_roi, cv2.COLOR_BGR2HSV)
+                
+                # Crear las máscaras
+                mask_green = cv2.inRange(hsv_roi, lower_green, upper_green)
+                mask_cyan = cv2.inRange(hsv_roi, lower_cyan, upper_cyan)
+                mask_red1 = cv2.inRange(hsv_roi, lower_red1, upper_red1)
+                mask_red2 = cv2.inRange(hsv_roi, lower_red2, upper_red2)
+                mask_red = cv2.bitwise_or(mask_red1, mask_red2)
+                
+                # Juntar todas las máscaras luminosas
+                combined_mask = mask_green | mask_cyan | mask_red
+                bright_pixels = cv2.countNonZero(combined_mask)
+                
+                # --- 3. DETECCIÓN INERCIAL Y DE ASSET (TRACKING HÍBRIDO) ---
+                is_brake = False
+                speed = 0
+                if prev_x != -1:
+                    speed = math.hypot(real_x - prev_x, real_y - prev_y)
+                    velocities.append(speed)
+                    if len(velocities) > 10:
+                        velocities.pop(0)
+                        
+                    avg_speed = sum(velocities) / len(velocities)
+                    # Micro-freno: Venía rápido y cayó en seco
+                    if avg_speed > 15 and speed < 4:
+                        is_brake = True
+                
+                # Guardar posición para el próximo frame
+                prev_x, prev_y = real_x, real_y
+                
+                # Cambio de Asset: Si el jugador forzó el cursor de espada (Attack)
+                asset_is_click = (best_type in ["attack", "right_click"])
+                
+                # TRIPLE REDUNDANCIA: Clic por Color OR Clic por Freno Físico OR Clic por Asset
+                if (bright_pixels > 30 or is_brake or asset_is_click) and frames_since_last_click >= COOLDOWN_FRAMES:
+                    # Determinar si fue clic normal o ataque
+                    green_cyan_pixels = cv2.countNonZero(mask_green | mask_cyan)
+                    red_pixels = cv2.countNonZero(mask_red)
+                    
+                    if red_pixels > green_cyan_pixels or best_type == "attack":
+                        evt_to_register = "left_click" # Ataque
+                    else:
+                        evt_to_register = "right_click" # Movimiento
+                        
+                    frames_since_last_click = 0
+            
+            frames_since_last_click += 1
+            
+            # Si el tracker visual detectó el sprite de espada, forzamos que al menos diga attack
+            if evt_to_register == "move" and best_type != "move":
+                evt_to_register = best_type
+            
+            # Guardamos la ubicación exitosa para el predictivo
+            last_loc = (int(real_x), int(real_y))
+            
+            # Corregimos la coordenada exportada con el HotSpot para que en la app de React
+            # el punto se dibuje exactamente en la punta de la espada/mano y no descuadrado
+            final_x = int(real_x + best_hotspot[0])
+            final_y = int(real_y + best_hotspot[1])
+            
             events.append({
                 "t": time_sec,
-                "x": float(best_loc[0]),
-                "y": float(best_loc[1]),
-                "evt": best_type
+                "x": final_x,
+                "y": final_y,
+                "evt": evt_to_register
             })
+        else:
+            # Si no encontramos el ratón (o bajó la confianza), perdimos el rastro.
+            # En el siguiente fotograma forzaremos una búsqueda Global en toda la pantalla.
+            last_loc = None
             
         # Emitir progreso
         if frame_count % (skip_frames * 20) == 0:

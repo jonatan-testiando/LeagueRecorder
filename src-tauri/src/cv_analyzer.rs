@@ -114,6 +114,9 @@ pub async fn process_vod(
 
     let _ = app.emit("vod_progress", "Análisis finalizado.");
 
+    // Guardar en el disco (en la carpeta VODsReviews)
+    let _ = crate::storage::save_match_metadata(&new_metadata);
+
     ProcessVodResponse {
         success: true,
         message: format!("VOD analizado. Clics y tracking detectados: {}", new_metadata.mouse_events.len()),

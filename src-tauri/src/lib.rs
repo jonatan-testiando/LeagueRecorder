@@ -1,5 +1,7 @@
 mod api_listener;
 mod commands;
+mod cv_analyzer;
+mod dataset_generator;
 mod detector;
 mod recorder;
 pub mod riot_api;
@@ -94,6 +96,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         // Protocolo de streaming propio para reproducir vídeos locales con soporte de
         // HTTP Range (seek instantáneo y archivos grandes). En Windows se sirve en
         // http://stream.localhost/<ruta>
@@ -125,7 +128,8 @@ pub fn run() {
             set_video_settings,
             get_app_config,
             set_app_config,
-            get_disk_usage
+            get_disk_usage,
+            cv_analyzer::process_vod
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

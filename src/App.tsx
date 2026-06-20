@@ -3,6 +3,7 @@ import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
 import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
+import { VodGallery } from "./features/vod/components/VodGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
@@ -11,7 +12,7 @@ import { ErrorClipMetadata } from "./core/tauri-ipc";
 import { motion, AnimatePresence } from "framer-motion";
 import { getVersion } from "@tauri-apps/api/app";
 
-type Tab = "games" | "clips" | "errors" | "review" | "settings";
+type Tab = "games" | "clips" | "errors" | "review" | "vod" | "settings";
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("games");
@@ -88,6 +89,17 @@ export const App: React.FC = () => {
             Review
           </button>
           <button
+            onClick={() => { setActiveTab("vod"); setSelectedMatch(null); }}
+            style={{
+              ...styles.navBtn,
+              backgroundColor: activeTab === "vod" ? "var(--accent-violet)" : "transparent",
+              color: activeTab === "vod" ? "#fff" : "var(--text-secondary)",
+            }}
+          >
+            <Film size={18} />
+            VOD Analysis
+          </button>
+          <button
             onClick={() => { setActiveTab("settings"); setSelectedMatch(null); }}
             style={{
               ...styles.navBtn,
@@ -122,6 +134,26 @@ export const App: React.FC = () => {
               <SettingsPanel />
             ) : activeTab === "clips" ? (
               <ClipsGallery />
+            ) : activeTab === "vod" ? (
+              <>
+                {selectedMatch && (
+                  <div style={styles.playerWrapper}>
+                    <div style={styles.playerTopBar}>
+                      <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
+                        <ArrowLeft size={20} />
+                      </button>
+                      <div style={styles.playerTitleBlock}>
+                        <h2 style={styles.playerTitle}>Análisis de IA</h2>
+                        <span style={styles.playerSub}>{selectedMatch.date}</span>
+                      </div>
+                    </div>
+                    <VideoPlayer match={selectedMatch} />
+                  </div>
+                )}
+                <div style={{ display: selectedMatch ? "none" : "block", width: "100%", height: "100%" }}>
+                  <VodGallery onSelectMatch={setSelectedMatch} />
+                </div>
+              </>
             ) : activeTab === "errors" ? (
               selectedError ? (
                 <ErrorPlayer 

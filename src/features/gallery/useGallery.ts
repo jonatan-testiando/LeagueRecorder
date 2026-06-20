@@ -21,9 +21,11 @@ export const useGallery = () => {
       
       // Si la partida seleccionada ya no existe (por ejemplo, tras borrarse), deseleccionarla
       if (selectedMatch) {
-        const stillExists = data.some(m => m.id === selectedMatch.id);
-        if (!stillExists) {
-          setSelectedMatch(null);
+        if (!selectedMatch.id.startsWith("vod_")) {
+          const stillExists = data.some(m => m.id === selectedMatch.id);
+          if (!stillExists) {
+            setSelectedMatch(null);
+          }
         }
       }
     } catch (err) {

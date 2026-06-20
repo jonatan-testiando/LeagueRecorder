@@ -578,6 +578,23 @@ async fn finalize_match(
                     Err(e) => eprintln!("Error al sincronizar con Riot API: {}", e),
                 }
             });
+
+            // Trigger Dataset Generation si está activo
+            let app_config = crate::storage::load_config();
+            if app_config.auto_dataset_generator {
+                let video_path = metadata.video_path.clone();
+                let meta_clone = metadata.clone();
+                let dataset_dir = std::path::Path::new(&app_config.save_directory).join("dataset");
+                tokio::spawn(async move {
+                    println!("Generando auto-dataset para partida {}...", meta_clone.id);
+                    // Extract ~100 clicks
+                    if let Err(e) = crate::dataset_generator::generate_dataset(&video_path, &meta_clone, &dataset_dir, 100).await {
+                        eprintln!("Error generando dataset: {}", e);
+                    } else {
+                        println!("Auto-dataset generado para {}", meta_clone.id);
+                    }
+                });
+            }
         }
         Err(e) => eprintln!("Error al guardar los metadatos de la partida: {}", e),
     }
@@ -1193,10 +1210,11 @@ pub fn get_app_config() -> crate::storage::AppConfig {
 }
 
 #[tauri::command]
-pub fn set_app_config(save_directory: String, riot_api_key: String) -> Result<(), String> {
+pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     config.save_directory = save_directory;
     config.riot_api_key = riot_api_key;
+    config.auto_dataset_generator = auto_dataset_generator;
     crate::storage::save_config(&config);
     Ok(())
 }

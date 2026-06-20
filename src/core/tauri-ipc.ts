@@ -88,12 +88,23 @@ export const toggleClipFavorite = async (path: string): Promise<boolean> => {
 export interface AppConfig {
   save_directory: string;
   riot_api_key: string;
+  auto_dataset_generator: boolean;
 }
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string, riotApiKey: string): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey });
+export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator });
+};
+
+export interface ProcessVodResponse {
+  success: boolean;
+  message: string;
+  metadata: any | null;
+}
+
+export const processVod = async (videoPath: string, modelPath: string): Promise<ProcessVodResponse> => {
+  return await invoke<ProcessVodResponse>("process_vod", { videoPath, modelPath });
 };

@@ -55,18 +55,22 @@ pub struct AppConfig {
     pub save_directory: String,
     #[serde(default)]
     pub riot_api_key: String,
+    #[serde(default)]
+    pub auto_dataset_generator: bool,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
+        let default_dir = Path::new(&user_profile)
+            .join("Videos")
+            .join("LeagueRecorder")
+            .to_string_lossy()
+            .to_string();
         Self {
-            save_directory: Path::new(&user_profile)
-                .join("Videos")
-                .join("LeagueRecorder")
-                .to_string_lossy()
-                .to_string(),
-            riot_api_key: "".to_string(),
+            save_directory: default_dir,
+            riot_api_key: String::new(),
+            auto_dataset_generator: false,
         }
     }
 }

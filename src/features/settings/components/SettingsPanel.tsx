@@ -17,7 +17,7 @@ export const SettingsPanel: React.FC = () => {
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "High" });
-  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "" });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false });
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
@@ -72,7 +72,7 @@ export const SettingsPanel: React.FC = () => {
 
   const handleSaveConfig = async (c: AppConfig) => {
     setConfig(c);
-    await setAppConfig(c.save_directory, c.riot_api_key).catch(console.error);
+    await setAppConfig(c.save_directory, c.riot_api_key, c.auto_dataset_generator).catch(console.error);
   };
 
   const handlePickDirectory = async () => {
@@ -561,6 +561,26 @@ export const SettingsPanel: React.FC = () => {
           <li>Registra marcas de tiempo para kills, deaths, asistencias y objetivos.</li>
           <li>Guarda todo al finalizar el match de manera 100% automatizada.</li>
         </ul>
+      </motion.div>
+
+      <motion.div variants={itemVariants} style={styles.card}>
+        <h3 style={styles.cardTitle}>Generador Automático de Dataset de IA</h3>
+        <p style={styles.cardText}>
+          Extrae fotogramas en los momentos exactos de tus clics físicos para entrenar un modelo YOLOv8 de forma automática.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+          <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "var(--space-3)" }}>
+            <input 
+              type="checkbox"
+              checked={config.auto_dataset_generator}
+              onChange={(e) => handleSaveConfig({ ...config, auto_dataset_generator: e.target.checked })}
+              style={{ width: "18px", height: "18px", accentColor: "var(--accent-violet)" }}
+            />
+            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-primary)" }}>
+              Activar auto-generación al finalizar partida
+            </span>
+          </label>
+        </div>
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>

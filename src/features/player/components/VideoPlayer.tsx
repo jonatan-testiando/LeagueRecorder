@@ -334,6 +334,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const timedEvents = match.events.filter((ev) => ev.type !== "GameStart" && ev.type !== "GameEnd");
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // Marcas del eje temporal adaptadas a la duración real del vídeo (antes fijas a 30 min).
+  // Elegimos un paso "redondo" para tener ~4-6 marcas legibles.
+  const axisMarks = React.useMemo(() => {
+    if (!isFinite(duration) || duration <= 0) return [];
+    const steps = [15, 30, 60, 120, 300, 600, 900]; // 15s..15min
+    const step = steps.find(s => duration / s <= 6) ?? Math.ceil(duration / 6);
+    const marks: number[] = [];
+    for (let t = 0; t < duration; t += step) marks.push(t);
+    return marks;
+  }, [duration]);
   
   const apmSeries = match.apm_series ?? [];
   let apmLinePath = "";
@@ -583,11 +594,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <div style={{ ...styles.playheadHover, left: `${hoverPct * 100}%` }} />
             )}
             
-            {/* Axis marks */}
+            {/* Axis marks — generados dinámicamente según la duración real */}
             <div style={styles.axisMarks}>
-              {[0, 10, 20, 30].map(m => (
-                <span key={m} style={{position: "absolute", left: `${(m*60/duration)*100}%`, fontSize: "10px", color: "var(--text-muted)"}}>
-                  {m}:00
+              {axisMarks.map(m => (
+                <span key={m} style={{position: "absolute", left: `${(m/duration)*100}%`, fontSize: "10px", color: "var(--text-muted)"}}>
+                  {formatTime(m)}
                 </span>
               ))}
             </div>
@@ -660,20 +671,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       {!isFullscreen && (
       <div style={styles.rightColumn}>
         <div style={styles.reviewHeader}>
-          <span style={styles.reviewTitle}>Game Review</span>
+          <span style={styles.reviewTitle}>{match.is_vod ? "VOD Analysis" : "Game Review"}</span>
         </div>
 
-        <div style={{...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)"}}>
-          <div style={{...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)"}}>
-            {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
+        {match.is_vod ? (
+          // En un VOD importado no hay resultado propio: mostramos una cabecera neutra
+          // en lugar del engañoso "Defeat" que salía siempre.
+          <div style={{...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(178, 92, 255, 0.1) 0%, transparent 100%)"}}>
+            <div style={{...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #7a3cff)", boxShadow: "0 0 20px rgba(178,92,255,0.4)"}}>
+              <MousePointer2 size={28} color="#fff" />
+            </div>
+            <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
+            <p style={styles.scoreSub}>
+              Análisis de cursor y APM sobre la partida importada.
+            </p>
           </div>
-          <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>
-            {isWin ? "Victory" : "Defeat"}
-          </h2>
-          <p style={styles.scoreSub}>
-            You and your team {isWin ? "secured" : "lost"} the match.
-          </p>
-        </div>
+        ) : (
+          <div style={{...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)"}}>
+            <div style={{...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)"}}>
+              {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
+            </div>
+            <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>
+              {isWin ? "Victory" : "Defeat"}
+            </h2>
+            <p style={styles.scoreSub}>
+              You and your team {isWin ? "secured" : "lost"} the match.
+            </p>
+          </div>
+        )}
 
         <div style={styles.reviewList}>
           <div style={styles.timelineContainer}>

@@ -27,3 +27,7 @@ dist-ssr
 
 # Bundled binaries
 src-tauri/bin/
+
+# Python runtime embebido (se construye con python_scripts/setup_runtime.ps1)
+src-tauri/python-runtime/
+python_scripts/__pycache__/

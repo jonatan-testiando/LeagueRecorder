@@ -5,6 +5,46 @@ import json
 import os
 import math
 
+# ------------------ CONFIGURACIÓN (TUNABLES) ------------------
+# Todos ajustables por variable de entorno sin recompilar nada. Antes estaban
+# repartidos como "números mágicos" por el código.
+def _envf(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+def _envi(name, default):
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+# FPS objetivo del análisis (estela). 30 = comportamiento original.
+# Bajarlo (p.ej. 20) acelera el análisis a costa de una estela algo menos fluida.
+TARGET_FPS         = _envf("VOD_TARGET_FPS", 30.0)
+# Confianza mínima para aceptar una coincidencia de cursor.
+MATCH_THRESHOLD    = _envf("VOD_MATCH_THRESHOLD", 0.85)
+# Por debajo de esto re-escaneamos toda la librería de cursores.
+RESCAN_THRESHOLD   = _envf("VOD_RESCAN_THRESHOLD", 0.88)
+# Coincidencia "lo bastante buena" para cortar el re-escaneo antes.
+EARLY_EXIT_MATCH   = _envf("VOD_EARLY_EXIT", 0.95)
+# Anti-spam de clics (en frames analizados).
+COOLDOWN_FRAMES    = _envi("VOD_COOLDOWN_FRAMES", 8)
+# Píxeles brillantes mínimos para considerar "explosión de color" de un clic.
+BRIGHT_PIXELS_MIN  = _envi("VOD_BRIGHT_PIXELS", 30)
+# Radio de búsqueda alrededor del último punto conocido.
+SEARCH_PADDING     = _envi("VOD_SEARCH_PADDING", 150)
+# Rechazo de "teletransportes": si el cursor salta más que esto (px) entre dos
+# frames y la confianza no es altísima, lo tratamos como falso positivo.
+TELEPORT_MAX_JUMP  = _envf("VOD_TELEPORT_JUMP", 600.0)
+TELEPORT_TRUST     = _envf("VOD_TELEPORT_TRUST", 0.93)
+# Cuando perdemos el rastro, el escaneo global a pantalla completa es caro.
+# Solo lo reintentamos cada N frames analizados (backoff) para no quemar CPU en
+# tramos de menú/cinemática sin cursor.
+GLOBAL_SEARCH_STRIDE = _envi("VOD_GLOBAL_STRIDE", 2)
+
+
 def load_template(path):
     # Leer imagen con canal alfa
     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
@@ -30,13 +70,18 @@ def load_template(path):
         
     return img, None
 
-def analyze(video_path):
+def analyze(video_path, cursors_dir=None):
     # Activar Aceleración por GPU (OpenCL Transparente)
     cv2.ocl.setUseOpenCL(True)
 
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    cursors_dir = os.path.join(base_dir, "assets", "cursors")
-    
+    # El directorio de cursores llega por argumento (robusto al empaquetado).
+    # Si no, caemos a la ruta relativa al script (modo desarrollo).
+    if not cursors_dir or not os.path.isdir(cursors_dir):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cursors_dir = os.path.join(base_dir, "assets", "cursors")
+    sys.stderr.write(f"[INFO] Usando cursores en: {cursors_dir}\n")
+    sys.stderr.flush()
+
     # Cargar las diferentes variantes de cursor (base y upscaled)
     target_files = [
         # (filename, event_type, hotspot_x, hotspot_y)
@@ -79,17 +124,16 @@ def analyze(video_path):
     lower_red2 = np.array([165, 180, 180])
     upper_red2 = np.array([180, 255, 255])
     
-    # Contador anti-spam (debounce)
+    # Contador anti-spam (debounce). COOLDOWN_FRAMES viene de la config global.
     frames_since_last_click = 0
-    COOLDOWN_FRAMES = 8 # ~260ms a 30 FPS
-    
+
     # ------------------ TRACKING INERCIAL ------------------
     prev_x, prev_y = -1, -1
     velocities = []
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(json.dumps([]))
+        print(json.dumps({"events": [], "duration": 0.0, "width": 0, "height": 0}))
         return
         
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -118,13 +162,13 @@ def analyze(video_path):
     events = []
     frame_count = 0
     
-    # Procesar 30 frames por segundo para una estela perfectamente fluida (el estándar de oro)
-    skip_frames = max(1, int(fps / 30))
-    
+    # Submuestreo a TARGET_FPS para la estela (30 = comportamiento original).
+    skip_frames = max(1, int(round(fps / TARGET_FPS)))
+
     last_loc = None
-    SEARCH_PADDING = 150 # Cuántos píxeles buscar alrededor del último punto conocido
     last_best_template_idx = 0 # Sticky Template Index
-    
+    lost_frames = 0            # frames analizados consecutivos sin rastro (para el backoff)
+
     while True:
         # Usar grab() para saltar frames MUCHO más rápido sin decodificarlos
         ret = cap.grab()
@@ -141,7 +185,19 @@ def analyze(video_path):
             continue
             
         time_sec = frame_count / fps
-        
+
+        # Backoff del escaneo global: cuando hemos perdido el rastro, el barrido a
+        # pantalla completa es lo más caro del análisis. En tramos sin cursor
+        # (menús, cinemáticas) solo lo reintentamos cada GLOBAL_SEARCH_STRIDE
+        # frames en vez de en todos, recortando mucho el tiempo total.
+        if last_loc is None:
+            lost_frames += 1
+            # Intentamos en el 1.er frame perdido y luego cada STRIDE (así no se
+            # retrasa la adquisición inicial, pero sí se aligeran los tramos largos
+            # sin cursor).
+            if GLOBAL_SEARCH_STRIDE > 1 and ((lost_frames - 1) % GLOBAL_SEARCH_STRIDE) != 0:
+                continue
+
         # Determinar el área de búsqueda (ROI - Region Of Interest)
         roi_offset_x = 0
         roi_offset_y = 0
@@ -180,7 +236,7 @@ def analyze(video_path):
         # --- FASE 2: CLASIFICACIÓN (Solo si el cursor cambió de forma o perdimos calidad) ---
         # Si la similitud cae por debajo de nuestro umbral de "clic válido" (0.85),
         # estamos obligados a buscar en toda la librería de cursores.
-        if best_val < 0.88:
+        if best_val < RESCAN_THRESHOLD:
             best_val = 0
             for i, (t_bgr, t_mask, t_type, h_x, h_y) in enumerate(active_templates):
                 if i == last_best_template_idx:
@@ -197,8 +253,8 @@ def analyze(video_path):
                     best_hotspot = (h_x, h_y)
                     last_best_template_idx = i # Memorizar el nuevo cursor
                 
-                # Optimización matemática: Si hallamos una coincidencia altísima (95%)
-                if best_val > 0.95:
+                # Optimización matemática: Si hallamos una coincidencia altísima
+                if best_val > EARLY_EXIT_MATCH:
                     break
                 
         if is_global_search:
@@ -207,11 +263,21 @@ def analyze(video_path):
             best_hotspot = (int(best_hotspot[0] * 2), int(best_hotspot[1] * 2))
         
         # Umbral estricto para evitar falsos positivos
-        if best_val > 0.85:
+        if best_val > MATCH_THRESHOLD:
             # Reajustar coordenadas si estábamos usando un recorte pequeño
             real_x = float(best_loc[0]) + roi_offset_x
             real_y = float(best_loc[1]) + roi_offset_y
-            
+
+            # Rechazo de "teletransportes": en seguimiento continuo (no global),
+            # si el cursor salta una distancia inverosímil y la confianza no es
+            # altísima, lo tratamos como falso positivo y soltamos el rastro.
+            if last_loc is not None and not is_global_search and best_val < TELEPORT_TRUST:
+                jump = math.hypot(real_x - last_loc[0], real_y - last_loc[1])
+                if jump > TELEPORT_MAX_JUMP:
+                    last_loc = None
+                    lost_frames = 0
+                    continue
+
             # --- 2. DETECCIÓN HSV (EXPLOSIÓN DE COLOR PARA CLICS) ---
             # En lugar de usar toda la pantalla, aplicamos el filtro de color
             # SOLO en un cuadrado muy pequeño debajo de la punta del cursor
@@ -227,9 +293,14 @@ def analyze(video_path):
             cx2 = min(frame.shape[1], click_x + 30)
             
             particle_roi = frame[cy1:cy2, cx1:cx2]
-            
+
             evt_to_register = "move"
-            
+
+            # Cooldown anti-spam: se incrementa UNA sola vez por frame aceptado,
+            # pase lo que pase con el ROI de partículas. (Antes se incrementaba dos
+            # veces, lo que reducía el debounce efectivo a la mitad.)
+            frames_since_last_click += 1
+
             if particle_roi.size > 0:
                 particle_roi_umat = cv2.UMat(particle_roi)
                 hsv_roi = cv2.cvtColor(particle_roi_umat, cv2.COLOR_BGR2HSV)
@@ -246,8 +317,6 @@ def analyze(video_path):
                 bright_pixels = cv2.countNonZero(combined_mask)
                 
                 # --- 3. DETECCIÓN INERCIAL Y DE ASSET (TRACKING HÍBRIDO) ---
-                frames_since_last_click += 1
-                
                 is_brake = False
                 speed = 0
                 if prev_x != -1:
@@ -268,7 +337,7 @@ def analyze(video_path):
                 asset_is_click = (best_type in ["attack", "right_click"])
                 
                 # TRIPLE REDUNDANCIA: Clic por Color OR Clic por Freno Físico OR Clic por Asset
-                if (bright_pixels > 30 or is_brake or asset_is_click) and frames_since_last_click >= COOLDOWN_FRAMES:
+                if (bright_pixels > BRIGHT_PIXELS_MIN or is_brake or asset_is_click) and frames_since_last_click >= COOLDOWN_FRAMES:
                     # Determinar si fue clic normal o ataque
                     green_cyan_pixels = cv2.countNonZero(cv2.bitwise_or(mask_green, mask_cyan))
                     red_pixels = cv2.countNonZero(mask_red)
@@ -279,15 +348,14 @@ def analyze(video_path):
                         evt_to_register = "right_click" # Movimiento
                         
                     frames_since_last_click = 0
-            
-            frames_since_last_click += 1
-            
+
             # Si el tracker visual detectó el sprite de espada, forzamos que al menos diga attack
             if evt_to_register == "move" and best_type != "move":
                 evt_to_register = best_type
-            
+
             # Guardamos la ubicación exitosa para el predictivo
             last_loc = (int(real_x), int(real_y))
+            lost_frames = 0  # rastro recuperado: reinicia el backoff global
             
             # Corregimos la coordenada exportada con el HotSpot para que en la app de React
             # el punto se dibuje exactamente en la punta de la espada/mano y no descuadrado
@@ -309,20 +377,33 @@ def analyze(video_path):
         if frame_count % (skip_frames * 20) == 0:
             if total_frames > 0:
                 progress = (frame_count / total_frames) * 100
+                # Línea legible para el log + línea estructurada para la barra de progreso
                 sys.stderr.write(f"Analizando VOD: {time_sec/60:.1f} min ({progress:.1f}%)\n")
+                sys.stderr.write(f"PROGRESS:{progress:.1f}\n")
                 sys.stderr.flush()
 
     sys.stderr.write("Analisis finalizado, exportando JSON...\n")
     sys.stderr.flush()
     cap.release()
-    print(json.dumps(events))
+
+    # Duración real del VOD a partir de los frames realmente recorridos.
+    # (Antes el backend la hardcodeaba a 1800s, descuadrando el eje del timeline.)
+    video_duration = (frame_count / fps) if fps > 0 else 0.0
+
+    print(json.dumps({
+        "events": events,
+        "duration": video_duration,
+        "width": frame_width,
+        "height": frame_height,
+    }))
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python analyzer.py <video_path>")
+        print("Usage: python analyzer.py <video_path> [cursors_dir]")
         sys.exit(1)
-    
+
     # Desactivar logs de opencv y tensorflow/ort si los hubiera en el backend de c++
     os.environ['OPENCV_LOG_LEVEL'] = 'OFF'
-    
-    analyze(sys.argv[1])
+
+    cursors_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    analyze(sys.argv[1], cursors_dir)

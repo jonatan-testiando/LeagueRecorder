@@ -1,0 +1,8 @@
+# Dependencias del analizador de VODs (visión por computador clásica).
+# Se instalan dentro del runtime de Python embebido (ver setup_runtime.ps1)
+# que se empaqueta junto al .exe. NO requieren que el usuario tenga Python.
+#
+# headless = sin dependencias de GUI (Qt). El analizador no usa ventanas,
+# así que es más pequeño y evita DLLs innecesarias.
+numpy>=1.26,<3
+opencv-python-headless>=4.9,<5

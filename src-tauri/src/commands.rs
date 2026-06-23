@@ -231,6 +231,7 @@ pub async fn stop_manual_recording(
             kda: None,
             gold_earned: None,
             damage_dealt: None,
+            is_vod: false,
         };
         let _ = save_match_metadata(&metadata);
     }
@@ -555,6 +556,7 @@ async fn finalize_match(
         kda: None,
         gold_earned: None,
         damage_dealt: None,
+        is_vod: false,
     };
     match save_match_metadata(&metadata) {
         Ok(_) => {

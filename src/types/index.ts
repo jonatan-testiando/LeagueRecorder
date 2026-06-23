@@ -46,6 +46,7 @@ export interface MatchMetadata {
   kda?: string;
   gold_earned?: number;
   damage_dealt?: number;
+  is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
 }
 
 export interface ClipMetadata {

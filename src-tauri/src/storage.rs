@@ -48,6 +48,10 @@ pub struct MatchMetadata {
     /// API de Riot: Daño total infligido a campeones
     #[serde(default)]
     pub damage_dealt: Option<i32>,
+    /// True si es un VOD importado/analizado (no una partida propia grabada).
+    /// Permite a la UI ocultar el panel de Victoria/Derrota, que no aplica.
+    #[serde(default)]
+    pub is_vod: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

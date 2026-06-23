@@ -45,6 +45,10 @@ jobs:
           $ffmpeg_exe = Get-ChildItem -Path "ffmpeg-extracted" -Filter "ffmpeg.exe" -Recurse | Select-Object -First 1
           Copy-Item -Path $ffmpeg_exe.FullName -Destination "src-tauri/bin/ffmpeg.exe"
 
+      - name: Build embedded Python runtime (VOD analyzer)
+        shell: pwsh
+        run: ./python_scripts/setup_runtime.ps1
+
       - name: Build and Release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

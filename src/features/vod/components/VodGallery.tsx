@@ -15,6 +15,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [hardwareInfo, setHardwareInfo] = useState("");
+  const [progressPct, setProgressPct] = useState<number | null>(null);
 
   useEffect(() => {
     // Cargar historial persistido del disco
@@ -29,10 +30,15 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
     const unlistenHardware = listen<string>("hardware_info", (event) => {
       setHardwareInfo(event.payload);
     });
-    
+
+    const unlistenPct = listen<number>("vod_progress_pct", (event) => {
+      setProgressPct(event.payload);
+    });
+
     return () => {
       unlisten.then(f => f());
       unlistenHardware.then(f => f());
+      unlistenPct.then(f => f());
     };
   }, []);
 
@@ -48,6 +54,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
 
       setIsProcessing(true);
       setHardwareInfo("");
+      setProgressPct(null);
       setStatusText("Analizando VOD con Inteligencia Artificial...");
       
       const res = await processVod(selectedVideo as string, "");
@@ -61,6 +68,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
     } finally {
       setIsProcessing(false);
       setStatusText("");
+      setProgressPct(null);
     }
   };
 
@@ -91,17 +99,31 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
           </button>
           
           {hardwareInfo && isProcessing && (
-            <span style={{ 
-              color: "#10b981", 
-              fontSize: "12px", 
-              backgroundColor: "rgba(16, 185, 129, 0.1)", 
-              padding: "4px 8px", 
-              borderRadius: "4px", 
-              display: "inline-block", 
-              fontWeight: 600 
+            <span style={{
+              color: "#10b981",
+              fontSize: "12px",
+              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              display: "inline-block",
+              fontWeight: 600
             }}>
               ⚡ GPU Activa: {hardwareInfo}
             </span>
+          )}
+
+          {isProcessing && progressPct !== null && (
+            <div style={{ width: "260px" }}>
+              <div style={{ height: "6px", borderRadius: "3px", backgroundColor: "var(--bg-card)", overflow: "hidden" }}>
+                <div style={{
+                  width: `${Math.min(100, Math.max(0, progressPct))}%`,
+                  height: "100%",
+                  backgroundColor: "var(--accent-violet)",
+                  transition: "width 0.3s ease",
+                }} />
+              </div>
+              <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>{progressPct.toFixed(0)}%</span>
+            </div>
           )}
         </div>
         

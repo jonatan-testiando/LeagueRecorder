@@ -4,6 +4,7 @@ import sys
 import json
 import os
 import math
+import statistics
 
 # ------------------ CONFIGURACIÓN (TUNABLES) ------------------
 # Todos ajustables por variable de entorno sin recompilar nada. Antes estaban
@@ -43,6 +44,56 @@ TELEPORT_TRUST     = _envf("VOD_TELEPORT_TRUST", 0.93)
 # Solo lo reintentamos cada N frames analizados (backoff) para no quemar CPU en
 # tramos de menú/cinemática sin cursor.
 GLOBAL_SEARCH_STRIDE = _envi("VOD_GLOBAL_STRIDE", 2)
+# Predicción inercial ("coasting"): si perdemos el cursor en ROI, predecimos su
+# posición por velocidad y seguimos buscando en ROI estos frames antes de caer a
+# la costosa búsqueda global. Reduce huecos por VFX brillantes y acelera. 0 = off.
+GRACE_FRAMES = _envi("VOD_GRACE_FRAMES", 4)
+
+# ------------------ MEJORAS DE DETECCIÓN ------------------
+# Método de matching. 'sqdiff' (TM_SQDIFF_NORMED) es más robusto frente a zonas
+# brillantes (VFX de peleas) que el 'ccorr' clásico, que tiende a falsos positivos.
+def _match_method():
+    m = os.environ.get("VOD_MATCH_METHOD", "ccorr").strip().lower()
+    if m in ("sqdiff", "sqdiff_normed"):
+        return cv2.TM_SQDIFF_NORMED, True   # (método, menor_es_mejor)
+    return cv2.TM_CCORR_NORMED, False
+MATCH_CV_METHOD, MATCH_LOWER_BETTER = _match_method()
+
+# Escalas de template a probar (multi-escala). Crucial cuando el VOD no está a la
+# misma resolución/DPI que los cursores base (p.ej. metraje 1440p). "1.0" = original.
+def _parse_scales():
+    raw = os.environ.get("VOD_SCALES", "1.0")
+    out = []
+    for p in raw.split(","):
+        p = p.strip()
+        if not p:
+            continue
+        try:
+            v = float(p)
+            if v > 0:
+                out.append(v)
+        except ValueError:
+            pass
+    return out or [1.0]
+SCALES = _parse_scales()
+
+# Modo diagnóstico: emite un resumen de métricas (METRICS:{...}) por stderr para
+# poder comparar configuraciones de forma objetiva sobre el mismo VOD.
+DIAGNOSTIC = os.environ.get("VOD_DIAGNOSTIC", "0").strip().lower() not in ("0", "", "false", "no")
+
+
+def match_score(search_umat, t_bgr, t_mask):
+    """Devuelve (score, loc) con score en [0..1] donde MÁS ALTO = MEJOR,
+    sea cual sea el método configurado. Unifica CCORR (max) y SQDIFF (min)."""
+    res = cv2.matchTemplate(search_umat, t_bgr, MATCH_CV_METHOD, mask=t_mask)
+    res_cpu = res.get() if hasattr(res, 'get') else res
+    if MATCH_LOWER_BETTER:
+        # SQDIFF enmascarado puede dar NaN/inf en bordes: solo entonces limpiamos.
+        res_cpu = np.nan_to_num(res_cpu, nan=1.0, posinf=1.0, neginf=0.0)
+        min_v, _, min_l, _ = cv2.minMaxLoc(res_cpu)
+        return (1.0 - min_v), min_l
+    _, max_v, _, max_l = cv2.minMaxLoc(res_cpu)
+    return max_v, max_l
 
 
 def load_template(path):
@@ -92,20 +143,34 @@ def analyze(video_path, cursors_dir=None):
         ("hover_enemy_precise_colorblind.png", "attack", 24, 24)
     ]
     
-    templates = []
-    templates_half = []
+    templates = []        # Para el seguimiento por ROI (multi-escala)
+    templates_half = []   # Para el escaneo global (media resolución, escala única)
     for fname, evt_type, h_x, h_y in target_files:
         for folder in [cursors_dir, os.path.join(cursors_dir, "upscaled")]:
             path = os.path.join(folder, fname)
             if os.path.exists(path):
                 b, m = load_template(path)
                 if b is not None:
-                    templates.append((cv2.UMat(b), cv2.UMat(m), evt_type, h_x, h_y))
-                    
-                    # Generar versión pequeña para el Escaneo Global Ultrarápido
+                    # Multi-escala: una variante por cada escala configurada. El
+                    # hotspot escala igual. Así toleramos cursores más grandes/pequeños
+                    # que el template (resoluciones/DPI distintos, p.ej. 1440p).
+                    for s in SCALES:
+                        if abs(s - 1.0) < 1e-6:
+                            bs, ms = b, m
+                        else:
+                            interp = cv2.INTER_AREA if s < 1.0 else cv2.INTER_LINEAR
+                            bs = cv2.resize(b, (0, 0), fx=s, fy=s, interpolation=interp)
+                            ms = cv2.resize(m, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_NEAREST)
+                        templates.append((cv2.UMat(bs), cv2.UMat(ms), evt_type, h_x * s, h_y * s))
+
+                    # Versión pequeña (escala única) para el Escaneo Global Ultrarápido
                     b_half = cv2.resize(b, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
                     m_half = cv2.resize(m, (0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
                     templates_half.append((cv2.UMat(b_half), cv2.UMat(m_half), evt_type, h_x/2.0, h_y/2.0))
+
+    sys.stderr.write(f"[INFO] Método: {'sqdiff' if MATCH_LOWER_BETTER else 'ccorr'} | escalas: {SCALES} | "
+                     f"templates ROI: {len(templates)} | global: {len(templates_half)}\n")
+    sys.stderr.flush()
     
     # ------------------ UMBRALES DE COLOR (HSV) ------------------
     # Definimos los rangos de color de las partículas del juego
@@ -130,7 +195,14 @@ def analyze(video_path, cursors_dir=None):
     # ------------------ TRACKING INERCIAL ------------------
     prev_x, prev_y = -1, -1
     velocities = []
-    
+
+    # ------------------ MÉTRICAS DE DIAGNÓSTICO ------------------
+    frames_analyzed = 0
+    frames_tracked = 0
+    track_losses = 0
+    n_clicks = 0
+    confidences = []
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(json.dumps({"events": [], "duration": 0.0, "width": 0, "height": 0}))
@@ -168,6 +240,8 @@ def analyze(video_path, cursors_dir=None):
     last_loc = None
     last_best_template_idx = 0 # Sticky Template Index
     lost_frames = 0            # frames analizados consecutivos sin rastro (para el backoff)
+    last_vel = (0.0, 0.0)      # velocidad estimada para la predicción inercial
+    grace_left = 0             # frames de "coasting" restantes antes de declarar pérdida
 
     while True:
         # Usar grab() para saltar frames MUCHO más rápido sin decodificarlos
@@ -198,10 +272,12 @@ def analyze(video_path, cursors_dir=None):
             if GLOBAL_SEARCH_STRIDE > 1 and ((lost_frames - 1) % GLOBAL_SEARCH_STRIDE) != 0:
                 continue
 
+        frames_analyzed += 1
+
         # Determinar el área de búsqueda (ROI - Region Of Interest)
         roi_offset_x = 0
         roi_offset_y = 0
-        
+
         is_global_search = False
         if last_loc is not None:
             lx, ly = int(last_loc[0]), int(last_loc[1])
@@ -225,34 +301,34 @@ def analyze(video_path, cursors_dir=None):
             search_frame = frame
         
         # --- FASE 1: STICKY TEMPLATE MATCHING ---
-        # Solo comparamos con el cursor que estaba activo en el frame anterior
-        t_bgr, t_mask, t_type, h_x, h_y = active_templates[last_best_template_idx]
-        res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
-        res_cpu = res.get() if hasattr(res, 'get') else res
-        _, best_val, _, best_loc = cv2.minMaxLoc(res_cpu)
+        # Solo comparamos con el cursor que estaba activo en el frame anterior.
+        # El índice sticky se comparte entre las listas ROI/global (de distinto
+        # tamaño con multi-escala): lo acotamos para no salirnos de rango.
+        sticky_idx = last_best_template_idx if last_best_template_idx < len(active_templates) else 0
+        t_bgr, t_mask, t_type, h_x, h_y = active_templates[sticky_idx]
+        best_val, best_loc = match_score(search_frame_umat, t_bgr, t_mask)
         best_type = t_type
         best_hotspot = (h_x, h_y)
-        
+        last_best_template_idx = sticky_idx
+
         # --- FASE 2: CLASIFICACIÓN (Solo si el cursor cambió de forma o perdimos calidad) ---
-        # Si la similitud cae por debajo de nuestro umbral de "clic válido" (0.85),
-        # estamos obligados a buscar en toda la librería de cursores.
+        # Si la similitud cae por debajo del umbral de re-escaneo, recorremos toda la
+        # librería de cursores (incluyendo todas las escalas).
         if best_val < RESCAN_THRESHOLD:
             best_val = 0
             for i, (t_bgr, t_mask, t_type, h_x, h_y) in enumerate(active_templates):
-                if i == last_best_template_idx:
+                if i == sticky_idx:
                     continue # Ya lo probamos
-                    
-                res = cv2.matchTemplate(search_frame_umat, t_bgr, cv2.TM_CCORR_NORMED, mask=t_mask)
-                res_cpu = res.get() if hasattr(res, 'get') else res
-                _, max_val, _, max_loc = cv2.minMaxLoc(res_cpu)
-                
-                if max_val > best_val:
-                    best_val = max_val
-                    best_loc = max_loc
+
+                mv, ml = match_score(search_frame_umat, t_bgr, t_mask)
+
+                if mv > best_val:
+                    best_val = mv
+                    best_loc = ml
                     best_type = t_type
                     best_hotspot = (h_x, h_y)
-                    last_best_template_idx = i # Memorizar el nuevo cursor
-                
+                    last_best_template_idx = i # Memorizar el nuevo cursor/escala
+
                 # Optimización matemática: Si hallamos una coincidencia altísima
                 if best_val > EARLY_EXIT_MATCH:
                     break
@@ -276,7 +352,12 @@ def analyze(video_path, cursors_dir=None):
                 if jump > TELEPORT_MAX_JUMP:
                     last_loc = None
                     lost_frames = 0
+                    track_losses += 1
                     continue
+
+            # Métrica: frame con rastro válido aceptado
+            frames_tracked += 1
+            confidences.append(best_val)
 
             # --- 2. DETECCIÓN HSV (EXPLOSIÓN DE COLOR PARA CLICS) ---
             # En lugar de usar toda la pantalla, aplicamos el filtro de color
@@ -353,9 +434,13 @@ def analyze(video_path, cursors_dir=None):
             if evt_to_register == "move" and best_type != "move":
                 evt_to_register = best_type
 
-            # Guardamos la ubicación exitosa para el predictivo
-            last_loc = (int(real_x), int(real_y))
-            lost_frames = 0  # rastro recuperado: reinicia el backoff global
+            # Guardamos la ubicación exitosa para el predictivo y estimamos velocidad
+            new_loc = (int(real_x), int(real_y))
+            if last_loc is not None:
+                last_vel = (new_loc[0] - last_loc[0], new_loc[1] - last_loc[1])
+            last_loc = new_loc
+            lost_frames = 0      # rastro recuperado: reinicia el backoff global
+            grace_left = GRACE_FRAMES  # recargamos el "colchón" de coasting
             
             # Corregimos la coordenada exportada con el HotSpot para que en la app de React
             # el punto se dibuje exactamente en la punta de la espada/mano y no descuadrado
@@ -368,10 +453,23 @@ def analyze(video_path, cursors_dir=None):
                 "y": final_y,
                 "evt": evt_to_register
             })
+            if evt_to_register in ("left_click", "right_click"):
+                n_clicks += 1
         else:
-            # Si no encontramos el ratón (o bajó la confianza), perdimos el rastro.
-            # En el siguiente fotograma forzaremos una búsqueda Global en toda la pantalla.
-            last_loc = None
+            # No encontramos el cursor en este frame.
+            if last_loc is not None and not is_global_search and grace_left > 0:
+                # Coasting: predecimos por velocidad y seguimos en ROI unos frames
+                # antes de rendirnos. No emitimos evento (no hay match confirmado),
+                # solo movemos el centro de búsqueda para reengancharlo.
+                grace_left -= 1
+                px = max(0, min(frame_width, last_loc[0] + last_vel[0]))
+                py = max(0, min(frame_height, last_loc[1] + last_vel[1]))
+                last_loc = (int(px), int(py))
+            else:
+                # Rastro realmente perdido → siguiente frame hará búsqueda global.
+                if last_loc is not None:
+                    track_losses += 1
+                last_loc = None
             
         # Emitir progreso
         if frame_count % (skip_frames * 20) == 0:
@@ -383,6 +481,23 @@ def analyze(video_path, cursors_dir=None):
                 sys.stderr.flush()
 
     sys.stderr.write("Analisis finalizado, exportando JSON...\n")
+
+    # Resumen de métricas para comparar configuraciones de forma objetiva.
+    if DIAGNOSTIC:
+        mean_c = (sum(confidences) / len(confidences)) if confidences else 0.0
+        med_c = statistics.median(confidences) if confidences else 0.0
+        tracked_pct = (100.0 * frames_tracked / frames_analyzed) if frames_analyzed else 0.0
+        metrics = {
+            "method": "sqdiff" if MATCH_LOWER_BETTER else "ccorr",
+            "scales": SCALES,
+            "frames_analyzed": frames_analyzed,
+            "tracked_pct": round(tracked_pct, 1),
+            "mean_conf": round(mean_c, 4),
+            "median_conf": round(med_c, 4),
+            "track_losses": track_losses,
+            "clicks": n_clicks,
+        }
+        sys.stderr.write("METRICS:" + json.dumps(metrics) + "\n")
     sys.stderr.flush()
     cap.release()
 

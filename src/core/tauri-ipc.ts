@@ -105,6 +105,10 @@ export interface ProcessVodResponse {
   metadata: any | null;
 }
 
-export const processVod = async (videoPath: string, modelPath: string): Promise<ProcessVodResponse> => {
-  return await invoke<ProcessVodResponse>("process_vod", { videoPath, modelPath });
+export const processVod = async (videoPath: string): Promise<ProcessVodResponse> => {
+  return await invoke<ProcessVodResponse>("process_vod", { videoPath });
+};
+
+export const cancelVod = async (): Promise<void> => {
+  return await invoke<void>("cancel_vod");
 };

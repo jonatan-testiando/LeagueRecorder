@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { processVod } from "../../../core/tauri-ipc";
+import { processVod, cancelVod } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
-import { Film, Upload, Play, Loader, Trash2 } from "lucide-react";
+import { Film, Upload, Play, Loader, Trash2, X } from "lucide-react";
 
 interface VodGalleryProps {
   onSelectMatch: (match: MatchMetadata) => void;
@@ -57,7 +57,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       setProgressPct(null);
       setStatusText("Analizando VOD con Inteligencia Artificial...");
       
-      const res = await processVod(selectedVideo as string, "");
+      const res = await processVod(selectedVideo as string);
       if (res.success && res.metadata) {
         setVods([...vods, res.metadata]);
       } else {
@@ -69,6 +69,16 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       setIsProcessing(false);
       setStatusText("");
       setProgressPct(null);
+    }
+  };
+
+  const handleCancel = async () => {
+    setStatusText("Cancelando análisis...");
+    try {
+      await cancelVod();
+    } catch (err: any) {
+      // Si falla la cancelación no bloqueamos la UI; el análisis terminará igualmente.
+      console.error("No se pudo cancelar:", err);
     }
   };
 
@@ -93,10 +103,17 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
 
       <div style={styles.actionRow}>
         <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-          <button onClick={handleImport} disabled={isProcessing} style={{...styles.importBtn, opacity: isProcessing ? 0.6 : 1}}>
-            {isProcessing ? <Loader size={18} className="spin" /> : <Upload size={18} />}
-            {isProcessing ? "Procesando VOD..." : "Importar VOD (.mp4)"}
-          </button>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <button onClick={handleImport} disabled={isProcessing} style={{...styles.importBtn, opacity: isProcessing ? 0.6 : 1}}>
+              {isProcessing ? <Loader size={18} className="spin" /> : <Upload size={18} />}
+              {isProcessing ? "Procesando VOD..." : "Importar VOD (.mp4)"}
+            </button>
+            {isProcessing && (
+              <button onClick={handleCancel} style={styles.cancelBtn} title="Cancelar análisis">
+                <X size={16} /> Cancelar
+              </button>
+            )}
+          </div>
           
           {hardwareInfo && isProcessing && (
             <span style={{
@@ -210,6 +227,18 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "var(--accent-violet)",
     color: "#fff",
     border: "none",
+    borderRadius: "var(--radius-md)",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  cancelBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "var(--space-3) var(--space-4)",
+    backgroundColor: "transparent",
+    color: "var(--color-defeat)",
+    border: "1px solid var(--color-defeat)",
     borderRadius: "var(--radius-md)",
     fontWeight: 600,
     cursor: "pointer",

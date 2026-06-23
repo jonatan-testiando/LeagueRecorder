@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::io::{BufRead, BufReader};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use uuid::Uuid;
 use chrono::Local;
 use tauri::{Emitter, Manager};
@@ -63,11 +63,19 @@ fn python_command(app: &tauri::AppHandle) -> String {
 
 pub struct AnalyzerState {
     pub is_running: AtomicBool,
+    /// PID del proceso de Python en curso (0 = ninguno), para poder cancelarlo.
+    pub child_pid: AtomicU32,
+    /// Marca que el usuario pidió cancelar (para distinguir fallo real de cancelación).
+    pub cancel_requested: AtomicBool,
 }
 
 impl Default for AnalyzerState {
     fn default() -> Self {
-        Self { is_running: AtomicBool::new(false) }
+        Self {
+            is_running: AtomicBool::new(false),
+            child_pid: AtomicU32::new(0),
+            cancel_requested: AtomicBool::new(false),
+        }
     }
 }
 
@@ -93,7 +101,6 @@ pub async fn process_vod(
     app: tauri::AppHandle,
     state: tauri::State<'_, AnalyzerState>,
     video_path: String,
-    model_path: String, // Mantenemos la firma para que el Frontend no rompa
 ) -> Result<ProcessVodResponse, String> {
     if state.is_running.swap(true, Ordering::SeqCst) {
         return Ok(ProcessVodResponse {
@@ -135,43 +142,60 @@ pub async fn process_vod(
         .unwrap_or_default();
     let python_exe = python_command(&app);
 
-    let app_for_closure = app.clone();
+    // Lanzamos el proceso de Python AQUÍ (cuerpo async) en vez de dentro del hilo
+    // bloqueante, para poder guardar su PID y permitir la cancelación.
+    let mut child = match Command::new(&python_exe)
+        .env("PYTHONUNBUFFERED", "1")
+        .arg(&script_to_run)
+        .arg(&video_path)
+        .arg(&cursors_dir) // argv[2]: carpeta de cursores (robusta al empaquetado)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            state.is_running.store(false, Ordering::SeqCst);
+            return Ok(ProcessVodResponse {
+                success: false,
+                message: format!("Fallo al ejecutar Python ({}): {}", python_exe, e),
+                metadata: None,
+            });
+        }
+    };
 
-    let result = tokio::task::spawn_blocking(move || {
-        let mut child = Command::new(&python_exe)
-            .env("PYTHONUNBUFFERED", "1")
-            .arg(&script_to_run)
-            .arg(&video_path)
-            .arg(&cursors_dir) // argv[2]: carpeta de cursores (robusta al empaquetado)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Fallo al ejecutar Python ({}): {}", python_exe, e))?;
+    // Registrar el PID para que `cancel_vod` pueda matarlo.
+    state.child_pid.store(child.id(), Ordering::SeqCst);
+    state.cancel_requested.store(false, Ordering::SeqCst);
 
-        let stderr = child.stderr.take().unwrap();
-        let app_clone = app_for_closure;
-
-        std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(l) = line {
-                    if l.starts_with("[HARDWARE]") {
-                        let msg = l.replace("[HARDWARE]", "");
-                        let _ = app_clone.emit("hardware_info", msg.trim().to_string());
-                    } else if let Some(pct) = l.strip_prefix("PROGRESS:") {
-                        // Línea estructurada de progreso → evento numérico para una barra real
-                        if let Ok(v) = pct.trim().parse::<f64>() {
-                            let _ = app_clone.emit("vod_progress_pct", v);
-                        }
-                    } else {
-                        // Enviar output normal de stderr al frontend como progreso
-                        let _ = app_clone.emit("vod_progress", format!("AI Log: {}", l));
+    // Hilo lector de stderr → eventos de progreso para el frontend.
+    let stderr = child.stderr.take().unwrap();
+    let app_clone = app.clone();
+    std::thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                if l.starts_with("[HARDWARE]") {
+                    let msg = l.replace("[HARDWARE]", "");
+                    let _ = app_clone.emit("hardware_info", msg.trim().to_string());
+                } else if let Some(pct) = l.strip_prefix("PROGRESS:") {
+                    // Línea estructurada de progreso → evento numérico para una barra real
+                    if let Ok(v) = pct.trim().parse::<f64>() {
+                        let _ = app_clone.emit("vod_progress_pct", v);
                     }
+                } else {
+                    // Enviar output normal de stderr al frontend como progreso
+                    let _ = app_clone.emit("vod_progress", format!("AI Log: {}", l));
                 }
             }
-        });
+        }
+    });
 
-        let output = child.wait_with_output().map_err(|e| format!("Error esperando a python: {}", e))?;
+    // La espera (bloqueante) y el parseo van en spawn_blocking.
+    let result = tokio::task::spawn_blocking(move || {
+        let output = child
+            .wait_with_output()
+            .map_err(|e| format!("Error esperando a python: {}", e))?;
 
         if !output.status.success() {
             return Err("El análisis falló. Revisa la consola para más detalles.".to_string());
@@ -187,13 +211,25 @@ pub async fn process_vod(
         })?;
 
         Ok((parsed.events, parsed.duration, video_path))
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
+
+    // El proceso terminó: ya no hay PID que cancelar.
+    state.child_pid.store(0, Ordering::SeqCst);
 
     let (detected_clicks, video_duration, v_path) = match result {
         Ok(res) => res,
         Err(e) => {
             state.is_running.store(false, Ordering::SeqCst);
-            return Ok(ProcessVodResponse { success: false, message: e, metadata: None });
+            // Si el usuario pidió cancelar, el "fallo" es esperado: mensaje claro.
+            let cancelled = state.cancel_requested.swap(false, Ordering::SeqCst);
+            let message = if cancelled {
+                "Análisis cancelado.".to_string()
+            } else {
+                e
+            };
+            return Ok(ProcessVodResponse { success: false, message, metadata: None });
         }
     };
 
@@ -235,4 +271,26 @@ pub async fn process_vod(
         message: format!("VOD analizado. Clics y tracking detectados: {}", new_metadata.mouse_events.len()),
         metadata: Some(new_metadata),
     })
+}
+
+/// Cancela el análisis de VOD en curso matando el proceso de Python (y su árbol).
+/// No-op si no hay ninguno corriendo.
+#[tauri::command]
+pub fn cancel_vod(state: tauri::State<'_, AnalyzerState>) -> Result<(), String> {
+    if !state.is_running.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let pid = state.child_pid.load(Ordering::SeqCst);
+    if pid == 0 {
+        return Ok(());
+    }
+    // Marcamos la cancelación para que process_vod no la reporte como error real.
+    state.cancel_requested.store(true, Ordering::SeqCst);
+
+    // En Windows matamos el árbol completo (taskkill /T) para que no quede Python huérfano.
+    let _ = Command::new("taskkill")
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .output();
+
+    Ok(())
 }

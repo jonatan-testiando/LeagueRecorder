@@ -1,0 +1,4 @@
+# Rutas que el watcher de `tauri dev` NO debe vigilar (evita sobrecarga en caliente).
+# El runtime de Python embebido son ~2300 archivos / 197 MB que nunca cambian.
+python-runtime/
+bin/

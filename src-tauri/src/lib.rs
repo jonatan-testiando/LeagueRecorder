@@ -131,7 +131,8 @@ pub fn run() {
             set_app_config,
             get_disk_usage,
             storage::get_vod_reviews,
-            cv_analyzer::process_vod
+            cv_analyzer::process_vod,
+            cv_analyzer::cancel_vod
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

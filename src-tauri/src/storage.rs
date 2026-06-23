@@ -179,7 +179,7 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
 }
 
 #[tauri::command]
-pub fn get_vod_reviews() -> Vec<MatchMetadata> {
+pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
     let dir = get_reviews_dir();
     let mut matches = Vec::new();
 

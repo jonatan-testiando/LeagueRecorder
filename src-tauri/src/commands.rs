@@ -23,7 +23,7 @@ pub struct DiskSpaceInfo {
 }
 
 #[tauri::command]
-pub fn get_disk_usage() -> DiskSpaceInfo {
+pub async fn get_disk_usage() -> DiskSpaceInfo {
     let root_dir = crate::storage::get_videos_dir();
     let used_bytes = crate::storage::get_dir_size(&root_dir);
     let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
@@ -64,7 +64,7 @@ impl Default for ActiveMatchState {
 }
 
 #[tauri::command]
-pub fn get_recorded_matches() -> Vec<MatchMetadata> {
+pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
     load_all_matches()
 }
 

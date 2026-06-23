@@ -340,7 +340,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const axisMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
     const steps = [15, 30, 60, 120, 300, 600, 900]; // 15s..15min
-    const step = steps.find(s => duration / s <= 6) ?? Math.ceil(duration / 6);
+    let step = steps.find(s => duration / s <= 6) ?? Math.ceil(duration / 6);
+    if (step <= 0) step = 15; // prevent infinite loop
     const marks: number[] = [];
     for (let t = 0; t < duration; t += step) marks.push(t);
     return marks;

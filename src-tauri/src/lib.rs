@@ -131,6 +131,7 @@ pub fn run() {
             set_app_config,
             get_disk_usage,
             storage::get_vod_reviews,
+            storage::get_match_details,
             cv_analyzer::process_vod,
             cv_analyzer::cancel_vod
         ])

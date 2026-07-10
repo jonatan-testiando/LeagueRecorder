@@ -7,12 +7,21 @@ import { VodGallery } from "./features/vod/components/VodGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
+import { Titlebar } from "./components/Titlebar";
 import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle } from "lucide-react";
 import { ErrorClipMetadata } from "./core/tauri-ipc";
 import { motion, AnimatePresence } from "framer-motion";
 import { getVersion } from "@tauri-apps/api/app";
 
 type Tab = "games" | "clips" | "errors" | "review" | "vod" | "settings";
+
+const NAV_ITEMS: { key: Tab; label: string; icon: React.ReactNode }[] = [
+  { key: "games", label: "Games", icon: <Gamepad2 size={18} /> },
+  { key: "clips", label: "Clips", icon: <Film size={18} /> },
+  { key: "errors", label: "Errors", icon: <AlertTriangle size={18} /> },
+  { key: "review", label: "Review", icon: <MonitorPlay size={18} /> },
+  { key: "vod", label: "VOD Analysis", icon: <Film size={18} /> },
+];
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>("games");
@@ -31,82 +40,34 @@ export const App: React.FC = () => {
     deleteMatch
   } = useGallery();
 
+  const goTo = (tab: Tab) => { setActiveTab(tab); setSelectedMatch(null); };
+
   return (
-    <div style={styles.appContainer}>
+    <>
+      <Titlebar />
+      <div className="app-body" style={styles.appContainer}>
       {/* Sidebar (Ascent Style) */}
       <div style={styles.sidebar}>
         <div style={styles.logoArea}>
           <Scissors color="var(--accent-violet)" size={28} strokeWidth={2.5} style={{ transform: "rotate(-45deg)" }} />
-          <span style={styles.logoText}>My Recorder</span>
+          <span style={styles.logoText}>LeagueRecorder</span>
         </div>
 
-
-
         <div style={styles.navLinks}>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => goTo(item.key)}
+              className={`nav-btn${activeTab === item.key ? " nav-btn--active" : ""}`}
+            >
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
           <button
-            onClick={() => { setActiveTab("games"); setSelectedMatch(null); }}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "games" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "games" ? "#fff" : "var(--text-secondary)",
-              fontWeight: activeTab === "games" ? 700 : 500,
-            }}
-          >
-            <Gamepad2 size={18} />
-            Games
-          </button>
-          <button
-            onClick={() => setActiveTab("clips")}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "clips" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "clips" ? "#fff" : "var(--text-secondary)",
-            }}
-          >
-            <Film size={18} />
-            Clips
-          </button>
-          <button
-            onClick={() => setActiveTab("errors")}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "errors" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "errors" ? "#fff" : "var(--text-secondary)",
-            }}
-          >
-            <AlertTriangle size={18} />
-            Errors
-          </button>
-          <button
-            onClick={() => setActiveTab("review")}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "review" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "review" ? "#fff" : "var(--text-secondary)",
-            }}
-          >
-            <MonitorPlay size={18} />
-            Review
-          </button>
-          <button
-            onClick={() => { setActiveTab("vod"); setSelectedMatch(null); }}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "vod" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "vod" ? "#fff" : "var(--text-secondary)",
-            }}
-          >
-            <Film size={18} />
-            VOD Analysis
-          </button>
-          <button
-            onClick={() => { setActiveTab("settings"); setSelectedMatch(null); }}
-            style={{
-              ...styles.navBtn,
-              backgroundColor: activeTab === "settings" ? "var(--accent-violet)" : "transparent",
-              color: activeTab === "settings" ? "#fff" : "var(--text-secondary)",
-              marginTop: "auto"
-            }}
+            onClick={() => goTo("settings")}
+            className={`nav-btn${activeTab === "settings" ? " nav-btn--active" : ""}`}
+            style={{ marginTop: "auto" }}
           >
             <Settings size={18} />
             Settings
@@ -143,7 +104,7 @@ export const App: React.FC = () => {
                         <ArrowLeft size={20} />
                       </button>
                       <div style={styles.playerTitleBlock}>
-                        <h2 style={styles.playerTitle}>Análisis de IA</h2>
+                        <h2 style={styles.playerTitle}>AI Analysis</h2>
                         <span style={styles.playerSub}>{selectedMatch.date}</span>
                       </div>
                     </div>
@@ -188,16 +149,13 @@ export const App: React.FC = () => {
           </motion.div>
         </AnimatePresence>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
   appContainer: {
-    display: "flex",
-    width: "100vw",
-    height: "100vh",
-    overflow: "hidden",
     boxSizing: "border-box",
     backgroundColor: "var(--bg-app)",
   },
@@ -261,18 +219,6 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "var(--space-2)",
     flex: 1,
-  },
-  navBtn: {
-    border: "none",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-3) var(--space-4)",
-    textAlign: "left",
-    fontSize: "var(--font-sm)",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    fontWeight: 600,
   },
   mainContent: {
     flex: 1,

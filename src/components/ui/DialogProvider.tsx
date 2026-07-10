@@ -84,9 +84,9 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     if (options.title) return options.title;
     switch (options.type) {
       case "error": return "Error";
-      case "success": return "Éxito";
-      case "confirm": return "Confirmar acción";
-      default: return "Atención";
+      case "success": return "Success";
+      case "confirm": return "Confirm action";
+      default: return "Notice";
     }
   };
 
@@ -112,20 +112,20 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
             <div style={styles.footer}>
               {options.type === "confirm" && (
-                <button onClick={handleCancel} style={styles.cancelBtn}>
-                  {options.cancelText || "Cancelar"}
+                <button onClick={handleCancel} className="btn-ghost" style={styles.cancelBtn}>
+                  {options.cancelText || "Cancel"}
                 </button>
               )}
-              <button 
-                onClick={handleConfirm} 
+              <button
+                onClick={handleConfirm}
                 style={{
-                  ...styles.confirmBtn, 
-                  backgroundColor: options.type === "error" ? "var(--color-defeat)" : 
-                                  options.type === "success" ? "var(--color-victory)" : 
+                  ...styles.confirmBtn,
+                  backgroundColor: options.type === "error" ? "var(--color-defeat)" :
+                                  options.type === "success" ? "var(--color-victory)" :
                                   "var(--accent-violet)"
                 }}
               >
-                {options.confirmText || "Aceptar"}
+                {options.confirmText || "OK"}
               </button>
             </div>
           </div>
@@ -199,7 +199,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "flex-end",
     gap: "12px",
     padding: "var(--space-4) var(--space-5)",
-    backgroundColor: "var(--bg-panel)",
+    backgroundColor: "var(--bg-elevated)",
     borderTop: "1px solid var(--border-subtle)",
   },
   cancelBtn: {

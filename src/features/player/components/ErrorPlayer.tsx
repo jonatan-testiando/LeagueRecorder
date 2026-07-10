@@ -110,27 +110,27 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
     try {
       if (editEventId) {
         await editErrorEvent(clip.path, editEventId, noteText, noteCategory);
-        showSuccess("Anotación actualizada");
+        showSuccess("Note updated");
       } else {
         await addErrorEvent(clip.path, currentTime, noteText, noteCategory);
-        showSuccess("Anotación guardada");
+        showSuccess("Note saved");
       }
       setIsAddingMode(false);
       setEditEventId(null);
       setNoteText("");
       onUpdate(); // Reload clip metadata
     } catch (e) {
-      showError("Error al guardar: " + e);
+      showError("Failed to save: " + e);
     }
   };
 
   const handleDeleteNote = async (id: string) => {
     try {
       await deleteErrorEvent(clip.path, id);
-      showSuccess("Anotación eliminada");
+      showSuccess("Note deleted");
       onUpdate();
     } catch (e) {
-      showError("Error al eliminar: " + e);
+      showError("Failed to delete: " + e);
     }
   };
 
@@ -155,7 +155,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
         <div style={styles.videoWrapper}>
           <div style={styles.topBar}>
             <button style={styles.backBtn} onClick={onClose}>
-              <ChevronLeft size={20} /> Volver a Galería
+              <ChevronLeft size={20} /> Back to Gallery
             </button>
             <div style={{ color: "#fff", fontWeight: "bold" }}>{clip.name}</div>
             <div style={{ width: "120px" }}></div>
@@ -185,7 +185,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             
             <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
               <button onClick={() => { videoRef.current?.pause(); setIsAddingMode(true); setEditEventId(null); setNoteText(""); }} style={styles.addBtn}>
-                <Plus size={14} /> Añadir Nota
+                <Plus size={14} /> Add Note
               </button>
               <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
             </div>
@@ -244,13 +244,13 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
       {!isFullscreen && (
       <div style={styles.rightColumn}>
         <div style={styles.reviewHeader}>
-          <span style={styles.reviewTitle}>Libreta de Errores</span>
+          <span style={styles.reviewTitle}>Error Notebook</span>
         </div>
 
         <div style={styles.reviewList}>
           {events.length === 0 && !isAddingMode && (
              <div style={{ textAlign: "center", color: "var(--text-muted)", marginTop: "40px", fontSize: "14px" }}>
-               No hay anotaciones en este clip. Pausa el video y haz clic en "Añadir Nota".
+               No notes on this clip yet. Pause the video and click "Add Note".
              </div>
           )}
 
@@ -263,29 +263,29 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 style={styles.addForm}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  Anotando en {formatTime(currentTime)}
+                  Note at {formatTime(currentTime)}
                 </div>
-                <select 
-                  value={noteCategory} 
+                <select
+                  value={noteCategory}
                   onChange={e => setNoteCategory(e.target.value)}
                   style={styles.select}
                 >
-                  <option value="Positioning">Posicionamiento</option>
-                  <option value="Mechanics">Mecánicas</option>
-                  <option value="Decision Making">Toma de Decisiones</option>
-                  <option value="Other">Otro</option>
+                  <option value="Positioning">Positioning</option>
+                  <option value="Mechanics">Mechanics</option>
+                  <option value="Decision Making">Decision Making</option>
+                  <option value="Other">Other</option>
                 </select>
-                <textarea 
+                <textarea
                   autoFocus
-                  placeholder="¿Qué falló aquí? ¿Qué podrías haber hecho mejor?"
+                  placeholder="What went wrong here? What could you have done better?"
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
                   style={styles.textarea}
                   rows={4}
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
-                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} style={styles.cancelBtn}>Cancelar</button>
-                  <button onClick={handleSaveNote} style={styles.saveBtn}>Guardar</button>
+                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} className="btn-ghost" style={styles.cancelBtn}>Cancel</button>
+                  <button onClick={handleSaveNote} style={styles.saveBtn}>Save</button>
                 </div>
               </motion.div>
             )}

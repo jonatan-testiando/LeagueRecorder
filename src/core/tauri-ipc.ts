@@ -112,3 +112,9 @@ export const processVod = async (videoPath: string): Promise<ProcessVodResponse>
 export const cancelVod = async (): Promise<void> => {
   return await invoke<void>("cancel_vod");
 };
+
+// Detalle completo de una partida/VOD (incluye mouse_events). El listado los
+// omite por rendimiento; el reproductor los pide aquí bajo demanda.
+export const getMatchDetails = async (id: string): Promise<MatchMetadata | null> => {
+  return await invoke<MatchMetadata | null>("get_match_details", { id });
+};

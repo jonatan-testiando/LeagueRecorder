@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { HardDrive, Search, Trash2 } from "lucide-react";
+import { HardDrive, Search, Trash2, Gamepad2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 
 interface DiskSpaceInfo {
@@ -43,7 +43,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       </div>
 
       <div style={styles.storageCardsRow}>
-        <div style={styles.storageCard}>
+        <div className="card" style={styles.storageCard}>
           <div style={styles.storageHeader}>
             <div style={styles.storageIconWrapper}>
               <HardDrive size={18} color="var(--accent-violet)" />
@@ -77,7 +77,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         </button>
         {isRecording && (
           <div style={styles.recordingIndicator}>
-            <span style={styles.recordingDot} /> GRABANDO PARTIDA EN CURSO
+            <span style={styles.recordingDot} /> RECORDING IN PROGRESS
           </div>
         )}
       </div>
@@ -92,9 +92,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
       <div style={styles.list}>
         {matches.length === 0 ? (
-          <div style={styles.emptyState}>
-            <span style={styles.emptyIcon}>🎮</span>
-            <p style={styles.emptyText}>No games recorded yet. Play a match to get started.</p>
+          <div className="empty-state">
+            <div className="empty-state__icon">
+              <Gamepad2 size={32} color="var(--text-muted)" />
+            </div>
+            <p className="empty-state__title">No games recorded yet</p>
+            <p className="empty-state__text">Play a match and it will show up here automatically.</p>
           </div>
         ) : (
           matches.map((match) => {
@@ -150,8 +153,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                 </div>
 
                 <div style={{ ...styles.td, width: "40px", justifyContent: "flex-end" }}>
-                  <button 
-                    style={styles.actionBtn}
+                  <button
+                    className="icon-btn icon-btn--danger"
                     onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
                     title="Delete Match"
                   >

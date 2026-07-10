@@ -17,11 +17,11 @@ const LITTERBOX_LIMIT = 1024 * 1024 * 1024; // 1 GB (límite de litterbox tempor
 
 // "permanent" -> catbox.moe (enlace permanente). El resto -> litterbox (temporal, máx. 72 h).
 const EXPIRY_OPTIONS = [
-  { value: "72h", label: "Temporal · 72 h" },
-  { value: "24h", label: "Temporal · 24 h" },
-  { value: "12h", label: "Temporal · 12 h" },
-  { value: "1h", label: "Temporal · 1 h" },
-  { value: "permanent", label: "Permanente" },
+  { value: "72h", label: "Temporary · 72 h" },
+  { value: "24h", label: "Temporary · 24 h" },
+  { value: "12h", label: "Temporary · 12 h" },
+  { value: "1h", label: "Temporary · 1 h" },
+  { value: "permanent", label: "Permanent" },
 ];
 
 const DURATION_MS: Record<string, number> = {
@@ -69,9 +69,9 @@ const formatSize = (bytes: number): string => {
 
 const formatRemaining = (ms: number): string => {
   const h = Math.floor(ms / 3600e3);
-  if (h >= 1) return `Caduca en ~${h} h`;
+  if (h >= 1) return `Expires in ~${h} h`;
   const m = Math.max(1, Math.floor(ms / 60e3));
-  return `Caduca en ~${m} min`;
+  return `Expires in ~${m} min`;
 };
 
 export const ClipsGallery: React.FC = () => {
@@ -132,7 +132,7 @@ export const ClipsGallery: React.FC = () => {
       await copyLink(url);
     } catch (e) {
       console.error(e);
-      showError("Error al subir: " + e);
+      showError("Upload failed: " + e);
     } finally {
       setUploading(null);
     }
@@ -151,7 +151,7 @@ export const ClipsGallery: React.FC = () => {
       const isFav = await toggleClipFavorite(clipPath);
       setClips(clips.map(c => c.path === clipPath ? { ...c, favorite: isFav } : c));
     } catch (err) {
-      showError("Error al marcar favorito: " + err);
+      showError("Failed to toggle favorite: " + err);
     }
   };
 
@@ -160,7 +160,7 @@ export const ClipsGallery: React.FC = () => {
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <div className="spinner" />
-          <p style={{ color: "var(--text-muted)", marginTop: 16 }}>Buscando clips...</p>
+          <p style={{ color: "var(--text-muted)", marginTop: 16 }}>Loading clips…</p>
         </div>
       </div>
     );
@@ -171,9 +171,9 @@ export const ClipsGallery: React.FC = () => {
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <Film size={48} color="var(--text-muted)" style={{ opacity: 0.5, marginBottom: 16 }} />
-          <h3 style={{ color: "#fff", margin: 0 }}>No tienes clips aún</h3>
+          <h3 style={{ color: "#fff", margin: 0 }}>No clips yet</h3>
           <p style={{ color: "var(--text-muted)", marginTop: 8, textAlign: "center", maxWidth: 360 }}>
-            Usa la herramienta de recorte en el reproductor para crear clips de tus mejores momentos.
+            Use the clipping tool in the player to create clips of your best moments.
           </p>
         </div>
       </div>
@@ -183,7 +183,7 @@ export const ClipsGallery: React.FC = () => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Mis Clips</h2>
+        <h2 style={styles.title}>My Clips</h2>
         <span style={styles.count}>{clips.length} {clips.length === 1 ? "clip" : "clips"}</span>
       </div>
       <motion.div 
@@ -222,7 +222,7 @@ export const ClipsGallery: React.FC = () => {
                   <button 
                     onClick={() => handleToggleFavorite(clip.path)}
                     style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--accent-violet)" : "var(--text-muted)" }}
-                    title={clip.favorite ? "Quitar de favoritos" : "Añadir a favoritos"}
+                    title={clip.favorite ? "Remove from favorites" : "Add to favorites"}
                   >
                     <Heart size={16} fill={clip.favorite ? "var(--accent-violet)" : "transparent"} />
                   </button>
@@ -237,19 +237,19 @@ export const ClipsGallery: React.FC = () => {
                     <>
                       <div style={styles.linkRow}>
                         <input readOnly value={stored.url} style={styles.linkInput} onFocus={(e) => e.target.select()} />
-                        <button onClick={() => copyLink(stored.url)} style={styles.iconBtn} title="Copiar enlace">
+                        <button onClick={() => copyLink(stored.url)} style={styles.iconBtn} title="Copy link">
                           {copied === stored.url ? <Check size={14} color="var(--color-victory)" /> : <Copy size={14} />}
                         </button>
-                        <button onClick={() => openUrl(stored.url)} style={styles.iconBtn} title="Abrir en el navegador">
+                        <button onClick={() => openUrl(stored.url)} style={styles.iconBtn} title="Open in browser">
                           <ExternalLink size={14} />
                         </button>
                       </div>
                       <div style={styles.statusRow}>
                         <span style={styles.statusText}>
-                          {stored.expiry === "permanent" ? "Enlace permanente" : formatRemaining(remaining)}
+                          {stored.expiry === "permanent" ? "Permanent link" : formatRemaining(remaining)}
                         </span>
-                        <button onClick={() => clearLink(clip.path)} style={styles.relinkBtn} title="Generar un enlace nuevo">
-                          <RotateCcw size={11} /> Volver a subir
+                        <button onClick={() => clearLink(clip.path)} style={styles.relinkBtn} title="Generate a new link">
+                          <RotateCcw size={11} /> Re-upload
                         </button>
                       </div>
                     </>
@@ -278,15 +278,15 @@ export const ClipsGallery: React.FC = () => {
                         }}
                       >
                         {isUploading ? (
-                          <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Subiendo...</>
+                          <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Uploading…</>
                         ) : (
-                          <><UploadCloud size={14} /> Subir y compartir</>
+                          <><UploadCloud size={14} /> Upload & share</>
                         )}
                       </button>
                       {tooBig && (
                         <span style={styles.warn}>
-                          Supera el límite de {isPermanent ? "200 MB (permanente)" : "1 GB (temporal)"}.
-                          {isPermanent ? " Elige una opción temporal." : ""}
+                          Exceeds the {isPermanent ? "200 MB (permanent)" : "1 GB (temporary)"} limit.
+                          {isPermanent ? " Choose a temporary option." : ""}
                         </span>
                       )}
                     </>

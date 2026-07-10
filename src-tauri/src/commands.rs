@@ -65,7 +65,14 @@ impl Default for ActiveMatchState {
 
 #[tauri::command]
 pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
-    load_all_matches()
+    let mut matches = load_all_matches();
+    // El listado NO necesita la estela del ratón (arrays enormes). El reproductor
+    // la carga aparte vía `get_match_details`. Esto aligera muchísimo el payload
+    // de IPC y el parseo del polling periódico.
+    for m in &mut matches {
+        m.mouse_events = Vec::new();
+    }
+    matches
 }
 
 #[tauri::command]

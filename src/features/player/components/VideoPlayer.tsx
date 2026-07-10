@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { outcome } from "../../../core/matchStats";
 import { 
@@ -9,7 +9,7 @@ import {
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, 
   ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff
 } from "lucide-react";
-import { exportErrorClip } from "../../../core/tauri-ipc";
+import { exportErrorClip, getMatchDetails } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
 
 const streamUrl = (path: string): string =>
@@ -149,6 +149,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   }, []);
 
   const videoSrc = streamUrl(match.video_path);
+
+  // La estela del ratón (mouse_events) NO viene en el listado por rendimiento.
+  // La cargamos bajo demanda al abrir la partida en el reproductor.
+  const [mouseEvents, setMouseEvents] = useState<MouseEventData[]>(match.mouse_events ?? []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (match.mouse_events && match.mouse_events.length > 0) {
+      setMouseEvents(match.mouse_events);
+      return;
+    }
+    setMouseEvents([]);
+    getMatchDetails(match.id)
+      .then((full) => {
+        if (!cancelled && full?.mouse_events) setMouseEvents(full.mouse_events);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [match.id]);
 
   useEffect(() => {
     setCurrentTime(0);
@@ -381,7 +400,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!match.mouse_events || match.mouse_events.length === 0) return;
+      if (mouseEvents.length === 0) return;
       
       const videoW = v.videoWidth || 1920;
       const videoH = v.videoHeight || 1080;
@@ -390,7 +409,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       
       const TRAIL_DURATION = 1.0;
       const adjustedCt = ct - mouseSync;
-      const recentEvents = match.mouse_events.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
+      const recentEvents = mouseEvents.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
       if (recentEvents.length === 0) return;
       const moves = recentEvents.filter(e => e.evt === "move");
       if (moves.length > 1) {
@@ -447,7 +466,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       resizeObserver.disconnect();
     };
-  }, [match.mouse_events, mouseSync]);
+  }, [mouseEvents, mouseSync]);
 
   return (
     <div ref={containerRef} style={styles.container}>
@@ -471,7 +490,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             preload="auto"
           />
           {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>No se pudo cargar el video</span></div>}
+          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>Couldn't load the video</span></div>}
           <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
           <div style={styles.videoProgressWrapper}>
             <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
@@ -498,7 +517,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <option value={4}>4.00x</option>
             </select>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", marginRight: "16px" }}>
-              <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Mostrar/Ocultar Ratón">
+              <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Show/Hide Cursor">
                 {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -684,7 +703,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             </div>
             <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
             <p style={styles.scoreSub}>
-              Análisis de cursor y APM sobre la partida importada.
+              Cursor and APM analysis of the imported match.
             </p>
           </div>
         ) : (
@@ -814,7 +833,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     setErrorNote("");
                   }
                   setIsClippingMode(false);
-                  showSuccess("¡Exportado con éxito!");
+                  showSuccess("Exported successfully!");
                 } catch (err) {
                   showError("Error: " + err);
                 } finally {
@@ -832,13 +851,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 borderRadius: "5px"
               }}
             >
-              {isExporting ? "Exportando..." : "Exportar " + (exportType === "clip" ? "Clip" : "Error")}
+              {isExporting ? "Exporting…" : "Export " + (exportType === "clip" ? "Clip" : "Error")}
             </button>
-            <button 
-              onClick={() => setIsClippingMode(false)} 
+            <button
+              onClick={() => setIsClippingMode(false)}
               style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}
             >
-              Cancelar
+              Cancel
             </button>
           </div>
         </div>

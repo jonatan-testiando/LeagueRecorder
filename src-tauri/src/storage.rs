@@ -186,8 +186,10 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
     let mut process_file = |path: &Path| {
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(metadata) = serde_json::from_str::<MatchMetadata>(&content) {
+                if let Ok(mut metadata) = serde_json::from_str::<MatchMetadata>(&content) {
                     if metadata.id.starts_with("vod_") {
+                        // El listado no necesita la estela; el reproductor la carga aparte.
+                        metadata.mouse_events = Vec::new();
                         matches.push(metadata);
                     }
                 }
@@ -222,6 +224,25 @@ pub fn get_match_metadata(match_id: &str) -> Result<MatchMetadata, String> {
         }
     }
     Err("Match not found".to_string())
+}
+
+/// Carga el metadata COMPLETO de una sola partida (incluye `mouse_events`) leyendo
+/// directamente su JSON, sin escanear toda la biblioteca.
+pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
+    let base = if id.starts_with("vod_") {
+        get_reviews_dir()
+    } else {
+        get_videos_dir()
+    };
+    let file = base.join(id).join(format!("{}.json", id));
+    let content = fs::read_to_string(file).ok()?;
+    serde_json::from_str::<MatchMetadata>(&content).ok()
+}
+
+/// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).
+#[tauri::command]
+pub async fn get_match_details(id: String) -> Option<MatchMetadata> {
+    load_match_by_id(&id)
 }
 
 pub fn delete_match_files(id: &str) -> Result<(), String> {

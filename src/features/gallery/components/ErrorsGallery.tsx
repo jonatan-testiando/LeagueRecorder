@@ -59,7 +59,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <div className="spinner" />
-          <p style={{ color: "var(--text-muted)", marginTop: 16 }}>Buscando errores...</p>
+          <p style={{ color: "var(--text-muted)", marginTop: 16 }}>Loading errors…</p>
         </div>
       </div>
     );
@@ -70,9 +70,9 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <AlertTriangle size={48} color="var(--color-defeat)" style={{ opacity: 0.5, marginBottom: 16 }} />
-          <h3 style={{ color: "#fff", margin: 0 }}>No tienes errores marcados aún</h3>
+          <h3 style={{ color: "#fff", margin: 0 }}>No errors flagged yet</h3>
           <p style={{ color: "var(--text-muted)", marginTop: 8, textAlign: "center", maxWidth: 360 }}>
-            Usa la herramienta de Error en el reproductor de video para guardar los errores que cometes y llevar un registro de tu evolución.
+            Use the Error tool in the video player to save the mistakes you make and track your progress over time.
           </p>
         </div>
       </div>
@@ -112,7 +112,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
               </div>
               <div style={styles.cardInfo}>
                 <div style={styles.metaRow}>
-                  <span style={styles.clipMatch} title={err.match_id}>Partida: {err.match_id}</span>
+                  <span style={styles.clipMatch} title={err.match_id}>Match: {err.match_id}</span>
                   <span style={styles.sizeBadge}>{formatSize(err.size)}</span>
                 </div>
                 

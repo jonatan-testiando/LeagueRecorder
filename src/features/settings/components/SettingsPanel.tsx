@@ -103,14 +103,14 @@ export const SettingsPanel: React.FC = () => {
     }
     
     setIsProcessing(true);
-    setStatusMsg("Iniciando grabación de prueba...");
+    setStatusMsg("Starting test recording…");
     try {
       await startManualRecording(manualId.trim());
       setIsRecording(true);
-      setStatusMsg("Grabación en curso. Puedes interactuar con tu PC.");
+      setStatusMsg("Recording in progress. You can use your PC.");
     } catch (err) {
       setStatusMsg("Error: " + err);
-      showError("No se pudo iniciar: " + err);
+      showError("Failed to start: " + err);
     } finally {
       setIsProcessing(false);
     }
@@ -118,16 +118,16 @@ export const SettingsPanel: React.FC = () => {
 
   const handleStopManual = async () => {
     setIsProcessing(true);
-    setStatusMsg("Deteniendo y guardando clip...");
+    setStatusMsg("Stopping and saving clip…");
     try {
       await stopManualRecording();
       setIsRecording(false);
-      setStatusMsg("Clip guardado con éxito. Revisa la sección 'Tus Partidas'.");
+      setStatusMsg("Clip saved successfully. Check the 'Games' section.");
       setManualId("");
-      showSuccess("Clip guardado con éxito.");
+      showSuccess("Clip saved successfully.");
     } catch (err) {
-      setStatusMsg("Error al detener: " + err);
-      showError("No se pudo detener: " + err);
+      setStatusMsg("Failed to stop: " + err);
+      showError("Failed to stop: " + err);
     } finally {
       setIsProcessing(false);
     }
@@ -135,11 +135,11 @@ export const SettingsPanel: React.FC = () => {
 
   const checkForUpdates = async () => {
     setIsUpdating(true);
-    setUpdateMsg("Buscando actualizaciones...");
+    setUpdateMsg("Checking for updates…");
     try {
       const update = await check();
       if (update) {
-        setUpdateMsg(`Nueva versión ${update.version} disponible`);
+        setUpdateMsg(`New version ${update.version} available`);
         setIsDownloading(true);
         setDownloadProgress(0);
         
@@ -150,33 +150,33 @@ export const SettingsPanel: React.FC = () => {
           switch (event.event) {
             case 'Started':
               contentLength = event.data.contentLength || 0;
-              setUpdateMsg("Iniciando descarga...");
+              setUpdateMsg("Starting download…");
               break;
             case 'Progress':
               downloaded += event.data.chunkLength;
               if (contentLength > 0) {
                 const percent = Math.round((downloaded / contentLength) * 100);
                 setDownloadProgress(percent);
-                setUpdateMsg(`Descargando... ${percent}%`);
+                setUpdateMsg(`Downloading… ${percent}%`);
               }
               break;
             case 'Finished':
-              setUpdateMsg("Instalando actualización...");
+              setUpdateMsg("Installing update…");
               setDownloadProgress(100);
               break;
           }
         });
-        
-        setUpdateMsg("Iniciando instalador...");
+
+        setUpdateMsg("Launching installer…");
         await exit(0);
       } else {
-        setUpdateMsg("Tu aplicación ya está en la última versión.");
-        showSuccess("Tu aplicación ya está actualizada.");
+        setUpdateMsg("Your app is already on the latest version.");
+        showSuccess("Your app is already up to date.");
       }
     } catch (err) {
       console.error(err);
-      setUpdateMsg("Error al buscar actualizaciones.");
-      showError("Error al actualizar: " + err);
+      setUpdateMsg("Failed to check for updates.");
+      showError("Update error: " + err);
     } finally {
       setIsUpdating(false);
       setIsDownloading(false);
@@ -201,8 +201,8 @@ export const SettingsPanel: React.FC = () => {
   return (
     <div style={styles.container}>
       <div>
-        <h2 style={styles.title}>Panel de Control</h2>
-        <p style={styles.subtitle}>Estado de la grabadora, captura de audio y detección automática de partidas.</p>
+        <h2 style={styles.title}>Control Panel</h2>
+        <p style={styles.subtitle}>Recorder status, audio capture and automatic match detection.</p>
       </div>
 
       <motion.div 
@@ -216,7 +216,7 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Sparkles size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
-            Detección de Ultimate (R)
+            Ultimate Detection (R)
           </h3>
           <button
             onClick={() => ult && saveUlt(!ult.enabled, ult.key)}
@@ -227,16 +227,16 @@ export const SettingsPanel: React.FC = () => {
               borderColor: ult?.enabled ? "transparent" : "var(--border-strong)",
             }}
           >
-            {ult?.enabled ? "Activado" : "Desactivado"}
+            {ult?.enabled ? "On" : "Off"}
           </button>
         </div>
         <p style={styles.cardText}>
-          La API de Riot <strong>no informa</strong> del uso de habilidades, así que esto se detecta por la
-          tecla mientras grabas (best-effort). Solo se marca cuando tu ultimate ya está disponible (nivel ≥ 6).
-          Puede haber algún falso positivo si la pulsas en enfriamiento.
+          Riot's API <strong>does not report</strong> ability usage, so this is detected from the
+          keypress while you record (best-effort). It's only flagged once your ultimate is available (level ≥ 6).
+          There may be a false positive if you press it while on cooldown.
         </p>
         <div style={styles.ultRow}>
-          <span style={styles.ultLabel}>Tecla de la ultimate:</span>
+          <span style={styles.ultLabel}>Ultimate key:</span>
           <input
             type="text"
             maxLength={1}
@@ -252,13 +252,13 @@ export const SettingsPanel: React.FC = () => {
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <FolderOpen size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
-          <h3 style={styles.cardTitle}>Almacenamiento</h3>
+          <h3 style={styles.cardTitle}>Storage</h3>
         </div>
         <div style={styles.cardBody}>
           <div style={styles.settingRow}>
             <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>Ruta de guardado</span>
-              <span style={styles.settingDesc}>Directorio donde se guardarán los videos y clips</span>
+              <span style={styles.settingLabel}>Save location</span>
+              <span style={styles.settingDesc}>Directory where videos and clips are saved</span>
             </div>
             <div style={{ display: "flex", gap: "8px", flex: 1, marginLeft: "16px" }}>
               <input 
@@ -271,7 +271,7 @@ export const SettingsPanel: React.FC = () => {
                 }} 
               />
               <button onClick={handlePickDirectory} style={{...styles.button, backgroundColor: "var(--accent-violet)", padding: "8px 12px"}}>
-                Cambiar
+                Change
               </button>
             </div>
           </div>
@@ -290,7 +290,7 @@ export const SettingsPanel: React.FC = () => {
           <div style={styles.settingRow}>
             <div style={styles.settingInfo}>
               <span style={styles.settingLabel}>API Key (Development)</span>
-              <span style={styles.settingDesc}>Necesario para obtener tus estadísticas (KDA, oro, daño). ¡Expira cada 24 horas!</span>
+              <span style={styles.settingDesc}>Required to fetch your stats (KDA, gold, damage). Expires every 24 hours!</span>
             </div>
             <div style={{ flex: 1, marginLeft: "16px" }}>
               <input 
@@ -314,12 +314,12 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <span style={{ fontSize: "20px", marginRight: "8px" }}>🚀</span>
-            <h3 style={styles.cardTitle}>Actualizaciones</h3>
+            <h3 style={styles.cardTitle}>Updates</h3>
           </div>
         </div>
         <div style={styles.cardBody}>
           <p style={styles.cardText}>
-            Busca e instala las últimas mejoras de LeagueRecorder de forma automática.
+            Automatically check for and install the latest LeagueRecorder improvements.
           </p>
           
           {isDownloading ? (
@@ -351,7 +351,7 @@ export const SettingsPanel: React.FC = () => {
                   disabled={isUpdating}
                   style={{ ...styles.btn, backgroundColor: "var(--accent-violet)", flex: 1, opacity: isUpdating ? 0.7 : 1, transition: "opacity 0.2s" }}
                 >
-                  {isUpdating ? updateMsg || "Buscando..." : "Buscar Actualizaciones"}
+                  {isUpdating ? updateMsg || "Checking…" : "Check for Updates"}
                 </button>
               </div>
               {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
@@ -365,11 +365,11 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Volume2 size={20} color="var(--accent-gold)" style={{ marginRight: "8px" }} />
-            Captura de Sonido del Juego
+            Game Sound Capture
           </h3>
           <button onClick={refreshAudio} disabled={audioLoading} style={styles.ghostBtn}>
             <RefreshCw size={14} style={{ marginRight: "6px" }} />
-            {audioLoading ? "Comprobando…" : "Re-detectar"}
+            {audioLoading ? "Checking…" : "Re-detect"}
           </button>
         </div>
 
@@ -380,20 +380,20 @@ export const SettingsPanel: React.FC = () => {
           <div>
             {audioReady ? (
               <>
-                <span style={styles.statusTitle}>Listo para grabar el sonido del juego</span>
+                <span style={styles.statusTitle}>Ready to record game sound</span>
                 <p style={styles.statusText}>
-                  Dispositivo de sistema detectado: <strong style={{ color: "var(--accent-teal)" }}>{audio?.system_audio_device}</strong>
+                  System device detected: <strong style={{ color: "var(--accent-teal)" }}>{audio?.system_audio_device}</strong>
                 </p>
               </>
             ) : (
               <>
-                <span style={styles.statusTitle}>Falta un dispositivo de captura de sistema</span>
+                <span style={styles.statusTitle}>Missing a system capture device</span>
                 <p style={styles.statusText}>
-                  Para grabar el sonido del juego sin latencia, instala <strong>Screen Capturer Recorder</strong> (ya descargado en
-                  <code style={styles.inlineCode}> Descargas\ScreenCaptureRecorder</code>): ejecuta
-                  <code style={styles.inlineCode}>Setup.Screen.Capturer.Recorder…exe</code> como administrador (Siguiente → Siguiente). Añade el
-                  dispositivo <strong>virtual-audio-capturer</strong>, que capta justo lo que oyes por tus auriculares. Luego pulsa “Re-detectar”.
-                  Mientras tanto se grabará con el micrófono si está disponible.
+                  To record game sound with no latency, install <strong>Screen Capturer Recorder</strong> (already downloaded in
+                  <code style={styles.inlineCode}> Downloads\ScreenCaptureRecorder</code>): run
+                  <code style={styles.inlineCode}>Setup.Screen.Capturer.Recorder…exe</code> as administrator (Next → Next). It adds the
+                  <strong> virtual-audio-capturer</strong> device, which captures exactly what you hear through your headphones. Then click “Re-detect”.
+                  Meanwhile it will record with the microphone if available.
                 </p>
               </>
             )}
@@ -402,11 +402,11 @@ export const SettingsPanel: React.FC = () => {
 
         {audio && audio.all_devices.length > 0 && (
           <details style={styles.details}>
-            <summary style={styles.summary}>Dispositivos de audio detectados ({audio.all_devices.length})</summary>
+            <summary style={styles.summary}>Detected audio devices ({audio.all_devices.length})</summary>
             <ul style={styles.deviceList}>
               {audio.all_devices.map((d) => (
                 <li key={d} style={{ color: d === audio.system_audio_device ? "var(--accent-teal)" : "var(--text-secondary)" }}>
-                  {d}{d === audio.system_audio_device ? "  ← usado para el juego" : ""}
+                  {d}{d === audio.system_audio_device ? "  ← used for the game" : ""}
                 </li>
               ))}
             </ul>
@@ -419,18 +419,18 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Monitor size={20} color="var(--accent-blue)" style={{ marginRight: "8px" }} />
-            Calidad de Grabación de Video
+            Video Recording Quality
           </h3>
         </div>
         <p style={styles.cardText}>
-          El video se graba a la resolución nativa de tu monitor por NVENC (GPU), sin perder FPS.
-          Elige los FPS y la calidad: la calidad define el bitrate, es decir la nitidez del video
-          frente al tamaño del archivo.
+          Video is recorded at your monitor's native resolution via NVENC (GPU), with no FPS loss.
+          Choose the FPS and quality: quality sets the bitrate — i.e. how sharp the video is
+          versus the file size.
         </p>
         
         <div style={styles.videoSettingsGrid}>
           <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Tasa de Fotogramas (FPS)</span>
+            <span style={styles.videoSetLabel}>Frame Rate (FPS)</span>
             <div style={styles.buttonGroup}>
               <button 
                 onClick={() => video && saveVideo(60, video.quality)}
@@ -458,12 +458,12 @@ export const SettingsPanel: React.FC = () => {
           </div>
 
           <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Calidad (bitrate)</span>
+            <span style={styles.videoSetLabel}>Quality (bitrate)</span>
             <div style={styles.buttonGroup}>
               {([
-                { key: "High", label: "Alta", hint: "22 Mbps" },
-                { key: "Medium", label: "Media", hint: "14 Mbps" },
-                { key: "Low", label: "Baja", hint: "8 Mbps" },
+                { key: "High", label: "High", hint: "22 Mbps" },
+                { key: "Medium", label: "Medium", hint: "14 Mbps" },
+                { key: "Low", label: "Low", hint: "8 Mbps" },
               ] as const).map((q) => {
                 const sel = video?.quality === q.key;
                 return (
@@ -489,32 +489,32 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.infoNote}>
           <Monitor size={14} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: "2px" }} />
           <span>
-            Se captura a la resolución nativa de tu juego (no se reescala, así no baja FPS). A mayor
-            bitrate, más nítido el movimiento pero más pesa el archivo.
+            Captured at your game's native resolution (no rescaling, so no FPS drop). The higher the
+            bitrate, the sharper the motion but the larger the file.
           </span>
         </div>
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Grabación Manual de Prueba</h3>
+        <h3 style={styles.cardTitle}>Manual Test Recording</h3>
         <p style={styles.cardText}>
-          Utiliza esta herramienta para comprobar que FFmpeg y la aceleración de video por hardware (GPU) funcionan correctamente antes de entrar a una partida real.
+          Use this tool to verify that FFmpeg and hardware (GPU) video acceleration work correctly before jumping into a real match.
         </p>
 
         {isRecording ? (
           <div style={styles.statusBoxActive}>
             <div style={styles.indicatorActive} />
             <div>
-              <span style={styles.statusTitle}>Grabando Pantalla</span>
-              <p style={styles.statusText}>{statusMsg || "Capturando video y audio..."}</p>
+              <span style={styles.statusTitle}>Recording Screen</span>
+              <p style={styles.statusText}>{statusMsg || "Capturing video and audio…"}</p>
             </div>
           </div>
         ) : (
           <div style={styles.statusBoxInactive}>
             <div style={styles.indicatorInactive} />
             <div>
-              <span style={styles.statusTitle}>Grabadora Inactiva</span>
-              <p style={styles.statusText}>{statusMsg || "Esperando inicio automático o manual."}</p>
+              <span style={styles.statusTitle}>Recorder Idle</span>
+              <p style={styles.statusText}>{statusMsg || "Waiting for automatic or manual start."}</p>
             </div>
           </div>
         )}
@@ -524,7 +524,7 @@ export const SettingsPanel: React.FC = () => {
             <>
               <input
                 type="text"
-                placeholder="Nombre de la prueba (ej. test_pantalla)"
+                placeholder="Test name (e.g. screen_test)"
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
                 style={styles.input}
@@ -535,7 +535,7 @@ export const SettingsPanel: React.FC = () => {
                 disabled={isProcessing}
                 style={{ ...styles.btn, backgroundColor: "var(--accent-blue)" }}
               >
-                Grabar Pantalla Completa
+                Record Full Screen
               </button>
             </>
           ) : (
@@ -544,29 +544,29 @@ export const SettingsPanel: React.FC = () => {
               disabled={isProcessing}
               style={{ ...styles.btn, backgroundColor: "var(--color-defeat)" }}
             >
-              Detener y Guardar Clip
+              Stop and Save Clip
             </button>
           )}
         </div>
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Detección de Partidas</h3>
+        <h3 style={styles.cardTitle}>Match Detection</h3>
         <p style={styles.cardText}>
-          El sistema en segundo plano está en ejecución constante. Cuando abres League of Legends y entras en partida:
+          The background service runs constantly. When you open League of Legends and enter a match:
         </p>
         <ul style={styles.list}>
-          <li>Se conecta automáticamente a la API del juego en el puerto 2999.</li>
-          <li>Inicia la grabación local a 1080p con cero impacto de rendimiento.</li>
-          <li>Registra marcas de tiempo para kills, deaths, asistencias y objetivos.</li>
-          <li>Guarda todo al finalizar el match de manera 100% automatizada.</li>
+          <li>It connects automatically to the in-game API on port 2999.</li>
+          <li>It starts local recording at 1080p with zero performance impact.</li>
+          <li>It logs timestamps for kills, deaths, assists and objectives.</li>
+          <li>It saves everything when the match ends, 100% automatically.</li>
         </ul>
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Generador Automático de Dataset de IA</h3>
+        <h3 style={styles.cardTitle}>Automatic AI Dataset Generator</h3>
         <p style={styles.cardText}>
-          Extrae fotogramas en los momentos exactos de tus clics físicos para entrenar un modelo YOLOv8 de forma automática.
+          Extracts frames at the exact moments of your physical clicks to automatically train a YOLOv8 model.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
           <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "var(--space-3)" }}>
@@ -577,20 +577,20 @@ export const SettingsPanel: React.FC = () => {
               style={{ width: "18px", height: "18px", accentColor: "var(--accent-violet)" }}
             />
             <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-primary)" }}>
-              Activar auto-generación al finalizar partida
+              Enable auto-generation when a match ends
             </span>
           </label>
         </div>
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Requisitos de Sistema</h3>
+        <h3 style={styles.cardTitle}>System Requirements</h3>
         <ul style={styles.list}>
           <li>
-            <strong>FFmpeg en el PATH:</strong> Asegúrate de que `ffmpeg` esté en el PATH de Windows. Si no, la grabadora no podrá arrancar.
+            <strong>FFmpeg on PATH:</strong> Make sure `ffmpeg` is on your Windows PATH. Otherwise the recorder won't be able to start.
           </li>
           <li>
-            <strong>Resolución de Juego:</strong> La captura se escala automáticamente a 1080p 60fps usando codificación por hardware en la GPU para no afectar tus FPS.
+            <strong>Game Resolution:</strong> Capture is automatically scaled to 1080p 60fps using hardware encoding on the GPU so your FPS isn't affected.
           </li>
         </ul>
       </motion.div>

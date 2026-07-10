@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { MatchMetadata } from "../../types";
 import { useDialog } from "../../components/ui/DialogProvider";
 import { getRecordedMatches, deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
@@ -67,17 +67,34 @@ export const useGallery = () => {
     fetchMatches();
     checkStatus();
 
-    // Polling cada 3 segundos para el estado de la grabadora y refrescar la lista si hay nuevas partidas
-    const interval = setInterval(() => {
-      checkStatus();
-      // Refrescar lista de partidas en background para ver si terminó una grabación automática
-      getRecordedMatches().then(data => {
-        setMatches(data);
-      }).catch(() => {});
-    }, 3000);
+    // El estado de la grabadora es barato (un bool en memoria): lo consultamos
+    // seguido para que el indicador de "grabando" responda al instante.
+    const statusInterval = setInterval(checkStatus, 5000);
 
-    return () => clearInterval(interval);
+    // La lista de partidas SÍ es cara de refrescar (lee los JSON de todas las
+    // partidas). Como una partida dura ~30 min, basta con refrescarla cada 5 min.
+    // Además, la refrescamos al instante cuando termina una grabación (efecto de
+    // abajo), así que no perdemos la utilidad de ver la partida nueva enseguida.
+    const listInterval = setInterval(() => {
+      getRecordedMatches().then(setMatches).catch(() => {});
+    }, 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(listInterval);
+    };
   }, [fetchMatches, checkStatus]);
+
+  // Refresco inmediato de la lista cuando una grabación pasa de activa a inactiva
+  // (acaba de terminar una partida): así la nueva grabación aparece al momento
+  // sin necesidad de pollear la lista con frecuencia.
+  const prevRecording = useRef(false);
+  useEffect(() => {
+    if (prevRecording.current && !isRecording) {
+      getRecordedMatches().then(setMatches).catch(() => {});
+    }
+    prevRecording.current = isRecording;
+  }, [isRecording]);
 
   return {
     matches,

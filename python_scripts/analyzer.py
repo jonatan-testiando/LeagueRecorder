@@ -59,6 +59,11 @@ def _match_method():
     return cv2.TM_CCORR_NORMED, False
 MATCH_CV_METHOD, MATCH_LOWER_BETTER = _match_method()
 
+# Usar máscara de transparencia es MUY lento en OpenCV y anula casi toda
+# la aceleración por GPU. Ponerlo a 0 acelera el escaneo x4, pero ROMPE
+# la precisión si el fondo no es negro. Lo dejamos a 1 por defecto.
+USE_MASK = os.environ.get("VOD_USE_MASK", "1").strip().lower() not in ("0", "", "false", "no")
+
 # Escalas de template a probar (multi-escala). Crucial cuando el VOD no está a la
 # misma resolución/DPI que los cursores base (p.ej. metraje 1440p). "1.0" = original.
 def _parse_scales():
@@ -85,7 +90,11 @@ DIAGNOSTIC = os.environ.get("VOD_DIAGNOSTIC", "0").strip().lower() not in ("0", 
 def match_score(search_umat, t_bgr, t_mask):
     """Devuelve (score, loc) con score en [0..1] donde MÁS ALTO = MEJOR,
     sea cual sea el método configurado. Unifica CCORR (max) y SQDIFF (min)."""
-    res = cv2.matchTemplate(search_umat, t_bgr, MATCH_CV_METHOD, mask=t_mask)
+    if USE_MASK:
+        res = cv2.matchTemplate(search_umat, t_bgr, MATCH_CV_METHOD, mask=t_mask)
+    else:
+        res = cv2.matchTemplate(search_umat, t_bgr, MATCH_CV_METHOD)
+        
     res_cpu = res.get() if hasattr(res, 'get') else res
     if MATCH_LOWER_BETTER:
         # SQDIFF enmascarado puede dar NaN/inf en bordes: solo entonces limpiamos.

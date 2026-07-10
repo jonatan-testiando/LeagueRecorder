@@ -55,7 +55,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       setIsProcessing(true);
       setHardwareInfo("");
       setProgressPct(null);
-      setStatusText("Analizando VOD con Inteligencia Artificial...");
+      setStatusText("Analyzing VOD with AI…");
       
       const res = await processVod(selectedVideo as string);
       if (res.success && res.metadata) {
@@ -73,7 +73,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   };
 
   const handleCancel = async () => {
-    setStatusText("Cancelando análisis...");
+    setStatusText("Cancelling analysis…");
     try {
       await cancelVod();
     } catch (err: any) {
@@ -83,12 +83,12 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Estás seguro de eliminar este VOD Review de manera permanente?")) return;
+    if (!window.confirm("Are you sure you want to permanently delete this VOD review?")) return;
     try {
       await invoke("delete_match", { id });
       setVods((prev) => prev.filter((v) => v.id !== id));
     } catch (err: any) {
-      alert("Error eliminando VOD: " + err.toString());
+      alert("Error deleting VOD: " + err.toString());
     }
   };
 
@@ -97,20 +97,20 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
       <div style={styles.header}>
         <h1 style={styles.pageTitle}>VOD Analysis (AI)</h1>
         <p style={styles.pageSubtitle}>
-          Importa partidas de profesionales para analizarlas con Inteligencia Artificial.
+          Import pro matches to analyze cursor movement and clicks with AI.
         </p>
       </div>
 
       <div style={styles.actionRow}>
         <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <button onClick={handleImport} disabled={isProcessing} style={{...styles.importBtn, opacity: isProcessing ? 0.6 : 1}}>
+            <button onClick={handleImport} disabled={isProcessing} className="btn-primary" style={{...styles.importBtn, opacity: isProcessing ? 0.6 : 1}}>
               {isProcessing ? <Loader size={18} className="spin" /> : <Upload size={18} />}
-              {isProcessing ? "Procesando VOD..." : "Importar VOD (.mp4)"}
+              {isProcessing ? "Processing VOD…" : "Import VOD (.mp4)"}
             </button>
             {isProcessing && (
-              <button onClick={handleCancel} style={styles.cancelBtn} title="Cancelar análisis">
-                <X size={16} /> Cancelar
+              <button onClick={handleCancel} style={styles.cancelBtn} title="Cancel analysis">
+                <X size={16} /> Cancel
               </button>
             )}
           </div>
@@ -125,7 +125,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
               display: "inline-block",
               fontWeight: 600
             }}>
-              ⚡ GPU Activa: {hardwareInfo}
+              ⚡ GPU active: {hardwareInfo}
             </span>
           )}
 
@@ -149,28 +149,31 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
 
       <div style={styles.grid}>
         {vods.length === 0 && !isProcessing && (
-          <div style={styles.emptyState}>
-            <Film size={48} color="var(--text-muted)" />
-            <p style={{ marginTop: "16px", color: "var(--text-secondary)" }}>
-              No has importado ningún VOD aún. Usa el botón de arriba para comenzar.
+          <div className="empty-state">
+            <div className="empty-state__icon">
+              <Film size={32} color="var(--text-muted)" />
+            </div>
+            <p className="empty-state__title">No VODs imported yet</p>
+            <p className="empty-state__text">
+              Use the button above to import a match and analyze it with AI.
             </p>
           </div>
         )}
 
         {vods.map((vod) => (
-          <div key={vod.id} style={styles.card}>
+          <div key={vod.id} className="card card-interactive" style={styles.card}>
             <div style={styles.cardInfo}>
               <h4 style={{ margin: 0, color: "#fff" }}>{vod.champion}</h4>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{vod.date}</span>
             </div>
-            <div style={{display: "flex", alignItems: "center"}}>
-              <button style={styles.playBtn} onClick={() => onSelectMatch(vod)}>
-                <Play size={16} /> Reproducir
+            <div style={{display: "flex", alignItems: "center", gap: "var(--space-2)"}}>
+              <button className="btn-ghost" style={styles.playBtn} onClick={() => onSelectMatch(vod)}>
+                <Play size={16} /> Play
               </button>
-              <button 
-                style={{...styles.playBtn, borderColor: "var(--color-defeat)", color: "var(--color-defeat)", marginLeft: "var(--space-2)"}} 
+              <button
+                className="icon-btn icon-btn--danger"
                 onClick={() => handleDelete(vod.id)}
-                title="Eliminar permanentemente"
+                title="Delete permanently"
               >
                 <Trash2 size={16} />
               </button>

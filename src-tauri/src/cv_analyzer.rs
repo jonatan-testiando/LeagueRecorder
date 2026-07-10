@@ -146,6 +146,11 @@ pub async fn process_vod(
     // bloqueante, para poder guardar su PID y permitir la cancelación.
     let mut child = match Command::new(&python_exe)
         .env("PYTHONUNBUFFERED", "1")
+        // Aceleradores medidos en HW real: OpenCL penaliza (copias CPU<->GPU) y el
+        // ROI adaptativo casi duplica la velocidad con calidad casi idéntica
+        // (~1.85x más rápido). Para revertir, quitar/editar estas dos líneas.
+        .env("VOD_USE_OPENCL", "0")
+        .env("VOD_ADAPTIVE_ROI", "1")
         .arg(&script_to_run)
         .arg(&video_path)
         .arg(&cursors_dir) // argv[2]: carpeta de cursores (robusta al empaquetado)

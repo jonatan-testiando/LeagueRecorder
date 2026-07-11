@@ -150,7 +150,7 @@ pub async fn process_vod(
         .unwrap_or_else(|_| r"C:\Users\Alejandro\Documents\LeagueRecorder".to_string());
     let yolo_py = Path::new(&yolo_root).join(".venv-train").join("Scripts").join("python.exe");
     let yolo_script = Path::new(&yolo_root).join("python_scripts").join("yolo_backend.py");
-    let yolo_model = Path::new(&yolo_root).join("models").join("cursor_fp32.onnx");
+    let yolo_model = Path::new(&yolo_root).join("models").join("cursor_multi_fp32.onnx");
     let torch_lib = Path::new(&yolo_root)
         .join(".venv-train").join("Lib").join("site-packages").join("torch").join("lib");
     let use_yolo = yolo_py.exists() && yolo_script.exists() && yolo_model.exists();

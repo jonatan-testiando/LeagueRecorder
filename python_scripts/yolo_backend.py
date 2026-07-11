@@ -101,22 +101,26 @@ class YoloCursorDetector:
         return batch, metas
 
     def _decode(self, outs, metas):
+        """Devuelve por frame (cx, cy, bw, bh, score, cls) de la mejor detección, en
+        coords del vídeo original. Funciona con 1 o N clases (single/multi)."""
         outs = np.asarray(outs, dtype=np.float32)
         results = []
+        nc = outs.shape[1] - 4  # filas: 4 de caja + nc de clase
         for i in range(outs.shape[0]):
-            pred = outs[i]                       # [4+nc, A]
-            boxes = pred[:4, :]                  # xywh en coords letterbox
-            scores = pred[4:, :].max(axis=0)     # score de clase (1 clase)
+            pred = outs[i]                        # [4+nc, A]
+            cls_scores = pred[4:4 + nc, :]        # [nc, A]
+            cls_idx = cls_scores.argmax(axis=0)   # clase por anchor
+            scores = cls_scores.max(axis=0)       # score por anchor
             a = int(np.argmax(scores))
             s = float(scores[a])
             if s < self.conf:
                 results.append(None)
                 continue
-            cx, cy, bw, bh = boxes[:, a]
+            cx, cy, bw, bh = pred[:4, a]
             r, dw, dh = metas[i]
             cx = (cx - dw) / r; cy = (cy - dh) / r
             bw = bw / r; bh = bh / r
-            results.append((cx, cy, bw, bh, s))
+            results.append((cx, cy, bw, bh, s, int(cls_idx[a])))
         return results
 
     def infer_prepared(self, batch, metas):
@@ -195,6 +199,14 @@ class YoloVideoAnalyzer:
         th.start()
         pool = ThreadPoolExecutor(max_workers=self.workers)
 
+        # Hotspot (punta) por clase, como fracción de la caja. Calculado de los
+        # sprites (ver synth_dataset.py): punteros/espadas -> pico sup-izq;
+        # cruces de target -> centro. La estela y el recuadro HSV del clic se anclan
+        # en la punta. Clases: 0=hand 1=arrow 2=sword 3=target.
+        HOTSPOT = {0: (0.06, 0.01), 1: (0.07, 0.05), 2: (0.03, 0.01), 3: (0.49, 0.49)}
+        ATTACK_CLS = {2, 3}  # espada / target = cursor de ataque -> señal de clic
+        DEFAULT_HS = (0.06, 0.01)
+
         def process_batch(items):
             frames = [it[1] for it in items]
             pre = list(pool.map(detector.preprocess_one, frames))  # orden preservado
@@ -207,9 +219,13 @@ class YoloVideoAnalyzer:
             for (t_sec, frame, fc), det in zip(items, dets):
                 if det is None:
                     continue
-                cx, cy, bw, bh, score = det
-                evt = clicker.classify(frame, cx, cy, (0, 0), "move")
-                events.append({"t": t_sec, "x": int(cx), "y": int(cy), "evt": evt})
+                cx, cy, bw, bh, score, cls = det
+                fx, fy = HOTSPOT.get(cls, DEFAULT_HS)
+                tipx = cx - bw * 0.5 + fx * bw
+                tipy = cy - bh * 0.5 + fy * bh
+                best_type = "attack" if cls in ATTACK_CLS else "move"
+                evt = clicker.classify(frame, tipx, tipy, (0, 0), best_type)
+                events.append({"t": t_sec, "x": int(tipx), "y": int(tipy), "evt": evt})
 
         batch_items = []
         while True:

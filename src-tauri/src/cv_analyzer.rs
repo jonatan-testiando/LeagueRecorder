@@ -142,28 +142,56 @@ pub async fn process_vod(
         .unwrap_or_default();
     let python_exe = python_command(&app);
 
+    // --- Selección de backend ---
+    // Si están el venv de entreno (con onnxruntime-gpu) + el script YOLO + el modelo,
+    // usamos el DETECTOR YOLO en GPU (mucho más rápido y más robusto). Si no, caemos
+    // al analizador clásico (template matching CPU). Ruta configurable por env.
+    let yolo_root = std::env::var("LEAGUEREC_YOLO_ROOT")
+        .unwrap_or_else(|_| r"C:\Users\Alejandro\Documents\LeagueRecorder".to_string());
+    let yolo_py = Path::new(&yolo_root).join(".venv-train").join("Scripts").join("python.exe");
+    let yolo_script = Path::new(&yolo_root).join("python_scripts").join("yolo_backend.py");
+    let yolo_model = Path::new(&yolo_root).join("models").join("cursor_fp32.onnx");
+    let torch_lib = Path::new(&yolo_root)
+        .join(".venv-train").join("Lib").join("site-packages").join("torch").join("lib");
+    let use_yolo = yolo_py.exists() && yolo_script.exists() && yolo_model.exists();
+
     // Lanzamos el proceso de Python AQUÍ (cuerpo async) en vez de dentro del hilo
     // bloqueante, para poder guardar su PID y permitir la cancelación.
-    let mut child = match Command::new(&python_exe)
-        .env("PYTHONUNBUFFERED", "1")
-        // Aceleradores medidos en HW real: OpenCL penaliza (copias CPU<->GPU) y el
-        // ROI adaptativo casi duplica la velocidad con calidad casi idéntica
-        // (~1.85x más rápido). Para revertir, quitar/editar estas dos líneas.
-        .env("VOD_USE_OPENCL", "0")
-        .env("VOD_ADAPTIVE_ROI", "1")
-        .arg(&script_to_run)
-        .arg(&video_path)
-        .arg(&cursors_dir) // argv[2]: carpeta de cursores (robusta al empaquetado)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
+    let mut cmd = if use_yolo {
+        let _ = app.emit("vod_progress", "Iniciando análisis por GPU (YOLO)...");
+        let mut c = Command::new(&yolo_py);
+        c.env("PYTHONUNBUFFERED", "1")
+            // Evita importar torch solo para localizar las DLLs de CUDA/cuDNN.
+            .env("VOD_CUDA_DLL_DIR", torch_lib.to_string_lossy().to_string())
+            .arg(&yolo_script)
+            .arg(&video_path)
+            .arg(yolo_model.to_string_lossy().to_string())
+            .arg("960")   // imgsz
+            .arg("0.30")  // conf
+            .arg("48")    // batch
+            .arg("8");    // workers de preproceso
+        c
+    } else {
+        let mut c = Command::new(&python_exe);
+        c.env("PYTHONUNBUFFERED", "1")
+            // Aceleradores medidos en HW real para el path clásico: OpenCL penaliza
+            // y el ROI adaptativo casi duplica la velocidad (~1.85x).
+            .env("VOD_USE_OPENCL", "0")
+            .env("VOD_ADAPTIVE_ROI", "1")
+            .arg(&script_to_run)
+            .arg(&video_path)
+            .arg(&cursors_dir); // argv[2]: carpeta de cursores (robusta al empaquetado)
+        c
+    };
+
+    let mut child = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(c) => c,
         Err(e) => {
             state.is_running.store(false, Ordering::SeqCst);
+            let prog = if use_yolo { yolo_py.to_string_lossy().to_string() } else { python_exe.clone() };
             return Ok(ProcessVodResponse {
                 success: false,
-                message: format!("Fallo al ejecutar Python ({}): {}", python_exe, e),
+                message: format!("Fallo al ejecutar Python ({}): {}", prog, e),
                 metadata: None,
             });
         }

@@ -31,3 +31,10 @@ src-tauri/bin/
 # Python runtime embebido (se construye con python_scripts/setup_runtime.ps1)
 src-tauri/python-runtime/
 python_scripts/__pycache__/
+
+# Datasets/entrenamiento YOLO (artefactos grandes, no van a git)
+/dataset/
+/runs/
+*.onnx
+*.pt
+.venv-train/

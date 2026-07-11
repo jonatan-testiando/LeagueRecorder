@@ -174,6 +174,7 @@ class Template:
     mask: object
     evt_type: str
     hotspot: Tuple[float, float]
+    size: Tuple[int, int] = (0, 0)  # (w, h) del template en su escala (para auto-etiquetado)
 
 
 class TemplateLibrary:
@@ -233,16 +234,18 @@ class TemplateLibrary:
                         interp = cv2.INTER_AREA if s < 1.0 else cv2.INTER_LINEAR
                         bs = cv2.resize(b, (0, 0), fx=s, fy=s, interpolation=interp)
                         ms = cv2.resize(m, (0, 0), fx=s, fy=s, interpolation=cv2.INTER_NEAREST)
+                    bh, bw = bs.shape[:2]
                     self.roi.append(Template(
                         _to_umat(bs, cfg.use_opencl), _to_umat(ms, cfg.use_opencl),
-                        evt, (hx * s, hy * s)))
+                        evt, (hx * s, hy * s), (bw, bh)))
 
                 # Versión a media resolución (escala única) para el escaneo global.
                 b_half = cv2.resize(b, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
                 m_half = cv2.resize(m, (0, 0), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+                hh, hw = b_half.shape[:2]
                 self.global_.append(Template(
                     _to_umat(b_half, cfg.use_opencl), _to_umat(m_half, cfg.use_opencl),
-                    evt, (hx / 2.0, hy / 2.0)))
+                    evt, (hx / 2.0, hy / 2.0), (hw, hh)))
 
 
 # ------------------ RESULTADO DE UN MATCH ------------------
@@ -254,6 +257,7 @@ class Match:
     evt_type: str
     hotspot: Tuple[float, float]
     is_global: bool
+    size: Tuple[int, int] = (0, 0)  # (w, h) del template ganador en coords del vídeo
 
 
 # ------------------ ESTADO DEL SEGUIMIENTO ------------------
@@ -350,14 +354,16 @@ class CursorTracker:
                     break  # coincidencia altísima: no hace falta seguir
 
         hx, hy = best.hotspot
+        w, h = best.size
         if is_global:
-            # Restaurar coordenada/hotspot a la escala nativa del vídeo.
+            # Restaurar coordenada/hotspot/tamaño a la escala nativa del vídeo.
             best_loc = (int(best_loc[0] * 2), int(best_loc[1] * 2))
             hx, hy = int(hx * 2), int(hy * 2)
+            w, h = w * 2, h * 2
 
         real_x = float(best_loc[0]) + off_x
         real_y = float(best_loc[1]) + off_y
-        return Match(best_val, real_x, real_y, best.evt_type, (hx, hy), is_global)
+        return Match(best_val, real_x, real_y, best.evt_type, (hx, hy), is_global, (w, h))
 
     def is_teleport(self, m: Match) -> bool:
         """En seguimiento continuo (no global), si el cursor salta una distancia

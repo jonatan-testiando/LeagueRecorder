@@ -27,10 +27,10 @@ import random
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from analyzer import Config, TemplateLibrary, CursorTracker
 
-CLASSES = ["hand", "arrow", "sword", "target"]
+CLASSES = ["hand", "arrow", "sword", "target", "click_move", "click_attack"]
 CLASS_IDX = {c: i for i, c in enumerate(CLASSES)}
 
-# Mapeo archivo -> clase (familias comunes).
+# Mapeo archivo -> clase (familias comunes de CURSOR).
 FILE_CLASS = {
     "hand1": "hand", "hand2": "hand", "hand1_tco": "hand",
     "hover_precise": "arrow", "hover_ally_precise": "arrow",
@@ -42,11 +42,24 @@ FILE_CLASS = {
     "singletargetenemy_colorblind": "target",
     "target_enemy_precise": "target", "target_enemy_precise_colorblind": "target",
 }
-HOTSPOT_RULE = {"hand": "topleft", "arrow": "topleft", "sword": "topleft", "target": "center"}
+# Arcos de feedback de CLIC (assets/click_arrows). verde/azul=mover, rojo/naranja=atacar.
+CLICK_FILE_CLASS = {
+    "movement_indicator_green": "click_move",
+    "movement_indicator_colorblind": "click_move",   # azul (daltónico)
+    "movement_indicator_red": "click_attack",
+    "movement_indicator_orange": "click_attack",      # naranja (daltónico)
+}
+CLICK_CLASSES = {"click_move", "click_attack"}
+# Alto en px del arco al pegar (medido en juego ~55, rango por la animación).
+CLICK_H_MIN, CLICK_H_MAX = 40, 95
 
-# Se sintetizan MÁS de las clases ausentes en las partidas (arrow/target) y menos
-# hand (que ya abunda en el dataset real).
-SYNTH_WEIGHTS = {"hand": 0.15, "arrow": 0.30, "sword": 0.25, "target": 0.30}
+HOTSPOT_RULE = {"hand": "topleft", "arrow": "topleft", "sword": "topleft", "target": "center",
+                "click_move": "bottom", "click_attack": "bottom"}
+
+# Pesos de síntesis: hand ya abunda (cursor real de fondo) -> menos; clics con buena
+# presencia (son la señal valiosa).
+SYNTH_WEIGHTS = {"hand": 0.08, "arrow": 0.16, "sword": 0.14, "target": 0.15,
+                 "click_move": 0.24, "click_attack": 0.23}
 
 random.seed(1234)  # reproducible (Math.random del entorno JS no aplica aquí)
 
@@ -61,12 +74,18 @@ def _arg(flag, default, cast):
 
 
 def _hotspot(alpha, rule):
+    h, w = alpha.shape
     if rule == "center":
         ys, xs = np.where(alpha > 128)
         if len(xs) == 0:
-            h, w = alpha.shape
             return (w / 2.0, h / 2.0)
         return (float(xs.mean()), float(ys.mean()))
+    if rule == "bottom":
+        # punta del arco de clic: apunta abajo -> x centro, y máximo opaco.
+        ys, xs = np.where(alpha > 128)
+        if len(xs) == 0:
+            return (w / 2.0, h - 1.0)
+        return (float(xs.mean()), float(ys.max()))
     # topleft: la punta debe caer en la parte SÓLIDA del sprite (no en el glow),
     # así que exigimos alfa alto; si no hay, bajamos el umbral.
     for thr in (200, 128, 60):
@@ -75,8 +94,25 @@ def _hotspot(alpha, rule):
             x0, y0 = xs.min(), ys.min()
             i = int(np.argmin((xs - x0) + (ys - y0)))
             return (float(xs[i]), float(ys[i]))
-    h, w = alpha.shape
     return (w / 2.0, h / 2.0)
+
+
+def _load_one(path, cls, sprites, frac_acc):
+    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    if img is None or img.ndim != 3 or img.shape[2] < 4:
+        return
+    a = img[:, :, 3]
+    ys, xs = np.where(a > 10)
+    if len(xs) == 0:
+        return
+    x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+    bgr = img[y0:y1, x0:x1, :3].copy()
+    al = img[y0:y1, x0:x1, 3].copy()
+    hx, hy = _hotspot(al, HOTSPOT_RULE[cls])
+    h, w = al.shape
+    hfx, hfy = hx / w, hy / h
+    sprites[cls].append((bgr, al, (hfx, hfy)))
+    frac_acc[cls].append((hfx, hfy))
 
 
 def load_sprites():
@@ -85,21 +121,9 @@ def load_sprites():
     sprites = {c: [] for c in CLASSES}
     frac_acc = {c: [] for c in CLASSES}
     for fname, cls in FILE_CLASS.items():
-        img = cv2.imread(f"assets/cursors/{fname}.png", cv2.IMREAD_UNCHANGED)
-        if img is None or img.ndim != 3 or img.shape[2] < 4:
-            continue
-        a = img[:, :, 3]
-        ys, xs = np.where(a > 10)
-        if len(xs) == 0:
-            continue
-        x0, y0, x1, y1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
-        bgr = img[y0:y1, x0:x1, :3].copy()
-        al = img[y0:y1, x0:x1, 3].copy()
-        hx, hy = _hotspot(al, HOTSPOT_RULE[cls])
-        h, w = al.shape
-        hfx, hfy = hx / w, hy / h
-        sprites[cls].append((bgr, al, (hfx, hfy)))
-        frac_acc[cls].append((hfx, hfy))
+        _load_one(f"assets/cursors/{fname}.png", cls, sprites, frac_acc)
+    for fname, cls in CLICK_FILE_CLASS.items():
+        _load_one(f"assets/click_arrows/{fname}.png", cls, sprites, frac_acc)
     table = {}
     for c in CLASSES:
         if frac_acc[c]:
@@ -202,11 +226,22 @@ def main():
                 if not sprites[cls]:
                     continue
                 bgr, al, _ = random.choice(sprites[cls])
-                sc = random.uniform(0.9, 1.15)
-                if abs(sc - 1.0) > 1e-3:
-                    nw, nh = max(6, int(al.shape[1] * sc)), max(6, int(al.shape[0] * sc))
-                    bgr = cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
-                    al = cv2.resize(al, (nw, nh), interpolation=cv2.INTER_LINEAR)
+                if cls in CLICK_CLASSES:
+                    # arco de clic: escalar a un alto objetivo (animación) + desvanecido
+                    th = random.randint(CLICK_H_MIN, CLICK_H_MAX)
+                    sc = th / al.shape[0]
+                    nw, nh = max(8, int(al.shape[1] * sc)), max(8, int(al.shape[0] * sc))
+                    bgr = cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_AREA)
+                    al = cv2.resize(al, (nw, nh), interpolation=cv2.INTER_AREA)
+                    fade = random.uniform(0.45, 1.0)
+                    if fade < 0.99:
+                        al = (al.astype(np.float32) * fade).astype(np.uint8)
+                else:
+                    sc = random.uniform(0.9, 1.15)
+                    if abs(sc - 1.0) > 1e-3:
+                        nw, nh = max(6, int(al.shape[1] * sc)), max(6, int(al.shape[0] * sc))
+                        bgr = cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
+                        al = cv2.resize(al, (nw, nh), interpolation=cv2.INTER_LINEAR)
                 h, w = al.shape
                 placed = False
                 for _try in range(10):

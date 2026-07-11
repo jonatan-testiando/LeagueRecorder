@@ -35,6 +35,8 @@ python_scripts/__pycache__/
 # Datasets/entrenamiento YOLO (artefactos grandes, no van a git)
 /dataset/
 /runs/
-*.onnx
+# los .onnx de modelos: ignoramos todos menos el que usa la app (versionado)
+/models/*.onnx
+!/models/cursor_multi_fp32.onnx
 *.pt
 .venv-train/

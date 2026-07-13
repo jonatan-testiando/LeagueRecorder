@@ -49,6 +49,13 @@ jobs:
         shell: pwsh
         run: ./python_scripts/setup_runtime.ps1
 
+      - name: Build OBS Studio and leaguerec-obs server
+        shell: pwsh
+        run: |
+          ./leaguerec-obs/scripts/build-obs.ps1
+          ./leaguerec-obs/scripts/build-server.ps1
+          ./leaguerec-obs/scripts/assemble-runtime.ps1
+
       - name: Build and Release Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

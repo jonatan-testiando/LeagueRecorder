@@ -26,6 +26,73 @@ pub struct MatchDto {
 pub struct MatchInfo {
     pub gameDuration: i64,
     pub participants: Vec<ParticipantDto>,
+    #[serde(default)]
+    pub teams: Vec<TeamDto>,
+    #[serde(default)]
+    pub queueId: i32,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[allow(non_snake_case)]
+pub struct TeamDto {
+    #[serde(default)]
+    pub teamId: i32,
+    #[serde(default)]
+    pub win: bool,
+    #[serde(default)]
+    pub objectives: ObjectivesDto,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct ObjectivesDto {
+    #[serde(default)]
+    pub baron: ObjCount,
+    #[serde(default)]
+    pub dragon: ObjCount,
+    #[serde(default)]
+    pub tower: ObjCount,
+    #[serde(default)]
+    pub riftHerald: ObjCount,
+    #[serde(default)]
+    pub inhibitor: ObjCount,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[allow(non_snake_case)]
+pub struct ObjCount {
+    #[serde(default)]
+    pub kills: i32,
+}
+
+// --- Timeline (Match-V5 /timeline) para las compras de items ---
+#[derive(Deserialize, Debug, Clone)]
+pub struct TimelineDto {
+    pub info: TimelineInfo,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TimelineInfo {
+    #[serde(default)]
+    pub frames: Vec<TimelineFrame>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct TimelineFrame {
+    #[serde(default)]
+    pub events: Vec<TimelineEvent>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[allow(non_snake_case)]
+pub struct TimelineEvent {
+    #[serde(rename = "type", default)]
+    pub event_type: String,
+    #[serde(default)]
+    pub timestamp: i64, // ms desde el inicio de la partida
+    #[serde(default)]
+    pub participantId: i32,
+    #[serde(default)]
+    pub itemId: i32,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -66,6 +133,10 @@ pub struct ParticipantDto {
     pub item5: i32,
     #[serde(default)]
     pub item6: i32,
+    #[serde(default)]
+    pub visionScore: i32,
+    #[serde(default)]
+    pub wardsPlaced: i32,
 }
 
 impl RiotApiClient {
@@ -159,6 +230,59 @@ impl RiotApiClient {
         let match_dto: MatchDto = resp.json().await.map_err(|e| e.to_string())?;
         Ok(match_dto)
     }
+
+    /// Obtiene la timeline de una partida (eventos minuto a minuto, incl. compras de items).
+    pub async fn get_match_timeline(&self, match_id: &str) -> Result<TimelineDto, String> {
+        let url = format!(
+            "https://{}.api.riotgames.com/lol/match/v5/matches/{}/timeline",
+            self.region, match_id
+        );
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Riot-Token", &self.api_key)
+            .send()
+            .await
+            .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+        if !resp.status().is_success() {
+            return Err(format!("Riot API Error (Timeline): {}", resp.status()));
+        }
+        let dto: TimelineDto = resp.json().await.map_err(|e| e.to_string())?;
+        Ok(dto)
+    }
+}
+
+/// Extrae del `MatchInfo` los objetivos por equipo (para el panel Objectives).
+fn objectives_from(info: &MatchInfo) -> Vec<crate::storage::TeamObjectives> {
+    info.teams
+        .iter()
+        .map(|t| crate::storage::TeamObjectives {
+            team_id: t.teamId,
+            win: t.win,
+            dragons: t.objectives.dragon.kills,
+            barons: t.objectives.baron.kills,
+            towers: t.objectives.tower.kills,
+            heralds: t.objectives.riftHerald.kills,
+            inhibitors: t.objectives.inhibitor.kills,
+        })
+        .collect()
+}
+
+/// Compras de items del jugador (participantId) a partir de la timeline.
+fn item_purchases_from(tl: &TimelineDto, participant_id: i32) -> Vec<crate::storage::ItemPurchase> {
+    let mut out = Vec::new();
+    for frame in &tl.info.frames {
+        for ev in &frame.events {
+            if ev.event_type == "ITEM_PURCHASED" && ev.participantId == participant_id && ev.itemId > 0
+            {
+                out.push(crate::storage::ItemPurchase {
+                    time: ev.timestamp as f64 / 1000.0,
+                    item_id: ev.itemId,
+                });
+            }
+        }
+    }
+    out
 }
 
 /// Convierte un participante de la API de Riot a nuestro modelo del scoreboard.
@@ -182,6 +306,9 @@ fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Particip
         items: vec![
             p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6,
         ],
+        damage: p.totalDamageDealtToChampions,
+        vision_score: p.visionScore,
+        wards_placed: p.wardsPlaced,
     }
 }
 
@@ -205,12 +332,25 @@ pub async fn backfill_participants(
     })?;
     let api = RiotApiClient::new(config.riot_api_key);
     let details = api.get_match_details(&rid).await?;
+    let self_idx = details
+        .info
+        .participants
+        .iter()
+        .position(|p| p.championName == metadata.champion);
     metadata.participants = details
         .info
         .participants
         .iter()
-        .map(|p| to_participant(p, p.championName == metadata.champion))
+        .enumerate()
+        .map(|(i, p)| to_participant(p, Some(i) == self_idx))
         .collect();
+    metadata.objectives = objectives_from(&details.info);
+    metadata.queue = Some(details.info.queueId);
+    if let Some(idx) = self_idx {
+        if let Ok(tl) = api.get_match_timeline(&rid).await {
+            metadata.item_purchases = item_purchases_from(&tl, (idx as i32) + 1);
+        }
+    }
     let _ = crate::storage::save_match_metadata(&metadata);
     Ok(metadata)
 }
@@ -256,26 +396,34 @@ pub async fn sync_riot_data(
             // Comparamos si la duración de la partida difiere por menos de 180 segundos (3 minutos)
             if duration_diff <= 180.0 {
                 if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
-                    found_match = Some((r_match_id, participant.clone(), details.info.participants.clone()));
+                    found_match = Some((r_match_id, participant.clone(), details.info.clone()));
                     break;
                 }
             }
         }
     }
 
-    if let Some((riot_id, participant, all_participants)) = found_match {
-        metadata.riot_match_id = Some(riot_id);
+    if let Some((riot_id, participant, info)) = found_match {
+        metadata.riot_match_id = Some(riot_id.clone());
         metadata.kda = Some(format!(
             "{}/{}/{}",
             participant.kills, participant.deaths, participant.assists
         ));
         metadata.gold_earned = Some(participant.goldEarned);
         metadata.damage_dealt = Some(participant.totalDamageDealtToChampions);
-        // Guardamos los 10 jugadores para el scoreboard estilo Ascent.
-        metadata.participants = all_participants
+        // Scoreboard, objetivos y compras de items (estilo Ascent).
+        metadata.participants = info
+            .participants
             .iter()
             .map(|p| to_participant(p, p.puuid == puuid))
             .collect();
+        metadata.objectives = objectives_from(&info);
+        metadata.queue = Some(info.queueId);
+        if let Some(idx) = info.participants.iter().position(|p| p.puuid == puuid) {
+            if let Ok(tl) = api.get_match_timeline(&riot_id).await {
+                metadata.item_purchases = item_purchases_from(&tl, (idx as i32) + 1);
+            }
+        }
 
         // Actualizamos el result usando Riot's truth
         metadata.result = if participant.win {

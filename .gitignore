@@ -35,6 +35,9 @@ src-tauri/python-runtime/
 src-tauri/obs-runtime/
 python_scripts/__pycache__/
 
+# Template de referencia de diseño (no forma parte de la app)
+/compute-the-platform-to-build-and-ship-ai-agents/
+
 # OBS compilado desde fuente para leaguerec-obs (enorme; se reconstruye con build-obs.ps1)
 /third_party/
 leaguerec-obs/build/

@@ -10,6 +10,23 @@ interface DiskSpaceInfo {
   total_bytes: number;
 }
 
+// queueId de Riot → nombre legible de la cola.
+const queueLabel = (q?: number): string => {
+  switch (q) {
+    case 420: return "Clasif. Solo/Dúo";
+    case 440: return "Clasif. Flexible";
+    case 400: return "Normal Draft";
+    case 430: return "Normal Blind";
+    case 490: return "Normal";
+    case 450: return "ARAM";
+    case 700: return "Clash";
+    case 830: case 840: case 850: return "Co-op vs IA";
+    case 900: case 1010: case 1900: return "URF";
+    case 0: return "Personalizada";
+    default: return "Sincronizada";
+  }
+};
+
 interface MatchGalleryProps {
   matches: MatchMetadata[];
   onSelectMatch: (match: MatchMetadata) => void;
@@ -103,28 +120,30 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           matches.map((match) => {
             const kda = computeKDA(match.events);
             const res = outcome(match.result);
-            const isWin = res === "victory";
-            
+            const resultColor =
+              res === "victory" ? "var(--color-victory)" : res === "defeat" ? "var(--color-defeat)" : "var(--border-strong)";
+            const resultBadgeBg =
+              res === "victory" ? "rgba(77,255,184,0.14)" : res === "defeat" ? "rgba(255,77,106,0.14)" : "rgba(255,255,255,0.06)";
+            const resultLabel = res === "victory" ? "Victoria" : res === "defeat" ? "Derrota" : "Sin resultado";
+
             return (
               <div
                 key={match.id}
                 onClick={() => onSelectMatch(match)}
-                style={styles.row}
+                style={{ ...styles.card, borderLeftColor: resultColor }}
                 className="game-row"
               >
-                <div style={{ ...styles.td, flex: 2, display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
-                  <div style={styles.avatarWrapper}>
-                    <ChampionAvatar champion={match.champion} size={48} />
-                    <div style={{ ...styles.resultDot, background: isWin ? "var(--color-victory)" : "var(--color-defeat)" }} />
+                <div style={{ ...styles.td, flex: 2, flexDirection: "row", alignItems: "center", gap: "var(--space-4)" }}>
+                  <div style={{ ...styles.avatarRing, boxShadow: `0 0 0 2px ${resultColor}` }}>
+                    <ChampionAvatar champion={match.champion} size={44} />
                   </div>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={styles.champName}>{match.champion}</div>
-                    <div style={styles.gameType}>
-                      {match.riot_match_id ? (
-                        <span style={{...styles.localBadge, borderColor: "var(--accent-violet)", color: "var(--accent-violet)"}}>Ranked / Normal Sync</span>
-                      ) : (
-                        <span style={styles.localBadge}>Custom Game</span>
-                      )}
+                    <div style={styles.badgeRow}>
+                      <span style={{ ...styles.resultBadge, color: resultColor, background: resultBadgeBg }}>{resultLabel}</span>
+                      <span style={match.riot_match_id ? styles.rankedBadge : styles.customBadge}>
+                        {match.riot_match_id ? queueLabel(match.queue) : "Personalizada"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -135,8 +154,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                 </div>
 
                 <div style={{ ...styles.td, flex: 1.5 }}>
-                  <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{fontSize:"11px", color:"var(--text-muted)", fontWeight:500}}>APM</span></div>
-                  <div style={styles.secondaryText}>Actions per min</div>
+                  <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}>APM</span></div>
+                  <div style={styles.secondaryText}>Acciones por minuto</div>
                 </div>
 
                 <div style={{ ...styles.td, flex: 1.5 }}>
@@ -148,15 +167,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                     )}
                   </div>
                   <div style={styles.secondaryText}>
-                    {match.gold_earned ? `💰 ${(match.gold_earned / 1000).toFixed(1)}k Gold` : `${kdaRatio(kda)} KDA`}
+                    {match.gold_earned ? `${(match.gold_earned / 1000).toFixed(1)}k oro` : `${kdaRatio(kda)} KDA`}
                   </div>
                 </div>
 
-                <div style={{ ...styles.td, width: "40px", justifyContent: "flex-end" }}>
+                <div style={{ ...styles.td, width: "40px", justifyContent: "center", alignItems: "flex-end" }}>
                   <button
                     className="icon-btn icon-btn--danger"
                     onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                    title="Delete Match"
+                    title="Eliminar partida"
                   >
                     <Trash2 size={18} />
                   </button>
@@ -357,13 +376,54 @@ const styles: Record<string, React.CSSProperties> = {
   list: {
     display: "flex",
     flexDirection: "column",
+    gap: "var(--space-2)",
   },
-  row: {
+  card: {
     display: "flex",
-    padding: "var(--space-4)",
-    borderBottom: "1px solid var(--border-subtle)",
+    alignItems: "stretch",
+    padding: "var(--space-3) var(--space-4)",
+    border: "1px solid var(--border-subtle)",
+    borderLeft: "3px solid var(--border-strong)",
+    borderRadius: "var(--radius-md)",
     cursor: "pointer",
-    transition: "background 0.2s",
+    transition: "background 0.15s, border-color 0.15s, transform 0.1s",
+  },
+  avatarRing: {
+    position: "relative",
+    borderRadius: "var(--radius-full)",
+    flexShrink: 0,
+  },
+  badgeRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    marginTop: "3px",
+  },
+  resultBadge: {
+    fontSize: "10px",
+    fontWeight: 800,
+    padding: "2px 8px",
+    borderRadius: "var(--radius-full)",
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+  },
+  rankedBadge: {
+    fontSize: "10px",
+    fontWeight: 700,
+    padding: "2px 8px",
+    borderRadius: "var(--radius-full)",
+    color: "var(--accent-violet)",
+    background: "var(--accent-violet-soft)",
+    border: "1px solid var(--accent-violet)",
+  },
+  customBadge: {
+    fontSize: "10px",
+    fontWeight: 700,
+    padding: "2px 8px",
+    borderRadius: "var(--radius-full)",
+    color: "var(--text-muted)",
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--border-strong)",
   },
   td: {
     display: "flex",

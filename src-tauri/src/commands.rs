@@ -262,6 +262,9 @@ pub async fn stop_manual_recording(
             gold_earned: None,
             damage_dealt: None,
             participants: Vec::new(),
+            queue: None,
+            objectives: Vec::new(),
+            item_purchases: Vec::new(),
             comments: Vec::new(),
             is_vod: false,
         };
@@ -589,6 +592,9 @@ async fn finalize_match(
         gold_earned: None,
         damage_dealt: None,
         participants: Vec::new(),
+        queue: None,
+        objectives: Vec::new(),
+        item_purchases: Vec::new(),
         comments: Vec::new(),
         is_vod: false,
     };

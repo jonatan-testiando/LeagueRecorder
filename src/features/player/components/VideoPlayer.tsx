@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { outcome } from "../../../core/matchStats";
 import {
@@ -37,7 +37,7 @@ interface EvMeta {
 
 const ULT_COLOR = "var(--accent-violet)";
 const MULTIKILL_COLOR = "var(--accent-gold)";
-const BARON_COLOR = "#b25cff";
+const BARON_COLOR = "var(--color-objective)";
 
 const objTone = (s?: string): Tone => (s === "ally" ? "excellent" : s === "enemy" ? "mistake" : "neutral");
 const structTone = (s?: string): Tone => (s === "ally" ? "mistake" : s === "enemy" ? "good" : "neutral");
@@ -156,6 +156,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   });
   const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
   const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
+  const [objectives, setObjectives] = useState<TeamObjectives[]>(match.objectives ?? []);
+  const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad">("all");
 
@@ -203,7 +205,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   useEffect(() => {
     setParticipants(match.participants ?? []);
-  }, [match.id, match.participants]);
+    setObjectives(match.objectives ?? []);
+    setItemPurchases(match.item_purchases ?? []);
+  }, [match.id, match.participants, match.objectives, match.item_purchases]);
 
   useEffect(() => {
     setCurrentTime(0);
@@ -417,6 +421,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     try {
       const updated = await syncMatchNow(match.id);
       setParticipants(updated.participants ?? []);
+      setObjectives(updated.objectives ?? []);
+      setItemPurchases(updated.item_purchases ?? []);
     } catch (e) {
       showError("No se pudo sincronizar con Riot: " + e);
     } finally {
@@ -496,6 +502,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const result = outcome(match.result);
   const isWin = result === "victory";
   const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
+
+  // Rendimiento del jugador y agregados de su equipo (para el panel "Your Performance").
+  const selfP = participants.find((p) => p.is_self);
+  const myTeam = selfP ? participants.filter((p) => p.team_id === selfP.team_id) : [];
+  const teamKills = myTeam.reduce((s, p) => s + p.kills, 0);
+  const teamDamage = myTeam.reduce((s, p) => s + (p.damage ?? 0), 0);
+  const durMin = duration > 0 ? duration / 60 : 0;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -792,7 +805,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 top: 0, bottom: 0,
                 left: `${(clipStart / duration) * 100}%`,
                 width: `${((clipEnd - clipStart) / duration) * 100}%`,
-                backgroundColor: "rgba(178, 92, 255, 0.4)",
+                backgroundColor: "rgba(61, 139, 253, 0.35)",
                 borderLeft: "2px solid var(--accent-violet)",
                 borderRight: "2px solid var(--accent-violet)",
                 zIndex: 10,
@@ -825,8 +838,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         {tab === "stats" && (
           <div style={styles.tabScroll}>
             {match.is_vod ? (
-              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(178, 92, 255, 0.1) 0%, transparent 100%)" }}>
-                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #7a3cff)", boxShadow: "0 0 20px rgba(178,92,255,0.4)" }}>
+              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(61, 139, 253, 0.1) 0%, transparent 100%)" }}>
+                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #1e5fd0)", boxShadow: "0 0 20px rgba(61,139,253,0.4)" }}>
                   <MousePointer2 size={28} color="#fff" />
                 </div>
                 <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
@@ -913,6 +926,87 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <p style={styles.syncHint}>Requiere tu Riot API key configurada en Ajustes.</p>
                 </div>
               )
+            )}
+
+            {/* Your Performance (estilo Ascent) */}
+            {selfP && (
+              <div style={styles.perfBox}>
+                <div style={styles.perfHeader}>
+                  <img src={champIcon(selfP.champion)} alt={selfP.champion} style={styles.perfChamp} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                  <div>
+                    <div style={styles.perfTitle}>Tu rendimiento</div>
+                    <div style={styles.perfSub}>{selfP.champion} · Nivel {selfP.level}</div>
+                  </div>
+                </div>
+                <div style={styles.perfList}>
+                  <div style={styles.perfRow}><span>Kill Participation</span><b>{teamKills > 0 ? Math.round(((selfP.kills + selfP.assists) / teamKills) * 100) + "%" : "—"}</b></div>
+                  <div style={styles.perfRow}><span>CS / min</span><b>{durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"}</b></div>
+                  <div style={styles.perfRow}><span>Daño a campeones</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
+                  <div style={styles.perfRow}><span>Damage Share</span><b>{teamDamage > 0 ? (100 * (selfP.damage ?? 0) / teamDamage).toFixed(1) + "%" : "—"}</b></div>
+                  <div style={styles.perfRow}><span>Daño / min</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
+                  <div style={styles.perfRow}><span>Vision Score</span><b>{selfP.vision_score ?? 0}</b></div>
+                  <div style={styles.perfRow}><span>Wards colocados</span><b>{selfP.wards_placed ?? 0}</b></div>
+                </div>
+                <div style={styles.perfItems}>
+                  {Array.from({ length: 7 }).map((_, k) => {
+                    const it = (selfP.items ?? [])[k] ?? 0;
+                    return it > 0 ? (
+                      <img key={k} src={itemIcon(ddragonVer, it)} style={styles.perfItem} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                    ) : (
+                      <span key={k} style={styles.perfItemEmpty} />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Objectives (estilo Ascent) */}
+            {objectives.length > 0 && (
+              <div style={{ flexShrink: 0 }}>
+                <div style={styles.sectionTitle}>Objectives</div>
+                <div style={styles.objGrid}>
+                  {[100, 200].map((tid) => {
+                    const o = objectives.find((x) => x.team_id === tid);
+                    if (!o) return null;
+                    return (
+                      <div key={tid} style={styles.objCol}>
+                        <div style={{ ...styles.objTeam, color: o.win ? "var(--color-victory)" : "var(--color-defeat)" }}>
+                          {tid === 100 ? "Equipo Azul" : "Equipo Rojo"}
+                        </div>
+                        <div style={styles.objRow}><span>Dragones</span><b>{o.dragons}</b></div>
+                        <div style={styles.objRow}><span>Barones</span><b>{o.barons}</b></div>
+                        <div style={styles.objRow}><span>Heraldos</span><b>{o.heralds}</b></div>
+                        <div style={styles.objRow}><span>Torres</span><b>{o.towers}</b></div>
+                        <div style={styles.objRow}><span>Inhibidores</span><b>{o.inhibitors}</b></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Compras de items con su minuto (timeline de Riot) */}
+            {itemPurchases.length > 0 && (
+              <div style={{ flexShrink: 0 }}>
+                <div style={styles.sectionTitle}>Compras de items</div>
+                <div style={styles.buyGrid}>
+                  {itemPurchases.map((ip, i) => (
+                    <button key={i} style={styles.buyItem} onClick={() => seekTo(ip.time, false)} title={`Comprado en ${formatTime(ip.time)} · ir a ese momento`}>
+                      <img src={itemIcon(ddragonVer, ip.item_id)} alt="" style={styles.buyIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                      <span style={styles.buyTime}>{formatTime(ip.time)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Re-sincronizar: partidas sincronizadas con versiones antiguas pueden no
+                tener daño/visión/objetivos/cola; esto refresca todo desde Riot. */}
+            {!match.is_vod && participants.length > 0 && (
+              <button style={styles.resyncBtn} onClick={handleSync} disabled={syncing}>
+                <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
+                {syncing ? "Actualizando…" : "Actualizar datos de Riot"}
+              </button>
             )}
           </div>
         )}
@@ -1126,7 +1220,8 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
     flexDirection: "row",
-    height: "100%",
+    flex: 1,
+    minHeight: 0,
     width: "100%",
     backgroundColor: "var(--bg-app)",
     overflow: "hidden",
@@ -1228,7 +1323,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fff",
     fontSize: "var(--font-xs)",
     fontWeight: 600,
-    fontFamily: "monospace",
+    fontFamily: "var(--font-mono)",
   },
   volumeContainer: {
     display: "flex",
@@ -1359,6 +1454,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   reviewScoreCard: {
+    flexShrink: 0,
     padding: "var(--space-6) var(--space-4)",
     display: "flex",
     flexDirection: "column",
@@ -1391,6 +1487,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   reviewList: {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
     padding: "var(--space-4) 0",
   },
@@ -1462,6 +1559,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
   },
   reviewFooter: {
+    flexShrink: 0,
     padding: "var(--space-4)",
     display: "flex",
     justifyContent: "space-between",
@@ -1497,6 +1595,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabScroll: {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
     padding: "var(--space-4)",
     display: "flex",
@@ -1504,6 +1603,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   statGrid: {
+    flexShrink: 0,
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: "var(--space-3)",
@@ -1575,6 +1675,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   // --- Scoreboard ---
   team: {
+    flexShrink: 0,
     background: "var(--bg-card)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-md)",
@@ -1598,7 +1699,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid rgba(255,255,255,0.03)",
   },
   playerRowSelf: {
-    background: "rgba(178,92,255,0.14)",
+    background: "var(--accent-violet-soft)",
     boxShadow: "inset 3px 0 0 var(--accent-violet)",
   },
   champIcon: {
@@ -1646,6 +1747,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   commentsList: {
     flex: 1,
+    minHeight: 0,
     overflowY: "auto",
     padding: "var(--space-4)",
     display: "flex",
@@ -1662,14 +1764,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "var(--space-2) var(--space-3)",
   },
   commentTime: {
-    background: "rgba(178,92,255,0.18)",
+    background: "var(--accent-violet-soft)",
     color: "var(--accent-violet)",
     border: "none",
     borderRadius: "4px",
     padding: "2px 6px",
     fontSize: "11px",
     fontWeight: 700,
-    fontFamily: "monospace",
+    fontFamily: "var(--font-mono)",
     cursor: "pointer",
     flexShrink: 0,
   },
@@ -1700,7 +1802,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--accent-violet)",
     fontSize: "11px",
     fontWeight: 700,
-    fontFamily: "monospace",
+    fontFamily: "var(--font-mono)",
     flexShrink: 0,
   },
   commentInput: {
@@ -1748,6 +1850,7 @@ const styles: Record<string, React.CSSProperties> = {
   playerRatio: { color: "var(--text-muted)", fontSize: "10px" },
   playerNums: { display: "flex", flexDirection: "column", alignItems: "flex-end", width: "48px", flexShrink: 0 },
   syncBox: {
+    flexShrink: 0,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -1773,8 +1876,24 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   syncHint: { margin: 0, color: "var(--text-muted)", fontSize: "11px" },
+  resyncBtn: {
+    flexShrink: 0,
+    alignSelf: "center",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    background: "transparent",
+    color: "var(--text-muted)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "6px 12px",
+    fontSize: "12px",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
   // --- Eventos v2 (estilo Ascent) ---
   featuredCard: {
+    flexShrink: 0,
     margin: "var(--space-4) var(--space-4) 0",
     background: "var(--bg-card)",
     border: "1px solid var(--border-subtle)",
@@ -1787,19 +1906,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   featuredTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   featuredTime: {
-    background: "rgba(178,92,255,0.18)",
+    background: "var(--accent-violet-soft)",
     color: "var(--accent-violet)",
     border: "none",
     borderRadius: "4px",
     padding: "2px 8px",
     fontSize: "11px",
     fontWeight: 700,
-    fontFamily: "monospace",
+    fontFamily: "var(--font-mono)",
     cursor: "pointer",
   },
   featuredName: { display: "flex", alignItems: "center", gap: "6px", color: "#fff", fontWeight: 700, fontSize: "14px" },
   featuredDesc: { margin: 0, color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.5 },
-  filterChips: { display: "flex", gap: "var(--space-2)", padding: "var(--space-3) var(--space-4) 0" },
+  filterChips: { flexShrink: 0, display: "flex", gap: "var(--space-2)", padding: "var(--space-3) var(--space-4) 0" },
   chip: {
     display: "flex",
     alignItems: "center",
@@ -1824,6 +1943,65 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "12px",
   },
   eventRowV2Active: { background: "hsla(0,0%,100%,0.06)", boxShadow: "inset 3px 0 0 var(--accent-violet)" },
-  eventRowTime: { color: "var(--text-muted)", fontFamily: "monospace", fontSize: "11px", width: "40px", flexShrink: 0 },
+  eventRowTime: { color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "11px", width: "40px", flexShrink: 0 },
   eventRowLabel: { color: "#fff", fontWeight: 600 },
+  // --- Your Performance ---
+  perfBox: {
+    flexShrink: 0,
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-3)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-3)",
+  },
+  perfHeader: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
+  perfChamp: { width: "40px", height: "40px", borderRadius: "8px", background: "var(--bg-app)" },
+  perfTitle: { color: "#fff", fontWeight: 700, fontSize: "14px" },
+  perfSub: { color: "var(--text-muted)", fontSize: "12px" },
+  perfList: { display: "flex", flexDirection: "column" },
+  perfRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "6px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.04)",
+    fontSize: "13px",
+    color: "var(--text-muted)",
+  },
+  perfItems: { display: "flex", gap: "3px" },
+  perfItem: { width: "26px", height: "26px", borderRadius: "5px", background: "var(--bg-app)" },
+  perfItemEmpty: { width: "26px", height: "26px", borderRadius: "5px", background: "rgba(255,255,255,0.04)" },
+  sectionTitle: {
+    color: "var(--text-secondary)",
+    fontSize: "12px",
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+    marginBottom: "var(--space-2)",
+  },
+  objGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)" },
+  objCol: {
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-3)",
+  },
+  objTeam: { fontWeight: 700, fontSize: "12px", marginBottom: "var(--space-2)" },
+  objRow: { display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--text-muted)", padding: "3px 0" },
+  buyGrid: { display: "flex", flexWrap: "wrap", gap: "var(--space-2)" },
+  buyItem: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "2px",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "4px",
+    cursor: "pointer",
+  },
+  buyIcon: { width: "30px", height: "30px", borderRadius: "5px", background: "var(--bg-app)" },
+  buyTime: { color: "var(--text-muted)", fontSize: "10px", fontFamily: "var(--font-mono)" },
 };

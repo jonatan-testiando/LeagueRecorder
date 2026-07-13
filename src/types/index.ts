@@ -51,6 +51,24 @@ export interface Participant {
   gold: number;
   is_self: boolean;
   items?: number[]; // item0..item6 (0 = casilla vacía)
+  damage?: number;
+  vision_score?: number;
+  wards_placed?: number;
+}
+
+export interface TeamObjectives {
+  team_id: number; // 100 = azul, 200 = rojo
+  win: boolean;
+  dragons: number;
+  barons: number;
+  towers: number;
+  heralds: number;
+  inhibitors: number;
+}
+
+export interface ItemPurchase {
+  time: number; // segundos de partida
+  item_id: number;
 }
 
 export interface MatchMetadata {
@@ -69,6 +87,9 @@ export interface MatchMetadata {
   gold_earned?: number;
   damage_dealt?: number;
   participants?: Participant[]; // scoreboard de los 10 (vacío hasta sincronizar con Riot)
+  queue?: number; // queueId de Riot (420=clasif solo, 440=flex, 450=ARAM, 0=custom…)
+  objectives?: TeamObjectives[]; // objetivos por equipo
+  item_purchases?: ItemPurchase[]; // compras de items del jugador con su minuto
   comments?: Comment[]; // comentarios con marca de tiempo
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
 }

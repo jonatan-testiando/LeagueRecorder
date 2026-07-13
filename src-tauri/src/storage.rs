@@ -41,6 +41,31 @@ pub struct Participant {
     pub is_self: bool,
     #[serde(default)]
     pub items: Vec<i32>, // item0..item6 (0 = casilla vacía)
+    #[serde(default)]
+    pub damage: i32, // daño a campeones
+    #[serde(default)]
+    pub vision_score: i32,
+    #[serde(default)]
+    pub wards_placed: i32,
+}
+
+/// Objetivos conseguidos por un equipo (panel Objectives estilo Ascent).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamObjectives {
+    pub team_id: i32, // 100 = azul, 200 = rojo
+    pub win: bool,
+    pub dragons: i32,
+    pub barons: i32,
+    pub towers: i32,
+    pub heralds: i32,
+    pub inhibitors: i32,
+}
+
+/// Compra de un item por el jugador, con el segundo de partida en que ocurrió.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ItemPurchase {
+    pub time: f64, // segundos de partida
+    pub item_id: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +101,15 @@ pub struct MatchMetadata {
     /// API de Riot: los 10 jugadores (scoreboard). Vacío hasta sincronizar con Riot.
     #[serde(default)]
     pub participants: Vec<Participant>,
+    /// API de Riot: queueId (420=clasif solo, 440=flex, 400/430=normal, 450=ARAM, 0=personalizada…).
+    #[serde(default)]
+    pub queue: Option<i32>,
+    /// API de Riot: objetivos por equipo (dragones, barones, torres…).
+    #[serde(default)]
+    pub objectives: Vec<TeamObjectives>,
+    /// API de Riot (timeline): compras de items del jugador con su minuto.
+    #[serde(default)]
+    pub item_purchases: Vec<ItemPurchase>,
     /// Comentarios del usuario anclados a marcas de tiempo del vídeo.
     #[serde(default)]
     pub comments: Vec<Comment>,

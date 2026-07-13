@@ -681,7 +681,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderLeft: "4px solid var(--accent-gold)",
   },
   inlineCode: {
-    fontFamily: "monospace",
+    fontFamily: "var(--font-mono)",
     fontSize: "12px",
     backgroundColor: "var(--bg-app)",
     padding: "1px 6px",

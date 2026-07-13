@@ -290,6 +290,9 @@ pub async fn process_vod(
         gold_earned: None,
         damage_dealt: None,
         participants: Vec::new(),
+        queue: None,
+        objectives: Vec::new(),
+        item_purchases: Vec::new(),
         comments: Vec::new(),
         is_vod: true,
     };

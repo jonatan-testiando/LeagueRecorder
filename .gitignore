@@ -30,7 +30,14 @@ src-tauri/bin/
 
 # Python runtime embebido (se construye con python_scripts/setup_runtime.ps1)
 src-tauri/python-runtime/
+
+# Runtime de OBS empaquetado (se ensambla con leaguerec-obs/scripts/assemble-runtime.ps1)
+src-tauri/obs-runtime/
 python_scripts/__pycache__/
+
+# OBS compilado desde fuente para leaguerec-obs (enorme; se reconstruye con build-obs.ps1)
+/third_party/
+leaguerec-obs/build/
 
 # Datasets/entrenamiento YOLO (artefactos grandes, no van a git)
 /dataset/

@@ -31,7 +31,6 @@ rdev = "0.5"
 tauri-plugin-dialog = "2.7.1"
 uuid = { version = "1.23.3", features = ["v4"] }
 tauri-plugin-process = "2"
-windows-capture = "2.0.0"
 log = "0.4.32"
 env_logger = "0.11.10"
 rand = "0.8"

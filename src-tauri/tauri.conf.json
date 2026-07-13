@@ -37,6 +37,7 @@
     "resources": {
       "bin/ffmpeg.exe": "bin/ffmpeg.exe",
       "python-runtime": "python-runtime",
+      "obs-runtime": "obs-runtime",
       "../python_scripts/analyzer.py": "python_scripts/analyzer.py",
       "../assets/cursors": "assets/cursors"
     },

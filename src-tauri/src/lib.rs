@@ -3,19 +3,20 @@ mod commands;
 mod cv_analyzer;
 mod dataset_generator;
 mod detector;
+mod obs_client;
 mod recorder;
 pub mod riot_api;
 mod storage;
 mod streamer;
 mod ultimate;
-mod wgc_recorder;
 
 use commands::{
     add_error_event, delete_error_event, delete_match, edit_error_event, export_clip,
     export_error_clip, get_all_clips, get_all_error_clips, get_app_config, get_audio_status,
     get_recorded_matches, get_recorder_status, get_ultimate_settings, get_video_settings,
-    set_app_config, set_ultimate_settings, set_video_settings, spawn_background_monitor,
-    start_manual_recording, stop_manual_recording, toggle_clip_favorite, update_error_note,
+    save_replay_clip, set_app_config, set_ultimate_settings, set_video_settings,
+    spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
+    update_error_note,
     upload_clip, get_disk_usage, ActiveMatchState,
 };
 use recorder::RecorderState;
@@ -59,6 +60,10 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
+                        // Cerrar el servidor de grabación (proceso hijo libobs) antes de salir.
+                        if let Some(state) = app.try_state::<Arc<RecorderState>>() {
+                            recorder::shutdown_recorder(&state);
+                        }
                         std::process::exit(0);
                     }
                     "show" => {
@@ -85,6 +90,11 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // En producción, el runtime de OBS va empaquetado bajo el resource dir; exponemos su
+            // ruta a recorder.rs para que lance el server desde ahí (en dev usa third_party).
+            if let Ok(res) = app.path().resource_dir() {
+                std::env::set_var("LEAGUEREC_OBS_RUNTIME", res.join("obs-runtime"));
+            }
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -110,6 +120,7 @@ pub fn run() {
             get_recorded_matches,
             delete_match,
             get_recorder_status,
+            save_replay_clip,
             get_audio_status,
             get_ultimate_settings,
             set_ultimate_settings,
@@ -135,6 +146,14 @@ pub fn run() {
             cv_analyzer::process_vod,
             cv_analyzer::cancel_vod
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Al cerrar la app, apagamos el servidor de grabación (cierra el proceso hijo libobs).
+            if let tauri::RunEvent::Exit = event {
+                if let Some(state) = app_handle.try_state::<Arc<RecorderState>>() {
+                    recorder::shutdown_recorder(&state);
+                }
+            }
+        });
 }

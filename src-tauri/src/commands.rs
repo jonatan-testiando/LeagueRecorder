@@ -85,6 +85,13 @@ pub fn get_recorder_status(state: State<'_, Arc<RecorderState>>) -> bool {
     is_recording(&state)
 }
 
+/// Guarda un clip con los últimos segundos de juego (replay buffer). Devuelve la ruta del clip.
+/// Pensado para atar a un atajo o botón durante la partida.
+#[tauri::command]
+pub fn save_replay_clip(state: State<'_, Arc<RecorderState>>) -> Result<String, String> {
+    crate::recorder::save_replay(&state)
+}
+
 #[derive(serde::Serialize)]
 pub struct AudioStatus {
     /// Dispositivo de captura de audio del sistema detectado (sonido del juego), si existe.

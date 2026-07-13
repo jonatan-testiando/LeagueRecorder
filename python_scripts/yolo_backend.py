@@ -20,7 +20,7 @@ import os
 from collections import deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from analyzer import Config, _envi
+from analyzer import Config, _envi, _envf
 
 
 def _letterbox(img, new_shape):
@@ -34,6 +34,30 @@ def _letterbox(img, new_shape):
     dw, dh = (new_shape - nw) // 2, (new_shape - nh) // 2
     canvas[dh:dh + nh, dw:dw + nw] = resized
     return canvas, r, (dw, dh)
+
+
+_HANN_CACHE = {}
+
+
+def _hann(shape):
+    """Ventana de Hanning cacheada por forma (reduce artefactos de borde en la
+    correlación de fase)."""
+    w = _HANN_CACHE.get(shape)
+    if w is None:
+        w = cv2.createHanningWindow((shape[1], shape[0]), cv2.CV_32F)
+        _HANN_CACHE[shape] = w
+    return w
+
+
+def _estimate_shift(prev_bgr, now_bgr):
+    """Traslación global (px, subpíxel) del fondo entre `prev` y `now` vía
+    correlación de fase. warpAffine(prev, [[1,0,dx],[0,1,dy]]) alinea prev->now.
+    `resp` (0..1) mide la confianza del pico; bajo = escena sin textura o cambio
+    no traslacional (no conviene compensar)."""
+    gp = cv2.cvtColor(prev_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gn = cv2.cvtColor(now_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    (dx, dy), resp = cv2.phaseCorrelate(gp, gn, _hann(gp.shape))
+    return dx, dy, resp
 
 
 def _add_cuda_dll_dirs():
@@ -171,14 +195,16 @@ class YoloVideoAnalyzer:
 
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
-            print(json.dumps({"events": [], "duration": 0.0, "width": 0, "height": 0}))
-            return
+            empty = {"events": [], "duration": 0.0, "width": 0, "height": 0}
+            print(json.dumps(empty))
+            return empty
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         skip = max(1, int(round(fps / cfg.target_fps)))
+        max_frames = _envi("VOD_MAX_FRAMES", 0)  # 0 = sin límite; >0 acota (harness/A-B)
 
         events = []
 
@@ -193,6 +219,8 @@ class YoloVideoAnalyzer:
         def producer():
             fc = 0
             while True:
+                if max_frames and fc >= max_frames:
+                    break
                 if not cap.grab():
                     break
                 fc += 1
@@ -229,6 +257,28 @@ class YoloVideoAnalyzer:
         BRIGHT_MIN = _envi("VOD_CLICK_BRIGHT", 120)        # área mínima del blob nuevo
         COOLDOWN = _envi("VOD_CLICK_COOLDOWN", 12)         # frames analizados entre clics
         DFRAMES = _envi("VOD_CLICK_DFRAMES", 2)            # frames de referencia atrás (menos = menos deriva de cámara)
+        # Compensación de movimiento de cámara: alinea el frame de referencia al
+        # actual (correlación de fase) ANTES de restar, para que la hierba/agua
+        # que se desplaza por el paneo se cancele y solo quede el anillo real.
+        # MEDIDO (eval_clicks.py, A/B 5min): NO mejora precisión (0.256->0.253) —
+        # el paneo no es la fuente de falsos positivos, así que va OFF por defecto.
+        # Se deja cableado (VOD_CLICK_STABILIZE=1) por si ayuda en otros VODs.
+        STABILIZE = _envi("VOD_CLICK_STABILIZE", 0)
+        STAB_PAD = _envi("VOD_CLICK_STAB_PAD", 24)         # margen de contexto para estimar el shift
+        STAB_MIN_RESP = _envf("VOD_CLICK_STAB_RESP", 0.05) # confianza mínima del pico para compensar
+        # Verificador de CONVERGENCIA RADIAL: el indicador de clic de LoL son
+        # flechas/chevrons convergiendo hacia un centro (patrón radial y HUECO en
+        # el medio), no un blob macizo. Exigimos que los píxeles nuevos (1) se
+        # repartan en varios sectores angulares (rechaza manchas de un solo lado)
+        # y (2) dejen el centro relativamente vacío (rechaza blobs macizos de
+        # efecto/terreno). Además el CENTROIDE = punto exacto del clic (mejor que
+        # la punta, que ya se movió). VOD_CLICK_RADIAL=0 lo desactiva (A/B).
+        RADIAL = _envi("VOD_CLICK_RADIAL", 0)
+        RAD_SECTORS = _envi("VOD_CLICK_RAD_SECTORS", 8)    # nº de sectores angulares
+        RAD_MIN_SEC = _envi("VOD_CLICK_RAD_MINSEC", 4)     # sectores ocupados mínimos
+        RAD_INNER_MAX = _envf("VOD_CLICK_RAD_INNER", 0.22) # fracción máx de píxeles en el disco interior (hueco)
+        RAD_MIN_PIX = _envi("VOD_CLICK_RAD_MINPIX", 40)    # píxeles nuevos mínimos para evaluar
+        RAD_DIAG = _envi("VOD_CLICK_RAD_DIAG", 0)          # emite features sin filtrar (para calibrar el harness)
         click_state = {"since": 999}
         frame_hist = deque(maxlen=DFRAMES + 2)             # frames analizados recientes
 
@@ -245,12 +295,35 @@ class YoloVideoAnalyzer:
 
         def _click_kind(frame, prev, tx, ty, cur_w, cur_h):
             """Cuenta píxeles de color de clic que son NUEVOS respecto a `prev`
-            (el anillo aparece de golpe; la hierba/agua estática se cancela)."""
+            (el anillo aparece de golpe; la hierba/agua estática se cancela).
+
+            El clic se ancla al ONSET: al restar contra un frame MUY reciente
+            (DFRAMES=2, ~66ms atrás) el anillo dispara el pico justo cuando aparece
+            pegado a la punta; los frames posteriores de la animación ya no son
+            "nuevos" y el COOLDOWN los suprime. La compensación de cámara alinea
+            el fondo antes de restar para no confundir el paneo con el anillo."""
             H, W = frame.shape[:2]
-            x0 = max(0, int(tx) - CLICK_HALF); x1 = min(W, int(tx) + CLICK_HALF)
-            y0 = max(0, int(ty) - CLICK_HALF); y1 = min(H, int(ty) + CLICK_HALF)
-            roi = frame[y0:y1, x0:x1]
-            roi_p = prev[y0:y1, x0:x1]
+            # Contexto con margen: estimamos el shift de cámara sobre una ventana
+            # algo mayor y luego analizamos solo la caja interna (± CLICK_HALF),
+            # de modo que el borde inválido del warp queda fuera del análisis.
+            pad = STAB_PAD if STABILIZE else 0
+            cx0 = max(0, int(tx) - CLICK_HALF - pad); cx1 = min(W, int(tx) + CLICK_HALF + pad)
+            cy0 = max(0, int(ty) - CLICK_HALF - pad); cy1 = min(H, int(ty) + CLICK_HALF + pad)
+            ctx = frame[cy0:cy1, cx0:cx1]
+            ctx_p = prev[cy0:cy1, cx0:cx1]
+            if ctx.size == 0 or ctx.shape != ctx_p.shape:
+                return None
+            if STABILIZE:
+                dx, dy, resp = _estimate_shift(ctx_p, ctx)
+                if resp >= STAB_MIN_RESP and (abs(dx) > 0.5 or abs(dy) > 0.5):
+                    M = np.float32([[1, 0, dx], [0, 1, dy]])
+                    ctx_p = cv2.warpAffine(ctx_p, M, (ctx_p.shape[1], ctx_p.shape[0]),
+                                           borderMode=cv2.BORDER_REPLICATE)
+            # caja interna (± CLICK_HALF) relativa al contexto
+            ix0 = int(tx) - CLICK_HALF - cx0; iy0 = int(ty) - CLICK_HALF - cy0
+            roi = ctx[max(0, iy0):iy0 + 2 * CLICK_HALF, max(0, ix0):ix0 + 2 * CLICK_HALF]
+            roi_p = ctx_p[max(0, iy0):iy0 + 2 * CLICK_HALF, max(0, ix0):ix0 + 2 * CLICK_HALF]
+            x0 = cx0 + max(0, ix0); y0 = cy0 + max(0, iy0)
             if roi.size == 0 or roi.shape != roi_p.shape:
                 return None
             hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -280,7 +353,32 @@ class YoloVideoAnalyzer:
             comp = lab == (i + 1)
             mv = int(np.count_nonzero(mv_m[comp]))
             at = int(np.count_nonzero(at_m[comp]))
-            return "left_click" if at > mv else "right_click"
+            kind = "left_click" if at > mv else "right_click"
+            px, py = float(tx), float(ty)   # por defecto: punta del cursor
+
+            if RADIAL or RAD_DIAG:
+                occ, inner_frac, ok = 0, 1.0, False
+                ys, xs = np.nonzero(combined)
+                if len(xs) >= RAD_MIN_PIX:
+                    ux, uy = float(xs.mean()), float(ys.mean())   # centro de convergencia
+                    dx = xs - ux; dy = ys - uy
+                    rr = np.sqrt(dx * dx + dy * dy)
+                    rmax = float(rr.max())
+                    if rmax >= 8:                                  # no todo apiñado
+                        # (1) reparto angular: rechaza manchas de un solo lado
+                        ang = np.arctan2(dy, dx)
+                        sec = np.clip(((ang + np.pi) / (2 * np.pi) * RAD_SECTORS).astype(np.int32),
+                                      0, RAD_SECTORS - 1)
+                        occ = int(np.unique(sec).size)
+                        # (2) centro hueco: rechaza blobs macizos (efectos/terreno)
+                        inner_frac = float(np.count_nonzero(rr < 0.4 * rmax)) / len(rr)
+                        ok = (occ >= RAD_MIN_SEC and inner_frac <= RAD_INNER_MAX)
+                        px, py = x0 + ux, y0 + uy                  # punto EXACTO del clic
+                if RADIAL and not ok:
+                    return None
+                if RAD_DIAG:
+                    return kind, int(px), int(py), {"occ": occ, "inner": round(inner_frac, 3)}
+            return kind, int(px), int(py), {}
 
         def process_batch(items):
             frames = [it[1] for it in items]
@@ -305,9 +403,12 @@ class YoloVideoAnalyzer:
                 # CLIC: explosión de color NUEVA (vs frame de referencia atrás) en la
                 # punta -> el anillo aparece de golpe; la hierba estática se cancela.
                 if len(frame_hist) >= DFRAMES:
-                    kind = _click_kind(frame, frame_hist[-DFRAMES], tx, ty, bw, bh)
-                    if kind and click_state["since"] >= COOLDOWN:
-                        events.append({"t": t_sec, "x": int(tx), "y": int(ty), "evt": kind})
+                    hit = _click_kind(frame, frame_hist[-DFRAMES], tx, ty, bw, bh)
+                    if hit and click_state["since"] >= COOLDOWN:
+                        kind, kx, ky, feat = hit
+                        ev = {"t": t_sec, "x": kx, "y": ky, "evt": kind}
+                        ev.update(feat)
+                        events.append(ev)
                         click_state["since"] = 0
                 frame_hist.append(frame)
 
@@ -333,7 +434,9 @@ class YoloVideoAnalyzer:
         cap.release()
         duration = (state["last_fc"] / fps) if fps > 0 else 0.0
         sys.stderr.write(f"[YOLO] Analisis finalizado. eventos={len(events)}\n")
-        print(json.dumps({"events": events, "duration": duration, "width": fw, "height": fh}))
+        result = {"events": events, "duration": duration, "width": fw, "height": fh}
+        print(json.dumps(result))
+        return result
 
 
 if __name__ == "__main__":

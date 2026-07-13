@@ -1,215 +1,254 @@
+//! Motor de grabación basado en **libobs** (proceso servidor `leaguerec-obs`), controlado por IPC.
+//!
+//! Sustituye al antiguo motor WGC (`wgc_recorder`). La API pública (`start_recording`,
+//! `stop_recording`, `is_recording`, `detect_system_audio_device`) se mantiene idéntica para
+//! los llamadores (`commands.rs`). El servidor libobs se lanza de forma perezosa en la primera
+//! grabación y se **reutiliza** entre partidas (no se reinicia cada vez).
+//!
+//! El audio del juego se captura vía `wasapi_output_capture` (loopback nativo de OBS) → ya no hace
+//! falta ningún dispositivo de audio virtual (VB-CABLE / virtual-audio-capturer).
+
 use crate::commands::VideoSettings;
+use crate::obs_client::{ObsClient, StartConfig};
 use crate::storage::get_match_dir;
-use crate::wgc_recorder::start_wgc_recording;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::Mutex;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-
-/// Estado de una grabación en curso: el video va por WGC (hilo propio) y el audio del sistema
-/// por un ffmpeg en paralelo. Al detener se muxean en el {match_id}.mp4 final.
-struct RecordingSession {
-    is_active: Arc<Mutex<bool>>,
-    finished: Arc<AtomicBool>,
-    audio_child: Option<Child>,
-    video_path: PathBuf,
-    audio_path: PathBuf,
-}
+/// Nombre del named pipe (debe coincidir con el que pasamos al server con `--pipe`).
+const PIPE_NAME: &str = "leaguerec-obs";
+/// Segundos que mantiene el replay buffer en memoria (para clipar la última jugada).
+const REPLAY_BUFFER_SECONDS: i32 = 30;
+/// Ventana del cliente 3D de League. Se usa el modo "window_crop": el server captura el monitor y
+/// recorta a la región de esta ventana (window_capture WGC no funciona en el proceso headless).
+const GAME_WINDOW: &str = "League of Legends (TM) Client";
 
 pub struct RecorderState {
-    session: Mutex<Option<RecordingSession>>,
+    /// Servidor libobs persistente (se lanza perezosamente y se reutiliza).
+    client: Mutex<Option<ObsClient>>,
+    /// match_id de la grabación en curso. Refleja la INTENCIÓN de grabar (ver `is_recording`).
+    current_match: Mutex<Option<String>>,
 }
 
 impl Default for RecorderState {
     fn default() -> Self {
         Self {
-            session: Mutex::new(None),
+            client: Mutex::new(None),
+            current_match: Mutex::new(None),
         }
     }
 }
 
-/// Localiza el ffmpeg empaquetado (junto al ejecutable) o cae al del PATH.
-fn ffmpeg_path() -> String {
+/// Rutas del runtime de OBS necesarias para lanzar el server.
+struct ObsPaths {
+    exe: PathBuf,      // leaguerec-obs.exe (dentro de bin/64bit, junto a obs.dll)
+    rundir: PathBuf,   // build_x64/rundir/RelWithDebInfo
+    deps_bin: PathBuf, // .deps/obs-deps-*-x64/bin (DLLs de ffmpeg)
+}
+
+/// Localiza el runtime de OBS. Orden:
+///   1. PROD: `<dir_del_exe>/obs-runtime` (bundle autocontenido; las DLLs de ffmpeg van en bin/64bit).
+///   2. DEV : env `LEAGUEREC_OBS_ROOT` o `third_party/obs-studio` (subiendo desde current_exe).
+fn resolve_obs_paths() -> Result<ObsPaths, String> {
+    // 0) Ruta explícita del runtime bundleado (la fija lib.rs desde resource_dir() en producción).
+    if let Ok(p) = std::env::var("LEAGUEREC_OBS_RUNTIME") {
+        let rt = PathBuf::from(p);
+        let server = rt.join("bin").join("64bit").join("leaguerec-obs.exe");
+        if server.exists() {
+            let bin = rt.join("bin").join("64bit");
+            return Ok(ObsPaths {
+                exe: server,
+                rundir: rt,
+                deps_bin: bin,
+            });
+        }
+    }
+
+    // 1) Runtime empaquetado con la app (producción). Todo autocontenido en obs-runtime/. Según cómo
+    //    empaquete Tauri los recursos, puede quedar junto al exe o bajo resources/.
     if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            let bundled = parent.join("bin").join("ffmpeg.exe");
-            if bundled.exists() {
-                return bundled.to_string_lossy().to_string();
-            }
-            let dev = parent.join("../../bin/ffmpeg.exe");
-            if dev.exists() {
-                return dev.to_string_lossy().to_string();
+        if let Some(dir) = exe.parent() {
+            for cand in [dir.join("obs-runtime"), dir.join("resources").join("obs-runtime")] {
+                let server = cand.join("bin").join("64bit").join("leaguerec-obs.exe");
+                if server.exists() {
+                    let bin = cand.join("bin").join("64bit");
+                    return Ok(ObsPaths {
+                        exe: server,
+                        rundir: cand,
+                        deps_bin: bin, // en el bundle las DLLs de ffmpeg están en el propio bin/64bit
+                    });
+                }
             }
         }
     }
-    "ffmpeg".to_string()
+
+    // 2) Árbol de desarrollo third_party/obs-studio (env override o autodetección).
+    let root = resolve_obs_root_dev()?;
+    let rundir = root.join("build_x64").join("rundir").join("RelWithDebInfo");
+    let exe = rundir.join("bin").join("64bit").join("leaguerec-obs.exe");
+    if !exe.exists() {
+        return Err(format!(
+            "no existe el servidor de grabación: {} (ejecuta build-server.ps1)",
+            exe.display()
+        ));
+    }
+    // La carpeta de deps lleva fecha en el nombre; elegimos la última obs-deps-*-x64 (NO la qt6).
+    let deps_root = root.join(".deps");
+    let deps_bin = std::fs::read_dir(&deps_root)
+        .map_err(|e| format!("no se pudo leer {}: {e}", deps_root.display()))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("obs-deps-") && n.ends_with("-x64") && !n.contains("qt"))
+                .unwrap_or(false)
+        })
+        .max()
+        .map(|p| p.join("bin"))
+        .ok_or_else(|| format!("no se encontró obs-deps-*-x64 en {}", deps_root.display()))?;
+
+    Ok(ObsPaths {
+        exe,
+        rundir,
+        deps_bin,
+    })
 }
 
-/// Lanza un ffmpeg que captura el audio del SISTEMA (loopback) a un .m4a AAC. Stdin queda abierto
-/// para poder enviarle 'q' y que cierre el contenedor limpiamente.
-fn start_system_audio_capture(audio_path: &Path) -> Option<Child> {
-    let mut cmd = Command::new(ffmpeg_path());
-    #[cfg(target_os = "windows")]
-    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-
-    cmd.args([
-        "-y",
-        "-f",
-        "dshow",
-        "-thread_queue_size",
-        "1024",
-        "-i",
-        "audio=virtual-audio-capturer",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "160k",
-        &audio_path.to_string_lossy(),
-    ])
-    .stdin(Stdio::piped())
-    .stdout(Stdio::null())
-    .stderr(Stdio::null());
-
-    cmd.spawn().ok()
+/// Raíz del árbol de OBS de desarrollo (`third_party/obs-studio`), vía env o subiendo desde el exe.
+fn resolve_obs_root_dev() -> Result<PathBuf, String> {
+    if let Ok(p) = std::env::var("LEAGUEREC_OBS_ROOT") {
+        let pb = PathBuf::from(p);
+        if pb.join("build_x64").exists() {
+            return Ok(pb);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        for anc in exe.ancestors() {
+            let cand = anc.join("third_party").join("obs-studio");
+            if cand.join("build_x64").exists() {
+                return Ok(cand);
+            }
+        }
+    }
+    Err("no se encontró el runtime de OBS (empaqueta obs-runtime, compila leaguerec-obs, o define LEAGUEREC_OBS_ROOT)".into())
 }
 
-/// Inicia la grabación: audio del sistema (ffmpeg) + video del juego (WGC), en paralelo.
+/// Bitrate CBR (kbps) según la calidad configurada.
+fn bitrate_for(quality: &str) -> i32 {
+    match quality {
+        "High" => 18000,
+        "Medium" => 10000,
+        "Low" => 6000,
+        _ => 12000,
+    }
+}
+
+/// Inicia la grabación del juego. Lanza el servidor libobs si aún no está vivo.
 pub fn start_recording(
     match_id: &str,
     state: &RecorderState,
     settings: &VideoSettings,
 ) -> Result<String, String> {
-    let mut guard = state.session.lock().unwrap();
-    if guard.is_some() {
+    let mut cur = state.current_match.lock().unwrap();
+    if cur.is_some() {
         return Err("La grabación ya está en curso".to_string());
     }
 
     let dir = get_match_dir(match_id);
     std::fs::create_dir_all(&dir).ok();
     let video_path = dir.join(format!("{}.mp4", match_id));
-    let audio_path = dir.join(format!("{}_audio.m4a", match_id));
-    let video_path_str = video_path
+    let _ = std::fs::remove_file(&video_path);
+    let out_str = video_path
         .to_str()
         .ok_or("Ruta de video inválida")?
         .to_string();
 
-    // Limpiar restos previos (evita errores de creación de contenedor).
-    let _ = std::fs::remove_file(&video_path);
-    let _ = std::fs::remove_file(&audio_path);
-
-    // Arrancamos el audio PRIMERO: dshow tarda más en inicializar que WGC, así quedan mejor
-    // alineados. La captura de audio es de coste despreciable (no toca la GPU).
-    let audio_child = start_system_audio_capture(&audio_path);
-    if audio_child.is_none() {
-        eprintln!("Aviso: no se pudo iniciar la captura de audio del sistema (se grabará sin sonido).");
+    let mut guard = state.client.lock().unwrap();
+    if guard.is_none() {
+        let paths = resolve_obs_paths()?;
+        let client =
+            ObsClient::spawn_and_connect(&paths.exe, &paths.rundir, &paths.deps_bin, PIPE_NAME)?;
+        *guard = Some(client);
     }
 
-    // Capturamos el juego en 3D ("League of Legends (TM) Client", no el launcher).
-    let (is_active, finished) =
-        start_wgc_recording("League of Legends (TM) Client", video_path_str.clone(), settings.fps as u32, &settings.quality);
-
-    *guard = Some(RecordingSession {
-        is_active,
-        finished,
-        audio_child,
-        video_path,
-        audio_path,
-    });
-
-    println!("Grabadora WGC + audio del sistema iniciada en: {}", video_path_str);
-    Ok(video_path_str)
-}
-
-/// Detiene la grabación: para el video y el audio, espera a que el mp4 se finalice y muxea el audio.
-pub fn stop_recording(state: &RecorderState) -> Result<(), String> {
-    let session = state.session.lock().unwrap().take();
-    let mut s = match session {
-        Some(s) => s,
-        None => return Err("No hay ninguna grabación activa para detener".to_string()),
+    let cfg = StartConfig {
+        // "window_crop": captura el monitor y recorta a la región de la ventana de League. Así graba
+        // solo el juego aunque juegue en modo ventana. Fiable en headless (a diferencia de WGC window).
+        source: "window_crop".to_string(),
+        window: GAME_WINDOW.to_string(),
+        out: out_str.clone(),
+        fps: settings.fps,
+        bitrate: bitrate_for(&settings.quality),
+        ..Default::default()
     };
 
-    // 1) Señal de parada al video WGC.
-    *s.is_active.lock().unwrap() = false;
-
-    // 2) Detener el ffmpeg de audio limpiamente ('q' por stdin) y esperar a que cierre el .m4a.
-    if let Some(mut child) = s.audio_child.take() {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(b"q\n");
-            let _ = stdin.flush();
-        }
-        let _ = child.wait();
+    let client = guard.as_mut().unwrap();
+    if let Err(e) = client.start(&cfg) {
+        // El server pudo haber muerto; lo descartamos para que se relance en el próximo intento.
+        *guard = None;
+        return Err(format!("No se pudo iniciar la grabación libobs: {e}"));
     }
 
-    // 3) Esperar a que WGC finalice el mp4 (escribe el moov atom DESPUÉS de la señal). Máx ~8s.
-    for _ in 0..80 {
-        if s.finished.load(Ordering::SeqCst) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+    // Además de la grabación continua, arrancamos el replay buffer (concurrente, encoders
+    // compartidos) para poder clipar los últimos segundos con save_replay(). Best-effort.
+    if let Err(e) = client.start_replay(&cfg, REPLAY_BUFFER_SECONDS) {
+        eprintln!("Aviso: no se pudo iniciar el replay buffer: {e}");
     }
 
-    // 4) Muxear audio + video en el {match_id}.mp4 final (copia de streams, sin recodificar).
-    let file_ok = |p: &Path| p.exists() && std::fs::metadata(p).map(|m| m.len() > 1024).unwrap_or(false);
-    if file_ok(&s.video_path) && file_ok(&s.audio_path) {
-        let muxed = s.video_path.with_extension("muxed.mp4");
-        let mut cmd = Command::new(ffmpeg_path());
-        #[cfg(target_os = "windows")]
-        cmd.creation_flags(0x08000000);
-        let status = cmd
-            .args([
-                "-y",
-                "-i",
-                &s.video_path.to_string_lossy(),
-                "-i",
-                &s.audio_path.to_string_lossy(),
-                "-c",
-                "copy",
-                "-map",
-                "0:v:0",
-                "-map",
-                "1:a:0",
-                "-shortest",
-                "-movflags",
-                "+faststart",
-                &muxed.to_string_lossy(),
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+    *cur = Some(match_id.to_string());
+    println!("Grabadora libobs iniciada en: {}", out_str);
+    Ok(out_str)
+}
 
-        match status {
-            Ok(st) if st.success() => {
-                let _ = std::fs::remove_file(&s.video_path);
-                let _ = std::fs::rename(&muxed, &s.video_path);
-                println!("Grabadora detenida; audio del sistema muxeado en el video.");
-            }
-            _ => {
-                let _ = std::fs::remove_file(&muxed);
-                eprintln!("Aviso: el mux de audio falló; se conserva el video sin sonido.");
+/// Guarda los últimos segundos del replay buffer a un clip. Devuelve la ruta del clip.
+pub fn save_replay(state: &RecorderState) -> Result<String, String> {
+    let mut guard = state.client.lock().unwrap();
+    match guard.as_mut() {
+        Some(client) => client.save_replay(),
+        None => Err("No hay grabación activa para clipar".to_string()),
+    }
+}
+
+/// Detiene la grabación en curso. El servidor libobs se mantiene vivo para la siguiente partida.
+pub fn stop_recording(state: &RecorderState) -> Result<(), String> {
+    let mut cur = state.current_match.lock().unwrap();
+    if cur.is_none() {
+        return Err("No hay ninguna grabación activa para detener".to_string());
+    }
+
+    let mut guard = state.client.lock().unwrap();
+    if let Some(client) = guard.as_mut() {
+        match client.stop() {
+            Ok(file) => println!("Grabadora libobs detenida; archivo: {}", file),
+            Err(e) => {
+                eprintln!("Aviso: stop libobs falló ({e}); se descarta el servidor.");
+                *guard = None; // forzar relanzamiento limpio la próxima vez
             }
         }
-    } else {
-        println!("Grabadora detenida; sin pista de audio para muxear (video conservado).");
     }
 
-    // Limpiar el .m4a temporal.
-    let _ = std::fs::remove_file(&s.audio_path);
+    *cur = None;
     Ok(())
 }
 
 pub fn is_recording(state: &RecorderState) -> bool {
-    // Refleja la INTENCIÓN de grabar (se pone en start, se quita en stop), NO si el hilo de WGC
-    // sigue vivo. WGC se auto-detiene cuando la ventana del juego se cierra al acabar la partida;
-    // si is_recording cayera a false ahí, el monitor nunca dispararía finalize_match (la rama
-    // `!lol_running && recording`) y no se guardaría la metadata de la partida.
-    state.session.lock().unwrap().is_some()
+    // Refleja la INTENCIÓN de grabar (se pone en start, se quita en stop), NO si el output de OBS
+    // sigue activo. Igual que con el motor WGC: si el juego se cierra al acabar la partida, la
+    // captura pierde su target pero is_recording debe seguir true para que el monitor dispare
+    // finalize_match (rama `!lol_running && recording`).
+    state.current_match.lock().unwrap().is_some()
+}
+
+/// Apaga el servidor libobs (para llamar al cerrar la app, si se desea un cierre limpio).
+pub fn shutdown_recorder(state: &RecorderState) {
+    let mut guard = state.client.lock().unwrap();
+    if let Some(mut client) = guard.take() {
+        let _ = client.shutdown();
+    }
+    *state.current_match.lock().unwrap() = None;
 }
 
 pub fn detect_system_audio_device() -> Option<String> {
-    // El audio del sistema se captura con ffmpeg dshow "virtual-audio-capturer".
-    Some("virtual-audio-capturer".to_string())
+    // El audio del sistema se captura con el loopback nativo de OBS (wasapi_output_capture):
+    // ya no se requiere un dispositivo de audio virtual.
+    Some("OBS wasapi_output_capture".to_string())
 }

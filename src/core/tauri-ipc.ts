@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { MatchMetadata, AudioStatus, UltimateSettings, VideoSettings } from "../types";
+import { MatchMetadata, AudioStatus, UltimateSettings, VideoSettings, Comment } from "../types";
 
 export const getRecordedMatches = async (): Promise<MatchMetadata[]> => {
   return await invoke<MatchMetadata[]>("get_recorded_matches");
@@ -117,4 +117,14 @@ export const cancelVod = async (): Promise<void> => {
 // omite por rendimiento; el reproductor los pide aquí bajo demanda.
 export const getMatchDetails = async (id: string): Promise<MatchMetadata | null> => {
   return await invoke<MatchMetadata | null>("get_match_details", { id });
+};
+
+// Persiste los comentarios (con marca de tiempo) de una partida en su JSON.
+export const saveMatchComments = async (matchId: string, comments: Comment[]): Promise<void> => {
+  return await invoke<void>("save_match_comments", { matchId, comments });
+};
+
+// Rellena el scoreboard (10 jugadores) de una partida ya sincronizada con Riot.
+export const syncMatchNow = async (matchId: string): Promise<MatchMetadata> => {
+  return await invoke<MatchMetadata>("sync_match_now", { matchId });
 };

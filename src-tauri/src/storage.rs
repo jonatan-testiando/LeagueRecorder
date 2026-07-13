@@ -18,6 +18,31 @@ pub struct MouseEventData {
     pub evt: String,
 }
 
+/// Comentario del usuario anclado a una marca de tiempo del vídeo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Comment {
+    pub time: f64,
+    pub text: String,
+}
+
+/// Un jugador de la partida (scoreboard, de la API Match-V5 de Riot).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Participant {
+    pub champion: String,
+    pub name: String,
+    pub team_id: i32, // 100 = azul, 200 = rojo
+    pub win: bool,
+    pub level: i32,
+    pub kills: i32,
+    pub deaths: i32,
+    pub assists: i32,
+    pub cs: i32,
+    pub gold: i32,
+    pub is_self: bool,
+    #[serde(default)]
+    pub items: Vec<i32>, // item0..item6 (0 = casilla vacía)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchMetadata {
     pub id: String,
@@ -48,6 +73,12 @@ pub struct MatchMetadata {
     /// API de Riot: Daño total infligido a campeones
     #[serde(default)]
     pub damage_dealt: Option<i32>,
+    /// API de Riot: los 10 jugadores (scoreboard). Vacío hasta sincronizar con Riot.
+    #[serde(default)]
+    pub participants: Vec<Participant>,
+    /// Comentarios del usuario anclados a marcas de tiempo del vídeo.
+    #[serde(default)]
+    pub comments: Vec<Comment>,
     /// True si es un VOD importado/analizado (no una partida propia grabada).
     /// Permite a la UI ocultar el panel de Victoria/Derrota, que no aplica.
     #[serde(default)]
@@ -142,6 +173,13 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
     fs::write(file_path, json_content)
         .map_err(|e| format!("Error guardando archivo JSON: {}", e))?;
     Ok(())
+}
+
+/// Actualiza SOLO los comentarios de una partida (lee su JSON, reemplaza comments, reescribe).
+pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
+    let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
+    m.comments = comments;
+    save_match_metadata(&m)
 }
 
 pub fn load_all_matches() -> Vec<MatchMetadata> {

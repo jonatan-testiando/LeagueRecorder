@@ -92,6 +92,22 @@ pub fn save_replay_clip(state: State<'_, Arc<RecorderState>>) -> Result<String, 
     crate::recorder::save_replay(&state)
 }
 
+/// Persiste los comentarios (con marca de tiempo) de una partida en su JSON.
+#[tauri::command]
+pub fn save_match_comments(
+    match_id: String,
+    comments: Vec<crate::storage::Comment>,
+) -> Result<(), String> {
+    crate::storage::save_comments(&match_id, comments)
+}
+
+/// Rellena el scoreboard (10 jugadores) de una partida ya sincronizada con Riot. Devuelve la
+/// metadata actualizada. Para partidas antiguas sin `participants`.
+#[tauri::command]
+pub async fn sync_match_now(match_id: String) -> Result<crate::storage::MatchMetadata, String> {
+    crate::riot_api::backfill_participants(&match_id).await
+}
+
 #[derive(serde::Serialize)]
 pub struct AudioStatus {
     /// Dispositivo de captura de audio del sistema detectado (sonido del juego), si existe.
@@ -245,6 +261,8 @@ pub async fn stop_manual_recording(
             kda: None,
             gold_earned: None,
             damage_dealt: None,
+            participants: Vec::new(),
+            comments: Vec::new(),
             is_vod: false,
         };
         let _ = save_match_metadata(&metadata);
@@ -570,6 +588,8 @@ async fn finalize_match(
         kda: None,
         gold_earned: None,
         damage_dealt: None,
+        participants: Vec::new(),
+        comments: Vec::new(),
         is_vod: false,
     };
     match save_match_metadata(&metadata) {

@@ -38,6 +38,34 @@ pub struct ParticipantDto {
     pub goldEarned: i32,
     pub totalDamageDealtToChampions: i32,
     pub win: bool,
+    #[serde(default)]
+    pub championName: String,
+    #[serde(default)]
+    pub champLevel: i32,
+    #[serde(default)]
+    pub totalMinionsKilled: i32,
+    #[serde(default)]
+    pub neutralMinionsKilled: i32,
+    #[serde(default)]
+    pub teamId: i32,
+    #[serde(default)]
+    pub riotIdGameName: String,
+    #[serde(default)]
+    pub summonerName: String,
+    #[serde(default)]
+    pub item0: i32,
+    #[serde(default)]
+    pub item1: i32,
+    #[serde(default)]
+    pub item2: i32,
+    #[serde(default)]
+    pub item3: i32,
+    #[serde(default)]
+    pub item4: i32,
+    #[serde(default)]
+    pub item5: i32,
+    #[serde(default)]
+    pub item6: i32,
 }
 
 impl RiotApiClient {
@@ -133,6 +161,60 @@ impl RiotApiClient {
     }
 }
 
+/// Convierte un participante de la API de Riot a nuestro modelo del scoreboard.
+fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Participant {
+    crate::storage::Participant {
+        champion: p.championName.clone(),
+        name: if !p.riotIdGameName.is_empty() {
+            p.riotIdGameName.clone()
+        } else {
+            p.summonerName.clone()
+        },
+        team_id: p.teamId,
+        win: p.win,
+        level: p.champLevel,
+        kills: p.kills,
+        deaths: p.deaths,
+        assists: p.assists,
+        cs: p.totalMinionsKilled + p.neutralMinionsKilled,
+        gold: p.goldEarned,
+        is_self,
+        items: vec![
+            p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6,
+        ],
+    }
+}
+
+/// Rellena los `participants` de una partida YA sincronizada (riot_match_id conocido), usando ese ID
+/// directamente (sin necesidad del riot id del jugador). Marca is_self por campeón. Para backfill de
+/// partidas antiguas que se sincronizaron antes de existir el scoreboard.
+pub async fn backfill_participants(
+    match_id: &str,
+) -> Result<crate::storage::MatchMetadata, String> {
+    let config = crate::storage::load_config();
+    if config.riot_api_key.is_empty() {
+        return Err("Configura tu Riot API Key en Ajustes".to_string());
+    }
+    let mut metadata = crate::storage::get_match_metadata(match_id)
+        .map_err(|e| format!("Error cargando metadata: {}", e))?;
+    if !metadata.participants.is_empty() {
+        return Ok(metadata);
+    }
+    let rid = metadata.riot_match_id.clone().ok_or_else(|| {
+        "Esta partida aún no está sincronizada con Riot (graba una nueva o espera la sincronización automática de ~60s tras la partida)".to_string()
+    })?;
+    let api = RiotApiClient::new(config.riot_api_key);
+    let details = api.get_match_details(&rid).await?;
+    metadata.participants = details
+        .info
+        .participants
+        .iter()
+        .map(|p| to_participant(p, p.championName == metadata.champion))
+        .collect();
+    let _ = crate::storage::save_match_metadata(&metadata);
+    Ok(metadata)
+}
+
 pub async fn sync_riot_data(
     match_id: &str,
     active_player: &str,
@@ -174,14 +256,14 @@ pub async fn sync_riot_data(
             // Comparamos si la duración de la partida difiere por menos de 180 segundos (3 minutos)
             if duration_diff <= 180.0 {
                 if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
-                    found_match = Some((r_match_id, participant.clone()));
+                    found_match = Some((r_match_id, participant.clone(), details.info.participants.clone()));
                     break;
                 }
             }
         }
     }
 
-    if let Some((riot_id, participant)) = found_match {
+    if let Some((riot_id, participant, all_participants)) = found_match {
         metadata.riot_match_id = Some(riot_id);
         metadata.kda = Some(format!(
             "{}/{}/{}",
@@ -189,6 +271,11 @@ pub async fn sync_riot_data(
         ));
         metadata.gold_earned = Some(participant.goldEarned);
         metadata.damage_dealt = Some(participant.totalDamageDealtToChampions);
+        // Guardamos los 10 jugadores para el scoreboard estilo Ascent.
+        metadata.participants = all_participants
+            .iter()
+            .map(|p| to_participant(p, p.puuid == puuid))
+            .collect();
 
         // Actualizamos el result usando Riot's truth
         metadata.result = if participant.win {

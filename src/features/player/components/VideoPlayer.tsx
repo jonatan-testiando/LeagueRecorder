@@ -1,15 +1,23 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent, MouseEventData } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { outcome } from "../../../core/matchStats";
-import { 
-  Swords, Skull, Handshake, Flame, Droplet, 
-  Orbit, Crown, Eye, TowerControl, BrickWall, 
+import {
+  Swords, Skull, Handshake, Flame, Droplet,
+  Orbit, Crown, Eye, TowerControl, BrickWall,
   Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
-  VolumeX, Volume1, Volume2, Scissors, AlertTriangle, 
-  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff
+  VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
+  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff,
+  Trash2, Send, RefreshCw, Check, MinusCircle
 } from "lucide-react";
-import { exportErrorClip, getMatchDetails } from "../../../core/tauri-ipc";
+import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
+
+// Retratos de campeón: bundleados localmente en public/champions (script scripts/download-champions.ps1).
+const champIcon = (champion: string) => `/champions/${champion}.png`;
+// Los iconos de items sí se piden a Data Dragon (conjunto grande y volátil). Versión de fallback.
+const DDRAGON_VER = "16.13.1";
+const itemIcon = (ver: string, id: number) =>
+  `https://ddragon.leagueoflegends.com/cdn/${ver}/img/item/${id}.png`;
 import { useDialog } from "../../../components/ui/DialogProvider";
 
 const streamUrl = (path: string): string =>
@@ -139,6 +147,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [exportType, setExportType] = useState<"clip" | "error">("clip");
   const [errorNote, setErrorNote] = useState<string>("");
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
+  const [tab, setTab] = useState<"stats" | "events" | "comments">("events");
+  const [comments, setComments] = useState<MatchComment[]>(match.comments ?? []);
+  const [newComment, setNewComment] = useState<string>("");
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);
+    return isNaN(v) ? 380 : Math.min(700, Math.max(300, v));
+  });
+  const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
+  const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
+  const [syncing, setSyncing] = useState<boolean>(false);
+  const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad">("all");
 
   const { showSuccess, showError } = useDialog();
 
@@ -168,6 +187,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [match.id]);
+
+  // Comentarios (con marca de tiempo) de la partida.
+  useEffect(() => {
+    setComments(match.comments ?? []);
+  }, [match.id, match.comments]);
+
+  // Última versión de Data Dragon (para los iconos de items).
+  useEffect(() => {
+    fetch("https://ddragon.leagueoflegends.com/api/versions.json")
+      .then((r) => r.json())
+      .then((v: string[]) => { if (Array.isArray(v) && v[0]) setDdragonVer(v[0]); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setParticipants(match.participants ?? []);
+  }, [match.id, match.participants]);
 
   useEffect(() => {
     setCurrentTime(0);
@@ -351,6 +387,59 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
+  // --- Comentarios (persistidos en el JSON de la partida vía backend) ---
+  const persistComments = useCallback(
+    (next: MatchComment[]) => {
+      setComments(next);
+      saveMatchComments(match.id, next).catch((e) =>
+        showError("No se pudieron guardar los comentarios: " + e)
+      );
+    },
+    [match.id, showError]
+  );
+
+  const addComment = () => {
+    const text = newComment.trim();
+    if (!text) return;
+    const next = [...comments, { time: currentTime, text }].sort((a, b) => a.time - b.time);
+    persistComments(next);
+    setNewComment("");
+  };
+
+  const deleteComment = (idx: number) => {
+    persistComments(comments.filter((_, i) => i !== idx));
+  };
+
+  // Sincroniza (backfill) el scoreboard de los 10 jugadores con Riot.
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const updated = await syncMatchNow(match.id);
+      setParticipants(updated.participants ?? []);
+    } catch (e) {
+      showError("No se pudo sincronizar con Riot: " + e);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // --- Redimensionar el panel lateral arrastrando su borde izquierdo ---
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.min(700, Math.max(300, window.innerWidth - ev.clientX));
+      setSidebarWidth(w);
+      localStorage.setItem("reviewSidebarWidth", String(Math.round(w)));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const timedEvents = match.events.filter((ev) => ev.type !== "GameStart" && ev.type !== "GameEnd");
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -378,6 +467,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     });
     apmLinePath = smoothLinePath(pts);
   }
+  // Cerramos la línea hasta el borde inferior para rellenar el área bajo la curva de APM.
+  const apmAreaPath = apmLinePath ? `${apmLinePath} L 100 100 L 0 100 Z` : "";
+
+  // Agrupamos eventos cercanos en el tiempo en un único marcador con badge de cantidad,
+  // para que no se solapen en la línea de tiempo (estilo Ascent).
+  const eventClusters = React.useMemo(() => {
+    if (!isFinite(duration) || duration <= 0) return [] as { events: MatchEvent[] }[];
+    const evs = match.events
+      .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
+      .sort((a, b) => a.time - b.time);
+    const gap = Math.max(8, duration * 0.018); // separación mínima entre marcadores (s)
+    const clusters: { events: MatchEvent[] }[] = [];
+    for (const ev of evs) {
+      const last = clusters[clusters.length - 1];
+      if (last && ev.time - last.events[last.events.length - 1].time <= gap) last.events.push(ev);
+      else clusters.push({ events: [ev] });
+    }
+    return clusters;
+  }, [match.events, duration]);
+
+  // Evento "principal" de un grupo: el de mayor relevancia (muerte/kill sobre objetivo, etc.).
+  const clusterPrimary = (evs: MatchEvent[]): MatchEvent => {
+    const pri: Record<string, number> = { deaths: 5, kills: 4, objectives: 3, structures: 2, assists: 1, abilities: 0, other: 0 };
+    return [...evs].sort((a, b) => (pri[eventMeta(b).category] ?? 0) - (pri[eventMeta(a).category] ?? 0))[0];
+  };
 
   const result = outcome(match.result);
   const isWin = result === "victory";
@@ -573,35 +687,46 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
           >
-            {/* APM Graph */}
+            {/* APM Graph (línea + área rellena) */}
             {apmSeries.length >= 2 && (
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={styles.graphSvg}>
-                <path d={apmLinePath} fill="none" stroke="var(--accent-violet)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+                <defs>
+                  <linearGradient id="apmFill" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stopColor="var(--accent-violet)" stopOpacity="0.42" />
+                    <stop offset="100%" stopColor="var(--accent-violet)" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path d={apmAreaPath} fill="url(#apmFill)" stroke="none" />
+                <path d={apmLinePath} fill="none" stroke="var(--accent-violet)" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
               </svg>
             )}
 
-            {/* Event Nodes */}
-            {duration > 0 && timedEvents.map((ev, i) => {
-              const meta = eventMeta(ev);
-              const pos = (ev.time / duration) * 100;
-              const isActive = activeEventTime === ev.time;
+            {/* Marcadores de eventos (agrupados) */}
+            {duration > 0 && eventClusters.map((cl, i) => {
+              const primary = clusterPrimary(cl.events);
+              const meta = eventMeta(primary);
+              const pos = (primary.time / duration) * 100;
+              const isActive = cl.events.some((e) => e.time === activeEventTime);
+              const count = cl.events.length;
               return (
                 <div
                   key={i}
-                  onClick={(e) => { e.stopPropagation(); jumpToClip(ev.time); }}
+                  onClick={(e) => { e.stopPropagation(); jumpToClip(primary.time); }}
                   style={{
                     ...styles.eventNode,
                     left: `${pos}%`,
                     borderColor: meta.color,
                     background: isActive ? meta.color : "var(--bg-app)",
-                    transform: `translateX(-50%) scale(${isActive ? 1.2 : 1})`,
+                    transform: `translateX(-50%) scale(${isActive ? 1.25 : 1})`,
+                    boxShadow: isActive ? `0 0 10px ${meta.color}` : "none",
                     zIndex: isActive ? 10 : 5,
                   }}
-                  title={ev.description}
+                  title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label}${e.description ? " – " + e.description : ""}`).join("\n")}
                 >
-                  <span style={{ color: isActive ? "#fff" : meta.color, display: "flex", transform: "scale(0.625)" }}>
+                  <span style={{ color: isActive ? "#fff" : meta.color, display: "flex", transform: "scale(0.68)" }}>
                     {meta.icon}
                   </span>
+                  {count > 1 && <span style={styles.nodeBadge}>{count}</span>}
                 </div>
               );
             })}
@@ -689,92 +814,223 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
       {/* Right Column: Game Review */}
       {!isFullscreen && (
-      <div style={styles.rightColumn}>
-        <div style={styles.reviewHeader}>
-          <span style={styles.reviewTitle}>{match.is_vod ? "VOD Analysis" : "Game Review"}</span>
+      <div style={{ ...styles.rightColumn, width: sidebarWidth }}>
+        <div style={styles.resizeHandle} onPointerDown={startResize} title="Arrastra para redimensionar" />
+        <div style={styles.tabBar}>
+          <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>Stats</button>
+          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Análisis" : "Eventos"}</button>
+          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comentarios</button>
         </div>
 
-        {match.is_vod ? (
-          // En un VOD importado no hay resultado propio: mostramos una cabecera neutra
-          // en lugar del engañoso "Defeat" que salía siempre.
-          <div style={{...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(178, 92, 255, 0.1) 0%, transparent 100%)"}}>
-            <div style={{...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #7a3cff)", boxShadow: "0 0 20px rgba(178,92,255,0.4)"}}>
-              <MousePointer2 size={28} color="#fff" />
+        {tab === "stats" && (
+          <div style={styles.tabScroll}>
+            {match.is_vod ? (
+              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(178, 92, 255, 0.1) 0%, transparent 100%)" }}>
+                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #7a3cff)", boxShadow: "0 0 20px rgba(178,92,255,0.4)" }}>
+                  <MousePointer2 size={28} color="#fff" />
+                </div>
+                <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
+                <p style={styles.scoreSub}>Análisis de cursor y APM de la partida importada.</p>
+              </div>
+            ) : (
+              <div style={{ ...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)" }}>
+                <div style={{ ...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)" }}>
+                  {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
+                </div>
+                <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>{isWin ? "Victory" : "Defeat"}</h2>
+                <p style={styles.scoreSub}>Tú y tu equipo {isWin ? "ganasteis" : "perdisteis"} la partida.</p>
+              </div>
+            )}
+
+            <div style={styles.statGrid}>
+              {match.kda && <div style={styles.statTile}><span style={styles.statLabel}>KDA</span><span style={styles.statValue}>{match.kda}</span></div>}
+              {!!match.apm && <div style={styles.statTile}><span style={styles.statLabel}>APM</span><span style={styles.statValue}>{Math.round(match.apm)}</span></div>}
+              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>Oro</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
+              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>Daño</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
+              <div style={styles.statTile}><span style={styles.statLabel}>Duración</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
+              <div style={styles.statTile}><span style={styles.statLabel}>Eventos</span><span style={styles.statValue}>{timedEvents.length}</span></div>
             </div>
-            <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
-            <p style={styles.scoreSub}>
-              Cursor and APM analysis of the imported match.
-            </p>
-          </div>
-        ) : (
-          <div style={{...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)"}}>
-            <div style={{...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)"}}>
-              {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
-            </div>
-            <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>
-              {isWin ? "Victory" : "Defeat"}
-            </h2>
-            <p style={styles.scoreSub}>
-              You and your team {isWin ? "secured" : "lost"} the match.
-            </p>
+
+            {/* Scoreboard de los 10 jugadores (API Match-V5 de Riot), estilo Ascent */}
+            {participants.length > 0 ? (
+              [100, 200].map((teamId) => {
+                const team = participants.filter((p) => p.team_id === teamId);
+                if (team.length === 0) return null;
+                const won = team[0].win;
+                return (
+                  <div key={teamId} style={styles.team}>
+                    <div style={styles.teamHeader}>
+                      <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)" }}>
+                        {teamId === 100 ? "Equipo Azul" : "Equipo Rojo"}
+                      </span>
+                      <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)", fontSize: "11px", fontWeight: 700 }}>
+                        {won ? "Victoria" : "Derrota"}
+                      </span>
+                    </div>
+                    {team.map((p, i) => {
+                      const ratio = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths;
+                      return (
+                        <div key={i} style={{ ...styles.playerRow, ...(p.is_self ? styles.playerRowSelf : {}) }}>
+                          <div style={styles.champWrap}>
+                            <img src={champIcon(p.champion)} alt={p.champion} style={styles.champIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                            <span style={styles.champLevel}>{p.level}</span>
+                          </div>
+                          <div style={styles.playerMid}>
+                            <span style={styles.playerName}>{p.is_self ? "Tú" : (p.name || p.champion)}</span>
+                            <div style={styles.itemRow}>
+                              {Array.from({ length: 6 }).map((_, k) => {
+                                const it = (p.items ?? [])[k] ?? 0;
+                                return it > 0 ? (
+                                  <img key={k} src={itemIcon(ddragonVer, it)} style={styles.itemIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                                ) : (
+                                  <span key={k} style={styles.itemEmpty} />
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div style={styles.playerKdaCol}>
+                            <span style={styles.playerKda}>{p.kills}/{p.deaths}/{p.assists}</span>
+                            <span style={styles.playerRatio}>{ratio.toFixed(2)} KDA</span>
+                          </div>
+                          <div style={styles.playerNums}>
+                            <span style={styles.playerCs}>{p.cs} CS</span>
+                            <span style={styles.playerGold}>{(p.gold / 1000).toFixed(1)}k</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })
+            ) : (
+              !match.is_vod && (
+                <div style={styles.syncBox}>
+                  <p style={styles.syncText}>Marcador de los 10 jugadores aún no cargado.</p>
+                  <button style={styles.syncBtn} onClick={handleSync} disabled={syncing}>
+                    <RefreshCw size={14} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
+                    {syncing ? "Sincronizando…" : "Sincronizar con Riot"}
+                  </button>
+                  <p style={styles.syncHint}>Requiere tu Riot API key configurada en Ajustes.</p>
+                </div>
+              )
+            )}
           </div>
         )}
 
-        <div style={styles.reviewList}>
-          <div style={styles.timelineContainer}>
-            {/* The vertical line */}
-            <div style={styles.timelineLine} />
-            
-            {timedEvents.map((ev, i) => {
-              const meta = eventMeta(ev);
-              const { text: toneText, color: toneColor, icon: toneIcon } = toneLabelAndIcon(meta.tone);
-              const isActive = activeEventTime === ev.time;
-
-              return (
-                <div 
-                  key={i} 
-                  onClick={() => jumpToClip(ev.time)}
-                  style={{
-                    ...styles.reviewCardWrapper,
-                    opacity: isActive ? 1 : 0.6,
-                    transform: isActive ? "scale(1.02)" : "scale(1)",
-                  }}
-                >
-                  <div style={{
-                    ...styles.timelineDot, 
-                    borderColor: meta.color, 
-                    backgroundColor: isActive ? meta.color : "var(--bg-app)", 
-                    boxShadow: isActive ? `0 0 10px ${meta.color}` : "none"
-                  }} />
-                  <div style={{
-                    ...styles.reviewCard,
-                    borderColor: isActive ? meta.color : "var(--border-subtle)",
-                    backgroundColor: isActive ? "hsla(0,0%,100%,0.08)" : "hsla(0,0%,100%,0.03)",
-                  }}>
-                    <div style={styles.reviewCardHeader}>
-                      <span style={{ color: "var(--text-muted)", fontSize: "10px", fontWeight: "bold" }}>
-                        {formatTime(ev.time)}
+        {tab === "events" && (() => {
+          const bucket = (tone: Tone): "good" | "neutral" | "bad" =>
+            tone === "excellent" || tone === "good" ? "good"
+              : tone === "mistake" || tone === "throw" ? "bad"
+              : "neutral";
+          const counts = { good: 0, neutral: 0, bad: 0 };
+          timedEvents.forEach((e) => { counts[bucket(eventMeta(e).tone)]++; });
+          const shown = timedEvents.filter((e) => eventFilter === "all" || bucket(eventMeta(e).tone) === eventFilter);
+          const featured = timedEvents.find((e) => e.time === activeEventTime) ?? timedEvents[0];
+          const chips: [("good" | "neutral" | "bad"), number, string, React.ReactNode][] = [
+            ["good", counts.good, "var(--color-victory)", <Check size={13} />],
+            ["neutral", counts.neutral, "var(--text-muted)", <MinusCircle size={13} />],
+            ["bad", counts.bad, "var(--color-death)", <XCircle size={13} />],
+          ];
+          return (
+            <>
+              {featured && (() => {
+                const meta = eventMeta(featured);
+                const t = toneLabelAndIcon(meta.tone);
+                return (
+                  <div style={{ ...styles.featuredCard, borderColor: meta.color }}>
+                    <div style={styles.featuredTop}>
+                      <span style={{ color: t.color, display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: 14 }}>
+                        {t.icon} {t.text}
                       </span>
-                      <div style={{...styles.toneBadge, color: toneColor, backgroundColor: `${toneColor}22`}}>
-                        {toneIcon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{toneText}</span>
-                      </div>
+                      <button style={styles.featuredTime} onClick={() => jumpToClip(featured.time)}>{formatTime(featured.time)}</button>
                     </div>
-                    <div style={styles.reviewCardBody}>
-                      <span style={{color: meta.color, display: "flex"}}>{meta.icon}</span>
-                      <span style={styles.reviewCardTitle}>{meta.label}</span>
+                    <div style={styles.featuredName}>
+                      <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {meta.label}
                     </div>
+                    {featured.description && <p style={styles.featuredDesc}>{featured.description}</p>}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+                );
+              })()}
 
-        <div style={styles.reviewFooter}>
-          <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title="Evento anterior (P)"><ChevronLeft size={16} /> Previous</button>
-          <span style={styles.pageInfo}>{activeIndex || "-"} of {timedEvents.length}</span>
-          <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title="Evento siguiente (N)">Next <ChevronRight size={16} /></button>
-        </div>
+              <div style={styles.filterChips}>
+                {chips.map(([id, count, color, icon]) => (
+                  <button
+                    key={id}
+                    onClick={() => setEventFilter(eventFilter === id ? "all" : id)}
+                    style={{ ...styles.chip, ...(eventFilter === id ? { borderColor: color, color } : {}) }}
+                  >
+                    <span style={{ color, display: "flex" }}>{icon}</span> {count}
+                  </button>
+                ))}
+              </div>
+
+              <div style={styles.reviewList}>
+                <div style={styles.eventListV2}>
+                  {shown.map((ev, i) => {
+                    const meta = eventMeta(ev);
+                    const t = toneLabelAndIcon(meta.tone);
+                    const isActive = activeEventTime === ev.time;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => jumpToClip(ev.time)}
+                        style={{ ...styles.eventRowV2, ...(isActive ? styles.eventRowV2Active : {}) }}
+                      >
+                        <span style={styles.eventRowTime}>{formatTime(ev.time)}</span>
+                        <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span>
+                        <span style={styles.eventRowLabel}>{meta.label}</span>
+                        <span style={{ color: t.color, display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, marginLeft: "auto" }}>
+                          {t.icon} {t.text}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {shown.length === 0 && (
+                    <div style={styles.emptyEvents}>
+                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : "Sin eventos en este filtro."}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={styles.reviewFooter}>
+                <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title="Evento anterior (P)"><ChevronLeft size={16} /> Previous</button>
+                <span style={styles.pageInfo}>{activeIndex || "-"} of {timedEvents.length}</span>
+                <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title="Evento siguiente (N)">Next <ChevronRight size={16} /></button>
+              </div>
+            </>
+          );
+        })()}
+
+        {tab === "comments" && (
+          <div style={styles.commentsWrap}>
+            <div style={styles.commentsList}>
+              {comments.length === 0 && (
+                <div style={styles.emptyEvents}>Aún no hay comentarios. Escribe uno abajo y se anclará al minuto actual del vídeo.</div>
+              )}
+              {comments.map((c, i) => (
+                <div key={i} style={styles.commentCard}>
+                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title="Ir a este momento">
+                    {formatTime(c.time)}
+                  </button>
+                  <span style={styles.commentText}>{c.text}</span>
+                  <button style={styles.commentDelete} onClick={() => deleteComment(i)} title="Eliminar comentario"><Trash2 size={14} /></button>
+                </div>
+              ))}
+            </div>
+            <div style={styles.commentInputRow}>
+              <span style={styles.commentAtTime} title="Se anclará a este momento">{formatTime(currentTime)}</span>
+              <input
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
+                placeholder="Comenta este momento…"
+                style={styles.commentInput}
+              />
+              <button style={styles.commentSend} onClick={addComment} title="Añadir en el minuto actual"><Send size={16} /></button>
+            </div>
+          </div>
+        )}
       </div>
       )}
 
@@ -1076,11 +1332,22 @@ const styles: Record<string, React.CSSProperties> = {
     right: 0,
   },
   rightColumn: {
-    width: "320px",
+    width: "380px",
+    flexShrink: 0,
+    position: "relative",
     backgroundColor: "var(--bg-sidebar)",
     borderLeft: "1px solid var(--border-subtle)",
     display: "flex",
     flexDirection: "column",
+  },
+  resizeHandle: {
+    position: "absolute",
+    left: "-3px",
+    top: 0,
+    bottom: 0,
+    width: "7px",
+    cursor: "ew-resize",
+    zIndex: 30,
   },
   reviewHeader: {
     padding: "var(--space-4)",
@@ -1097,7 +1364,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     textAlign: "center",
-    borderBottom: "1px solid var(--border-subtle)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-lg)",
   },
   scoreIcon: {
     width: "48px",
@@ -1204,5 +1472,358 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-muted)",
     fontSize: "11px",
     fontWeight: 600,
-  }
+  },
+  tabBar: {
+    display: "flex",
+    borderBottom: "1px solid var(--border-subtle)",
+    padding: "0 var(--space-2)",
+    flexShrink: 0,
+  },
+  tab: {
+    flex: 1,
+    background: "transparent",
+    border: "none",
+    borderBottom: "2px solid transparent",
+    color: "var(--text-muted)",
+    fontSize: "var(--font-sm)",
+    fontWeight: 700,
+    padding: "var(--space-3) var(--space-2)",
+    cursor: "pointer",
+    transition: "color 0.15s, border-color 0.15s",
+  },
+  tabActive: {
+    color: "var(--accent-violet)",
+    borderBottomColor: "var(--accent-violet)",
+  },
+  tabScroll: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "var(--space-4)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-4)",
+  },
+  statGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "var(--space-3)",
+  },
+  statTile: {
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-3)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+  },
+  statLabel: {
+    color: "var(--text-muted)",
+    fontSize: "10px",
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+    fontWeight: 700,
+  },
+  statValue: {
+    color: "#fff",
+    fontSize: "18px",
+    fontWeight: 800,
+    fontVariantNumeric: "tabular-nums",
+  },
+  notesArea: {
+    width: "100%",
+    minHeight: "220px",
+    resize: "vertical",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    color: "var(--text-primary)",
+    fontSize: "var(--font-sm)",
+    lineHeight: 1.6,
+    padding: "var(--space-3)",
+    outline: "none",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+  },
+  notesHint: {
+    color: "var(--text-muted)",
+    fontSize: "11px",
+    margin: 0,
+  },
+  nodeBadge: {
+    position: "absolute",
+    top: "-6px",
+    right: "-6px",
+    minWidth: "15px",
+    height: "15px",
+    padding: "0 3px",
+    borderRadius: "8px",
+    background: "var(--accent-violet)",
+    color: "#fff",
+    fontSize: "9px",
+    fontWeight: 800,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 0 0 1.5px var(--bg-card)",
+  },
+  emptyEvents: {
+    color: "var(--text-muted)",
+    fontSize: "var(--font-sm)",
+    textAlign: "center",
+    padding: "var(--space-6) var(--space-4)",
+  },
+  // --- Scoreboard ---
+  team: {
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    overflow: "hidden",
+  },
+  teamHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "var(--space-2) var(--space-3)",
+    fontWeight: 700,
+    fontSize: "12px",
+    borderBottom: "1px solid var(--border-subtle)",
+  },
+  playerRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "6px var(--space-3)",
+    fontSize: "12px",
+    borderBottom: "1px solid rgba(255,255,255,0.03)",
+  },
+  playerRowSelf: {
+    background: "rgba(178,92,255,0.14)",
+    boxShadow: "inset 3px 0 0 var(--accent-violet)",
+  },
+  champIcon: {
+    width: "26px",
+    height: "26px",
+    borderRadius: "6px",
+    background: "var(--bg-app)",
+    flexShrink: 0,
+    objectFit: "cover",
+  },
+  playerLevel: {
+    color: "var(--text-muted)",
+    width: "18px",
+    textAlign: "center",
+    fontVariantNumeric: "tabular-nums",
+  },
+  playerName: {
+    flex: 1,
+    fontWeight: 600,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  playerKda: {
+    width: "64px",
+    textAlign: "right",
+    fontVariantNumeric: "tabular-nums",
+  },
+  playerCs: {
+    width: "58px",
+    textAlign: "right",
+    color: "var(--text-muted)",
+  },
+  playerGold: {
+    width: "46px",
+    textAlign: "right",
+    color: "var(--accent-gold)",
+  },
+  // --- Comentarios ---
+  commentsWrap: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+  },
+  commentsList: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "var(--space-4)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-2)",
+  },
+  commentCard: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "var(--space-2)",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-2) var(--space-3)",
+  },
+  commentTime: {
+    background: "rgba(178,92,255,0.18)",
+    color: "var(--accent-violet)",
+    border: "none",
+    borderRadius: "4px",
+    padding: "2px 6px",
+    fontSize: "11px",
+    fontWeight: 700,
+    fontFamily: "monospace",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  commentText: {
+    flex: 1,
+    fontSize: "13px",
+    color: "var(--text-primary)",
+    lineHeight: 1.5,
+    wordBreak: "break-word",
+  },
+  commentDelete: {
+    background: "transparent",
+    border: "none",
+    color: "var(--text-muted)",
+    cursor: "pointer",
+    padding: "2px",
+    display: "flex",
+    flexShrink: 0,
+  },
+  commentInputRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "var(--space-3)",
+    borderTop: "1px solid var(--border-subtle)",
+  },
+  commentAtTime: {
+    color: "var(--accent-violet)",
+    fontSize: "11px",
+    fontWeight: 700,
+    fontFamily: "monospace",
+    flexShrink: 0,
+  },
+  commentInput: {
+    flex: 1,
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    color: "var(--text-primary)",
+    fontSize: "13px",
+    padding: "var(--space-2) var(--space-3)",
+    outline: "none",
+  },
+  commentSend: {
+    background: "var(--accent-violet)",
+    border: "none",
+    color: "#fff",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-2)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  // --- Scoreboard v2 (estilo Ascent) ---
+  champWrap: { position: "relative", flexShrink: 0 },
+  champLevel: {
+    position: "absolute",
+    bottom: "-3px",
+    right: "-3px",
+    background: "var(--bg-app)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "6px",
+    fontSize: "9px",
+    fontWeight: 800,
+    padding: "0 3px",
+    color: "var(--text-secondary)",
+    lineHeight: "13px",
+  },
+  playerMid: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "3px" },
+  itemRow: { display: "flex", gap: "2px" },
+  itemIcon: { width: "15px", height: "15px", borderRadius: "3px", background: "var(--bg-app)" },
+  itemEmpty: { width: "15px", height: "15px", borderRadius: "3px", background: "rgba(255,255,255,0.04)" },
+  playerKdaCol: { display: "flex", flexDirection: "column", alignItems: "flex-end", width: "62px", flexShrink: 0 },
+  playerRatio: { color: "var(--text-muted)", fontSize: "10px" },
+  playerNums: { display: "flex", flexDirection: "column", alignItems: "flex-end", width: "48px", flexShrink: 0 },
+  syncBox: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "var(--space-5) var(--space-4)",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "var(--radius-md)",
+    textAlign: "center",
+  },
+  syncText: { margin: 0, color: "var(--text-secondary)", fontSize: "13px" },
+  syncBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    background: "var(--accent-violet)",
+    color: "#fff",
+    border: "none",
+    borderRadius: "var(--radius-md)",
+    padding: "8px 14px",
+    fontWeight: 700,
+    fontSize: "13px",
+    cursor: "pointer",
+  },
+  syncHint: { margin: 0, color: "var(--text-muted)", fontSize: "11px" },
+  // --- Eventos v2 (estilo Ascent) ---
+  featuredCard: {
+    margin: "var(--space-4) var(--space-4) 0",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderLeftWidth: "3px",
+    borderRadius: "var(--radius-md)",
+    padding: "var(--space-3)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-2)",
+  },
+  featuredTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  featuredTime: {
+    background: "rgba(178,92,255,0.18)",
+    color: "var(--accent-violet)",
+    border: "none",
+    borderRadius: "4px",
+    padding: "2px 8px",
+    fontSize: "11px",
+    fontWeight: 700,
+    fontFamily: "monospace",
+    cursor: "pointer",
+  },
+  featuredName: { display: "flex", alignItems: "center", gap: "6px", color: "#fff", fontWeight: 700, fontSize: "14px" },
+  featuredDesc: { margin: 0, color: "var(--text-secondary)", fontSize: "12px", lineHeight: 1.5 },
+  filterChips: { display: "flex", gap: "var(--space-2)", padding: "var(--space-3) var(--space-4) 0" },
+  chip: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border-subtle)",
+    borderRadius: "16px",
+    padding: "4px 12px",
+    color: "var(--text-secondary)",
+    fontSize: "12px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  eventListV2: { display: "flex", flexDirection: "column" },
+  eventRowV2: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "8px var(--space-4)",
+    cursor: "pointer",
+    borderBottom: "1px solid rgba(255,255,255,0.03)",
+    fontSize: "12px",
+  },
+  eventRowV2Active: { background: "hsla(0,0%,100%,0.06)", boxShadow: "inset 3px 0 0 var(--accent-violet)" },
+  eventRowTime: { color: "var(--text-muted)", fontFamily: "monospace", fontSize: "11px", width: "40px", flexShrink: 0 },
+  eventRowLabel: { color: "#fff", fontWeight: 600 },
 };

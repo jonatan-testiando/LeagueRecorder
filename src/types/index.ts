@@ -31,6 +31,28 @@ export interface MouseEventData {
   evt: string; // "move", "left_click", "right_click"
 }
 
+// Comentario del usuario anclado a una marca de tiempo del vídeo.
+export interface Comment {
+  time: number; // segundos
+  text: string;
+}
+
+// Un jugador de la partida (scoreboard, de la API Match-V5 de Riot).
+export interface Participant {
+  champion: string;
+  name: string;
+  team_id: number; // 100 = azul, 200 = rojo
+  win: boolean;
+  level: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  cs: number;
+  gold: number;
+  is_self: boolean;
+  items?: number[]; // item0..item6 (0 = casilla vacía)
+}
+
 export interface MatchMetadata {
   id: string;
   game_duration: number;
@@ -46,6 +68,8 @@ export interface MatchMetadata {
   kda?: string;
   gold_earned?: number;
   damage_dealt?: number;
+  participants?: Participant[]; // scoreboard de los 10 (vacío hasta sincronizar con Riot)
+  comments?: Comment[]; // comentarios con marca de tiempo
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
 }
 

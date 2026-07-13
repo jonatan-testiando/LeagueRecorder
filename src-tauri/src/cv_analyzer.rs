@@ -289,6 +289,8 @@ pub async fn process_vod(
         kda: None,
         gold_earned: None,
         damage_dealt: None,
+        participants: Vec::new(),
+        comments: Vec::new(),
         is_vod: true,
     };
 

@@ -1,4 +1,5 @@
 use crate::api_listener::{strip_tag, LolApiClient, LolEvent};
+use crate::awareness::{self, AwarenessRecord, CameraPress, GameSnapshot};
 use crate::recorder::{
     detect_system_audio_device, is_recording, start_recording, stop_recording,
     RecorderState,
@@ -7,13 +8,14 @@ use crate::storage::{
     delete_match_files, load_all_matches, save_match_metadata, MatchEvent, MatchMetadata,
     MouseEventData,
 };
+use crate::training::{MetronomeEvent, MetronomeRunner, TrainingState};
 use crate::ultimate::UltState;
 use chrono::Local;
 use reqwest::multipart;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
 #[derive(serde::Serialize)]
@@ -77,6 +79,9 @@ pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
 
 #[tauri::command]
 pub fn delete_match(id: String) -> Result<(), String> {
+    // El registro de entrenamiento vive fuera de la carpeta de la partida: hay que
+    // borrarlo aparte para no dejar huérfanos en %APPDATA%.
+    awareness::delete_record(&id);
     delete_match_files(&id)
 }
 
@@ -224,6 +229,7 @@ pub async fn stop_manual_recording(
     // Guardar metadata simulada para la prueba manual
     let id = active_match.id.lock().await.clone();
     if !id.is_empty() {
+        let mouse_space = crate::ultimate::mouse_coordinate_space();
         let metadata = MatchMetadata {
             id: id.clone(),
             game_duration: 30.0, // Simulado
@@ -257,6 +263,8 @@ pub async fn stop_manual_recording(
             apm: 0.0,
             apm_series: Vec::new(),
             mouse_events: active_match.mouse_events.lock().await.clone(),
+            mouse_space_w: mouse_space.0,
+            mouse_space_h: mouse_space.1,
             riot_match_id: None,
             kda: None,
             gold_earned: None,
@@ -267,6 +275,7 @@ pub async fn stop_manual_recording(
             item_purchases: Vec::new(),
             comments: Vec::new(),
             is_vod: false,
+            camera_snaps: Vec::new(),
         };
         let _ = save_match_metadata(&metadata);
     }
@@ -280,6 +289,8 @@ pub fn spawn_background_monitor(
     active_match: Arc<ActiveMatchState>,
     ult_state: Arc<UltState>,
     video_settings_state: Arc<std::sync::Mutex<VideoSettings>>,
+    training_state: Arc<TrainingState>,
+    app: tauri::AppHandle,
 ) {
     std::thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
@@ -295,6 +306,20 @@ pub fn spawn_background_monitor(
             let mut last_game_time_at = std::time::Instant::now();
             let mut r_available = false;
             let mut last_ult_time: f64 = -100.0;
+            // Entrenamiento de cámara: fotos del estado de la partida (para el quiz) y
+            // pulsaciones de las teclas de cámara aliada (para las métricas).
+            let mut snapshots: Vec<GameSnapshot> = Vec::new();
+            let mut cam_presses: Vec<CameraPress> = Vec::new();
+            let mut last_snapshot_time: f64 = -1e9;
+            // Metrónomo: rotación de roles, aviso pendiente y resultados.
+            let mut metro: MetronomeRunner = MetronomeRunner::default();
+            // Config de entrenamiento: se relee al empezar cada partida, no en cada
+            // tick (sería un acceso a disco por segundo durante toda la partida).
+            let mut tcfg = crate::training::load_config();
+            // Hay partida en curso. Se sigue APARTE de si la grabación arrancó: el
+            // entrenamiento (eventos, teclas de cámara, quiz) solo necesita la API del
+            // juego y el teclado, así que un fallo de la grabadora no debe cegarlo.
+            let mut session_active = false;
 
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -303,9 +328,9 @@ pub fn spawn_background_monitor(
                 // Si responde Ok, significa que el juego está activo (independiente de si algún endpoint da 404 momentáneo).
                 let events_result = api_client.get_events().await;
                 let lol_running = events_result.is_ok();
-                let recording = is_recording(&recorder_state);
 
-                if lol_running && !recording && !awaiting_new_game {
+                if lol_running && !session_active && !awaiting_new_game {
+                    session_active = true;
                     let match_id = format!("match_{}", Local::now().format("%Y%m%d_%H%M%S"));
                     println!("Detección automática: Servidor del juego detectado en el puerto 2999. Grabadora activa.");
 
@@ -328,6 +353,21 @@ pub fn spawn_background_monitor(
                     // Reiniciar el conteo de acciones (APM) y empezar a contar.
                     ult_state.actions.store(0, Ordering::Relaxed);
                     ult_state.counting.store(true, Ordering::Relaxed);
+                    // Empezar a registrar las teclas de cámara aliada de esta partida.
+                    training_state.reset();
+                    training_state.active.store(true, Ordering::Relaxed);
+                    // Recargamos la config por si cambió entre partidas.
+                    tcfg = crate::training::load_config();
+                    training_state.set_bindings(tcfg.bindings.clone());
+                    snapshots.clear();
+                    cam_presses.clear();
+                    last_snapshot_time = -1e9;
+                    // El primer aviso espera a que empiece la fase de líneas: pedir
+                    // que mires al top mientras compras en la base no entrena nada.
+                    metro.start(&tcfg, 90.0);
+                    if metro.is_enabled() {
+                        crate::overlay::show(&app);
+                    }
                     active_match.apm_samples.lock().await.clear();
                     active_match.mouse_events.lock().await.clear();
                     ult_state.mouse_events.lock().unwrap().clear();
@@ -343,27 +383,32 @@ pub fn spawn_background_monitor(
                     // Iniciar grabación
                     let settings = video_settings_state.lock().unwrap().clone();
                     if let Err(e) = start_recording(&match_id, &recorder_state, &settings) {
-                        eprintln!("Fallo al iniciar grabación: {}", e);
+                        // La partida sigue "activa" aunque no haya vídeo: el entrenamiento
+                        // y los eventos se recogen igual. Antes esto reintentaba en bucle
+                        // cada segundo y dejaba todo lo demás sin ejecutarse nunca.
+                        eprintln!("Fallo al iniciar grabación (se sigue registrando la partida sin vídeo): {}", e);
                     } else {
                         *active_match.recording_start.lock().await = Some(std::time::Instant::now());
                     }
-                } else if !lol_running && recording {
+                } else if !lol_running && session_active {
                     // Salida brusca SIN evento GameEnd (cierre/crash). Usamos ticks de gracia
                     // por si es un fallo momentáneo de la API.
                     close_grace_ticks += 1;
                     if close_grace_ticks >= 3 {
                         println!("Detección automática: La API no responde. Finalizando grabación...");
+                        persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
                         finalize_match(&recorder_state, &active_match, &ult_state, game_start_time).await;
+                        session_active = false;
                         awaiting_new_game = false;
                         close_grace_ticks = 0;
                     } else {
                         println!("Detección automática: La API del juego no responde (Ticks de gracia: {}/3)", close_grace_ticks);
                     }
-                } else if !lol_running && !recording {
+                } else if !lol_running && !session_active {
                     // El juego/cliente se cerró del todo: listos para una nueva partida.
                     awaiting_new_game = false;
                     close_grace_ticks = 0;
-                } else if recording {
+                } else if session_active {
                     close_grace_ticks = 0;
 
                     // Cargar (en diferido) el contexto de la partida si aún no lo tenemos:
@@ -391,6 +436,55 @@ pub fn spawn_background_monitor(
                         // Muestrear el contador de acciones para el APM.
                         let actions = ult_state.actions.load(Ordering::Relaxed);
                         active_match.apm_samples.lock().await.push((gt, actions));
+                    }
+
+                    // --- Entrenamiento de cámara ---
+                    // Pulsaciones de las teclas de cámara aliada, pasadas a tiempo de juego.
+                    for (inst, role) in training_state.drain_presses() {
+                        let ago = last_game_time_at.saturating_duration_since(inst).as_secs_f64();
+                        cam_presses.push(CameraPress {
+                            t: (last_game_time - ago).max(0.0),
+                            role,
+                        });
+                    }
+
+                    // Metrónomo: pedir el siguiente aliado o resolver el aviso anterior.
+                    match metro.tick(last_game_time, &cam_presses) {
+                        Some(MetronomeEvent::Prompt { role, key, window_secs }) => {
+                            let _ = app.emit(
+                                "metronome_prompt",
+                                serde_json::json!({ "role": role, "key": key, "window_secs": window_secs }),
+                            );
+                        }
+                        Some(MetronomeEvent::Ack { ok, role, latency_ms }) => {
+                            let _ = app.emit(
+                                "metronome_ack",
+                                serde_json::json!({ "ok": ok, "role": role, "latency_ms": latency_ms }),
+                            );
+                        }
+                        None => {}
+                    }
+
+                    // Foto del estado de los 10 jugadores cada N segundos: es la fuente de
+                    // verdad con la que luego se corrige el quiz de awareness.
+                    if tcfg.awareness_quiz_enabled
+                        && last_game_time - last_snapshot_time
+                            >= tcfg.snapshot_interval_secs.max(1) as f64
+                    {
+                        if let Ok(raw) = api_client.get_allgamedata().await {
+                            let active_name = active_match.active_player.lock().await.clone();
+                            let active_norm = strip_tag(&active_name);
+                            if let Some(snap) =
+                                awareness::snapshot_from_allgamedata(&raw, &active_norm)
+                            {
+                                // Sin saber quiénes somos no podemos distinguir aliados de
+                                // enemigos: mejor descartar la foto que guardar una inútil.
+                                if snap.players.iter().any(|p| p.is_self) {
+                                    last_snapshot_time = snap.t;
+                                    snapshots.push(snap);
+                                }
+                            }
+                        }
                     }
 
                     // Procesar pulsaciones de ultimate (best-effort): solo si la R está
@@ -472,13 +566,62 @@ pub fn spawn_background_monitor(
                     // muera la API durante la pantalla de victoria/derrota (~15s de más).
                     if game_ended {
                         println!("Detección automática: evento GameEnd recibido. Finalizando grabación de inmediato.");
+                        persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
                         finalize_match(&recorder_state, &active_match, &ult_state, game_start_time).await;
+                        session_active = false;
                         awaiting_new_game = true;
                     }
                 }
             }
         });
     });
+}
+
+/// Vuelca a disco lo recogido para el entrenamiento de cámara y deja de escuchar.
+/// Se llama justo antes de finalizar la grabación, cuando `active_match` aún tiene
+/// el id y el campeón de la partida que acaba de terminar.
+async fn persist_awareness(
+    app: &tauri::AppHandle,
+    active_match: &Arc<ActiveMatchState>,
+    training_state: &Arc<TrainingState>,
+    snapshots: &mut Vec<GameSnapshot>,
+    cam_presses: &mut Vec<CameraPress>,
+    metro: &mut MetronomeRunner,
+    duration_secs: f64,
+) {
+    training_state.active.store(false, Ordering::Relaxed);
+    metro.stop();
+    crate::overlay::hide(app);
+    // Últimas pulsaciones que quedaran sin drenar en el buffer del listener.
+    for (_, role) in training_state.drain_presses() {
+        cam_presses.push(CameraPress { t: duration_secs, role });
+    }
+
+    if snapshots.is_empty() && cam_presses.is_empty() && metro.results.is_empty() {
+        return;
+    }
+    let match_id = active_match.id.lock().await.clone();
+    if match_id.is_empty() {
+        snapshots.clear();
+        cam_presses.clear();
+        metro.results.clear();
+        return;
+    }
+
+    let record = AwarenessRecord {
+        match_id,
+        date: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+        champion: active_match.champion.lock().await.clone(),
+        duration_secs,
+        snapshots: std::mem::take(snapshots),
+        camera_presses: std::mem::take(cam_presses),
+        metronome: std::mem::take(&mut metro.results),
+        pending_quiz: None,
+        results: Vec::new(),
+    };
+    if let Err(e) = awareness::save_record(&record) {
+        eprintln!("Entrenamiento: no se pudo guardar el registro de awareness: {}", e);
+    }
 }
 
 // Utilidades para Duration y compatibilidad
@@ -573,6 +716,9 @@ async fn finalize_match(
         }
     }
 
+    // Resolución del escritorio: es el espacio en el que `rdev` da las coordenadas
+    // del ratón, y el reproductor lo necesita para escalar bien la estela.
+    let mouse_space = crate::ultimate::mouse_coordinate_space();
     let metadata = MatchMetadata {
         id: match_id.clone(),
         game_duration: final_duration,
@@ -587,6 +733,8 @@ async fn finalize_match(
         apm,
         apm_series,
         mouse_events: active_match.mouse_events.lock().await.clone(),
+        mouse_space_w: mouse_space.0,
+        mouse_space_h: mouse_space.1,
         riot_match_id: None,
         kda: None,
         gold_earned: None,
@@ -597,6 +745,7 @@ async fn finalize_match(
         item_purchases: Vec::new(),
         comments: Vec::new(),
         is_vod: false,
+        camera_snaps: Vec::new(),
     };
     match save_match_metadata(&metadata) {
         Ok(_) => {

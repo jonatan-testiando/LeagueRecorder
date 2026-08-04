@@ -7,13 +7,14 @@ import { VodGallery } from "./features/vod/components/VodGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
+import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle, Crosshair } from "lucide-react";
 import { ErrorClipMetadata } from "./core/tauri-ipc";
 import { motion, AnimatePresence } from "framer-motion";
 import { getVersion } from "@tauri-apps/api/app";
 
-type Tab = "games" | "clips" | "errors" | "review" | "vod" | "settings";
+type Tab = "games" | "clips" | "errors" | "review" | "vod" | "training" | "settings";
 
 const NAV_ITEMS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "games", label: "Games", icon: <Gamepad2 size={18} /> },
@@ -21,6 +22,7 @@ const NAV_ITEMS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: "errors", label: "Errors", icon: <AlertTriangle size={18} /> },
   { key: "review", label: "Review", icon: <MonitorPlay size={18} /> },
   { key: "vod", label: "VOD Analysis", icon: <Film size={18} /> },
+  { key: "training", label: "Training", icon: <Crosshair size={18} /> },
 ];
 
 export const App: React.FC = () => {
@@ -93,6 +95,8 @@ export const App: React.FC = () => {
           >
             {activeTab === "settings" ? (
               <SettingsPanel />
+            ) : activeTab === "training" ? (
+              <TrainingPanel />
             ) : activeTab === "clips" ? (
               <ClipsGallery />
             ) : activeTab === "vod" ? (

@@ -86,6 +86,15 @@ pub struct MatchMetadata {
     /// Movimientos y clics del ratón.
     #[serde(default)]
     pub mouse_events: Vec<MouseEventData>,
+    /// Resolución del escritorio en la que se capturaron `mouse_events`.
+    ///
+    /// Imprescindible para dibujar la estela: `rdev` da coordenadas de PANTALLA, no
+    /// del vídeo, y grabar 1080p en un monitor 1440p desplazaba el trazo un 33%.
+    /// 0 = partida antigua sin este dato (el reproductor tira de heurística).
+    #[serde(default)]
+    pub mouse_space_w: u32,
+    #[serde(default)]
+    pub mouse_space_h: u32,
     /// API de Riot: ID real de la partida en el servidor
     #[serde(default)]
     pub riot_match_id: Option<String>,
@@ -117,6 +126,10 @@ pub struct MatchMetadata {
     /// Permite a la UI ocultar el panel de Victoria/Derrota, que no aplica.
     #[serde(default)]
     pub is_vod: bool,
+    /// Segundos de vídeo en que la cámara dio un salto (tecla de cámara aliada),
+    /// detectados por `camera_snaps.py`. Vacío hasta que se analiza la partida.
+    #[serde(default)]
+    pub camera_snaps: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

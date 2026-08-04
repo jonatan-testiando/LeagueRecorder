@@ -1,13 +1,17 @@
 mod api_listener;
+mod awareness;
+mod camera_snaps;
 mod commands;
 mod cv_analyzer;
 mod dataset_generator;
 mod detector;
 mod obs_client;
+mod overlay;
 mod recorder;
 pub mod riot_api;
 mod storage;
 mod streamer;
+mod training;
 mod ultimate;
 
 use commands::{
@@ -22,6 +26,7 @@ use commands::{
 };
 use recorder::RecorderState;
 use std::sync::Arc;
+use training::TrainingState;
 use ultimate::{spawn_keyboard_listener, UltState};
 
 use tauri::{tray::TrayIconBuilder, menu::{Menu, MenuItem}, Manager};
@@ -32,25 +37,29 @@ pub fn run() {
     let recorder_state = Arc::new(RecorderState::default());
     let active_match_state = Arc::new(ActiveMatchState::default());
     let ult_state = Arc::new(UltState::default());
+    let training_state = Arc::new(TrainingState::default());
 
-    // Listener global de teclado para detectar la ultimate (best-effort)
-    spawn_keyboard_listener(Arc::clone(&ult_state));
+    // Listener global de teclado: detecta la ultimate y las teclas de cámara aliada.
+    // Solo lee eventos; nunca inyecta input en el juego.
+    spawn_keyboard_listener(Arc::clone(&ult_state), Arc::clone(&training_state));
 
     let video_settings = Arc::new(std::sync::Mutex::new(
         crate::commands::VideoSettings::default(),
     ));
 
-    // Iniciar monitor de fondo para detección automática de partidas
-    spawn_background_monitor(
+    // El monitor de fondo se lanza dentro de `setup` porque necesita un AppHandle
+    // para emitir eventos al overlay del metrónomo.
+    let monitor_deps = (
         Arc::clone(&recorder_state),
         Arc::clone(&active_match_state),
         Arc::clone(&ult_state),
         Arc::clone(&video_settings),
+        Arc::clone(&training_state),
     );
 
     tauri::Builder::default()
         .manage(cv_analyzer::AnalyzerState::default())
-        .setup(|app| {
+        .setup(move |app| {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
@@ -96,6 +105,10 @@ pub fn run() {
             if let Ok(res) = app.path().resource_dir() {
                 std::env::set_var("LEAGUEREC_OBS_RUNTIME", res.join("obs-runtime"));
             }
+
+            // Detección automática de partidas (y, con ella, el entrenamiento en vivo).
+            let (rec, active, ult, video, training) = monitor_deps;
+            spawn_background_monitor(rec, active, ult, video, training, app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -117,6 +130,7 @@ pub fn run() {
         .manage(active_match_state)
         .manage(ult_state)
         .manage(video_settings)
+        .manage(training_state)
         .invoke_handler(tauri::generate_handler![
             get_recorded_matches,
             delete_match,
@@ -147,7 +161,19 @@ pub fn run() {
             storage::get_vod_reviews,
             storage::get_match_details,
             cv_analyzer::process_vod,
-            cv_analyzer::cancel_vod
+            cv_analyzer::cancel_vod,
+            training::get_training_config,
+            training::set_training_config,
+            training::get_drill_sessions,
+            training::save_drill_session,
+            awareness::generate_awareness_quiz,
+            awareness::submit_awareness_quiz,
+            awareness::list_awareness_records,
+            awareness::get_champion_pool,
+            camera_snaps::analyze_camera_snaps,
+            camera_snaps::list_recall_frames,
+            camera_snaps::get_camera_snap_summary,
+            overlay::preview_metronome_overlay
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

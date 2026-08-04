@@ -82,6 +82,10 @@ export interface MatchMetadata {
   apm?: number; // Acciones por minuto promedio
   apm_series?: number[]; // APM por minuto de juego
   mouse_events?: MouseEventData[];
+  // Resolución del escritorio donde se capturaron mouse_events (rdev da coords de
+  // pantalla, no de vídeo). 0/ausente = partida antigua, el player usa heurística.
+  mouse_space_w?: number;
+  mouse_space_h?: number;
   riot_match_id?: string;
   kda?: string;
   gold_earned?: number;
@@ -92,6 +96,7 @@ export interface MatchMetadata {
   item_purchases?: ItemPurchase[]; // compras de items del jugador con su minuto
   comments?: Comment[]; // comentarios con marca de tiempo
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
+  camera_snaps?: number[]; // segundos en que la cámara saltó (tecla de cámara aliada)
 }
 
 export interface ClipMetadata {

@@ -39,6 +39,25 @@ pub fn handle(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
         .and_then(|v| v.to_str().ok())
         .and_then(parse_range);
 
+    // Petición sin Range de un archivo que cabe entero (los stills del entrenamiento
+    // son JPEG de ~150 KB): responder 200 con todo el cuerpo. Un `<img>` no envía
+    // Range y no tiene por qué lidiar con un 206. Los vídeos siempre superan CHUNK,
+    // así que su ruta de streaming no cambia.
+    if range.is_none() && total <= CHUNK {
+        let mut buf = Vec::with_capacity(total as usize);
+        if file.read_to_end(&mut buf).is_err() {
+            return fail(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, content_type(&decoded))
+            .header(header::ACCEPT_RANGES, "bytes")
+            .header(header::CONTENT_LENGTH, total.to_string())
+            .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*")
+            .body(buf)
+            .unwrap();
+    }
+
     let (start, end) = match range {
         Some((s, Some(e))) => (s, e.min(total - 1)),
         Some((s, None)) => (s, (s + CHUNK - 1).min(total - 1)),
@@ -102,6 +121,10 @@ fn content_type(path: &str) -> &'static str {
         "video/webm"
     } else if p.ends_with(".mkv") {
         "video/x-matroska"
+    } else if p.ends_with(".jpg") || p.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if p.ends_with(".png") {
+        "image/png"
     } else {
         "application/octet-stream"
     }

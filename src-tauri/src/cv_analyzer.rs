@@ -12,7 +12,7 @@ use tauri::{Emitter, Manager};
 /// probando, en orden: el directorio de recursos de Tauri (instalación real),
 /// el directorio del ejecutable, y varias rutas de desarrollo. Devuelve la
 /// primera que exista. Misma filosofía que `recorder::ffmpeg_path`.
-fn resolve_resource(app: &tauri::AppHandle, rel: &str) -> Option<PathBuf> {
+pub(crate) fn resolve_resource(app: &tauri::AppHandle, rel: &str) -> Option<PathBuf> {
     // 1) Directorio oficial de recursos de Tauri (junto al .exe en producción)
     if let Ok(res_dir) = app.path().resource_dir() {
         let p = res_dir.join(rel);
@@ -54,7 +54,7 @@ fn resolve_resource(app: &tauri::AppHandle, rel: &str) -> Option<PathBuf> {
 
 /// Devuelve la ruta al intérprete de Python embebido si está empaquetado,
 /// o cae al `python` del PATH del sistema (modo desarrollo).
-fn python_command(app: &tauri::AppHandle) -> String {
+pub(crate) fn python_command(app: &tauri::AppHandle) -> String {
     if let Some(p) = resolve_resource(app, "python-runtime/python.exe") {
         return p.to_string_lossy().to_string();
     }
@@ -285,6 +285,10 @@ pub async fn process_vod(
         apm: 0.0,
         apm_series: vec![],
         mouse_events: detected_clicks,
+        // El analizador de VOD detecta el cursor SOBRE el vídeo: sus coordenadas ya
+        // están en el espacio del vídeo, así que no hay reescalado que aplicar.
+        mouse_space_w: 0,
+        mouse_space_h: 0,
         riot_match_id: None,
         kda: None,
         gold_earned: None,
@@ -295,6 +299,7 @@ pub async fn process_vod(
         item_purchases: Vec::new(),
         comments: Vec::new(),
         is_vod: true,
+        camera_snaps: Vec::new(),
     };
 
     let _ = app.emit("vod_progress", "Análisis finalizado.");

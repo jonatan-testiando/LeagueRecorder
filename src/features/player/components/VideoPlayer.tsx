@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
 import {
   Swords, Skull, Handshake, Flame, Droplet,
@@ -11,6 +12,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle
 } from "lucide-react";
 import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
+import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
 
 // Retratos de campeón: bundleados localmente en public/champions (script scripts/download-champions.ps1).
 const champIcon = (champion: string) => `/champions/${champion}.png`;
@@ -22,6 +24,30 @@ import { useDialog } from "../../../components/ui/DialogProvider";
 
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
+
+/**
+ * Espacio de coordenadas en el que están guardados los `mouse_events`.
+ *
+ * El hook global (rdev) entrega coordenadas del ESCRITORIO. Si se graba a una
+ * resolución distinta a la del monitor, escalar por las dimensiones del vídeo
+ * descuadra la estela proporcionalmente a la distancia al origen.
+ */
+const mouseSpace = (
+  m: MatchMetadata,
+  videoW: number,
+  videoH: number
+): [number, number] => {
+  // Partidas grabadas con la corrección: el espacio viene explícito.
+  if (m.mouse_space_w && m.mouse_space_h) return [m.mouse_space_w, m.mouse_space_h];
+  // Los VOD analizados detectan el cursor SOBRE el vídeo: ya están en su espacio.
+  if (m.is_vod) return [videoW, videoH];
+  // Partidas antiguas, que no guardaron el dato: la mejor aproximación es el
+  // monitor actual, que es casi con seguridad donde se grabaron. Si el usuario
+  // cambió de monitor desde entonces, esas partidas seguirán descuadradas.
+  const w = Math.round(window.screen.width * (window.devicePixelRatio || 1));
+  const h = Math.round(window.screen.height * (window.devicePixelRatio || 1));
+  return w > 0 && h > 0 ? [w, h] : [videoW, videoH];
+};
 
 const CLIP_BEFORE = 10;
 const CLIP_AFTER = 10;
@@ -461,6 +487,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     return marks;
   }, [duration]);
   
+  // --- Saltos de cámara (entrenamiento de teclas de aliado) ---
+  // Los tiempos viven en la metadata; el resumen (checks/min, hueco ciego) se pide
+  // aparte porque se calcula del informe detallado del analizador.
+  const [snapSummary, setSnapSummary] = useState<SnapSummary | null>(null);
+  const [snapBusy, setSnapBusy] = useState(false);
+  const [snapPct, setSnapPct] = useState(0);
+  const [cameraSnaps, setCameraSnaps] = useState<number[]>(match.camera_snaps ?? []);
+
+  useEffect(() => {
+    setCameraSnaps(match.camera_snaps ?? []);
+    getCameraSnapSummary(match.id).then(setSnapSummary).catch(() => setSnapSummary(null));
+  }, [match.id, match.camera_snaps]);
+
+  useEffect(() => {
+    if (!snapBusy) return;
+    const un = listen<number>("snaps_progress_pct", (e) => setSnapPct(e.payload));
+    return () => {
+      un.then((f) => f()).catch(() => {});
+    };
+  }, [snapBusy]);
+
+  const runSnapAnalysis = async () => {
+    setSnapBusy(true);
+    setSnapPct(0);
+    try {
+      const res = await analyzeCameraSnaps(match.id);
+      if (res.success) {
+        setSnapSummary(await getCameraSnapSummary(match.id));
+        // La metadata que nos pasaron ya está vieja: releemos para pintar las marcas.
+        const fresh = await getMatchDetails(match.id);
+        setCameraSnaps(fresh?.camera_snaps ?? []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSnapBusy(false);
+    }
+  };
+
   const apmSeries = match.apm_series ?? [];
   let apmLinePath = "";
   if (apmSeries.length >= 2) {
@@ -529,10 +594,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (mouseEvents.length === 0) return;
       
+      // Las coordenadas del ratón vienen de rdev y están en el espacio del
+      // ESCRITORIO, no del vídeo. Escalar por las dimensiones del vídeo desplazaba
+      // toda la estela cuando se grababa a una resolución distinta a la del monitor
+      // (1080p en un monitor 1440p = todo dibujado un 33% más lejos del origen).
       const videoW = v.videoWidth || 1920;
       const videoH = v.videoHeight || 1080;
-      const scaleX = canvas.width / videoW;
-      const scaleY = canvas.height / videoH;
+      const [spaceW, spaceH] = mouseSpace(match, videoW, videoH);
+      const scaleX = canvas.width / spaceW;
+      const scaleY = canvas.height / spaceH;
       
       const TRAIL_DURATION = 1.0;
       const adjustedCt = ct - mouseSync;
@@ -662,6 +732,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.timelineArea}>
           <div style={styles.timelineHeaderRow}>
             <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
+            {/* Métricas de uso de las teclas de cámara aliada. */}
+            {snapSummary?.analyzed ? (
+              <span
+                style={styles.snapLabel}
+                title="Camera repositions found in the video (deaths excluded). This counts ally camera keys AND minimap clicks — it is a proxy for how often you took the camera off yourself, not an exact F-key count. Games recorded from now on measure the keys exactly."
+              >
+                <Eye size={13} /> {snapSummary.per_minute.toFixed(1)}/min
+                <span style={{ color: "var(--text-muted)" }}>·</span>
+                <span
+                  style={{
+                    color:
+                      snapSummary.longest_gap_secs > 120
+                        ? "var(--color-defeat)"
+                        : "var(--color-victory)",
+                  }}
+                >
+                  {fmtClock(snapSummary.longest_gap_secs)} blind
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={runSnapAnalysis}
+                disabled={snapBusy}
+                style={{ ...styles.ghostBtn, opacity: snapBusy ? 0.6 : 1 }}
+                title="Scan the video for camera repositions (ally camera keys and minimap clicks)"
+              >
+                <Eye size={14} />
+                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : "Camera moves"}
+              </button>
+            )}
             <div style={styles.timelineHeaderRight}>
               <button 
                 onClick={() => {
@@ -712,6 +812,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <path d={apmAreaPath} fill="url(#apmFill)" stroke="none" />
                 <path d={apmLinePath} fill="none" stroke="var(--accent-violet)" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
               </svg>
+            )}
+
+            {/* Saltos de cámara: tira de marcas finas al pie de la curva de APM.
+                Los huecos anchos son exactamente los minutos en que no miraste a nadie. */}
+            {duration > 0 && cameraSnaps.length > 0 && (
+              <div style={styles.snapStrip}>
+                {cameraSnaps.map((t, i) => (
+                  <div
+                    key={i}
+                    style={{ ...styles.snapTick, left: `${(t / duration) * 100}%` }}
+                  />
+                ))}
+              </div>
             )}
 
             {/* Marcadores de eventos (agrupados) */}
@@ -1358,6 +1471,37 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-secondary)",
     fontSize: "var(--font-xs)",
     fontWeight: 600,
+  },
+  snapLabel: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    color: "var(--text-secondary)",
+    fontSize: "var(--font-xs)",
+    fontWeight: 600,
+    fontFamily: "var(--font-mono)",
+    marginRight: "auto",
+    marginLeft: "var(--space-4)",
+  },
+  // Tira de saltos de cámara al pie del gráfico de APM.
+  snapStrip: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "12px",
+    pointerEvents: "none",
+    zIndex: 3,
+  },
+  snapTick: {
+    position: "absolute",
+    bottom: 0,
+    width: "2px",
+    height: "100%",
+    marginLeft: "-1px",
+    background: "var(--accent-teal)",
+    opacity: 0.75,
+    borderRadius: "1px",
   },
   timelineHeaderRight: {
     display: "flex",

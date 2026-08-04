@@ -37,7 +37,7 @@ pub struct LolEvent {
 
 /// Devuelve el nombre de juego de un objeto jugador (activePlayer o entrada de allPlayers),
 /// priorizando riotIdGameName y cayendo a summonerName o al riotId sin el #TAG.
-fn player_game_name(obj: Option<&serde_json::Value>) -> Option<String> {
+pub fn player_game_name(obj: Option<&serde_json::Value>) -> Option<String> {
     let o = obj?;
     let pick = |k: &str| o.get(k).and_then(|v| v.as_str()).filter(|s| !s.is_empty());
 
@@ -181,6 +181,19 @@ impl LolApiClient {
             .and_then(|l| l.as_i64())
             .unwrap_or(0) as i32;
         Ok((game_time, r_level))
+    }
+
+    /// Respuesta cruda de `/allgamedata`, para quien necesite más campos que los
+    /// que exponen los helpers (p.ej. el muestreo de awareness, que lee los 10 jugadores).
+    pub async fn get_allgamedata(&self) -> Result<serde_json::Value, String> {
+        let url = format!("{}/allgamedata", self.base_url);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Fallo al conectar con la API de LoL: {}", e))?;
+        resp.json().await.map_err(|e| e.to_string())
     }
 
     pub async fn get_events(&self) -> Result<Vec<LolEvent>, String> {

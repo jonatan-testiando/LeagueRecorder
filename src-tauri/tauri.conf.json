@@ -39,6 +39,7 @@
       "python-runtime": "python-runtime",
       "obs-runtime": "obs-runtime",
       "../python_scripts/analyzer.py": "python_scripts/analyzer.py",
+      "../python_scripts/camera_snaps.py": "python_scripts/camera_snaps.py",
       "../assets/cursors": "assets/cursors"
     },
     "icon": [

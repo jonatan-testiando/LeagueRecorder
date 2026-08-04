@@ -41,7 +41,7 @@ impl Default for UltState {
 /// Lanza un listener global de teclado en un hilo dedicado. Cuando se pulsa la tecla
 /// configurada y la detección está activa, registra el instante de la pulsación.
 /// El monitor decidirá luego si cuenta (solo en partida grabando y con la R disponible).
-pub fn spawn_keyboard_listener(state: Arc<UltState>) {
+pub fn spawn_keyboard_listener(state: Arc<UltState>, training: Arc<crate::training::TrainingState>) {
     let ctrl_pressed = Arc::new(AtomicBool::new(false));
 
     std::thread::spawn(move || {
@@ -61,6 +61,11 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
                     // Contar acción para el APM (solo mientras se graba y solo si es pulsación nueva).
                     if is_counting && is_new_press {
                         state.actions.fetch_add(1, Ordering::Relaxed);
+                    }
+                    // Teclas de cámara aliada: registrar la pulsación para el entrenamiento.
+                    // `note_key` ya filtra por si el entrenamiento no está activo.
+                    if is_new_press {
+                        training.note_key(key);
                     }
                     // Detección de ultimate.
                     if *state.enabled.lock().unwrap() {
@@ -127,47 +132,22 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>) {
     });
 }
 
-/// Compara la tecla pulsada con la configurada (letras y dígitos comunes).
+/// Resolución del escritorio donde `rdev` entrega las coordenadas del ratón.
+/// El reproductor la necesita para escalar la estela: son coordenadas de PANTALLA,
+/// no del vídeo, y grabar a una resolución distinta descuadraba el trazo.
+/// Devuelve (0, 0) si no se puede consultar.
+pub fn mouse_coordinate_space() -> (u32, u32) {
+    match rdev::display_size() {
+        Ok((w, h)) => (w as u32, h as u32),
+        Err(e) => {
+            eprintln!("No se pudo obtener el tamaño de pantalla para la estela: {:?}", e);
+            (0, 0)
+        }
+    }
+}
+
+/// Compara la tecla pulsada con la configurada. Delega en el parser de `training`,
+/// que además de letras y dígitos entiende F1–F12.
 fn key_matches(key: rdev::Key, configured: &str) -> bool {
-    use rdev::Key::*;
-    let target = match configured.trim().to_uppercase().as_str() {
-        "A" => KeyA,
-        "B" => KeyB,
-        "C" => KeyC,
-        "D" => KeyD,
-        "E" => KeyE,
-        "F" => KeyF,
-        "G" => KeyG,
-        "H" => KeyH,
-        "I" => KeyI,
-        "J" => KeyJ,
-        "K" => KeyK,
-        "L" => KeyL,
-        "M" => KeyM,
-        "N" => KeyN,
-        "O" => KeyO,
-        "P" => KeyP,
-        "Q" => KeyQ,
-        "R" => KeyR,
-        "S" => KeyS,
-        "T" => KeyT,
-        "U" => KeyU,
-        "V" => KeyV,
-        "W" => KeyW,
-        "X" => KeyX,
-        "Y" => KeyY,
-        "Z" => KeyZ,
-        "1" => Num1,
-        "2" => Num2,
-        "3" => Num3,
-        "4" => Num4,
-        "5" => Num5,
-        "6" => Num6,
-        "7" => Num7,
-        "8" => Num8,
-        "9" => Num9,
-        "0" => Num0,
-        _ => return false,
-    };
-    key == target
+    crate::training::parse_key(configured) == Some(key)
 }

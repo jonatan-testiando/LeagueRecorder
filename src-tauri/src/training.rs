@@ -1,0 +1,568 @@
+//! Entrenamiento de teclas de cámara aliada (las "F-Keys").
+//!
+//! Reúne las cuatro piezas del ejercicio:
+//!   1. Configuración de qué tecla mira a qué rol (por defecto 1/2/3/4).
+//!   2. Historial de sesiones de los drills offline (mapeo y lectura rápida).
+//!   3. Muestreo del estado de la partida para el quiz de awareness posterior.
+//!   4. Estado en vivo compartido con el listener global de teclado (overlay).
+//!
+//! Todo vive en `%APPDATA%/LeagueRecorder/training/`, aparte de los vídeos, porque
+//! son datos de progreso del usuario y no de una partida concreta.
+
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::Instant;
+
+// ---------------------------------------------------------------------------
+// Configuración
+// ---------------------------------------------------------------------------
+
+/// Una tecla de cámara y el rol al que apunta.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CameraBinding {
+    /// Tecla física tal y como la escribe el usuario: "1", "F2", "4"…
+    pub key: String,
+    /// Rol al que salta la cámara: TOP / JUNGLE / MID / ADC / SUPPORT.
+    pub role: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrainingConfig {
+    /// Teclas de cámara aliada, en el orden en que aparecen en el TAB.
+    pub bindings: Vec<CameraBinding>,
+    /// Tecla que devuelve la cámara a tu campeón (por defecto la barra espaciadora).
+    pub self_key: String,
+    /// Overlay metrónomo activo durante la partida.
+    pub metronome_enabled: bool,
+    /// Cada cuántos segundos pide el metrónomo revisar a un aliado.
+    pub metronome_interval_secs: u64,
+    /// Cuánto tiempo tienes para responder al metrónomo antes de contarlo como fallo.
+    pub metronome_window_secs: u64,
+    /// Duración del destello en el drill de lectura rápida (occlusion).
+    pub flash_ms: u64,
+    /// Cada cuántos segundos se muestrea el estado de la partida para el quiz.
+    pub snapshot_interval_secs: u64,
+    /// Genera el quiz de awareness al terminar la partida.
+    pub awareness_quiz_enabled: bool,
+}
+
+impl Default for TrainingConfig {
+    fn default() -> Self {
+        Self {
+            // El reparto que describe el usuario: números superiores, sin la jungla.
+            bindings: vec![
+                CameraBinding { key: "1".into(), role: "TOP".into() },
+                CameraBinding { key: "2".into(), role: "MID".into() },
+                CameraBinding { key: "3".into(), role: "ADC".into() },
+                CameraBinding { key: "4".into(), role: "SUPPORT".into() },
+            ],
+            self_key: "Space".into(),
+            metronome_enabled: false,
+            metronome_interval_secs: 20,
+            metronome_window_secs: 5,
+            flash_ms: 400,
+            snapshot_interval_secs: 5,
+            awareness_quiz_enabled: true,
+        }
+    }
+}
+
+impl TrainingConfig {
+    /// Roles configurados, sin duplicados y en orden. Lo usan los drills y el metrónomo.
+    pub fn roles(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for b in &self.bindings {
+            if !out.contains(&b.role) {
+                out.push(b.role.clone());
+            }
+        }
+        out
+    }
+
+    /// Tecla asociada a un rol (la primera que lo referencie).
+    pub fn key_for_role(&self, role: &str) -> Option<String> {
+        self.bindings
+            .iter()
+            .find(|b| b.role.eq_ignore_ascii_case(role))
+            .map(|b| b.key.clone())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rutas y persistencia
+// ---------------------------------------------------------------------------
+
+/// `%APPDATA%/LeagueRecorder/training/`, creado si no existe.
+pub fn training_dir() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| "C:".to_string());
+    let dir = PathBuf::from(appdata).join("LeagueRecorder").join("training");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir
+}
+
+/// Subcarpeta con los snapshots de estado de partida (uno por partida).
+pub fn awareness_dir() -> PathBuf {
+    let dir = training_dir().join("awareness");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir
+}
+
+fn config_path() -> PathBuf {
+    training_dir().join("config.json")
+}
+
+fn sessions_path() -> PathBuf {
+    training_dir().join("sessions.json")
+}
+
+pub fn load_config() -> TrainingConfig {
+    fs::read_to_string(config_path())
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_config(cfg: &TrainingConfig) -> Result<(), String> {
+    let content =
+        serde_json::to_string_pretty(cfg).map_err(|e| format!("Error serializando config: {}", e))?;
+    fs::write(config_path(), content).map_err(|e| format!("Error guardando config: {}", e))
+}
+
+// ---------------------------------------------------------------------------
+// Sesiones de drill
+// ---------------------------------------------------------------------------
+
+/// Desglose por rol dentro de una sesión: dónde estás flojo.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoleStat {
+    pub role: String,
+    pub attempts: u32,
+    pub hits: u32,
+    pub avg_latency_ms: f64,
+}
+
+/// Una tanda completa de un drill.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrillSession {
+    pub id: String,
+    pub date: String,
+    /// "reflex" (mapeo tecla→rol) | "recall" (lectura en 400 ms).
+    pub kind: String,
+    pub rounds: u32,
+    pub hits: u32,
+    pub avg_latency_ms: f64,
+    pub best_latency_ms: f64,
+    #[serde(default)]
+    pub per_role: Vec<RoleStat>,
+    /// Modo del drill, para poder comparar peras con peras ("role" | "champion" | "loaded").
+    #[serde(default)]
+    pub mode: String,
+}
+
+pub fn load_sessions() -> Vec<DrillSession> {
+    fs::read_to_string(sessions_path())
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default()
+}
+
+/// Añade una sesión al historial. Recorta a las últimas 500 para que el JSON no crezca sin fin.
+pub fn append_session(session: DrillSession) -> Result<(), String> {
+    let mut all = load_sessions();
+    all.push(session);
+    if all.len() > 500 {
+        let excess = all.len() - 500;
+        all.drain(0..excess);
+    }
+    let content = serde_json::to_string_pretty(&all)
+        .map_err(|e| format!("Error serializando sesiones: {}", e))?;
+    fs::write(sessions_path(), content).map_err(|e| format!("Error guardando sesiones: {}", e))
+}
+
+// ---------------------------------------------------------------------------
+// Estado en vivo (compartido con el listener global de teclado)
+// ---------------------------------------------------------------------------
+
+/// Estado runtime del entrenamiento durante una partida.
+///
+/// El listener de `rdev` corre en su propio hilo y solo *escribe* pulsaciones aquí;
+/// el monitor de fondo las consume. Nunca se inyecta input al juego.
+pub struct TrainingState {
+    /// Teclas de cámara vigiladas, en minúsculas y ya resueltas a su rol.
+    pub watched: Mutex<Vec<CameraBinding>>,
+    /// Pulsaciones detectadas pendientes de procesar: (instante, rol).
+    pub presses: Mutex<Vec<(Instant, String)>>,
+    /// Solo se registra mientras hay una partida en curso.
+    pub active: AtomicBool,
+    /// Contador acumulado de pulsaciones de cámara en la partida actual.
+    pub total_presses: AtomicU64,
+}
+
+impl Default for TrainingState {
+    fn default() -> Self {
+        let cfg = load_config();
+        Self {
+            watched: Mutex::new(cfg.bindings),
+            presses: Mutex::new(Vec::new()),
+            active: AtomicBool::new(false),
+            total_presses: AtomicU64::new(0),
+        }
+    }
+}
+
+impl TrainingState {
+    /// Refresca las teclas vigiladas tras un cambio de configuración.
+    pub fn set_bindings(&self, bindings: Vec<CameraBinding>) {
+        if let Ok(mut w) = self.watched.lock() {
+            *w = bindings;
+        }
+    }
+
+    /// Llamado desde el hilo de `rdev` en cada pulsación. Devuelve el rol si la
+    /// tecla es una de las de cámara configuradas.
+    pub fn note_key(&self, key: rdev::Key) -> Option<String> {
+        if !self.active.load(Ordering::Relaxed) {
+            return None;
+        }
+        let role = {
+            let watched = self.watched.lock().ok()?;
+            watched
+                .iter()
+                .find(|b| parse_key(&b.key) == Some(key))
+                .map(|b| b.role.clone())?
+        };
+        self.total_presses.fetch_add(1, Ordering::Relaxed);
+        if let Ok(mut p) = self.presses.lock() {
+            p.push((Instant::now(), role.clone()));
+            // Cinturón de seguridad: si nadie consume (partida sin monitor), no crecer sin fin.
+            if p.len() > 4096 {
+                p.drain(0..2048);
+            }
+        }
+        Some(role)
+    }
+
+    /// Vacía y devuelve las pulsaciones acumuladas.
+    pub fn drain_presses(&self) -> Vec<(Instant, String)> {
+        self.presses
+            .lock()
+            .map(|mut p| p.drain(..).collect())
+            .unwrap_or_default()
+    }
+
+    /// Reinicia el estado al empezar una partida.
+    pub fn reset(&self) {
+        self.total_presses.store(0, Ordering::Relaxed);
+        if let Ok(mut p) = self.presses.lock() {
+            p.clear();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Metrónomo
+// ---------------------------------------------------------------------------
+
+/// Lo que el metrónomo quiere que ocurra en pantalla este tick.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MetronomeEvent {
+    /// Pide revisar a un aliado.
+    Prompt { role: String, key: String, window_secs: u64 },
+    /// Resuelve el aviso anterior.
+    Ack { ok: bool, role: String, latency_ms: f64 },
+}
+
+/// Máquina de estados del metrónomo: pide revisar un aliado cada N segundos,
+/// rotando roles, y comprueba si respondiste dentro de la ventana.
+///
+/// Rota en orden fijo en vez de al azar a propósito: el objetivo es que acabes
+/// cubriendo a todo el equipo, no que te sorprenda.
+#[derive(Default)]
+pub struct MetronomeRunner {
+    enabled: bool,
+    bindings: Vec<CameraBinding>,
+    idx: usize,
+    interval: f64,
+    window: f64,
+    next_at: f64,
+    /// (rol pedido, tiempo de juego del aviso)
+    pending: Option<(String, f64)>,
+    pub results: Vec<crate::awareness::MetronomeResult>,
+}
+
+impl MetronomeRunner {
+    /// Arranca (o reinicia) para una partida nueva. `first_at` es el segundo de
+    /// juego del primer aviso: conviene dejar pasar la fase inicial.
+    pub fn start(&mut self, cfg: &TrainingConfig, first_at: f64) {
+        self.enabled = cfg.metronome_enabled && !cfg.bindings.is_empty();
+        self.bindings = cfg.bindings.clone();
+        self.idx = 0;
+        self.interval = cfg.metronome_interval_secs.max(5) as f64;
+        self.window = cfg.metronome_window_secs.max(1) as f64;
+        self.next_at = first_at;
+        self.pending = None;
+        self.results.clear();
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn stop(&mut self) {
+        self.enabled = false;
+        self.pending = None;
+    }
+
+    /// Avanza un tick. `now` es el tiempo de juego y `presses` el histórico
+    /// acumulado de pulsaciones de cámara de la partida.
+    pub fn tick(
+        &mut self,
+        now: f64,
+        presses: &[crate::awareness::CameraPress],
+    ) -> Option<MetronomeEvent> {
+        if !self.enabled || self.bindings.is_empty() {
+            return None;
+        }
+
+        if let Some((role, at)) = self.pending.clone() {
+            // Solo cuenta una pulsación del rol pedido y posterior al aviso.
+            if let Some(p) = presses.iter().find(|p| p.t >= at && p.role == role) {
+                let latency_ms = ((p.t - at) * 1000.0).max(0.0);
+                self.results.push(crate::awareness::MetronomeResult {
+                    t: at,
+                    role: role.clone(),
+                    responded: true,
+                    latency_ms,
+                });
+                self.pending = None;
+                self.next_at = now + self.interval;
+                return Some(MetronomeEvent::Ack { ok: true, role, latency_ms });
+            }
+            if now - at > self.window {
+                self.results.push(crate::awareness::MetronomeResult {
+                    t: at,
+                    role: role.clone(),
+                    responded: false,
+                    latency_ms: 0.0,
+                });
+                self.pending = None;
+                self.next_at = now + self.interval;
+                return Some(MetronomeEvent::Ack { ok: false, role, latency_ms: 0.0 });
+            }
+            return None;
+        }
+
+        if now >= self.next_at {
+            let b = &self.bindings[self.idx % self.bindings.len()];
+            self.idx += 1;
+            self.pending = Some((b.role.clone(), now));
+            return Some(MetronomeEvent::Prompt {
+                role: b.role.clone(),
+                key: b.key.to_uppercase(),
+                window_secs: self.window as u64,
+            });
+        }
+        None
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Parseo de teclas
+// ---------------------------------------------------------------------------
+
+/// Traduce el nombre de una tecla escrito por el usuario a la `rdev::Key`
+/// correspondiente. Acepta letras, dígitos de la fila superior, F1–F12 y
+/// algunas teclas sueltas útiles (espacio, tab).
+pub fn parse_key(s: &str) -> Option<rdev::Key> {
+    use rdev::Key::*;
+    let t = s.trim().to_uppercase();
+    Some(match t.as_str() {
+        "A" => KeyA, "B" => KeyB, "C" => KeyC, "D" => KeyD, "E" => KeyE,
+        "F" => KeyF, "G" => KeyG, "H" => KeyH, "I" => KeyI, "J" => KeyJ,
+        "K" => KeyK, "L" => KeyL, "M" => KeyM, "N" => KeyN, "O" => KeyO,
+        "P" => KeyP, "Q" => KeyQ, "R" => KeyR, "S" => KeyS, "T" => KeyT,
+        "U" => KeyU, "V" => KeyV, "W" => KeyW, "X" => KeyX, "Y" => KeyY,
+        "Z" => KeyZ,
+        "0" => Num0, "1" => Num1, "2" => Num2, "3" => Num3, "4" => Num4,
+        "5" => Num5, "6" => Num6, "7" => Num7, "8" => Num8, "9" => Num9,
+        "F1" => F1, "F2" => F2, "F3" => F3, "F4" => F4, "F5" => F5, "F6" => F6,
+        "F7" => F7, "F8" => F8, "F9" => F9, "F10" => F10, "F11" => F11, "F12" => F12,
+        "SPACE" | "SPACEBAR" | "ESPACIO" => Space,
+        "TAB" => Tab,
+        _ => return None,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Comandos Tauri
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_training_config() -> TrainingConfig {
+    load_config()
+}
+
+/// Guarda la configuración y propaga los bindings al listener de teclado en caliente.
+#[tauri::command]
+pub async fn set_training_config(
+    state: tauri::State<'_, std::sync::Arc<TrainingState>>,
+    config: TrainingConfig,
+) -> Result<TrainingConfig, String> {
+    // Rechazamos teclas que el listener no sabría reconocer: si no, el usuario
+    // configuraría algo que nunca dispara y parecería que el overlay está roto.
+    for b in &config.bindings {
+        if parse_key(&b.key).is_none() {
+            return Err(format!("Unrecognized key: \"{}\"", b.key));
+        }
+        if b.role.trim().is_empty() {
+            return Err("One of the roles is empty.".to_string());
+        }
+    }
+    save_config(&config)?;
+    state.set_bindings(config.bindings.clone());
+    Ok(config)
+}
+
+#[tauri::command]
+pub async fn get_drill_sessions(limit: Option<usize>) -> Vec<DrillSession> {
+    let mut all = load_sessions();
+    all.reverse(); // más recientes primero
+    if let Some(n) = limit {
+        all.truncate(n);
+    }
+    all
+}
+
+#[tauri::command]
+pub async fn save_drill_session(session: DrillSession) -> Result<(), String> {
+    append_session(session)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parsea_digitos_y_fkeys() {
+        assert_eq!(parse_key("1"), Some(rdev::Key::Num1));
+        assert_eq!(parse_key("f3"), Some(rdev::Key::F3));
+        assert_eq!(parse_key(" space "), Some(rdev::Key::Space));
+        assert_eq!(parse_key("ñ"), None);
+    }
+
+    #[test]
+    fn config_por_defecto_mapea_los_cuatro_roles() {
+        let cfg = TrainingConfig::default();
+        assert_eq!(cfg.roles(), vec!["TOP", "MID", "ADC", "SUPPORT"]);
+        assert_eq!(cfg.key_for_role("adc"), Some("3".to_string()));
+        assert_eq!(cfg.key_for_role("JUNGLE"), None);
+    }
+
+    fn cfg_metronomo() -> TrainingConfig {
+        TrainingConfig {
+            metronome_enabled: true,
+            metronome_interval_secs: 20,
+            metronome_window_secs: 5,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn metronomo_pide_rota_y_acierta() {
+        use crate::awareness::CameraPress;
+        let mut m = MetronomeRunner::default();
+        m.start(&cfg_metronomo(), 60.0);
+
+        // Antes de la hora no pide nada.
+        assert_eq!(m.tick(59.0, &[]), None);
+
+        // Primer aviso: el primer binding (TOP → tecla 1).
+        assert_eq!(
+            m.tick(60.0, &[]),
+            Some(MetronomeEvent::Prompt {
+                role: "TOP".into(),
+                key: "1".into(),
+                window_secs: 5
+            })
+        );
+
+        // Respondemos a los 400 ms.
+        let presses = vec![CameraPress { t: 60.4, role: "TOP".into() }];
+        match m.tick(61.0, &presses) {
+            Some(MetronomeEvent::Ack { ok, role, latency_ms }) => {
+                assert!(ok);
+                assert_eq!(role, "TOP");
+                assert!((latency_ms - 400.0).abs() < 1.0, "latencia {}", latency_ms);
+            }
+            other => panic!("esperaba ack correcto, llegó {:?}", other),
+        }
+
+        // El siguiente aviso llega un intervalo después y es el rol siguiente.
+        assert_eq!(m.tick(70.0, &presses), None);
+        match m.tick(81.0, &presses) {
+            Some(MetronomeEvent::Prompt { role, .. }) => assert_eq!(role, "MID"),
+            other => panic!("esperaba prompt de MID, llegó {:?}", other),
+        }
+    }
+
+    #[test]
+    fn metronomo_falla_al_pasar_la_ventana() {
+        let mut m = MetronomeRunner::default();
+        m.start(&cfg_metronomo(), 60.0);
+        m.tick(60.0, &[]);
+        // Dentro de la ventana todavía no se decide nada.
+        assert_eq!(m.tick(64.0, &[]), None);
+        assert_eq!(
+            m.tick(66.0, &[]),
+            Some(MetronomeEvent::Ack {
+                ok: false,
+                role: "TOP".into(),
+                latency_ms: 0.0
+            })
+        );
+        assert_eq!(m.results.len(), 1);
+        assert!(!m.results[0].responded);
+    }
+
+    #[test]
+    fn metronomo_ignora_pulsaciones_previas_al_aviso() {
+        use crate::awareness::CameraPress;
+        let mut m = MetronomeRunner::default();
+        m.start(&cfg_metronomo(), 60.0);
+        // Una pulsación de TOP ANTES del aviso no debe validarlo.
+        let previas = vec![CameraPress { t: 30.0, role: "TOP".into() }];
+        m.tick(60.0, &previas);
+        assert_eq!(m.tick(61.0, &previas), None);
+        assert!(matches!(
+            m.tick(66.0, &previas),
+            Some(MetronomeEvent::Ack { ok: false, .. })
+        ));
+    }
+
+    #[test]
+    fn metronomo_desactivado_no_hace_nada() {
+        let mut m = MetronomeRunner::default();
+        m.start(&TrainingConfig::default(), 0.0); // metronome_enabled = false
+        assert!(!m.is_enabled());
+        assert_eq!(m.tick(1000.0, &[]), None);
+    }
+
+    #[test]
+    fn note_key_ignora_si_no_esta_activo() {
+        let st = TrainingState::default();
+        st.set_bindings(vec![CameraBinding { key: "2".into(), role: "MID".into() }]);
+        assert_eq!(st.note_key(rdev::Key::Num2), None);
+        st.active.store(true, Ordering::Relaxed);
+        assert_eq!(st.note_key(rdev::Key::Num2), Some("MID".to_string()));
+        assert_eq!(st.note_key(rdev::Key::Num9), None);
+        assert_eq!(st.drain_presses().len(), 1);
+        assert!(st.drain_presses().is_empty());
+    }
+}

@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub async fn generate_dataset(
+    app: &tauri::AppHandle,
     video_path: &str,
     metadata: &MatchMetadata,
     dataset_dir: &Path,
     max_samples: usize,
 ) -> Result<(), String> {
+    let ffmpeg_exe = crate::proc::ffmpeg(app);
     let images_dir = dataset_dir.join("images");
     let labels_dir = dataset_dir.join("labels");
 
@@ -40,29 +42,11 @@ pub async fn generate_dataset(
 
     let match_id = &metadata.id;
 
-    // Obtener resolución real del video usando ffprobe
-    let mut screen_w = 1920.0;
-    let mut screen_h = 1080.0;
-    
-    if let Ok(output) = Command::new("ffprobe")
-        .args(&[
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "csv=s=x:p=0",
-            video_path,
-        ])
-        .output()
-    {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let parts: Vec<&str> = stdout.trim().split('x').collect();
-        if parts.len() == 2 {
-            if let (Ok(w), Ok(h)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
-                screen_w = w;
-                screen_h = h;
-            }
-        }
-    }
+    // Resolución real del vídeo. Se lee de la cabecera de `ffmpeg -i` en vez de
+    // llamar a ffprobe: ese binario no se empaqueta, así que dependía de que el
+    // usuario lo tuviera instalado.
+    let (screen_w, screen_h) = crate::proc::video_dimensions(&ffmpeg_exe, video_path)
+        .unwrap_or((1920.0, 1080.0));
 
     let box_size = 60.0; // 60x60 pixels bounding box
     
@@ -88,16 +72,15 @@ pub async fn generate_dataset(
 
         // Extraer frame con FFmpeg (Fast Seek)
         // -ss antes de -i es MUY rápido
-        let output = Command::new("ffmpeg")
-            .args(&[
-                "-y", // Sobrescribir
-                "-ss", &format!("{:.3}", extract_time),
-                "-i", video_path,
-                "-frames:v", "1",
-                "-q:v", "2", // Alta calidad JPEG
-                img_path.to_str().unwrap(),
-            ])
-            .output();
+        let output = crate::proc::hide_console(Command::new(&ffmpeg_exe).args(&[
+            "-y", // Sobrescribir
+            "-ss", &format!("{:.3}", extract_time),
+            "-i", video_path,
+            "-frames:v", "1",
+            "-q:v", "2", // Alta calidad JPEG
+            img_path.to_str().unwrap(),
+        ]))
+        .output();
 
         match output {
             Ok(res) if res.status.success() => {

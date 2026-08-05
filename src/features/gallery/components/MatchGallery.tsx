@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { HardDrive, Search, Trash2, Gamepad2 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 interface DiskSpaceInfo {
   used_bytes: number;
@@ -41,6 +42,17 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   isRecording,
 }) => {
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
+
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const rowVirtualizer = useVirtualizer({
+    count: matches.length,
+    getScrollElement: () => parentRef.current,
+    // Estimación inicial; la altura real se mide con `measureElement` por si los
+    // badges hacen dos líneas en ventanas estrechas.
+    estimateSize: () => 76,
+    overscan: 5,
+  });
 
   useEffect(() => {
     invoke<DiskSpaceInfo>("get_disk_usage")
@@ -107,7 +119,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         <div style={{ ...styles.th, width: "40px" }} />
       </div>
 
-      <div style={styles.list}>
+      <div style={styles.list} ref={parentRef}>
         {matches.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state__icon">
@@ -117,72 +129,89 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             <p className="empty-state__text">Play a match and it will show up here automatically.</p>
           </div>
         ) : (
-          matches.map((match) => {
-            const kda = computeKDA(match.events);
-            const res = outcome(match.result);
-            const resultColor =
-              res === "victory" ? "var(--color-victory)" : res === "defeat" ? "var(--color-defeat)" : "var(--border-strong)";
-            const resultBadgeBg =
-              res === "victory" ? "rgba(77,255,184,0.14)" : res === "defeat" ? "rgba(255,77,106,0.14)" : "rgba(255,255,255,0.06)";
-            const resultLabel = res === "victory" ? "Victoria" : res === "defeat" ? "Derrota" : "Sin resultado";
+          <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const match = matches[virtualRow.index];
+              const kda = computeKDA(match.events);
+              const res = outcome(match.result);
+              const resultColor =
+                res === "victory" ? "var(--color-victory)" : res === "defeat" ? "var(--color-defeat)" : "var(--border-strong)";
+              const resultBadgeBg =
+                res === "victory" ? "rgba(77,255,184,0.14)" : res === "defeat" ? "rgba(255,77,106,0.14)" : "rgba(255,255,255,0.06)";
+              const resultLabel = res === "victory" ? "Victoria" : res === "defeat" ? "Derrota" : "Sin resultado";
 
-            return (
-              <div
-                key={match.id}
-                onClick={() => onSelectMatch(match)}
-                style={{ ...styles.card, borderLeftColor: resultColor }}
-                className="game-row"
-              >
-                <div style={{ ...styles.td, flex: 2, flexDirection: "row", alignItems: "center", gap: "var(--space-4)" }}>
-                  <div style={{ ...styles.avatarRing, boxShadow: `0 0 0 2px ${resultColor}` }}>
-                    <ChampionAvatar champion={match.champion} size={44} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={styles.champName}>{match.champion}</div>
-                    <div style={styles.badgeRow}>
-                      <span style={{ ...styles.resultBadge, color: resultColor, background: resultBadgeBg }}>{resultLabel}</span>
-                      <span style={match.riot_match_id ? styles.rankedBadge : styles.customBadge}>
-                        {match.riot_match_id ? queueLabel(match.queue) : "Personalizada"}
-                      </span>
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    // El hueco entre filas va como padding para que lo recoja la medida.
+                    paddingBottom: "var(--space-2)",
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div
+                    onClick={() => onSelectMatch(match)}
+                    style={{ ...styles.card, borderLeftColor: resultColor }}
+                    className="game-row"
+                  >
+                    <div style={{ ...styles.td, flex: 2, flexDirection: "row", alignItems: "center", gap: "var(--space-4)" }}>
+                      <div style={{ ...styles.avatarRing, boxShadow: `0 0 0 2px ${resultColor}` }}>
+                        <ChampionAvatar champion={match.champion} size={44} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={styles.champName}>{match.champion}</div>
+                        <div style={styles.badgeRow}>
+                          <span style={{ ...styles.resultBadge, color: resultColor, background: resultBadgeBg }}>{resultLabel}</span>
+                          <span style={match.riot_match_id ? styles.rankedBadge : styles.customBadge}>
+                            {match.riot_match_id ? queueLabel(match.queue) : "Personalizada"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ ...styles.td, flex: 1.5 }}>
+                      <div style={styles.primaryText}>{match.date.split(" ")[0]}</div>
+                      <div style={styles.secondaryText}>{formatDuration(match.game_duration)}</div>
+                    </div>
+
+                    <div style={{ ...styles.td, flex: 1.5 }}>
+                      <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}>APM</span></div>
+                      <div style={styles.secondaryText}>Acciones por minuto</div>
+                    </div>
+
+                    <div style={{ ...styles.td, flex: 1.5 }}>
+                      <div style={styles.primaryText}>
+                        {match.kda ? (
+                          <span>{match.kda.replace(/\//g, " / ")}</span>
+                        ) : (
+                          <>{kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}</>
+                        )}
+                      </div>
+                      <div style={styles.secondaryText}>
+                        {match.gold_earned ? `${(match.gold_earned / 1000).toFixed(1)}k oro` : `${kdaRatio(kda)} KDA`}
+                      </div>
+                    </div>
+
+                    <div style={{ ...styles.td, width: "40px", justifyContent: "center", alignItems: "flex-end" }}>
+                      <button
+                        className="icon-btn icon-btn--danger"
+                        onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
+                        title="Eliminar partida"
+                      >
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                <div style={{ ...styles.td, flex: 1.5 }}>
-                  <div style={styles.primaryText}>{match.date.split(" ")[0]}</div>
-                  <div style={styles.secondaryText}>{formatDuration(match.game_duration)}</div>
-                </div>
-
-                <div style={{ ...styles.td, flex: 1.5 }}>
-                  <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}>APM</span></div>
-                  <div style={styles.secondaryText}>Acciones por minuto</div>
-                </div>
-
-                <div style={{ ...styles.td, flex: 1.5 }}>
-                  <div style={styles.primaryText}>
-                    {match.kda ? (
-                      <span>{match.kda.replace(/\//g, " / ")}</span>
-                    ) : (
-                      <>{kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}</>
-                    )}
-                  </div>
-                  <div style={styles.secondaryText}>
-                    {match.gold_earned ? `${(match.gold_earned / 1000).toFixed(1)}k oro` : `${kdaRatio(kda)} KDA`}
-                  </div>
-                </div>
-
-                <div style={{ ...styles.td, width: "40px", justifyContent: "center", alignItems: "flex-end" }}>
-                  <button
-                    className="icon-btn icon-btn--danger"
-                    onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                    title="Eliminar partida"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
@@ -196,7 +225,6 @@ const styles: Record<string, React.CSSProperties> = {
     width: "100%",
     height: "100%",
     padding: "var(--space-8) 10%",
-    overflowY: "auto",
     boxSizing: "border-box",
   },
   header: {
@@ -376,7 +404,9 @@ const styles: Record<string, React.CSSProperties> = {
   list: {
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-2)",
+    flex: 1,
+    overflowY: "auto",
+    position: "relative",
   },
   card: {
     display: "flex",

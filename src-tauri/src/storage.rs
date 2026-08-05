@@ -132,6 +132,16 @@ pub struct MatchMetadata {
     pub camera_snaps: Vec<f64>,
 }
 
+/// Suelo de la cuota de disco. Cualquier valor por debajo se ignora: un 0 aquí
+/// significaría "borra todas las grabaciones".
+pub const MIN_STORAGE_GB: u64 = 10;
+
+fn default_max_storage() -> u64 { 100 }
+/// 0 = borrado por edad DESACTIVADO. Es el valor que heredan las configuraciones
+/// ya guardadas, que no traen el campo: actualizar la app nunca debe empezar a
+/// borrar grabaciones que el usuario no ha pedido borrar.
+fn default_auto_prune() -> u32 { 0 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub save_directory: String,
@@ -139,6 +149,10 @@ pub struct AppConfig {
     pub riot_api_key: String,
     #[serde(default)]
     pub auto_dataset_generator: bool,
+    #[serde(default = "default_max_storage")]
+    pub max_storage_gb: u64,
+    #[serde(default = "default_auto_prune")]
+    pub auto_prune_days: u32,
 }
 
 impl Default for AppConfig {
@@ -153,6 +167,9 @@ impl Default for AppConfig {
             save_directory: default_dir,
             riot_api_key: String::new(),
             auto_dataset_generator: false,
+            max_storage_gb: 100,
+            // Opt-in, también en instalaciones nuevas: ver `default_auto_prune`.
+            auto_prune_days: 0,
         }
     }
 }
@@ -366,28 +383,94 @@ pub fn get_dir_size(path: &Path) -> u64 {
     size
 }
 
+/// Decide si una partida puede borrarse automáticamente. Borrar una partida se
+/// lleva por delante su carpeta entera, y ahí dentro viven también sus clips, así
+/// que hay dos cosas que el borrado automático nunca toca:
+///   - VOD importados: material que el usuario trajo a mano, no lo generamos nosotros.
+///   - Partidas con algún clip marcado como favorito.
+fn is_auto_deletable(m: &MatchMetadata) -> bool {
+    if m.is_vod {
+        return false;
+    }
+    !has_favorite_clip(&m.id)
+}
+
+/// true si la carpeta de la partida contiene algún clip marcado como favorito.
+/// Se lee el JSON en crudo a propósito: solo nos interesa ese campo y no queremos
+/// que un cambio de forma en `ClipMetadata` haga fallar el parseo y, con él, la
+/// protección.
+fn has_favorite_clip(match_id: &str) -> bool {
+    let dir = get_match_dir(match_id);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.contains("_clip_") || !name.ends_with(".json") {
+            continue;
+        }
+        if let Ok(content) = fs::read_to_string(entry.path()) {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                if v.get("favorite").and_then(|f| f.as_bool()).unwrap_or(false) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 pub fn check_storage_quota() {
-    let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
+    let cfg = load_config();
+    // Un límite de 0 (campo vacío en ajustes, config corrupta) borraría absolutamente
+    // todo: por debajo del mínimo lo tratamos como "sin configurar".
+    let limit: u64 = cfg.max_storage_gb.max(MIN_STORAGE_GB) * 1024 * 1024 * 1024;
+    let prune_days = cfg.auto_prune_days;
     let root_dir = get_videos_dir();
+
+    // 1. Borrado por edad. Desactivado mientras `auto_prune_days` sea 0, que es
+    //    el valor por defecto: es destructivo, así que se opta por él a mano.
+    //    El formato de fecha es "YYYY-MM-DD HH:MM:SS".
+    if prune_days > 0 {
+        let now = chrono::Local::now().naive_local();
+        for m in load_all_matches() {
+            if !is_auto_deletable(&m) {
+                continue;
+            }
+            let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&m.date, "%Y-%m-%d %H:%M:%S") else {
+                continue; // fecha ilegible: no la borramos a ciegas
+            };
+            if now.signed_duration_since(dt).num_days() > prune_days as i64 {
+                if let Err(e) = delete_match_files(&m.id) {
+                    eprintln!("Auto-prune: no se pudo borrar {}: {}", m.id, e);
+                }
+            }
+        }
+    }
+
+    // 2. Borrado por cuota. El tamaño se mide una sola vez, ya con el paso anterior
+    //    aplicado: recorrer el árbol entero es caro y antes se hacía dos veces.
     let current_size = get_dir_size(&root_dir);
+    if current_size <= limit {
+        return;
+    }
 
-    if current_size > limit {
-        let mut matches = load_all_matches();
-        // Sort from oldest to newest (ascending)
-        matches.sort_by(|a, b| a.date.cmp(&b.date));
+    let mut matches = load_all_matches();
+    matches.sort_by(|a, b| a.date.cmp(&b.date)); // de la más antigua a la más nueva
 
-        let mut freed = 0;
-        let excess = current_size - limit;
-
-        for m in matches {
-            if freed >= excess {
-                break;
-            }
-            let m_dir = get_match_dir(&m.id);
-            let size = get_dir_size(&m_dir);
-            if delete_match_files(&m.id).is_ok() {
-                freed += size;
-            }
+    let mut freed = 0;
+    let excess = current_size - limit;
+    for m in matches {
+        if freed >= excess {
+            break;
+        }
+        if !is_auto_deletable(&m) {
+            continue;
+        }
+        let size = get_dir_size(&get_match_dir(&m.id));
+        match delete_match_files(&m.id) {
+            Ok(()) => freed += size,
+            Err(e) => eprintln!("Cuota: no se pudo borrar {}: {}", m.id, e),
         }
     }
 }

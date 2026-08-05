@@ -2,10 +2,11 @@ import React, { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart } from "lucide-react";
-import { motion, Variants } from "framer-motion";
+import { motion } from "framer-motion";
 import { ClipMetadata } from "../../../types";
 import { toggleClipFavorite } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 // El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
 // en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
@@ -39,6 +40,11 @@ interface StoredLink {
 }
 
 const LS_KEY = "clipLinks";
+
+// Medidas del grid. Están aquí y no solo en el CSS porque el virtualizador necesita
+// calcular a mano cuántas columnas caben.
+const CARD_MIN_WIDTH = 280;
+const GRID_GAP = 24;
 
 const expiresAt = (l: StoredLink): number =>
   l.expiry === "permanent" ? Infinity : l.uploadedAt + (DURATION_MS[l.expiry] ?? 0);
@@ -83,18 +89,48 @@ export const ClipsGallery: React.FC = () => {
   const [expiry, setExpiry] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
 
-  const containerVariants: Variants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.05 }
-    }
-  };
+  // OJO: todos los hooks van aquí arriba, antes de los `return` de "cargando" y
+  // "sin clips". Declararlos después haría que el número de hooks cambiara entre
+  // renders y React abortaría con "Rendered more hooks than during the previous render".
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [columns, setColumns] = useState(3);
 
-  const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
-  };
+  // El grid solo existe cuando hay clips que pintar: mientras se carga o si no hay
+  // ninguno se devuelve otra cosa más abajo, y `scrollRef` está vacío.
+  const showGrid = !loading && clips.length > 0;
+
+  // Cuántas tarjetas caben por fila. Replica a mano lo que hacía
+  // `grid-template-columns: repeat(auto-fill, minmax(CARD_MIN_WIDTH, 1fr))`,
+  // porque el virtualizador necesita saber el número de columnas para agrupar.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const width = entry.contentRect.width;
+        setColumns(Math.max(1, Math.floor((width + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [showGrid]);
+
+  const rowCount = Math.ceil(clips.length / columns);
+  const rowVirtualizer = useVirtualizer({
+    count: rowCount,
+    getScrollElement: () => scrollRef.current,
+    // Estimación inicial; la altura real de cada fila se mide con `measureElement`,
+    // porque la tarjeta cambia de alto según el estado (selector de caducidad, fila
+    // de enlace ya subido, aviso de tamaño excedido...).
+    estimateSize: () => 380,
+    overscan: 3,
+  });
+
+  // Al cambiar el número de columnas, cada índice de fila pasa a contener otras
+  // tarjetas: las alturas medidas antes ya no valen.
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [columns, rowVirtualizer]);
 
   // Persistir los enlaces cada vez que cambian para que sobrevivan a recargas.
   useEffect(() => {
@@ -186,128 +222,159 @@ export const ClipsGallery: React.FC = () => {
         <h2 style={styles.title}>My Clips</h2>
         <span style={styles.count}>{clips.length} {clips.length === 1 ? "clip" : "clips"}</span>
       </div>
-      <motion.div 
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        style={styles.grid}
-      >
-        {clips.map((clip) => {
-          const stored = links[clip.path];
-          const isUploading = uploading === clip.path;
-          const exp = expiry[clip.path] ?? "72h";
-          const isPermanent = exp === "permanent";
-          const limit = isPermanent ? CATBOX_LIMIT : LITTERBOX_LIMIT;
-          const tooBig = clip.size > limit;
-          const remaining = stored ? expiresAt(stored) - Date.now() : 0;
+      {/* El scroll vive aquí y no en el contenedor: el virtualizador posiciona los
+          items relativos a este div, así que si el elemento con scroll fuera el de
+          fuera, la cabecera desplazaría todas las filas. */}
+      <div style={styles.scrollArea} ref={scrollRef}>
+      <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
+        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          const startIndex = virtualRow.index * columns;
+          const rowClips = clips.slice(startIndex, startIndex + columns);
 
           return (
-            <motion.div 
-              variants={itemVariants}
-              key={clip.path} 
-              style={styles.card}
-              whileHover={{ scale: 1.02 }}
+            <div
+              key={virtualRow.key}
+              data-index={virtualRow.index}
+              ref={rowVirtualizer.measureElement}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                // Sin `height`: la mide `measureElement`. El hueco entre filas se
+                // hace con padding para que entre en esa medida.
+                paddingBottom: `${GRID_GAP}px`,
+                transform: `translateY(${virtualRow.start}px)`,
+                display: "grid",
+                gridTemplateColumns: `repeat(${columns}, 1fr)`,
+                gap: `${GRID_GAP}px`,
+              }}
             >
-              <div style={styles.thumbnailWrapper}>
-                <video
-                  src={streamUrl(clip.path)}
-                  style={styles.videoPreview}
-                  controls
-                  preload="metadata"
-                />
-              </div>
-              <div style={styles.cardInfo}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
-                  <span style={styles.clipName} title={clip.name}>{clip.name}</span>
-                  <button 
-                    onClick={() => handleToggleFavorite(clip.path)}
-                    style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--accent-violet)" : "var(--text-muted)" }}
-                    title={clip.favorite ? "Remove from favorites" : "Add to favorites"}
-                  >
-                    <Heart size={16} fill={clip.favorite ? "var(--accent-violet)" : "transparent"} />
-                  </button>
-                </div>
-                <div style={styles.metaRow}>
-                  <span style={styles.clipMatch}>De: {clip.match_id}</span>
-                  <span style={styles.sizeBadge}>{formatSize(clip.size)}</span>
-                </div>
+              {rowClips.map((clip) => {
+                const stored = links[clip.path];
+                const isUploading = uploading === clip.path;
+                const exp = expiry[clip.path] ?? "72h";
+                const isPermanent = exp === "permanent";
+                const limit = isPermanent ? CATBOX_LIMIT : LITTERBOX_LIMIT;
+                const tooBig = clip.size > limit;
+                const remaining = stored ? expiresAt(stored) - Date.now() : 0;
 
-                <div style={styles.actions}>
-                  {stored ? (
-                    <>
-                      <div style={styles.linkRow}>
-                        <input readOnly value={stored.url} style={styles.linkInput} onFocus={(e) => e.target.select()} />
-                        <button onClick={() => copyLink(stored.url)} style={styles.iconBtn} title="Copy link">
-                          {copied === stored.url ? <Check size={14} color="var(--color-victory)" /> : <Copy size={14} />}
-                        </button>
-                        <button onClick={() => openUrl(stored.url)} style={styles.iconBtn} title="Open in browser">
-                          <ExternalLink size={14} />
-                        </button>
-                      </div>
-                      <div style={styles.statusRow}>
-                        <span style={styles.statusText}>
-                          {stored.expiry === "permanent" ? "Permanent link" : formatRemaining(remaining)}
-                        </span>
-                        <button onClick={() => clearLink(clip.path)} style={styles.relinkBtn} title="Generate a new link">
-                          <RotateCcw size={11} /> Re-upload
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div style={styles.expiryRow}>
-                        <Clock size={13} color="var(--text-muted)" />
-                        <select
-                          value={exp}
-                          disabled={isUploading}
-                          onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
-                          style={styles.select}
+                return (
+                  <motion.div
+                    key={clip.path}
+                    style={styles.card}
+                    whileHover={{ scale: 1.02 }}
+                  >
+                    <div style={styles.thumbnailWrapper}>
+                      <video
+                        src={streamUrl(clip.path)}
+                        style={styles.videoPreview}
+                        controls
+                        preload="metadata"
+                      />
+                    </div>
+                    <div style={styles.cardInfo}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                        <span style={styles.clipName} title={clip.name}>{clip.name}</span>
+                        <button 
+                          onClick={() => handleToggleFavorite(clip.path)}
+                          style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--accent-violet)" : "var(--text-muted)" }}
+                          title={clip.favorite ? "Remove from favorites" : "Add to favorites"}
                         >
-                          {EXPIRY_OPTIONS.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
+                          <Heart size={16} fill={clip.favorite ? "var(--accent-violet)" : "transparent"} />
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleUpload(clip)}
-                        disabled={isUploading || tooBig}
-                        style={{
-                          ...styles.uploadBtn,
-                          opacity: isUploading || tooBig ? 0.5 : 1,
-                          cursor: isUploading || tooBig ? "default" : "pointer",
-                        }}
-                      >
-                        {isUploading ? (
-                          <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Uploading…</>
+                      <div style={styles.metaRow}>
+                        <span style={styles.clipMatch}>De: {clip.match_id}</span>
+                        <span style={styles.sizeBadge}>{formatSize(clip.size)}</span>
+                      </div>
+
+                      <div style={styles.actions}>
+                        {stored ? (
+                          <>
+                            <div style={styles.linkRow}>
+                              <input readOnly value={stored.url} style={styles.linkInput} onFocus={(e) => e.target.select()} />
+                              <button onClick={() => copyLink(stored.url)} style={styles.iconBtn} title="Copy link">
+                                {copied === stored.url ? <Check size={14} color="var(--color-victory)" /> : <Copy size={14} />}
+                              </button>
+                              <button onClick={() => openUrl(stored.url)} style={styles.iconBtn} title="Open in browser">
+                                <ExternalLink size={14} />
+                              </button>
+                            </div>
+                            <div style={styles.statusRow}>
+                              <span style={styles.statusText}>
+                                {stored.expiry === "permanent" ? "Permanent link" : formatRemaining(remaining)}
+                              </span>
+                              <button onClick={() => clearLink(clip.path)} style={styles.relinkBtn} title="Generate a new link">
+                                <RotateCcw size={11} /> Re-upload
+                              </button>
+                            </div>
+                          </>
                         ) : (
-                          <><UploadCloud size={14} /> Upload & share</>
+                          <>
+                            <div style={styles.expiryRow}>
+                              <Clock size={13} color="var(--text-muted)" />
+                              <select
+                                value={exp}
+                                disabled={isUploading}
+                                onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
+                                style={styles.select}
+                              >
+                                {EXPIRY_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              onClick={() => handleUpload(clip)}
+                              disabled={isUploading || tooBig}
+                              style={{
+                                ...styles.uploadBtn,
+                                opacity: isUploading || tooBig ? 0.5 : 1,
+                                cursor: isUploading || tooBig ? "default" : "pointer",
+                              }}
+                            >
+                              {isUploading ? (
+                                <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Uploading…</>
+                              ) : (
+                                <><UploadCloud size={14} /> Upload & share</>
+                              )}
+                            </button>
+                            {tooBig && (
+                              <span style={styles.warn}>
+                                Exceeds the {isPermanent ? "200 MB (permanent)" : "1 GB (temporary)"} limit.
+                                {isPermanent ? " Choose a temporary option." : ""}
+                              </span>
+                            )}
+                          </>
                         )}
-                      </button>
-                      {tooBig && (
-                        <span style={styles.warn}>
-                          Exceeds the {isPermanent ? "200 MB (permanent)" : "1 GB (temporary)"} limit.
-                          {isPermanent ? " Choose a temporary option." : ""}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </motion.div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
           );
         })}
-      </motion.div>
+      </div>
+      </div>
     </div>
   );
 };
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
+    display: "flex",
+    flexDirection: "column",
     padding: "var(--space-8)",
     height: "100%",
     boxSizing: "border-box",
-    overflowY: "auto",
     backgroundColor: "var(--bg-app)",
+  },
+  scrollArea: {
+    flex: 1,
+    overflowY: "auto",
+    position: "relative",
   },
   header: {
     display: "flex",
@@ -330,11 +397,6 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     height: "100%",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-    gap: "var(--space-6)",
   },
   card: {
     backgroundColor: "var(--bg-card)",

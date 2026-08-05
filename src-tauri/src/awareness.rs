@@ -213,7 +213,7 @@ pub fn snapshot_from_allgamedata(
 
     let mut players = Vec::with_capacity(arr.len());
     for p in arr {
-        let name = crate::api_listener::player_game_name(Some(p)).unwrap_or_default();
+        let name = crate::riot_live_api::player_game_name(Some(p)).unwrap_or_default();
         let scores = p.get("scores");
         let pick_i = |k: &str| -> i32 {
             scores
@@ -232,7 +232,7 @@ pub fn snapshot_from_allgamedata(
             .unwrap_or_default();
 
         players.push(PlayerSnapshot {
-            is_self: crate::api_listener::strip_tag(&name) == active_player_norm,
+            is_self: crate::riot_live_api::strip_tag(&name) == active_player_norm,
             name,
             champion: p
                 .get("championName")

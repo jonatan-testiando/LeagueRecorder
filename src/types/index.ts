@@ -9,6 +9,8 @@ export type MatchEventType =
   | 'DragonKill'
   | 'BaronKill'
   | 'HeraldKill'
+  // Ya no se generan (la detección por tecla se retiró), pero las partidas
+  // grabadas antes lo llevan y el reproductor las sigue pintando.
   | 'Ultimate';
 
 export interface MatchEvent {
@@ -17,11 +19,6 @@ export interface MatchEvent {
   subtype?: 'kill' | 'death' | 'assist' | 'ally' | 'enemy' | 'win' | 'lose' | 'R' | string;
   time: number; // Marca de tiempo en segundos
   description: string;
-}
-
-export interface UltimateSettings {
-  enabled: boolean;
-  key: string;
 }
 
 export interface MouseEventData {

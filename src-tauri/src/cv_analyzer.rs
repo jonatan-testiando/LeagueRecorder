@@ -184,6 +184,8 @@ pub async fn process_vod(
         c
     };
 
+    crate::proc::hide_console(&mut cmd);
+
     let mut child = match cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(c) => c,
         Err(e) => {
@@ -331,9 +333,10 @@ pub fn cancel_vod(state: tauri::State<'_, AnalyzerState>) -> Result<(), String> 
     state.cancel_requested.store(true, Ordering::SeqCst);
 
     // En Windows matamos el árbol completo (taskkill /T) para que no quede Python huérfano.
-    let _ = Command::new("taskkill")
-        .args(["/F", "/T", "/PID", &pid.to_string()])
-        .output();
+    let _ = crate::proc::hide_console(
+        Command::new("taskkill").args(["/F", "/T", "/PID", &pid.to_string()]),
+    )
+    .output();
 
     Ok(())
 }

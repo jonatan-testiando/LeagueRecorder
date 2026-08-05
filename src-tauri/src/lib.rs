@@ -1,4 +1,4 @@
-mod api_listener;
+mod riot_live_api;
 mod awareness;
 mod camera_snaps;
 mod commands;
@@ -7,6 +7,7 @@ mod dataset_generator;
 mod detector;
 mod obs_client;
 mod overlay;
+mod proc;
 mod recorder;
 pub mod riot_api;
 mod storage;
@@ -17,8 +18,8 @@ mod ultimate;
 use commands::{
     add_error_event, delete_error_event, delete_match, edit_error_event, export_clip,
     export_error_clip, get_all_clips, get_all_error_clips, get_app_config, get_audio_status,
-    get_recorded_matches, get_recorder_status, get_ultimate_settings, get_video_settings,
-    save_match_comments, save_replay_clip, set_app_config, set_ultimate_settings, set_video_settings,
+    get_recorded_matches, get_recorder_status, get_video_settings,
+    save_match_comments, save_replay_clip, set_app_config, set_video_settings,
     sync_match_now,
     spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
     update_error_note,
@@ -39,8 +40,8 @@ pub fn run() {
     let ult_state = Arc::new(UltState::default());
     let training_state = Arc::new(TrainingState::default());
 
-    // Listener global de teclado: detecta la ultimate y las teclas de cámara aliada.
-    // Solo lee eventos; nunca inyecta input en el juego.
+    // Listener global de teclado y ratón: APM, estela del ratón y teclas de cámara
+    // aliada. Solo lee eventos; nunca inyecta input en el juego.
     spawn_keyboard_listener(Arc::clone(&ult_state), Arc::clone(&training_state));
 
     let video_settings = Arc::new(std::sync::Mutex::new(
@@ -139,8 +140,6 @@ pub fn run() {
             save_match_comments,
             sync_match_now,
             get_audio_status,
-            get_ultimate_settings,
-            set_ultimate_settings,
             start_manual_recording,
             stop_manual_recording,
             export_clip,

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { MatchMetadata, AudioStatus, UltimateSettings, VideoSettings, Comment } from "../types";
+import { MatchMetadata, AudioStatus, VideoSettings, Comment } from "../types";
 
 export const getRecordedMatches = async (): Promise<MatchMetadata[]> => {
   return await invoke<MatchMetadata[]>("get_recorded_matches");
@@ -15,14 +15,6 @@ export const getRecorderStatus = async (): Promise<boolean> => {
 
 export const getAudioStatus = async (): Promise<AudioStatus> => {
   return await invoke<AudioStatus>("get_audio_status");
-};
-
-export const getUltimateSettings = async (): Promise<UltimateSettings> => {
-  return await invoke<UltimateSettings>("get_ultimate_settings");
-};
-
-export const setUltimateSettings = async (enabled: boolean, key: string): Promise<UltimateSettings> => {
-  return await invoke<UltimateSettings>("set_ultimate_settings", { enabled, key });
 };
 
 export const startManualRecording = async (id: string): Promise<string> => {
@@ -89,14 +81,16 @@ export interface AppConfig {
   save_directory: string;
   riot_api_key: string;
   auto_dataset_generator: boolean;
+  max_storage_gb: number;
+  auto_prune_days: number;
 }
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator });
+export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays });
 };
 
 export interface ProcessVodResponse {

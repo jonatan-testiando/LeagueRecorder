@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { MatchMetadata } from "../../types";
 import { useDialog } from "../../components/ui/DialogProvider";
 import { getRecordedMatches, deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
+import { useAppStore } from "../../store/useAppStore";
 
 export const useGallery = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
-  const [selectedMatch, setSelectedMatch] = useState<MatchMetadata | null>(null);
+  const selectedMatch = useAppStore(state => state.selectedMatch);
+  const setSelectedMatch = useAppStore(state => state.setSelectedMatch);
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

@@ -85,6 +85,29 @@ if ($LASTEXITCODE -ne 0) {
     throw "El runtime se construyó pero cv2/numpy no importan. Revisa la versión de Python."
 }
 
+# 6) Podar lo que no se ejecuta nunca en el runtime del usuario.
+#    - pip: solo hacía falta durante este script (~12 MB).
+#    - tests/ de numpy: baterías de pruebas del propio paquete (~15 MB).
+#    - __pycache__: se regenera solo si hiciera falta.
+#    La verificación va ANTES a propósito, para no podar un runtime roto.
+Write-Host "[setup_runtime] Podando lo que no se usa en ejecución..."
+$before = (Get-ChildItem $RuntimeDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+$sitePkgs = Join-Path $RuntimeDir "Lib\site-packages"
+$prune = @()
+$prune += Get-ChildItem $sitePkgs -Directory -ErrorAction SilentlyContinue |
+          Where-Object { $_.Name -in @("pip", "pkg_resources", "setuptools") -or $_.Name -like "pip-*" }
+$prune += Get-ChildItem $sitePkgs -Recurse -Directory -Filter "tests" -ErrorAction SilentlyContinue
+$prune += Get-ChildItem $RuntimeDir -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue
+foreach ($d in $prune) { if (Test-Path $d.FullName) { Remove-Item -Recurse -Force $d.FullName } }
+
+# Con pip fuera, cv2/numpy tienen que seguir importando. Si no, es un fallo de build.
+& $PythonExe -c "import cv2, numpy" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "La poda rompió el runtime: cv2/numpy ya no importan. Revisa la lista de directorios podados."
+}
+$after = (Get-ChildItem $RuntimeDir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
+Write-Host ("[setup_runtime] Podado: {0:N0} MB -> {1:N0} MB ({2:N0} MB menos)" -f $before, $after, ($before - $after)) -ForegroundColor Yellow
+
 # Marcar como listo para builds incrementales
 "ready $PythonVersion" | Set-Content -Path $Marker -Encoding ascii
 Write-Host "[setup_runtime] Runtime listo en $RuntimeDir" -ForegroundColor Green

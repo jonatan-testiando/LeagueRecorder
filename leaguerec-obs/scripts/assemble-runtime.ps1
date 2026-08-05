@@ -65,5 +65,15 @@ foreach ($p in $plugins) {
 Write-Host "Copiando data/libobs ..." -ForegroundColor Cyan
 Copy-Item (Join-Path $rundir "data\libobs\*") $dataObs -Recurse -Force
 
+# El data/ de win-capture viene con los .pdb de sus helpers (graphics-hook32/64,
+# inject-helper, get-graphics-offsets): son símbolos de depuración, en ejecución no
+# se abren jamás y suman ~45 MB, casi la mitad del runtime de OBS.
+$pdbs = @(Get-ChildItem $OutDir -Recurse -Include *.pdb -File)
+if ($pdbs.Count -gt 0) {
+  $freed = ($pdbs | Measure-Object Length -Sum).Sum / 1MB
+  $pdbs | Remove-Item -Force
+  Write-Host ("Descartados {0} .pdb de depuración ({1:N0} MB)" -f $pdbs.Count, $freed) -ForegroundColor Yellow
+}
+
 $size = (Get-ChildItem $OutDir -Recurse | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("Runtime ensamblado en $OutDir ({0:N0} MB)" -f $size) -ForegroundColor Green

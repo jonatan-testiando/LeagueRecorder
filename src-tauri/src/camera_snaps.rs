@@ -135,14 +135,16 @@ pub async fn analyze_camera_snaps(
 
     let _ = app.emit("snaps_progress", "Scanning for camera cuts…");
 
-    let mut child = match Command::new(&python_exe)
-        .env("PYTHONUNBUFFERED", "1")
-        .arg(&script)
-        .arg(&meta.video_path)
-        .arg(out_dir.to_string_lossy().to_string())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+    let mut child = match crate::proc::hide_console(
+        Command::new(&python_exe)
+            .env("PYTHONUNBUFFERED", "1")
+            .arg(&script)
+            .arg(&meta.video_path)
+            .arg(out_dir.to_string_lossy().to_string()),
+    )
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
     {
         Ok(c) => c,
         Err(e) => {

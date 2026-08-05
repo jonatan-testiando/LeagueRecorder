@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
@@ -10,30 +11,45 @@ import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
 import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle, Crosshair } from "lucide-react";
-import { ErrorClipMetadata } from "./core/tauri-ipc";
-import { motion, AnimatePresence } from "framer-motion";
 import { getVersion } from "@tauri-apps/api/app";
+import { useAppStore } from "./store/useAppStore";
 
 type Tab = "games" | "clips" | "errors" | "review" | "vod" | "training" | "settings";
 
-const NAV_ITEMS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-  { key: "games", label: "Games", icon: <Gamepad2 size={18} /> },
-  { key: "clips", label: "Clips", icon: <Film size={18} /> },
-  { key: "errors", label: "Errors", icon: <AlertTriangle size={18} /> },
-  { key: "review", label: "Review", icon: <MonitorPlay size={18} /> },
-  { key: "vod", label: "VOD Analysis", icon: <Film size={18} /> },
-  { key: "training", label: "Training", icon: <Crosshair size={18} /> },
+/** Paneles con contenido propio. "review" no está: reutiliza el de "/games". */
+type Panel = "/games" | "/clips" | "/errors" | "/vod" | "/training" | "/settings";
+
+const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode }[] = [
+  { key: "games", path: "/games", label: "Games", icon: <Gamepad2 size={18} /> },
+  { key: "clips", path: "/clips", label: "Clips", icon: <Film size={18} /> },
+  { key: "errors", path: "/errors", label: "Errors", icon: <AlertTriangle size={18} /> },
+  { key: "review", path: "/review", label: "Review", icon: <MonitorPlay size={18} /> },
+  { key: "vod", path: "/vod", label: "VOD Analysis", icon: <Film size={18} /> },
+  { key: "training", path: "/training", label: "Training", icon: <Crosshair size={18} /> },
 ];
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>("games");
-  const [selectedError, setSelectedError] = useState<ErrorClipMetadata | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [appVersion, setAppVersion] = useState<string>("");
-  
+
+  const selectedError = useAppStore(state => state.selectedError);
+  const setSelectedError = useAppStore(state => state.setSelectedError);
+  const selectedVod = useAppStore(state => state.selectedVod);
+  const setSelectedVod = useAppStore(state => state.setSelectedVod);
+
   React.useEffect(() => {
     getVersion().then(setAppVersion).catch(console.error);
   }, []);
-  
+
+  const currentPath = location.pathname;
+
+  React.useEffect(() => {
+    if (currentPath === "/") {
+      navigate("/games", { replace: true });
+    }
+  }, [currentPath, navigate]);
+
   const {
     matches,
     selectedMatch,
@@ -42,7 +58,47 @@ export const App: React.FC = () => {
     deleteMatch
   } = useGallery();
 
-  const goTo = (tab: Tab) => { setActiveTab(tab); setSelectedMatch(null); };
+  const goTo = (path: string) => {
+    navigate(path);
+  };
+
+  const matchedNav = NAV_ITEMS.find(n => currentPath.startsWith(n.path));
+  const activeTabKey: string = matchedNav
+    ? matchedNav.key
+    : currentPath.startsWith("/settings")
+      ? "settings"
+      : "games";
+
+  // Panel visible ahora mismo. "Review" comparte panel con "Games": es la lista de
+  // partidas desde la que se abre una para revisarla, como antes de las rutas.
+  const activePanel: Panel =
+    activeTabKey === "review" ? "/games" : ((matchedNav?.path ?? "/games") as Panel);
+
+  // Los paneles se quedan montados una vez visitados para no perder su estado (el
+  // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo
+  // arranca el panel inicial, no las seis pestañas con sus fetches y sus listeners.
+  const [mountedPanels, setMountedPanels] = useState<Set<Panel>>(() => new Set<Panel>());
+  // useLayoutEffect y no useEffect: así el panel se monta antes de pintar y al
+  // cambiar de pestaña no se ve un fotograma en blanco.
+  React.useLayoutEffect(() => {
+    setMountedPanels(prev => (prev.has(activePanel) ? prev : new Set(prev).add(activePanel)));
+  }, [activePanel]);
+
+  // Envuelve un panel: oculto con display:none en vez de desmontarlo, y sin renderizar
+  // su contenido hasta la primera visita.
+  const panel = (path: Panel, content: React.ReactNode) => (
+    <div
+      key={path}
+      style={{
+        display: activePanel === path ? "flex" : "none",
+        width: "100%",
+        height: "100%",
+        flexDirection: "column",
+      }}
+    >
+      {mountedPanels.has(path) ? content : null}
+    </div>
+  );
 
   return (
     <>
@@ -59,16 +115,16 @@ export const App: React.FC = () => {
           {NAV_ITEMS.map((item) => (
             <button
               key={item.key}
-              onClick={() => goTo(item.key)}
-              className={`nav-btn${activeTab === item.key ? " nav-btn--active" : ""}`}
+              onClick={() => goTo(item.path)}
+              className={`nav-btn${activeTabKey === item.key ? " nav-btn--active" : ""}`}
             >
               {item.icon}
               {item.label}
             </button>
           ))}
           <button
-            onClick={() => goTo("settings")}
-            className={`nav-btn${activeTab === "settings" ? " nav-btn--active" : ""}`}
+            onClick={() => goTo("/settings")}
+            className={`nav-btn${activeTabKey === "settings" ? " nav-btn--active" : ""}`}
             style={{ marginTop: "auto" }}
           >
             <Settings size={18} />
@@ -84,74 +140,69 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div style={styles.mainContent}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={selectedError ? "errorPlayer" : activeTab === "games" && selectedMatch ? "videoPlayer" : activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}
-          >
-            {activeTab === "settings" ? (
-              <SettingsPanel />
-            ) : activeTab === "training" ? (
-              <TrainingPanel />
-            ) : activeTab === "clips" ? (
-              <ClipsGallery />
-            ) : activeTab === "vod" ? (
-              <>
-                {selectedMatch && (
-                  <div style={styles.playerWrapper}>
-                    <div style={styles.playerTopBar}>
-                      <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
-                        <ArrowLeft size={20} />
-                      </button>
-                      <div style={styles.playerTitleBlock}>
-                        <h2 style={styles.playerTitle}>AI Analysis</h2>
-                        <span style={styles.playerSub}>{selectedMatch.date}</span>
-                      </div>
-                    </div>
-                    <VideoPlayer match={selectedMatch} />
-                  </div>
-                )}
-                <div style={{ display: selectedMatch ? "none" : "block", width: "100%", height: "100%" }}>
-                  <VodGallery onSelectMatch={setSelectedMatch} />
+        {panel("/settings", <SettingsPanel />)}
+
+        {panel("/training", <TrainingPanel />)}
+
+        {panel("/clips", <ClipsGallery />)}
+
+        {panel(
+          "/vod",
+          selectedVod ? (
+            <div style={styles.playerWrapper}>
+              <div style={styles.playerTopBar}>
+                <button style={styles.backBtn} onClick={() => setSelectedVod(null)}>
+                  <ArrowLeft size={20} />
+                </button>
+                <div style={styles.playerTitleBlock}>
+                  <h2 style={styles.playerTitle}>AI Analysis</h2>
+                  <span style={styles.playerSub}>{selectedVod.date}</span>
                 </div>
-              </>
-            ) : activeTab === "errors" ? (
-              selectedError ? (
-                <ErrorPlayer 
-                  clip={selectedError} 
-                  onUpdate={() => {}} 
-                  onClose={() => setSelectedError(null)} 
-                />
-              ) : (
-                <ErrorsGallery onSelectError={setSelectedError} />
-              )
-            ) : selectedMatch ? (
-              <div style={styles.playerWrapper}>
-                <div style={styles.playerTopBar}>
-                  <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
-                    <ArrowLeft size={20} />
-                  </button>
-                  <div style={styles.playerTitleBlock}>
-                    <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
-                    <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
-                  </div>
-                </div>
-                <VideoPlayer match={selectedMatch} />
               </div>
-            ) : (
-              <MatchGallery
-                matches={matches}
-                onSelectMatch={setSelectedMatch}
-                onDeleteMatch={deleteMatch}
-                isRecording={isRecording}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
+              <VideoPlayer match={selectedVod} />
+            </div>
+          ) : (
+            <VodGallery onSelectMatch={setSelectedVod} />
+          )
+        )}
+
+        {panel(
+          "/errors",
+          selectedError ? (
+            <ErrorPlayer
+              clip={selectedError}
+              onUpdate={() => {}}
+              onClose={() => setSelectedError(null)}
+            />
+          ) : (
+            <ErrorsGallery onSelectError={setSelectedError} />
+          )
+        )}
+
+        {panel(
+          "/games",
+          selectedMatch ? (
+            <div style={styles.playerWrapper}>
+              <div style={styles.playerTopBar}>
+                <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
+                  <ArrowLeft size={20} />
+                </button>
+                <div style={styles.playerTitleBlock}>
+                  <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
+                  <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+                </div>
+              </div>
+              <VideoPlayer match={selectedMatch} />
+            </div>
+          ) : (
+            <MatchGallery
+              matches={matches}
+              onSelectMatch={setSelectedMatch}
+              onDeleteMatch={deleteMatch}
+              isRecording={isRecording}
+            />
+          )
+        )}
       </div>
       </div>
     </>

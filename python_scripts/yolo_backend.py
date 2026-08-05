@@ -17,6 +17,7 @@ import numpy as np
 import sys
 import json
 import os
+import time
 from collections import deque
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,14 +25,23 @@ from analyzer import Config, _envi, _envf
 
 
 def _letterbox(img, new_shape):
-    """Redimensiona manteniendo aspecto y rellena a (new_shape,new_shape).
-    Devuelve (img_padded, ratio, (dw, dh))."""
+    """Redimensiona manteniendo aspecto y rellena al destino.
+
+    `new_shape` puede ser un entero (destino cuadrado, comportamiento histórico) o
+    una tupla (tw, th) para un destino rectangular.
+
+    Con vídeo 16:9 y destino cuadrado, la escala la fija SIEMPRE el ancho
+    (r = imgsz/W < imgsz/H), así que pasar a un destino 16:9 no cambia el tamaño
+    con el que la red ve el cursor: solo elimina las barras grises de arriba y
+    abajo, que son ~43% del tensor.
+    """
     h, w = img.shape[:2]
-    r = min(new_shape / h, new_shape / w)
+    tw, th = (new_shape, new_shape) if isinstance(new_shape, int) else new_shape
+    r = min(th / h, tw / w)
     nh, nw = int(round(h * r)), int(round(w * r))
     resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
-    canvas = np.full((new_shape, new_shape, 3), 114, dtype=np.uint8)
-    dw, dh = (new_shape - nw) // 2, (new_shape - nh) // 2
+    canvas = np.full((th, tw, 3), 114, dtype=np.uint8)
+    dw, dh = (tw - nw) // 2, (th - nh) // 2
     canvas[dh:dh + nh, dw:dw + nw] = resized
     return canvas, r, (dw, dh)
 
@@ -79,6 +89,70 @@ def _add_cuda_dll_dirs():
         import torch  # noqa: F401  (fuerza la carga de las DLLs CUDA en el proceso)
     except Exception:
         pass
+    # TensorRT: sus DLLs (nvinfer_10.dll y compañía) viven en el paquete
+    # `tensorrt_libs`. El proveedor de onnxruntime las busca por el cargador del
+    # sistema, así que hay que meter esa carpeta en el PATH del proceso.
+    try:
+        import tensorrt_libs
+        d = os.path.dirname(tensorrt_libs.__file__)
+        os.add_dll_directory(d)
+        os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+    except Exception:
+        pass
+
+
+# --- Perfilado (opt-in con VOD_PROFILE=1) -----------------------------------
+# Acumula segundos por etapa. El decode corre en su propio hilo y se solapa con
+# GPU, así que la suma de etapas es MAYOR que el wall clock: lo que interesa es
+# comparar el tiempo del hilo productor contra el del hilo principal, porque el
+# techo del pipeline es el mayor de los dos.
+PROFILE = os.environ.get("VOD_PROFILE", "0") not in ("0", "", "false")
+_T = {"decode": 0.0, "preprocess": 0.0, "infer": 0.0, "decode_out": 0.0, "click": 0.0}
+
+
+class _Timer:
+    """Cronómetro de bloque. Sin coste apreciable cuando PROFILE está apagado."""
+
+    __slots__ = ("key", "t0")
+
+    def __init__(self, key):
+        self.key = key
+
+    def __enter__(self):
+        if PROFILE:
+            self.t0 = time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        if PROFILE:
+            _T[self.key] += time.perf_counter() - self.t0
+        return False
+
+
+def _build_providers():
+    """Proveedor de ejecución según VOD_EP: trt | cuda | cpu (por defecto cuda).
+
+    TensorRT compila un motor específico para ESTA GPU la primera vez (de decenas
+    de segundos a varios minutos). La caché lo evita en ejecuciones posteriores,
+    pero no es portable entre GPUs, drivers ni versiones de TensorRT, así que solo
+    sirve para la máquina que la genera.
+    """
+    ep = os.environ.get("VOD_EP", "cuda").lower()
+    cuda = ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"})
+    if ep == "cpu":
+        return ["CPUExecutionProvider"]
+    if ep == "trt":
+        cache = os.environ.get("VOD_TRT_CACHE", os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "..", "models", "trt_cache"))
+        os.makedirs(cache, exist_ok=True)
+        trt = ("TensorrtExecutionProvider", {
+            "trt_engine_cache_enable": True,
+            "trt_engine_cache_path": cache,
+            "trt_timing_cache_enable": True,
+            "trt_fp16_enable": os.environ.get("VOD_TRT_FP16", "1") not in ("0", "", "false"),
+        })
+        return [trt, cuda, "CPUExecutionProvider"]
+    return [cuda, "CPUExecutionProvider"]
 
 
 class YoloCursorDetector:
@@ -88,28 +162,52 @@ class YoloCursorDetector:
         _add_cuda_dll_dirs()
         import onnxruntime as ort
         self.imgsz = imgsz
+        # Destino del letterbox (ancho, alto). Cuadrado por defecto; `set_frame_size`
+        # lo ajusta al aspecto real del vídeo si VOD_RECT está activo.
+        self.tw = self.th = imgsz
         self.conf = conf
         if providers is None:
             # HEURISTIC evita la búsqueda EXHAUSTIVE de cuDNN en el primer batch
             # (que costaba ~80s de warmup con FP16); el steady-state apenas cambia.
-            providers = [
-                ("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"}),
-                "CPUExecutionProvider",
-            ]
+            providers = _build_providers()
         so = ort.SessionOptions()
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self.sess = ort.InferenceSession(model_path, sess_options=so, providers=providers)
         self.input_name = self.sess.get_inputs()[0].name
         self.active = self.sess.get_providers()
+        # Si un proveedor pedido no carga sus DLLs (típico: TensorRT sin nvinfer),
+        # onnxruntime NO cae al siguiente de la lista: se queda SOLO en CPU, que
+        # aquí es ~27x más lento por frame. Detectarlo y rehacer la sesión con CUDA
+        # explícito evita una degradación silenciosa de minutos.
+        if self.active == ["CPUExecutionProvider"] and providers != ["CPUExecutionProvider"]:
+            sys.stderr.write(
+                "[EP] El proveedor pedido no cargó; onnxruntime se quedó en CPU. "
+                "Reintentando con CUDA.\n")
+            self.sess = ort.InferenceSession(
+                model_path, sess_options=so,
+                providers=[("CUDAExecutionProvider", {"cudnn_conv_algo_search": "HEURISTIC"}),
+                           "CPUExecutionProvider"])
+            self.active = self.sess.get_providers()
         # ¿fp16? miramos el tipo del input del modelo.
         it = self.sess.get_inputs()[0].type
         self.dtype = np.float16 if "float16" in it else np.float32
+
+    def set_frame_size(self, w, h):
+        """Fija el destino del letterbox al aspecto del vídeo si VOD_RECT=1.
+
+        El alto se redondea a múltiplo de 32 (el stride de la red). Con 1920x1080 e
+        imgsz=960 sale 960x544: mismo factor de escala, 43% menos de tensor.
+        """
+        if os.environ.get("VOD_RECT", "0") in ("0", "", "false") or not w or not h:
+            return
+        self.tw = self.imgsz
+        self.th = max(32, int(round(self.imgsz * h / w / 32)) * 32)
 
     def preprocess_one(self, frame):
         """Letterbox + normalize + swapRB + CHW de UN frame, TODO en C (cv2, que
         libera el GIL) para que el pool de hilos lo paralelice de verdad. Antes el
         transpose/astype/div de numpy retenían el GIL y serializaban el preproceso."""
-        pad, r, (dw, dh) = _letterbox(frame, self.imgsz)
+        pad, r, (dw, dh) = _letterbox(frame, (self.tw, self.th))
         blob = cv2.dnn.blobFromImage(pad, scalefactor=1.0 / 255.0, swapRB=True)  # [1,3,H,W] f32
         row = blob[0]
         if self.dtype == np.float16:
@@ -117,7 +215,7 @@ class YoloCursorDetector:
         return row, (r, dw, dh)
 
     def _preprocess(self, frames):
-        batch = np.empty((len(frames), 3, self.imgsz, self.imgsz), dtype=self.dtype)
+        batch = np.empty((len(frames), 3, self.th, self.tw), dtype=self.dtype)
         metas = []
         for i, f in enumerate(frames):
             chw, meta = self.preprocess_one(f)
@@ -160,8 +258,10 @@ class YoloCursorDetector:
 
     def infer_prepared(self, batch, metas):
         """Infiere un batch YA preprocesado (np array [B,3,H,W]) y decodifica."""
-        outs = self.sess.run(None, {self.input_name: batch})[0]
-        return self._decode(outs, metas)
+        with _Timer("infer"):
+            outs = self.sess.run(None, {self.input_name: batch})[0]
+        with _Timer("decode_out"):
+            return self._decode(outs, metas)
 
     def detect(self, frames):
         """Ruta simple (sin pipeline): preprocesa + infiere una lista de frames."""
@@ -205,6 +305,8 @@ class YoloVideoAnalyzer:
         fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         skip = max(1, int(round(fps / cfg.target_fps)))
         max_frames = _envi("VOD_MAX_FRAMES", 0)  # 0 = sin límite; >0 acota (harness/A-B)
+        detector.set_frame_size(fw, fh)
+        sys.stderr.write(f"[YOLO] entrada de red: {detector.tw}x{detector.th}\n")
 
         events = []
 
@@ -221,12 +323,15 @@ class YoloVideoAnalyzer:
             while True:
                 if max_frames and fc >= max_frames:
                     break
-                if not cap.grab():
+                with _Timer("decode"):
+                    got = cap.grab()
+                if not got:
                     break
                 fc += 1
                 if fc % skip != 0:
                     continue
-                ok, frame = cap.retrieve()
+                with _Timer("decode"):
+                    ok, frame = cap.retrieve()
                 if not ok:
                     continue
                 raw_q.put((fc / fps, frame, fc))
@@ -382,13 +487,18 @@ class YoloVideoAnalyzer:
 
         def process_batch(items):
             frames = [it[1] for it in items]
-            pre = list(pool.map(detector.preprocess_one, frames))  # orden preservado
-            batch = np.empty((len(frames), 3, self.imgsz, self.imgsz), dtype=detector.dtype)
-            metas = []
-            for j, (chw, meta) in enumerate(pre):
-                batch[j] = chw
-                metas.append(meta)
+            with _Timer("preprocess"):
+                pre = list(pool.map(detector.preprocess_one, frames))  # orden preservado
+                batch = np.empty((len(frames), 3, detector.th, detector.tw), dtype=detector.dtype)
+                metas = []
+                for j, (chw, meta) in enumerate(pre):
+                    batch[j] = chw
+                    metas.append(meta)
             frame_dets = detector.infer_prepared(batch, metas)
+            with _Timer("click"):
+                _click_pass(items, frame_dets)
+
+        def _click_pass(items, frame_dets):
             for (t_sec, frame, fc), dets in zip(items, frame_dets):
                 click_state["since"] += 1
                 if not dets:
@@ -412,6 +522,7 @@ class YoloVideoAnalyzer:
                         click_state["since"] = 0
                 frame_hist.append(frame)
 
+        t_wall0 = time.perf_counter()
         batch_items = []
         while True:
             item = raw_q.get()
@@ -431,8 +542,33 @@ class YoloVideoAnalyzer:
 
         th.join()
         pool.shutdown()
+        wall = time.perf_counter() - t_wall0
         cap.release()
         duration = (state["last_fc"] / fps) if fps > 0 else 0.0
+
+        if PROFILE:
+            analyzed = state["last_fc"] // skip if skip else state["last_fc"]
+            main = _T["preprocess"] + _T["infer"] + _T["decode_out"] + _T["click"]
+            sys.stderr.write(
+                "\n[PROFILE] ---------------------------------------------\n"
+                f"[PROFILE] vídeo            {duration:7.1f} s ({state['last_fc']} frames, "
+                f"{analyzed} analizados a 1/{skip})\n"
+                f"[PROFILE] wall clock       {wall:7.2f} s   -> {analyzed / wall:6.1f} frames analizados/s\n"
+                f"[PROFILE] x tiempo real    {duration / wall:7.2f}\n"
+                "[PROFILE]\n"
+                f"[PROFILE] hilo DECODE      {_T['decode']:7.2f} s  ({_T['decode'] / wall * 100:5.1f}% del wall)\n"
+                f"[PROFILE] hilo PRINCIPAL   {main:7.2f} s  ({main / wall * 100:5.1f}% del wall)\n"
+                f"[PROFILE]   · preproceso   {_T['preprocess']:7.2f} s  ({_T['preprocess'] / wall * 100:5.1f}%)\n"
+                f"[PROFILE]   · inferencia   {_T['infer']:7.2f} s  ({_T['infer'] / wall * 100:5.1f}%)\n"
+                f"[PROFILE]   · post-NMS     {_T['decode_out']:7.2f} s  ({_T['decode_out'] / wall * 100:5.1f}%)\n"
+                f"[PROFILE]   · clics (HSV)  {_T['click']:7.2f} s  ({_T['click'] / wall * 100:5.1f}%)\n"
+                "[PROFILE]\n"
+                f"[PROFILE] techo = {'DECODE' if _T['decode'] > main else 'HILO PRINCIPAL'}"
+                " (decode se solapa con el resto, por eso la suma pasa del 100%)\n"
+                "[PROFILE] ---------------------------------------------\n"
+            )
+            sys.stderr.flush()
+
         sys.stderr.write(f"[YOLO] Analisis finalizado. eventos={len(events)}\n")
         result = {"events": events, "duration": duration, "width": fw, "height": fh}
         print(json.dumps(result))

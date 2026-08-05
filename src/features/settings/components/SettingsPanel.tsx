@@ -1,12 +1,31 @@
 import React, { useState, useEffect } from "react";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getUltimateSettings, setUltimateSettings, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
-import { AudioStatus, UltimateSettings, VideoSettings } from "../../../types";
-import { Sparkles, Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
+import { AudioStatus, VideoSettings } from "../../../types";
+import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { check } from "@tauri-apps/plugin-updater";
 import { exit } from "@tauri-apps/plugin-process";
 import { motion, Variants } from "framer-motion";
+
+// Mismos límites que aplica el backend (`storage::MIN_STORAGE_GB` y el clamp de
+// `set_app_config`). Los dos campos gobiernan borrados de ficheros, así que un 0
+// colado por un campo vacío significaría "vacía la biblioteca".
+const MIN_STORAGE_GB = 10;
+const MAX_STORAGE_GB = 100_000;
+const MAX_PRUNE_DAYS = 3650;
+
+const clampStorageGb = (raw: string): number => {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return MIN_STORAGE_GB;
+  return Math.min(Math.max(n, MIN_STORAGE_GB), MAX_STORAGE_GB);
+};
+
+const clampPruneDays = (raw: string): number => {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(Math.max(n, 0), MAX_PRUNE_DAYS);
+};
 
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -15,9 +34,12 @@ export const SettingsPanel: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
-  const [ult, setUlt] = useState<UltimateSettings>({ enabled: true, key: "R" });
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "High" });
-  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false, max_storage_gb: 100, auto_prune_days: 0 });
+  // Los dos campos numéricos se editan como texto: si se guardara el `Number()` de
+  // cada pulsación, vaciar el campo enviaría un 0 al backend. Se acotan al salir.
+  const [storageDraft, setStorageDraft] = useState<string>("100");
+  const [pruneDraft, setPruneDraft] = useState<string>("0");
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
@@ -44,14 +66,6 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
-  const saveUlt = async (enabled: boolean, key: string) => {
-    try {
-      setUlt(await setUltimateSettings(enabled, key));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const saveVideo = async (fps: number, quality: string) => {
     try {
       setVideo(await setVideoSettings(fps, quality));
@@ -63,16 +77,21 @@ export const SettingsPanel: React.FC = () => {
   useEffect(() => {
     checkStatus();
     refreshAudio();
-    getUltimateSettings().then(setUlt).catch(console.error);
     getVideoSettings().then(setVideo).catch(console.error);
-    getAppConfig().then(setConfig).catch(console.error);
+    getAppConfig()
+      .then(c => {
+        setConfig(c);
+        setStorageDraft(String(c.max_storage_gb));
+        setPruneDraft(String(c.auto_prune_days));
+      })
+      .catch(console.error);
     const interval = setInterval(checkStatus, 2000);
     return () => clearInterval(interval);
   }, []);
 
   const handleSaveConfig = async (c: AppConfig) => {
     setConfig(c);
-    await setAppConfig(c.save_directory, c.riot_api_key, c.auto_dataset_generator).catch(console.error);
+    await setAppConfig(c.save_directory, c.riot_api_key, c.auto_dataset_generator, c.max_storage_gb, c.auto_prune_days).catch(console.error);
   };
 
   const handlePickDirectory = async () => {
@@ -211,43 +230,6 @@ export const SettingsPanel: React.FC = () => {
         initial="hidden"
         animate="show"
       >
-      {/* Detección de ultimate (R) */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardTitleRow}>
-          <h3 style={styles.cardTitle}>
-            <Sparkles size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
-            Ultimate Detection (R)
-          </h3>
-          <button
-            onClick={() => ult && saveUlt(!ult.enabled, ult.key)}
-            style={{
-              ...styles.toggle,
-              background: ult?.enabled ? "var(--gradient-teal)" : "transparent",
-              color: ult?.enabled ? "var(--bg-app)" : "var(--text-secondary)",
-              borderColor: ult?.enabled ? "transparent" : "var(--border-strong)",
-            }}
-          >
-            {ult?.enabled ? "On" : "Off"}
-          </button>
-        </div>
-        <p style={styles.cardText}>
-          Riot's API <strong>does not report</strong> ability usage, so this is detected from the
-          keypress while you record (best-effort). It's only flagged once your ultimate is available (level ≥ 6).
-          There may be a false positive if you press it while on cooldown.
-        </p>
-        <div style={styles.ultRow}>
-          <span style={styles.ultLabel}>Ultimate key:</span>
-          <input
-            type="text"
-            maxLength={1}
-            value={ult?.key ?? "R"}
-            onChange={(e) => ult && setUlt({ ...ult, key: e.target.value.toUpperCase() })}
-            onBlur={() => ult && saveUlt(ult.enabled, ult.key)}
-            style={{ width: "30px", textAlign: "center", textTransform: "uppercase", fontWeight: "bold" }}
-          />
-        </div>
-      </motion.div>
-
       {/* Almacenamiento */}
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
@@ -273,6 +255,57 @@ export const SettingsPanel: React.FC = () => {
               <button onClick={handlePickDirectory} style={{...styles.button, backgroundColor: "var(--accent-violet)", padding: "8px 12px"}}>
                 Change
               </button>
+            </div>
+          </div>
+
+          <div style={{...styles.settingRow, marginTop: "16px"}}>
+            <div style={styles.settingInfo}>
+              <span style={styles.settingLabel}>Max Storage Quota (GB)</span>
+              <span style={styles.settingDesc}>Oldest matches are deleted first if size exceeds this limit (minimum {MIN_STORAGE_GB} GB)</span>
+            </div>
+            <div style={{ flex: 1, marginLeft: "16px", maxWidth: "80px" }}>
+              <input
+                type="number"
+                min={MIN_STORAGE_GB}
+                value={storageDraft}
+                onChange={(e) => setStorageDraft(e.target.value)}
+                onBlur={() => {
+                  const gb = clampStorageGb(storageDraft);
+                  setStorageDraft(String(gb));
+                  handleSaveConfig({ ...config, max_storage_gb: gb });
+                }}
+                style={{
+                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
+                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none", textAlign: "center"
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{...styles.settingRow, marginTop: "16px"}}>
+            <div style={styles.settingInfo}>
+              <span style={styles.settingLabel}>Auto-prune Age (Days)</span>
+              <span style={styles.settingDesc}>
+                Permanently deletes local matches older than X days, together with their clips.
+                0 disables it (default). Imported VODs and matches with favorited clips are never touched.
+              </span>
+            </div>
+            <div style={{ flex: 1, marginLeft: "16px", maxWidth: "80px" }}>
+              <input
+                type="number"
+                min="0"
+                value={pruneDraft}
+                onChange={(e) => setPruneDraft(e.target.value)}
+                onBlur={() => {
+                  const days = clampPruneDays(pruneDraft);
+                  setPruneDraft(String(days));
+                  handleSaveConfig({ ...config, auto_prune_days: days });
+                }}
+                style={{
+                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
+                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none", textAlign: "center"
+                }}
+              />
             </div>
           </div>
         </div>

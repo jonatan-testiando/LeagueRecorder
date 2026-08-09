@@ -8,7 +8,7 @@ import {
   Orbit, Crown, Eye, TowerControl, BrickWall,
   Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
-  ThumbsUp, XCircle, ChevronLeft, ChevronRight, Share2, MousePointer2, EyeOff,
+  ThumbsUp, XCircle, ChevronLeft, ChevronRight, MousePointer2, EyeOff,
   Trash2, Send, RefreshCw, Check, MinusCircle
 } from "lucide-react";
 import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";

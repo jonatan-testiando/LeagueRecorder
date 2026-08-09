@@ -46,6 +46,7 @@ pub struct ActiveMatchState {
     pub apm_samples: Mutex<Vec<(f64, u64)>>, // (tiempo de juego, acciones acumuladas)
     pub mouse_events: Mutex<Vec<MouseEventData>>,
     pub recording_start: Mutex<Option<std::time::Instant>>,
+    pub game_time_offset: Mutex<Option<f64>>,
 }
 
 impl Default for ActiveMatchState {
@@ -61,6 +62,7 @@ impl Default for ActiveMatchState {
             apm_samples: Mutex::new(Vec::new()),
             mouse_events: Mutex::new(Vec::new()),
             recording_start: Mutex::new(None),
+            game_time_offset: Mutex::new(None),
         }
     }
 }
@@ -274,6 +276,7 @@ pub fn spawn_background_monitor(
             // que llegan por teclado/ratón (teclas de cámara, estela, muestras de APM).
             let mut last_game_time: f64 = 0.0;
             let mut last_game_time_at = std::time::Instant::now();
+            let mut last_ult_time: f64 = -100.0;
             // Entrenamiento de cámara: fotos del estado de la partida (para el quiz) y
             // pulsaciones de las teclas de cámara aliada (para las métricas).
             let mut snapshots: Vec<GameSnapshot> = Vec::new();
@@ -315,9 +318,12 @@ pub fn spawn_background_monitor(
                     // Reiniciar el seguimiento de tiempo de juego para la nueva partida.
                     last_game_time = 0.0;
                     last_game_time_at = std::time::Instant::now();
+                    *active_match.game_time_offset.lock().await = None;
                     // Reiniciar el conteo de acciones (APM) y empezar a contar.
                     ult_state.actions.store(0, Ordering::Relaxed);
                     ult_state.counting.store(true, Ordering::Relaxed);
+                    ult_state.presses.lock().unwrap().clear();
+                    last_ult_time = -100.0;
                     // Empezar a registrar las teclas de cámara aliada de esta partida.
                     training_state.reset();
                     training_state.active.store(true, Ordering::Relaxed);
@@ -361,8 +367,9 @@ pub fn spawn_background_monitor(
                     close_grace_ticks += 1;
                     if close_grace_ticks >= 3 {
                         println!("Detección automática: La API no responde. Finalizando grabación...");
+                        let snaps = cam_presses.iter().map(|c| c.t).collect::<Vec<_>>();
                         persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
-                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time).await;
+                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps).await;
                         session_active = false;
                         awaiting_new_game = false;
                         close_grace_ticks = 0;
@@ -396,6 +403,16 @@ pub fn spawn_background_monitor(
                     // Actualizar el tiempo de juego (el nivel de la R ya no se usa:
                     // la detección de ultimate se retiró, ver `ultimate.rs`).
                     if let Ok((gt, _r_level)) = api_client.get_live_state().await {
+                        let mut offset_guard = active_match.game_time_offset.lock().await;
+                        if offset_guard.is_none() && gt > 0.0 {
+                            let rec_start = active_match.recording_start.lock().await;
+                            if let Some(start) = *rec_start {
+                                let video_time = std::time::Instant::now().saturating_duration_since(start).as_secs_f64();
+                                *offset_guard = Some(gt - video_time);
+                                println!("Calculado game_time_offset: {}", gt - video_time);
+                            }
+                        }
+
                         last_game_time = gt;
                         last_game_time_at = std::time::Instant::now();
                         // Muestrear el contador de acciones para el APM.
@@ -411,6 +428,31 @@ pub fn spawn_background_monitor(
                             t: (last_game_time - ago).max(0.0),
                             role,
                         });
+                    }
+                    
+                    // --- Uso de Ultimate ---
+                    let presses: Vec<std::time::Instant> = {
+                        let mut guard = ult_state.presses.lock().unwrap();
+                        guard.drain(..).collect()
+                    };
+                    if !presses.is_empty() {
+                        let mut ult_events = Vec::new();
+                        for p in presses {
+                            let ago = last_game_time_at.saturating_duration_since(p).as_secs_f64();
+                            let gt = (last_game_time - ago).max(0.0);
+                            // Debouncing de 8s para evitar flood
+                            if gt - last_ult_time < 8.0 { continue; } 
+                            last_ult_time = gt;
+                            ult_events.push(MatchEvent {
+                                r#type: "Ultimate".to_string(),
+                                subtype: Some("R".to_string()),
+                                time: gt,
+                                description: "Usaste tu Ultimate (R)".to_string(),
+                            });
+                        }
+                        if !ult_events.is_empty() {
+                            active_match.events.lock().await.extend(ult_events);
+                        }
                     }
 
                     // Metrónomo: pedir el siguiente aliado o resolver el aviso anterior.
@@ -478,13 +520,14 @@ pub fn spawn_background_monitor(
                     let active_name = active_match.active_player.lock().await.clone();
                     let player_team = active_match.player_team.lock().await.clone();
                     let team_map = active_match.team_map.lock().await.clone();
+                    let game_time_offset = active_match.game_time_offset.lock().await.unwrap_or(0.0);
                     let mut game_ended = false;
                     if let Ok(lol_events) = api_client.get_events().await {
                         let mut new_events = Vec::new();
                         for ev in lol_events {
                             if ev.event_id > last_event_id {
                                 last_event_id = ev.event_id;
-                                if let Some(mapped) = map_lol_event(&ev, &active_name, &player_team, &team_map) {
+                                if let Some(mapped) = map_lol_event(&ev, &active_name, &player_team, &team_map, game_time_offset) {
                                     if mapped.r#type == "GameEnd" {
                                         game_ended = true;
                                     }
@@ -501,8 +544,9 @@ pub fn spawn_background_monitor(
                     // muera la API durante la pantalla de victoria/derrota (~15s de más).
                     if game_ended {
                         println!("Detección automática: evento GameEnd recibido. Finalizando grabación de inmediato.");
+                        let snaps = cam_presses.iter().map(|c| c.t).collect::<Vec<_>>();
                         persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
-                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time).await;
+                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps).await;
                         session_active = false;
                         awaiting_new_game = true;
                     }
@@ -570,6 +614,7 @@ async fn finalize_match(
     active_match: &Arc<ActiveMatchState>,
     ult_state: &Arc<UltState>,
     game_start_time: chrono::DateTime<Local>,
+    camera_snaps: Vec<f64>,
 ) {
     let is_auto = *active_match.is_auto_recording.lock().await;
     let _ = stop_recording(recorder_state);
@@ -682,7 +727,7 @@ async fn finalize_match(
         item_purchases: Vec::new(),
         comments: Vec::new(),
         is_vod: false,
-        camera_snaps: Vec::new(),
+        camera_snaps,
     };
     match save_match_metadata(&metadata) {
         Ok(_) => {
@@ -820,6 +865,7 @@ fn map_lol_event(
     active_name: &str,
     player_team: &str,
     team_map: &HashMap<String, String>,
+    game_time_offset: f64,
 ) -> Option<MatchEvent> {
     let an = strip_tag(active_name);
     let stolen = ev
@@ -893,6 +939,14 @@ fn map_lol_event(
             ("Multikill", Some("kill"), desc.to_string())
         }
         "TurretKilled" => {
+            let killer = ev.killer_name.as_deref().unwrap_or("");
+            let is_killer = strip_tag(killer) == an;
+            let is_assister = ev.assisters.as_ref().map_or(false, |a| a.iter().any(|n| strip_tag(n) == an));
+            
+            if !is_killer && !is_assister {
+                return None;
+            }
+
             let turret = ev.turret_killed.as_deref().unwrap_or("");
             match structure_owner_team(turret) {
                 Some(owner) if owner == player_team => (
@@ -903,12 +957,20 @@ fn map_lol_event(
                 Some(_) => (
                     "TowerKill",
                     Some("enemy"),
-                    "Tu equipo destruyó una torre enemiga".to_string(),
+                    "Destruiste una torre enemiga".to_string(),
                 ),
                 None => ("TowerKill", None, "Torre destruida".to_string()),
             }
         }
         "InhibKilled" => {
+            let killer = ev.killer_name.as_deref().unwrap_or("");
+            let is_killer = strip_tag(killer) == an;
+            let is_assister = ev.assisters.as_ref().map_or(false, |a| a.iter().any(|n| strip_tag(n) == an));
+            
+            if !is_killer && !is_assister {
+                return None;
+            }
+
             let inhib = ev.inhib_killed.as_deref().unwrap_or("");
             match structure_owner_team(inhib) {
                 Some(owner) if owner == player_team => (
@@ -919,7 +981,7 @@ fn map_lol_event(
                 Some(_) => (
                     "InhibKill",
                     Some("enemy"),
-                    "Tu equipo destruyó un inhibidor".to_string(),
+                    "Destruiste un inhibidor".to_string(),
                 ),
                 None => ("InhibKill", None, "Inhibidor destruido".to_string()),
             }
@@ -973,7 +1035,7 @@ fn map_lol_event(
     Some(MatchEvent {
         r#type: ty.to_string(),
         subtype: subtype.map(|s| s.to_string()),
-        time: ev.event_time,
+        time: (ev.event_time - game_time_offset).max(0.0),
         description,
     })
 }

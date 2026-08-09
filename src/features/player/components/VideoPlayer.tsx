@@ -49,7 +49,7 @@ const mouseSpace = (
   return w > 0 && h > 0 ? [w, h] : [videoW, videoH];
 };
 
-const CLIP_BEFORE = 10;
+const CLIP_BEFORE = 5;
 const CLIP_AFTER = 10;
 
 type Tone = "excellent" | "good" | "inaccuracy" | "mistake" | "throw" | "neutral";
@@ -671,9 +671,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.videoWrapper}>
           <div style={styles.topBar}>
             <div style={styles.topBarLeft}></div>
-            <button style={styles.shareBtn}>
-              <Share2 size={14} /> Share Video
-            </button>
           </div>
           <video
             ref={videoRef}
@@ -1144,7 +1141,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 const meta = eventMeta(featured);
                 const t = toneLabelAndIcon(meta.tone);
                 return (
-                  <div style={{ ...styles.featuredCard, borderColor: meta.color }}>
+                  <div style={{ ...styles.featuredCard, borderLeft: `4px solid ${meta.color}` }}>
                     <div style={styles.featuredTop}>
                       <span style={{ color: t.color, display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: 14 }}>
                         {t.icon} {t.text}
@@ -1453,14 +1450,17 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--bg-card)",
   },
   timelineArea: {
-    height: "140px",
-    backgroundColor: "var(--bg-card)",
+    height: "150px", // Un poco más de altura para respirar
+    backgroundColor: "rgba(30, 32, 36, 0.65)", // Fondo oscuro semitransparente
     borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--border-subtle)",
-    padding: "var(--space-3) var(--space-4)",
+    border: "1px solid rgba(255, 255, 255, 0.05)", // Borde de luz sutil
+    padding: "20px 24px", // Espaciado más generoso
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-2)",
+    gap: "16px",
+    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)", // Elevación suave
+    backdropFilter: "blur(12px)", // Efecto Glassmorphism
+    WebkitBackdropFilter: "blur(12px)",
   },
   timelineHeaderRow: {
     display: "flex",
@@ -1532,16 +1532,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   eventNode: {
     position: "absolute",
-    bottom: "20px",
-    width: "20px",
-    height: "20px",
+    bottom: "24px", // Ajustado a la nueva altura
+    width: "24px",  // Área de clic ligeramente mayor
+    height: "24px",
     borderRadius: "50%",
-    border: "1.5px solid",
+    border: "2.5px solid", // Borde con más presencia
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "transform 0.1s",
+    transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease",
     cursor: "pointer",
+    boxShadow: "0 2px 8px rgba(0,0,0,0.5)", // Sombra de contacto
   },
   playhead: {
     position: "absolute",
@@ -2038,15 +2039,15 @@ const styles: Record<string, React.CSSProperties> = {
   // --- Eventos v2 (estilo Ascent) ---
   featuredCard: {
     flexShrink: 0,
-    margin: "var(--space-4) var(--space-4) 0",
-    background: "var(--bg-card)",
-    border: "1px solid var(--border-subtle)",
-    borderLeftWidth: "3px",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-3)",
+    margin: "24px 16px 8px", // Más margen exterior que interior (Principio Refactoring UI)
+    background: "linear-gradient(145deg, rgba(40,42,50,0.8) 0%, rgba(20,22,28,0.9) 100%)", // Gradiente oscuro rico
+    border: "1px solid rgba(255, 255, 255, 0.04)",
+    borderRadius: "12px",
+    padding: "20px", 
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-2)",
+    gap: "12px",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
   },
   featuredTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   featuredTime: {
@@ -2076,17 +2077,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
-  eventListV2: { display: "flex", flexDirection: "column" },
+  eventListV2: { 
+    display: "flex", 
+    flexDirection: "column",
+    gap: "4px", // Separación entre filas en lugar de border-bottom
+    padding: "0 8px"
+  },
   eventRowV2: {
     display: "flex",
     alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "8px var(--space-4)",
+    gap: "12px",
+    padding: "12px 16px",
     cursor: "pointer",
-    borderBottom: "1px solid rgba(255,255,255,0.03)",
-    fontSize: "12px",
+    borderRadius: "8px",
+    border: "1px solid transparent",
+    transition: "background 0.2s ease, border-color 0.2s ease",
+    fontSize: "13px",
   },
-  eventRowV2Active: { background: "hsla(0,0%,100%,0.06)", boxShadow: "inset 3px 0 0 var(--accent-violet)" },
+  eventRowV2Active: { 
+    background: "rgba(255, 255, 255, 0.04)", 
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    // Usamos boxShadow interno para el acento de color en lugar de borde izquierdo, 
+    // lo que evita empujar el contenido
+    boxShadow: "inset 4px 0 0 var(--accent-violet)" 
+  },
   eventRowTime: { color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: "11px", width: "40px", flexShrink: 0 },
   eventRowLabel: { color: "#fff", fontWeight: 600 },
   // --- Your Performance ---

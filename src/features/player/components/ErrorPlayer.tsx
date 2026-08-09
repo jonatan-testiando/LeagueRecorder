@@ -74,7 +74,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
 
   const jumpToEvent = useCallback((eventTime: number, eventId: string) => {
     setActiveEventId(eventId);
-    seekTo(Math.max(0, eventTime - 2), true); // Saltamos 2s antes
+    seekTo(Math.max(0, eventTime - 5), true); // Saltamos 5s antes
   }, [seekTo]);
 
   const toggleFullscreen = () => {

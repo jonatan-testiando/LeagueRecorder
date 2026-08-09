@@ -5,12 +5,13 @@ use std::time::Instant;
 /// Estado compartido del listener global de entrada: conteo de acciones (APM) y
 /// estela del ratón.
 ///
-/// Ya no detecta el uso de la ultimate: eso dependía de reconocer una tecla concreta
-/// del juego y se retiró por seguridad frente a Vanguard. La Live Client API no expone
-/// cooldowns ni lanzamientos de habilidad, así que no hay sustituto por polling; las
-/// partidas antiguas conservan sus eventos "Ultimate" y el reproductor los sigue
-/// pintando, pero no se generan nuevos.
 pub struct UltState {
+    /// Instantes de pulsación pendientes de procesar por el monitor.
+    pub presses: Mutex<Vec<Instant>>,
+    /// Tecla configurada para la ultimate (por defecto "R").
+    pub key: Mutex<String>,
+    /// Activa/desactiva la detección de ultimate.
+    pub enabled: Mutex<bool>,
     /// Contador acumulado de acciones (teclas + clics) para calcular el APM.
     pub actions: AtomicU64,
     /// Solo se cuentan acciones mientras hay una grabación en curso.
@@ -26,6 +27,9 @@ pub struct UltState {
 impl Default for UltState {
     fn default() -> Self {
         Self {
+            presses: Mutex::new(Vec::new()),
+            key: Mutex::new("R".to_string()),
+            enabled: Mutex::new(true),
             actions: AtomicU64::new(0),
             counting: AtomicBool::new(false),
             mouse_events: Mutex::new(Vec::new()),
@@ -39,14 +43,20 @@ impl Default for UltState {
 /// para el APM, guarda la estela del ratón y pasa las teclas de cámara aliada al
 /// entrenamiento. Solo lee eventos; nunca inyecta input en el juego.
 pub fn spawn_keyboard_listener(state: Arc<UltState>, training: Arc<crate::training::TrainingState>) {
+    let ctrl_pressed = Arc::new(AtomicBool::new(false));
+
     std::thread::spawn(move || {
-        use rdev::{listen, Button, EventType};
+        use rdev::{listen, Button, EventType, Key};
         let pressed_keys = Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
 
         let result = listen(move |event| {
             let is_counting = state.counting.load(Ordering::Relaxed);
             match event.event_type {
                 EventType::KeyPress(key) => {
+                    if key == Key::ControlLeft || key == Key::ControlRight {
+                        ctrl_pressed.store(true, Ordering::Relaxed);
+                    }
+
                     let is_new_press = pressed_keys.lock().unwrap().insert(key);
 
                     // Contar acción para el APM (solo mientras se graba y solo si es pulsación nueva).
@@ -58,9 +68,21 @@ pub fn spawn_keyboard_listener(state: Arc<UltState>, training: Arc<crate::traini
                     if is_new_press {
                         training.note_key(key);
                     }
+                    
+                    // Detección de ultimate en vivo (Keylogger local)
+                    if *state.enabled.lock().unwrap() {
+                        let configured = state.key.lock().unwrap().clone();
+                        // Ignorar si CTRL está pulsado (ej. subiendo de nivel la habilidad con CTRL+R)
+                        if key_matches(key, &configured) && !ctrl_pressed.load(Ordering::Relaxed) {
+                            state.presses.lock().unwrap().push(Instant::now());
+                        }
+                    }
                 }
                 EventType::KeyRelease(key) => {
                     pressed_keys.lock().unwrap().remove(&key);
+                    if key == Key::ControlLeft || key == Key::ControlRight {
+                        ctrl_pressed.store(false, Ordering::Relaxed);
+                    }
                 }
                 EventType::ButtonPress(btn) => {
                     // Los clics también cuentan como acciones para el APM.
@@ -124,4 +146,10 @@ pub fn mouse_coordinate_space() -> (u32, u32) {
             (0, 0)
         }
     }
+}
+
+/// Compara la tecla pulsada con la configurada. Delega en el parser de `training`,
+/// que además de letras y dígitos entiende F1–F12.
+fn key_matches(key: rdev::Key, configured: &str) -> bool {
+    crate::training::parse_key(configured) == Some(key)
 }

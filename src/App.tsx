@@ -72,7 +72,11 @@ export const App: React.FC = () => {
   // Panel visible ahora mismo. "Review" comparte panel con "Games": es la lista de
   // partidas desde la que se abre una para revisarla, como antes de las rutas.
   const activePanel: Panel =
-    activeTabKey === "review" ? "/games" : ((matchedNav?.path ?? "/games") as Panel);
+    currentPath.startsWith("/settings")
+      ? "/settings"
+      : activeTabKey === "review"
+        ? "/games"
+        : ((matchedNav?.path ?? "/games") as Panel);
 
   // Los paneles se quedan montados una vez visitados para no perder su estado (el
   // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo

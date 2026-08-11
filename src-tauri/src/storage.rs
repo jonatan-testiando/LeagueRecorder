@@ -68,6 +68,28 @@ pub struct ItemPurchase {
     pub item_id: i32,
 }
 
+/// Marcador de evento en la línea de tiempo del vídeo (de la Timeline v5 de Riot).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimelineMarker {
+    pub time: f64, // segundos en el vídeo
+    pub event_type: String, // "kill", "death", "dragon", "herald", "tower", "plate"
+    pub description: String,
+    #[serde(default)]
+    pub position_x: Option<i32>,
+    #[serde(default)]
+    pub position_y: Option<i32>,
+}
+
+/// Fotograma minuto a minuto de la partida (Timeline v5) para la gráfica de oro/XP
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MinuteFrameDto {
+    pub minute: i32,
+    pub team_gold_diff: i32,
+    pub self_gold_diff: i32,
+    pub self_xp_diff: i32,
+    pub self_jungle_cs_diff: i32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchMetadata {
     pub id: String,
@@ -119,6 +141,23 @@ pub struct MatchMetadata {
     /// API de Riot (timeline): compras de items del jugador con su minuto.
     #[serde(default)]
     pub item_purchases: Vec<ItemPurchase>,
+    /// API de Riot (timeline): métricas avanzadas a min 15
+    #[serde(default)]
+    pub gold_diff_15: Option<i32>,
+    #[serde(default)]
+    pub xp_diff_15: Option<i32>,
+    #[serde(default)]
+    pub jungle_cs_diff_15: Option<i32>,
+    #[serde(default)]
+    pub gank_impact_15: Option<f64>,
+    #[serde(default)]
+    pub lane_result: Option<String>,
+    /// Marcadores de eventos para la barra del reproductor de vídeo
+    #[serde(default)]
+    pub timeline_markers: Vec<TimelineMarker>,
+    /// Fotogramas minuto a minuto para la gráfica de oro/XP
+    #[serde(default)]
+    pub minute_frames: Vec<MinuteFrameDto>,
     /// Comentarios del usuario anclados a marcas de tiempo del vídeo.
     #[serde(default)]
     pub comments: Vec<Comment>,

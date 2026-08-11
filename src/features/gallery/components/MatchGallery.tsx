@@ -171,6 +171,63 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           <span style={match.riot_match_id ? styles.rankedBadge : styles.customBadge}>
                             {match.riot_match_id ? queueLabel(match.queue) : "Personalizada"}
                           </span>
+                          {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: match.gold_diff_15 >= 0 ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+                                color: match.gold_diff_15 >= 0 ? "#10b981" : "#ef4444",
+                                border: `1px solid ${match.gold_diff_15 >= 0 ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+                              }}
+                              title={`Diferencia de Oro a min 15 (${match.lane_result ?? "Even"})`}
+                            >
+                              {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g @15` : `${match.gold_diff_15}g @15`}
+                            </span>
+                          )}
+                          {match.jungle_cs_diff_15 !== undefined && match.jungle_cs_diff_15 !== null && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "rgba(139, 92, 246, 0.15)",
+                                color: "#a78bfa",
+                                border: "1px solid rgba(139, 92, 246, 0.3)",
+                              }}
+                              title="Diferencia de CS de Jungla a min 15"
+                            >
+                              {match.jungle_cs_diff_15 >= 0 ? `+${match.jungle_cs_diff_15} JG CS` : `${match.jungle_cs_diff_15} JG CS`}
+                            </span>
+                          )}
+                          {match.gank_impact_15 !== undefined && match.gank_impact_15 !== null && (
+                            <span
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: "4px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "rgba(245, 158, 11, 0.15)",
+                                color: "#fbbf24",
+                                border: "1px solid rgba(245, 158, 11, 0.3)",
+                              }}
+                              title="Participación en ganks en los primeros 15 min"
+                            >
+                              Gank: {match.gank_impact_15}%
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

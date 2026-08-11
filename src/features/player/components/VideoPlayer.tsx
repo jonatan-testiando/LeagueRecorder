@@ -4,15 +4,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
 import {
-  Swords, Skull, Handshake, Flame, Droplet,
-  Orbit, Crown, Eye, TowerControl, BrickWall,
-  Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
+  Eye, Sparkles, Flag, Trophy, FlagOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
   ThumbsUp, XCircle, ChevronLeft, ChevronRight, MousePointer2, EyeOff,
-  Trash2, Send, RefreshCw, Check, MinusCircle
+  Trash2, Send, RefreshCw, Check, MinusCircle, Tv
 } from "lucide-react";
 import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
+import { GoldXpChart } from "./GoldXpChart";
+import { TacticalMap } from "./TacticalMap";
+import { MapAwarenessWidget } from "./MapAwarenessWidget";
+import { PowerSpikeWidget } from "./PowerSpikeWidget";
+import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
+import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
+import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 
 // Retratos de campeón: bundleados localmente en public/champions (script scripts/download-champions.ps1).
 const champIcon = (champion: string) => `/champions/${champion}.png`;
@@ -61,50 +66,133 @@ interface EvMeta {
   category: "kills" | "deaths" | "assists" | "objectives" | "structures" | "abilities" | "other";
 }
 
-const ULT_COLOR = "var(--accent-violet)";
-const MULTIKILL_COLOR = "var(--accent-gold)";
-const BARON_COLOR = "var(--color-objective)";
+// Iconos eSports personalizados estilo badges metálicos con gradientes HSL
+const IconKill: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(16, 185, 129, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#killBg)" stroke="#34d399" strokeWidth="1.5" />
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6-3.8 3.8-1.4-1.4a1 1 0 0 0-1.4 0l-3.8 3.8L4.3 14a1 1 0 0 0-1.4 1.4l3.5 3.5a1 1 0 0 0 1.4 0l1.6-1.6 3.8-3.8 1.4 1.4a1 1 0 0 0 1.4 0l3.8-3.8 1.6 1.6a1 1 0 0 0 1.4-1.4l-3.5-3.5a1 1 0 0 0-1.4 0z" fill="#ffffff" />
+    <defs>
+      <linearGradient id="killBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#059669" />
+        <stop offset="1" stopColor="#10b981" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const IconDeath: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(239, 68, 68, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#deathBg)" stroke="#f87171" strokeWidth="1.5" />
+    <path d="M12 4C8.13 4 5 7.13 5 11c0 2.38 1.19 4.47 3 5.74V18c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm-2 15h4v1.5h-4V19z" fill="#ffffff" />
+    <circle cx="9.5" cy="11.5" r="1.5" fill="#ef4444" />
+    <circle cx="14.5" cy="11.5" r="1.5" fill="#ef4444" />
+    <defs>
+      <linearGradient id="deathBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#dc2626" />
+        <stop offset="1" stopColor="#991b1b" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const IconAssist: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(59, 130, 246, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#assistBg)" stroke="#60a5fa" strokeWidth="1.5" />
+    <path d="M12 17s5-2.5 5-6.5V7l-5-2-5 2v3.5c0 4 5 6.5 5 6.5z" fill="#ffffff" />
+    <path d="M10 11l1.5 1.5 3-3" stroke="#1d4ed8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <defs>
+      <linearGradient id="assistBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#2563eb" />
+        <stop offset="1" stopColor="#1d4ed8" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const IconDragon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(245, 158, 11, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#dragonBg)" stroke="#fbbf24" strokeWidth="1.5" />
+    <path d="M12 5L14 9.5L19 10.2L15.4 13.7L16.4 18.6L12 16L7.6 18.6L8.6 13.7L5 10.2L10 9.5L12 5Z" fill="#ffffff" />
+    <defs>
+      <linearGradient id="dragonBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#d97706" />
+        <stop offset="1" stopColor="#b45309" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const IconBaron: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(168, 85, 247, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#baronBg)" stroke="#c084fc" strokeWidth="1.5" />
+    <path d="M6 14L4.5 6L9 9.5L12 5L15 9.5L19.5 6L18 14H6Z" fill="#ffffff" />
+    <path d="M6 16.5H18V18H6V16.5Z" fill="#e9d5ff" />
+    <defs>
+      <linearGradient id="baronBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#9333ea" />
+        <stop offset="1" stopColor="#6b21a8" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ filter: "drop-shadow(0 0 4px rgba(6, 182, 212, 0.6))" }}>
+    <circle cx="12" cy="12" r="10" fill="url(#towerBg)" stroke="#38bdf8" strokeWidth="1.5" />
+    <path d="M7 18H17V16H16V9L17.5 7.5V5H14.5V6.5H13.5V5H10.5V6.5H9.5V5H6.5V7.5L8 9V16H7V18Z" fill="#ffffff" />
+    <defs>
+      <linearGradient id="towerBg" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#0891b2" />
+        <stop offset="1" stopColor="#0e7490" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
+const ULT_COLOR = "#a855f7";
+const MULTIKILL_COLOR = "#f59e0b";
+const BARON_COLOR = "#a855f7";
 
 const objTone = (s?: string): Tone => (s === "ally" ? "excellent" : s === "enemy" ? "mistake" : "neutral");
 const structTone = (s?: string): Tone => (s === "ally" ? "mistake" : s === "enemy" ? "good" : "neutral");
-const objColor = (s: string | undefined, base: string) => (s === "enemy" ? "var(--color-death)" : base);
-const structColor = (s?: string) => (s === "ally" ? "var(--color-death)" : "var(--accent-teal)");
+const objColor = (s: string | undefined, base: string) => (s === "enemy" ? "#ef4444" : base);
+const structColor = (s?: string) => (s === "ally" ? "#ef4444" : "#06b6d4");
 
 function eventMeta(ev: MatchEvent): EvMeta {
-  const size = 16;
+  const size = 18;
   switch (ev.type) {
     case "ChampionKill":
       if (ev.subtype === "kill")
-        return { icon: <Swords size={size} />, color: "var(--color-victory)", label: "Kill", tone: "good", category: "kills" };
+        return { icon: <IconKill size={size} />, color: "#10b981", label: "Kill", tone: "good", category: "kills" };
       if (ev.subtype === "death")
-        return { icon: <Skull size={size} />, color: "var(--color-death)", label: "Death", tone: "mistake", category: "deaths" };
-      return { icon: <Handshake size={size} />, color: "var(--color-assist)", label: "Assist", tone: "good", category: "assists" };
+        return { icon: <IconDeath size={size} />, color: "#ef4444", label: "Death", tone: "mistake", category: "deaths" };
+      return { icon: <IconAssist size={size} />, color: "#3b82f6", label: "Assist", tone: "good", category: "assists" };
     case "Multikill":
-      return { icon: <Flame size={size} />, color: MULTIKILL_COLOR, label: "Multi Kill", tone: "excellent", category: "kills" };
+      return { icon: <IconKill size={size} />, color: MULTIKILL_COLOR, label: "Multi Kill", tone: "excellent", category: "kills" };
     case "FirstBlood":
-      return { icon: <Droplet size={size} />, color: "var(--color-victory)", label: "First Blood", tone: "excellent", category: "kills" };
+      return { icon: <IconKill size={size} />, color: "#10b981", label: "First Blood", tone: "excellent", category: "kills" };
     case "DragonKill":
-      return { icon: <Orbit size={size} />, color: objColor(ev.subtype, "var(--color-objective)"), label: "Dragon", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <IconDragon size={size} />, color: objColor(ev.subtype, "#f59e0b"), label: "Dragon", tone: objTone(ev.subtype), category: "objectives" };
     case "BaronKill":
-      return { icon: <Crown size={size} />, color: objColor(ev.subtype, BARON_COLOR), label: "Baron", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <IconBaron size={size} />, color: objColor(ev.subtype, BARON_COLOR), label: "Baron", tone: objTone(ev.subtype), category: "objectives" };
     case "HeraldKill":
-      return { icon: <Eye size={size} />, color: objColor(ev.subtype, "var(--accent-blue)"), label: "Herald", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <IconTower size={size} />, color: objColor(ev.subtype, "#06b6d4"), label: "Herald", tone: objTone(ev.subtype), category: "objectives" };
     case "TowerKill":
-      return { icon: <TowerControl size={size} />, color: structColor(ev.subtype), label: "Tower", tone: structTone(ev.subtype), category: "structures" };
+      return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Tower", tone: structTone(ev.subtype), category: "structures" };
     case "InhibKill":
-      return { icon: <BrickWall size={size} />, color: structColor(ev.subtype), label: "Inhibitor", tone: structTone(ev.subtype), category: "structures" };
+      return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Inhibitor", tone: structTone(ev.subtype), category: "structures" };
     case "Ultimate":
-      return { icon: <Sparkles size={size} />, color: ULT_COLOR, label: "Ultimate (R)", tone: "neutral", category: "abilities" };
+      return { icon: <Sparkles size={size} color="#a855f7" />, color: ULT_COLOR, label: "Ultimate (R)", tone: "neutral", category: "abilities" };
     case "GameStart":
-      return { icon: <Flag size={size} />, color: "var(--text-muted)", label: "Game Start", tone: "neutral", category: "other" };
+      return { icon: <Flag size={size} color="#94a3b8" />, color: "#94a3b8", label: "Game Start", tone: "neutral", category: "other" };
     case "GameEnd":
       return ev.subtype === "win"
-        ? { icon: <Trophy size={size} />, color: "var(--color-victory)", label: "Victory", tone: "excellent", category: "other" }
+        ? { icon: <Trophy size={size} color="#10b981" />, color: "#10b981", label: "Victory", tone: "excellent", category: "other" }
         : ev.subtype === "lose"
-        ? { icon: <FlagOff size={size} />, color: "var(--color-defeat)", label: "Defeat", tone: "throw", category: "other" }
-        : { icon: <Flag size={size} />, color: "var(--text-muted)", label: "Game End", tone: "neutral", category: "other" };
+        ? { icon: <FlagOff size={size} color="#ef4444" />, color: "#ef4444", label: "Defeat", tone: "throw", category: "other" }
+        : { icon: <Flag size={size} color="#94a3b8" />, color: "#94a3b8", label: "Game End", tone: "neutral", category: "other" };
     default:
-      return { icon: <Sparkles size={size} />, color: "var(--accent-blue)", label: ev.type, tone: "neutral", category: "other" };
+      return { icon: <Sparkles size={size} color="#3b82f6" />, color: "#3b82f6", label: ev.type, tone: "neutral", category: "other" };
   }
 }
 
@@ -173,7 +261,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [exportType, setExportType] = useState<"clip" | "error">("clip");
   const [errorNote, setErrorNote] = useState<string>("");
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
-  const [tab, setTab] = useState<"stats" | "events" | "comments">("events");
+  const [tab, setTab] = useState<"stats" | "analytics" | "events" | "comments">("stats");
   const [comments, setComments] = useState<MatchComment[]>(match.comments ?? []);
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -186,6 +274,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad">("all");
+  const [showEsportsHud, setShowEsportsHud] = useState<boolean>(true);
 
   const { showSuccess, showError } = useDialog();
 
@@ -198,19 +287,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const videoSrc = streamUrl(match.video_path);
 
   // La estela del ratón (mouse_events) NO viene en el listado por rendimiento.
-  // La cargamos bajo demanda al abrir la partida en el reproductor.
+  const [currentMatch, setCurrentMatch] = useState<MatchMetadata>(match);
   const [mouseEvents, setMouseEvents] = useState<MouseEventData[]>(match.mouse_events ?? []);
 
   useEffect(() => {
+    setCurrentMatch(match);
+  }, [match]);
+
+  useEffect(() => {
     let cancelled = false;
-    if (match.mouse_events && match.mouse_events.length > 0) {
-      setMouseEvents(match.mouse_events);
-      return;
-    }
-    setMouseEvents([]);
     getMatchDetails(match.id)
       .then((full) => {
-        if (!cancelled && full?.mouse_events) setMouseEvents(full.mouse_events);
+        if (!cancelled && full) {
+          setCurrentMatch(full);
+          if (full.mouse_events) setMouseEvents(full.mouse_events);
+          if (full.participants) setParticipants(full.participants);
+          if (full.objectives) setObjectives(full.objectives);
+          if (full.item_purchases) setItemPurchases(full.item_purchases);
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -446,6 +540,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     setSyncing(true);
     try {
       const updated = await syncMatchNow(match.id);
+      setCurrentMatch(updated);
       setParticipants(updated.participants ?? []);
       setObjectives(updated.objectives ?? []);
       setItemPurchases(updated.item_purchases ?? []);
@@ -545,18 +640,38 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // para que no se solapen en la línea de tiempo (estilo Ascent).
   const eventClusters = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [] as { events: MatchEvent[] }[];
-    const evs = match.events
+
+    const timelineEvents: MatchEvent[] = (match.timeline_markers ?? []).map((tm) => {
+      let type = "ChampionKill";
+      let subtype: string | undefined = "kill";
+      if (tm.event_type === "kill") { type = "ChampionKill"; subtype = "kill"; }
+      else if (tm.event_type === "death") { type = "ChampionKill"; subtype = "death"; }
+      else if (tm.event_type === "dragon") { type = "DragonKill"; subtype = "ally"; }
+      else if (tm.event_type === "herald") { type = "HeraldKill"; subtype = "ally"; }
+      else if (tm.event_type === "tower") { type = "TowerKill"; subtype = "ally"; }
+      else if (tm.event_type === "plate") { type = "TowerKill"; subtype = "plate"; }
+
+      return {
+        type,
+        subtype,
+        time: tm.time,
+        description: tm.description,
+      };
+    });
+
+    const allEvs = [...match.events, ...timelineEvents]
       .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
       .sort((a, b) => a.time - b.time);
+
     const gap = Math.max(8, duration * 0.018); // separación mínima entre marcadores (s)
     const clusters: { events: MatchEvent[] }[] = [];
-    for (const ev of evs) {
+    for (const ev of allEvs) {
       const last = clusters[clusters.length - 1];
       if (last && ev.time - last.events[last.events.length - 1].time <= gap) last.events.push(ev);
       else clusters.push({ events: [ev] });
     }
     return clusters;
-  }, [match.events, duration]);
+  }, [match.events, match.timeline_markers, duration]);
 
   // Evento "principal" de un grupo: el de mayor relevancia (muerte/kill sobre objetivo, etc.).
   const clusterPrimary = (evs: MatchEvent[]): MatchEvent => {
@@ -686,6 +801,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
           {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>Couldn't load the video</span></div>}
           <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
+          
+          {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
+          <EsportsPlayerOverlay
+            currentTime={currentTime}
+            match={currentMatch}
+            visible={showEsportsHud}
+          />
+
           <div style={styles.videoProgressWrapper}>
             <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
               {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
@@ -711,6 +834,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <option value={4}>4.00x</option>
             </select>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", marginRight: "16px" }}>
+              <button onClick={() => setShowEsportsHud((h) => !h)} style={{ ...styles.videoPlayBtn, color: showEsportsHud ? "var(--accent-violet)" : "var(--text-muted)" }} title="Activar/Desactivar HUD eSports Broadcast">
+                <Tv size={16} />
+              </button>
               <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Show/Hide Cursor">
                 {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
@@ -838,18 +964,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   style={{
                     ...styles.eventNode,
                     left: `${pos}%`,
+                    width: "28px",
+                    height: "28px",
                     borderColor: meta.color,
-                    background: isActive ? meta.color : "var(--bg-app)",
+                    background: isActive ? meta.color : "radial-gradient(circle at center, rgba(24, 28, 38, 0.95), rgba(10, 12, 16, 0.98))",
                     transform: `translateX(-50%) scale(${isActive ? 1.25 : 1})`,
-                    boxShadow: isActive ? `0 0 10px ${meta.color}` : "none",
+                    boxShadow: isActive
+                      ? `0 0 20px ${meta.color}, 0 0 6px ${meta.color}`
+                      : `0 0 10px ${meta.color}60, 0 3px 8px rgba(0,0,0,0.6)`,
+                    backdropFilter: "blur(8px)",
                     zIndex: isActive ? 10 : 5,
                   }}
                   title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label}${e.description ? " – " + e.description : ""}`).join("\n")}
                 >
-                  <span style={{ color: isActive ? "#fff" : meta.color, display: "flex", transform: "scale(0.68)" }}>
+                  <span style={{ color: isActive ? "#fff" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.icon}
                   </span>
-                  {count > 1 && <span style={styles.nodeBadge}>{count}</span>}
+                  {count > 1 && (
+                    <span style={{
+                      position: "absolute",
+                      top: "-7px",
+                      right: "-7px",
+                      minWidth: "16px",
+                      height: "16px",
+                      padding: "0 4px",
+                      borderRadius: "10px",
+                      background: "rgba(10, 12, 16, 0.95)",
+                      border: `1.5px solid ${meta.color}`,
+                      color: "#fff",
+                      fontSize: "10px",
+                      fontWeight: 800,
+                      fontFamily: "var(--font-mono)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      boxShadow: "0 2px 6px rgba(0,0,0,0.8)",
+                    }}>
+                      {count}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -941,6 +1094,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.resizeHandle} onPointerDown={startResize} title="Arrastra para redimensionar" />
         <div style={styles.tabBar}>
           <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>Stats</button>
+          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>Analítica</button>
           <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Análisis" : "Eventos"}</button>
           <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comentarios</button>
         </div>
@@ -1110,14 +1264,133 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </div>
             )}
 
-            {/* Re-sincronizar: partidas sincronizadas con versiones antiguas pueden no
-                tener daño/visión/objetivos/cola; esto refresca todo desde Riot. */}
+            {/* Re-sincronizar con Riot */}
             {!match.is_vod && participants.length > 0 && (
               <button style={styles.resyncBtn} onClick={handleSync} disabled={syncing}>
                 <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
                 {syncing ? "Actualizando…" : "Actualizar datos de Riot"}
               </button>
             )}
+          </div>
+        )}
+
+        {tab === "analytics" && (
+          <div style={styles.tabScroll}>
+            {/* Comparativa de Rendimiento y Tendencias con el Campeón */}
+            <PerformanceTrendsWidget currentMatch={match} />
+
+            {/* Early Game @ 15m (Riot Timeline v5) Card */}
+            {(match.gold_diff_15 !== undefined || match.jungle_cs_diff_15 !== undefined || match.gank_impact_15 !== undefined) && (
+              <div style={{
+                backgroundColor: "var(--bg-card)",
+                border: "1px solid var(--border-subtle)",
+                borderTop: "3px solid var(--accent-violet)",
+                borderRadius: "var(--radius-lg)",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+                    <Sparkles size={16} color="var(--accent-violet)" />
+                    <span>Fase Temprana (@15 min)</span>
+                  </div>
+                  {match.lane_result && (
+                    <span style={{
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "12px",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                      background: match.lane_result === "Win" ? "rgba(16, 185, 129, 0.15)" : match.lane_result === "Loss" ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.1)",
+                      color: match.lane_result === "Win" ? "#10b981" : match.lane_result === "Loss" ? "#ef4444" : "var(--text-secondary)",
+                      border: `1px solid ${match.lane_result === "Win" ? "rgba(16, 185, 129, 0.3)" : match.lane_result === "Loss" ? "rgba(239, 68, 68, 0.3)" : "rgba(255, 255, 255, 0.15)"}`,
+                    }}>
+                      {match.lane_result === "Win" ? "Victoria de Línea" : match.lane_result === "Loss" ? "Derrota de Línea" : "Línea Igualada"}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
+                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Oro</span>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "#10b981" : "#ef4444" }}>
+                        {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g` : `${match.gold_diff_15}g`}
+                      </div>
+                    </div>
+                  )}
+
+                  {match.xp_diff_15 !== undefined && match.xp_diff_15 !== null && (
+                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de XP</span>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.xp_diff_15 >= 0 ? "#10b981" : "#ef4444" }}>
+                        {match.xp_diff_15 >= 0 ? `+${match.xp_diff_15} XP` : `${match.xp_diff_15} XP`}
+                      </div>
+                    </div>
+                  )}
+
+                  {match.jungle_cs_diff_15 !== undefined && match.jungle_cs_diff_15 !== null && (
+                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Jungla</span>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "#a78bfa" }}>
+                        {match.jungle_cs_diff_15 >= 0 ? `+${match.jungle_cs_diff_15} CS` : `${match.jungle_cs_diff_15} CS`}
+                      </div>
+                    </div>
+                  )}
+
+                  {match.gank_impact_15 !== undefined && match.gank_impact_15 !== null && (
+                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Presión de Ganks</span>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "#fbbf24" }}>
+                        {match.gank_impact_15}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Gráfica de Ventaja de Oro y XP minuto a minuto */}
+            {match.minute_frames && match.minute_frames.length > 1 && (
+              <GoldXpChart
+                frames={match.minute_frames}
+                duration={duration}
+                onSeek={(secs) => seekTo(secs, false)}
+              />
+            )}
+
+            {/* Minimapa Táctico 2D con Mapa de Calor */}
+            {match.timeline_markers && match.timeline_markers.length > 0 && (
+              <TacticalMap
+                markers={match.timeline_markers}
+                onSeek={(secs) => seekTo(secs, false)}
+              />
+            )}
+
+            {/* Diagnóstico de Conciencia de Mapa y Muertes a Ciegas */}
+            <MapAwarenessWidget
+              cameraSnaps={cameraSnaps}
+              markers={match.timeline_markers}
+              onSeek={(secs) => seekTo(secs, false)}
+            />
+
+            {/* Asistente de Power Spikes y Compras */}
+            <PowerSpikeWidget
+              itemPurchases={match.item_purchases}
+              markers={match.timeline_markers}
+              onSeek={(secs) => seekTo(secs, false)}
+            />
+
+            {/* Análisis de Ganks e Impacto en Líneas */}
+            <GankEfficiencyWidget
+              markers={match.timeline_markers}
+              gankImpact15={match.gank_impact_15}
+              onSeek={(secs) => seekTo(secs, false)}
+            />
           </div>
         )}
 
@@ -1178,12 +1451,62 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       <div
                         key={i}
                         onClick={() => jumpToClip(ev.time)}
-                        style={{ ...styles.eventRowV2, ...(isActive ? styles.eventRowV2Active : {}) }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 14px",
+                          marginBottom: "6px",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          background: isActive
+                            ? "rgba(61, 139, 253, 0.15)"
+                            : "rgba(18, 21, 29, 0.6)",
+                          border: isActive
+                            ? "1px solid rgba(61, 139, 253, 0.4)"
+                            : "1px solid rgba(255, 255, 255, 0.08)",
+                          borderLeft: `4px solid ${meta.color}`,
+                          boxShadow: isActive
+                            ? `0 0 16px ${meta.color}30`
+                            : "0 2px 8px rgba(0, 0, 0, 0.25)",
+                          transition: "all 0.15s ease",
+                        }}
                       >
-                        <span style={styles.eventRowTime}>{formatTime(ev.time)}</span>
-                        <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span>
-                        <span style={styles.eventRowLabel}>{meta.label}</span>
-                        <span style={{ color: t.color, display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, marginLeft: "auto" }}>
+                        <span style={{
+                          color: "var(--text-secondary)",
+                          fontFamily: "var(--font-mono)",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          background: "rgba(255, 255, 255, 0.06)",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                        }}>
+                          {formatTime(ev.time)}
+                        </span>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {meta.icon}
+                        </div>
+                        <span style={{ color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+                          {meta.label}
+                        </span>
+                        {ev.description && (
+                          <span style={{ color: "var(--text-muted)", fontSize: "11px", marginLeft: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90px" }}>
+                            {ev.description}
+                          </span>
+                        )}
+                        <span style={{
+                          color: t.color,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 11,
+                          fontWeight: 800,
+                          marginLeft: "auto",
+                          padding: "2px 8px",
+                          borderRadius: "12px",
+                          background: `${t.color}15`,
+                          border: `1px solid ${t.color}30`,
+                        }}>
                           {t.icon} {t.text}
                         </span>
                       </div>

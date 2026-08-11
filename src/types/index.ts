@@ -68,6 +68,22 @@ export interface ItemPurchase {
   item_id: number;
 }
 
+export interface TimelineMarker {
+  time: number; // segundos en el vídeo
+  event_type: 'kill' | 'death' | 'dragon' | 'herald' | 'tower' | 'plate' | string;
+  description: string;
+  position_x?: number;
+  position_y?: number;
+}
+
+export interface MinuteFrameDto {
+  minute: number;
+  team_gold_diff: number;
+  self_gold_diff: number;
+  self_xp_diff: number;
+  self_jungle_cs_diff: number;
+}
+
 export interface MatchMetadata {
   id: string;
   game_duration: number;
@@ -91,6 +107,13 @@ export interface MatchMetadata {
   queue?: number; // queueId de Riot (420=clasif solo, 440=flex, 450=ARAM, 0=custom…)
   objectives?: TeamObjectives[]; // objetivos por equipo
   item_purchases?: ItemPurchase[]; // compras de items del jugador con su minuto
+  gold_diff_15?: number;
+  xp_diff_15?: number;
+  jungle_cs_diff_15?: number;
+  gank_impact_15?: number;
+  lane_result?: 'Win' | 'Loss' | 'Even' | string;
+  timeline_markers?: TimelineMarker[];
+  minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
   camera_snaps?: number[]; // segundos en que la cámara saltó (tecla de cámara aliada)

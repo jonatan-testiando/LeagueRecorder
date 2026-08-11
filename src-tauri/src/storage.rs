@@ -375,9 +375,19 @@ pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
     } else {
         get_videos_dir()
     };
-    let file = base.join(id).join(format!("{}.json", id));
-    let content = fs::read_to_string(file).ok()?;
-    serde_json::from_str::<MatchMetadata>(&content).ok()
+    let subfolder_file = base.join(id).join(format!("{}.json", id));
+    if let Ok(content) = fs::read_to_string(&subfolder_file) {
+        if let Ok(m) = serde_json::from_str::<MatchMetadata>(&content) {
+            return Some(m);
+        }
+    }
+    let legacy_flat_file = base.join(format!("{}.json", id));
+    if let Ok(content) = fs::read_to_string(&legacy_flat_file) {
+        if let Ok(m) = serde_json::from_str::<MatchMetadata>(&content) {
+            return Some(m);
+        }
+    }
+    None
 }
 
 /// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).

@@ -300,6 +300,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       .then((full) => {
         if (!cancelled && full) {
           setCurrentMatch(full);
+          if (full.comments) setComments(full.comments);
           if (full.mouse_events) setMouseEvents(full.mouse_events);
           if (full.participants) setParticipants(full.participants);
           if (full.objectives) setObjectives(full.objectives);
@@ -312,8 +313,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   // Comentarios (con marca de tiempo) de la partida.
   useEffect(() => {
-    setComments(match.comments ?? []);
-  }, [match.id, match.comments]);
+    setComments(currentMatch.comments ?? match.comments ?? []);
+  }, [currentMatch.id, currentMatch.comments, match.comments]);
 
   // Última versión de Data Dragon (para los iconos de items).
   useEffect(() => {
@@ -515,6 +516,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const persistComments = useCallback(
     (next: MatchComment[]) => {
       setComments(next);
+      setCurrentMatch((prev) => ({ ...prev, comments: next }));
       saveMatchComments(match.id, next).catch((e) =>
         showError("No se pudieron guardar los comentarios: " + e)
       );
@@ -1591,6 +1593,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 placeholder="Escribe una nota sobre este error..."
                 value={errorNote}
                 onChange={(e) => setErrorNote(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
                 style={{
                   flex: 1,
                   padding: "var(--space-2) var(--space-3)",

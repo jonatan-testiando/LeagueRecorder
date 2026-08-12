@@ -4,13 +4,15 @@ import { TrendingUp } from "lucide-react";
 
 interface GoldXpChartProps {
   frames: MinuteFrameDto[];
-  duration: number; // duración en segundos
+  // Segundos de vídeo previos al 0:00 de la partida: el eje de esta gráfica son minutos
+  // DE PARTIDA, así que hay que sumarlos para saltar al punto correcto del vídeo.
+  videoOffset: number;
   onSeek: (seconds: number) => void;
 }
 
 type MetricMode = "team_gold" | "self_gold" | "self_xp";
 
-export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, duration, onSeek }) => {
+export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, onSeek }) => {
   const [mode, setMode] = useState<MetricMode>("team_gold");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
@@ -61,8 +63,8 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, duration, onSe
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
     const pct = relX / rect.width;
-    const targetSecs = pct * (duration > 0 ? duration : (frames.length - 1) * 60);
-    onSeek(targetSecs);
+    const gameSecs = pct * (frames.length - 1) * 60;
+    onSeek(Math.max(0, gameSecs + videoOffset));
   };
 
   const hoverP = hoverIndex !== null ? points[hoverIndex] : null;

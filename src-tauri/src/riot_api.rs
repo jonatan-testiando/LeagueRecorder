@@ -334,12 +334,43 @@ pub struct FullTimelineAnalysis {
     pub lane_result: Option<String>,
 }
 
+/// Segundos de vídeo previos al 0:00 de la partida, para colocar los datos de Riot
+/// —que vienen en tiempo de partida— sobre la línea de tiempo del vídeo.
+///
+/// Las grabaciones nuevas lo traen medido en `video_offset`. Para las antiguas se estima
+/// comparando la duración del vídeo con la duración real de la partida según Riot: la
+/// diferencia es justo la pantalla de carga que quedó grabada al principio.
+fn resolve_video_offset(metadata: &mut crate::storage::MatchMetadata, riot_game_duration: i64) -> f64 {
+    if let Some(offset) = metadata.video_offset {
+        return offset;
+    }
+    // `gameDuration` va en segundos desde el parche 11.20, en milisegundos en partidas
+    // más antiguas (Riot lo cambió sin renombrar el campo).
+    let riot_secs = if riot_game_duration > 20_000 {
+        riot_game_duration as f64 / 1000.0
+    } else {
+        riot_game_duration as f64
+    };
+    let estimate = metadata.game_duration - riot_secs;
+    let offset = if estimate.is_finite() && estimate.abs() <= 600.0 {
+        estimate
+    } else {
+        0.0
+    };
+    metadata.video_offset = Some(offset);
+    offset
+}
+
 /// Procesa la timeline completa de Riot (v5) para extraer compras de items,
 /// marcadores de eventos (Kills, Dragones, Torres) y métricas de línea/jungla a min 15.
+///
+/// `video_offset` desplaza los tiempos resultantes al eje del vídeo (ver
+/// `MatchMetadata::video_offset`); el análisis interno se hace en tiempo de partida.
 fn process_timeline_full(
     tl: &TimelineDto,
     self_participant_id: i32,
     participants: &[ParticipantDto],
+    video_offset: f64,
 ) -> FullTimelineAnalysis {
     let mut item_purchases = Vec::new();
     let mut timeline_markers = Vec::new();
@@ -625,6 +656,14 @@ fn process_timeline_full(
         }
     });
 
+    // Último paso, ya con todo calculado en tiempo de partida: al eje del vídeo.
+    for ip in item_purchases.iter_mut() {
+        ip.time = (ip.time + video_offset).max(0.0);
+    }
+    for mk in timeline_markers.iter_mut() {
+        mk.time = (mk.time + video_offset).max(0.0);
+    }
+
     FullTimelineAnalysis {
         item_purchases,
         timeline_markers,
@@ -700,7 +739,8 @@ pub async fn backfill_participants(
     metadata.queue = Some(details.info.queueId);
     if let Some(idx) = self_idx {
         if let Ok(tl) = api.get_match_timeline(&rid).await {
-            let analysis = process_timeline_full(&tl, (idx as i32) + 1, &details.info.participants);
+            let video_offset = resolve_video_offset(&mut metadata, details.info.gameDuration);
+            let analysis = process_timeline_full(&tl, (idx as i32) + 1, &details.info.participants, video_offset);
             metadata.item_purchases = analysis.item_purchases;
             metadata.timeline_markers = analysis.timeline_markers;
             metadata.minute_frames = analysis.minute_frames;
@@ -775,7 +815,8 @@ pub async fn sync_riot_data(
         metadata.queue = Some(info.queueId);
         if let Some(idx) = info.participants.iter().position(|p| p.puuid == puuid) {
             if let Ok(tl) = api.get_match_timeline(&riot_id).await {
-                let analysis = process_timeline_full(&tl, (idx as i32) + 1, &info.participants);
+                let video_offset = resolve_video_offset(&mut metadata, info.gameDuration);
+                let analysis = process_timeline_full(&tl, (idx as i32) + 1, &info.participants, video_offset);
                 metadata.item_purchases = analysis.item_purchases;
                 metadata.timeline_markers = analysis.timeline_markers;
                 metadata.minute_frames = analysis.minute_frames;

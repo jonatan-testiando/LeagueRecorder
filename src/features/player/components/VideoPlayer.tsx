@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase, TimelineMarker } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
@@ -451,23 +451,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const eventClusters = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [] as { events: MatchEvent[] }[];
 
-    const timelineEvents: MatchEvent[] = (match.timeline_markers ?? []).map((tm) => {
-      let type = "ChampionKill";
-      let subtype: string | undefined = "kill";
-      if (tm.event_type === "kill") { type = "ChampionKill"; subtype = "kill"; }
-      else if (tm.event_type === "death") { type = "ChampionKill"; subtype = "death"; }
-      else if (tm.event_type === "dragon") { type = "DragonKill"; subtype = "ally"; }
-      else if (tm.event_type === "herald") { type = "HeraldKill"; subtype = "ally"; }
-      else if (tm.event_type === "tower") { type = "TowerKill"; subtype = "ally"; }
-      else if (tm.event_type === "plate") { type = "TowerKill"; subtype = "plate"; }
+    // Los marcadores de la Timeline de Riot repiten kills, muertes y objetivos que ya
+    // llegan por la API en directo (con mejor descripción): ahora que ambos van en el
+    // mismo eje de tiempo, se solaparían en la misma marca y contarían doble.
+    const alreadyLive = (tm: TimelineMarker) =>
+      match.events.some((ev) => {
+        if (Math.abs(ev.time - tm.time) > 6) return false;
+        switch (tm.event_type) {
+          case "kill": return ev.type === "ChampionKill" && ev.subtype !== "death";
+          case "death": return ev.type === "ChampionKill" && ev.subtype === "death";
+          case "dragon": return ev.type === "DragonKill";
+          case "herald": return ev.type === "HeraldKill" || ev.type === "BaronKill";
+          case "tower": return ev.type === "TowerKill";
+          default: return false;
+        }
+      });
 
-      return {
-        type,
-        subtype,
-        time: tm.time,
-        description: tm.description,
-      };
-    });
+    const timelineEvents: MatchEvent[] = (match.timeline_markers ?? [])
+      // `gank_attempt` es materia prima del widget de ganks (una marca por minuto de
+      // presencia en línea), no un evento que pintar en la línea de tiempo.
+      .filter((tm) => tm.event_type !== "gank_attempt" && !alreadyLive(tm))
+      .map((tm) => {
+        let type = "ChampionKill";
+        let subtype: string | undefined = "kill";
+        if (tm.event_type === "kill") { type = "ChampionKill"; subtype = "kill"; }
+        else if (tm.event_type === "death") { type = "ChampionKill"; subtype = "death"; }
+        else if (tm.event_type === "dragon") { type = "DragonKill"; subtype = "ally"; }
+        else if (tm.event_type === "herald") { type = "HeraldKill"; subtype = "ally"; }
+        else if (tm.event_type === "tower") { type = "TowerKill"; subtype = "ally"; }
+        else if (tm.event_type === "plate") { type = "TowerKill"; subtype = "plate"; }
+
+        return {
+          type,
+          subtype,
+          time: tm.time,
+          description: tm.description,
+        };
+      });
 
     const allEvs = [...match.events, ...timelineEvents]
       .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
@@ -1168,7 +1188,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {match.minute_frames && match.minute_frames.length > 1 && (
               <GoldXpChart
                 frames={match.minute_frames}
-                duration={duration}
+                videoOffset={match.video_offset ?? 0}
                 onSeek={(secs) => seekTo(secs, false)}
               />
             )}

@@ -18,6 +18,10 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
+/// A partir de cuántos segundos de reloj damos la partida por empezada de verdad.
+/// Sirve para no fijar el desfase vídeo↔partida durante la pantalla de carga.
+const GAME_CLOCK_RUNNING_SECS: f64 = 3.0;
+
 #[derive(serde::Serialize)]
 pub struct DiskSpaceInfo {
     pub used_bytes: u64,
@@ -254,6 +258,8 @@ pub async fn stop_manual_recording(
             comments: Vec::new(),
             is_vod: false,
             camera_snaps: Vec::new(),
+            // La grabación manual empieza y acaba con el vídeo: no hay carga que descontar.
+            video_offset: Some(0.0),
         };
         let _ = save_match_metadata(&metadata);
     }
@@ -411,7 +417,14 @@ pub fn spawn_background_monitor(
                     // la detección de ultimate se retiró, ver `ultimate.rs`).
                     if let Ok((gt, _r_level)) = api_client.get_live_state().await {
                         let mut offset_guard = active_match.game_time_offset.lock().await;
-                        if offset_guard.is_none() && gt > 0.0 {
+                        // El reloj de /allgamedata se queda clavado en ~0 (pero no en 0 exacto)
+                        // mientras dura la pantalla de carga. Con `gt > 0.0` el offset se fijaba
+                        // ahí, ANTES de que la partida empezara, y todos los eventos quedaban
+                        // adelantados lo que hubiese durado la carga (medido: hasta ~1:45).
+                        // Esperamos a que el reloj corra de verdad: mientras corre,
+                        // `gt - tiempo_de_vídeo` es constante, así que fijarlo unos segundos
+                        // más tarde no resta ni un ápice de precisión.
+                        if offset_guard.is_none() && gt >= GAME_CLOCK_RUNNING_SECS {
                             let rec_start = active_match.recording_start.lock().await;
                             if let Some(start) = *rec_start {
                                 let video_time = std::time::Instant::now().saturating_duration_since(start).as_secs_f64();
@@ -638,8 +651,23 @@ async fn finalize_match(
     let champion = active_match.champion.lock().await.clone();
     let duration = (Local::now() - game_start_time).num_seconds() as f64;
 
-    let samples = active_match.apm_samples.lock().await.clone();
+    // Segundos de vídeo que preceden al 0:00 del reloj de la partida (la carga).
+    // `game_time_offset` guarda `t_partida - t_vídeo`, así que el desfase inverso
+    // —el que convierte tiempo de partida en tiempo de vídeo— es su negativo.
+    let video_offset = active_match.game_time_offset.lock().await.map(|o| -o);
+    let to_video = |t_game: f64| (t_game + video_offset.unwrap_or(0.0)).max(0.0);
+
+    // Las muestras de APM y los saltos de cámara se recogen en tiempo de partida, pero
+    // la gráfica y las marcas se pintan sobre la línea del vídeo.
+    let samples: Vec<(f64, u64)> = active_match
+        .apm_samples
+        .lock()
+        .await
+        .iter()
+        .map(|(t, a)| (to_video(*t), *a))
+        .collect();
     let (apm, apm_series) = compute_apm(&samples, duration);
+    let camera_snaps: Vec<f64> = camera_snaps.iter().map(|t| to_video(*t)).collect();
 
     // Resultado a partir del GameEnd de Riot (subtype win/lose) y si ya existe ese evento.
     let mut result = "Unknown".to_string();
@@ -742,6 +770,7 @@ async fn finalize_match(
         comments: Vec::new(),
         is_vod: false,
         camera_snaps,
+        video_offset,
     };
     match save_match_metadata(&metadata) {
         Ok(_) => {
@@ -789,7 +818,7 @@ async fn finalize_match(
 }
 
 /// Calcula el APM promedio y la serie de APM por minuto a partir de muestras
-/// (tiempo_de_juego, acciones_acumuladas).
+/// (tiempo_de_vídeo, acciones_acumuladas).
 fn compute_apm(samples: &[(f64, u64)], duration: f64) -> (f64, Vec<f64>) {
     if samples.len() < 2 || duration <= 0.0 {
         return (0.0, Vec::new());

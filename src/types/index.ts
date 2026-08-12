@@ -117,6 +117,10 @@ export interface MatchMetadata {
   comments?: Comment[]; // comentarios con marca de tiempo
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
   camera_snaps?: number[]; // segundos en que la cámara saltó (tecla de cámara aliada)
+  // Segundos de vídeo anteriores al 0:00 de la partida (la pantalla de carga también se
+  // graba). El backend ya entrega todos los tiempos en el eje del vídeo; esto es
+  // informativo, por si hace falta volver al reloj de la partida: t_partida = t - offset.
+  video_offset?: number | null;
 }
 
 export interface ClipMetadata {

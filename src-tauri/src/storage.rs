@@ -169,6 +169,129 @@ pub struct MatchMetadata {
     /// detectados por `camera_snaps.py`. Vacío hasta que se analiza la partida.
     #[serde(default)]
     pub camera_snaps: Vec<f64>,
+    /// Segundos de vídeo que hay ANTES del 0:00 del reloj de la partida (la pantalla
+    /// de carga, que sí se graba). Es lo que convierte tiempo de partida en tiempo de
+    /// vídeo: `t_vídeo = t_partida + video_offset`. Negativo si la grabación arrancó
+    /// con la partida ya empezada. `None` = grabación antigua, sin medir: al abrirla,
+    /// `realign_to_video_time` lo estima y reescribe el fichero.
+    #[serde(default)]
+    pub video_offset: Option<f64>,
+}
+
+/// Tope de cordura para el desfase vídeo↔partida. Cualquier estimación fuera de este
+/// margen es basura (metadatos corruptos, vídeo recortado a mano…) y se descarta.
+const MAX_VIDEO_OFFSET_SECS: f64 = 600.0;
+
+/// Pasa a tiempo de vídeo lo que una grabación antigua guardó en tiempo de partida.
+///
+/// Hasta ahora los marcadores de la Timeline de Riot se guardaban tal cual (tiempo de
+/// partida) y el desfase de los eventos en directo se fijaba durante la pantalla de
+/// carga, cuando el reloj de la API todavía está clavado en 0. Resultado: las marcas
+/// salían adelantadas en la línea de tiempo hasta ~2 minutos respecto al vídeo.
+///
+/// Como el vídeo termina justo con la partida, el desfase se puede reconstruir a
+/// posteriori: `video_offset ≈ duración_del_vídeo − instante_del_GameEnd_en_la_partida`.
+/// Para saber en qué tiempo estaban ya los eventos en directo se compara cada kill/muerte
+/// suya con su marcador de Riot equivalente (la mediana de esa diferencia es el desfase
+/// que se les aplicó al grabar).
+///
+/// Devuelve `true` si ha tocado algo (entonces conviene reescribir el JSON).
+pub fn realign_to_video_time(m: &mut MatchMetadata) -> bool {
+    if m.video_offset.is_some() || m.is_vod {
+        return false;
+    }
+
+    // Sin marcadores de Riot no hay nada desalineado que arreglar ni con qué estimar.
+    let marker_times: Vec<f64> = m
+        .timeline_markers
+        .iter()
+        .filter(|t| t.event_type == "kill" || t.event_type == "death")
+        .map(|t| t.time)
+        .collect();
+    if marker_times.is_empty() {
+        return false;
+    }
+
+    // El GameEnd de la API viene en tiempo de partida; el de respaldo ("Grabación
+    // finalizada", que se inventa cuando el juego se cierra a lo bruto) ya es de vídeo.
+    let game_end = m
+        .events
+        .iter()
+        .find(|e| e.r#type == "GameEnd" && e.description != "Grabación finalizada")
+        .map(|e| e.time);
+    let game_end = match game_end {
+        Some(t) => t,
+        None => return false,
+    };
+
+    // Desfase que ya llevan los eventos en directo, por emparejamiento con Riot.
+    let mut diffs: Vec<f64> = Vec::new();
+    for ev in m.events.iter().filter(|e| e.r#type == "ChampionKill") {
+        let nearest = marker_times
+            .iter()
+            .map(|t| ev.time - t)
+            .min_by(|a, b| a.abs().total_cmp(&b.abs()));
+        if let Some(d) = nearest {
+            if d.abs() <= 60.0 {
+                diffs.push(d);
+            }
+        }
+    }
+    if diffs.is_empty() {
+        return false;
+    }
+    diffs.sort_by(|a, b| a.total_cmp(b));
+    let live_offset = diffs[diffs.len() / 2];
+
+    let offset = m.game_duration - (game_end - live_offset);
+    if !offset.is_finite() || offset.abs() > MAX_VIDEO_OFFSET_SECS {
+        return false;
+    }
+
+    for ev in m.events.iter_mut() {
+        // El GameStart inicial se apuntó al empezar a grabar: ya está en tiempo de vídeo.
+        if ev.r#type == "GameStart" {
+            continue;
+        }
+        ev.time = (ev.time - live_offset + offset).max(0.0);
+    }
+    for mk in m.timeline_markers.iter_mut() {
+        mk.time = (mk.time + offset).max(0.0);
+    }
+    for ip in m.item_purchases.iter_mut() {
+        ip.time = (ip.time + offset).max(0.0);
+    }
+    m.apm_series = shift_apm_series(&m.apm_series, m.game_duration, offset);
+    m.video_offset = Some(offset);
+    true
+}
+
+/// Reinterpreta la curva de APM —muestreada en tiempo de partida sobre `duration`—
+/// como curva sobre la línea del vídeo. El tramo de carga queda a 0, que es lo que
+/// había: la cuenta de acciones no empieza hasta que arranca la partida.
+fn shift_apm_series(series: &[f64], duration: f64, offset: f64) -> Vec<f64> {
+    if series.len() < 2 || duration <= 0.0 {
+        return series.to_vec();
+    }
+    let n = series.len();
+    let at_game_time = |t: f64| -> f64 {
+        if t <= 0.0 {
+            return 0.0;
+        }
+        let pos = t / duration * (n - 1) as f64;
+        if pos >= (n - 1) as f64 {
+            return series[n - 1];
+        }
+        let i = pos.floor() as usize;
+        let frac = pos - i as f64;
+        series[i] + (series[i + 1] - series[i]) * frac
+    };
+    (0..n)
+        .map(|i| {
+            let video_t = duration * i as f64 / (n - 1) as f64;
+            at_game_time(video_t - offset)
+        })
+        .collect()
 }
 
 /// Suelo de la cuota de disco. Cualquier valor por debajo se ignora: un 0 aquí
@@ -358,6 +481,10 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
 }
 
 pub fn get_match_metadata(match_id: &str) -> Result<MatchMetadata, String> {
+    // Por la ruta normal (una carpeta por partida) para que pase la realineación.
+    if let Some(m) = load_match_by_id(match_id) {
+        return Ok(m);
+    }
     let matches = load_all_matches();
     for m in matches {
         if m.id == match_id {
@@ -483,7 +610,12 @@ pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
     };
     let file = base.join(id).join(format!("{}.json", id));
     let content = fs::read_to_string(file).ok()?;
-    serde_json::from_str::<MatchMetadata>(&content).ok()
+    let mut metadata = serde_json::from_str::<MatchMetadata>(&content).ok()?;
+    // Las grabaciones anteriores al arreglo del desfase se realinean al abrirlas.
+    if realign_to_video_time(&mut metadata) {
+        let _ = save_match_metadata(&metadata);
+    }
+    Some(metadata)
 }
 
 /// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).
@@ -702,5 +834,104 @@ mod layout_migration_tests {
         assert!(root.join("VODsReviews").is_dir());
         assert!(root.join("dataset").is_dir());
         assert!(root.join("notas.txt").is_file());
+    }
+}
+
+#[cfg(test)]
+mod realineado_tests {
+    use super::*;
+
+    /// Partida real (match_20260811_225013): 2595 s de vídeo con 1:47 de pantalla de
+    /// carga por delante. La muerte que el reloj de la partida sitúa en 5:34 ocurre en
+    /// el 7:20 del vídeo.
+    fn partida_con_carga_larga() -> MatchMetadata {
+        serde_json::from_str(
+            r#"{
+                "id": "match_test",
+                "game_duration": 2595.0,
+                "video_path": "",
+                "result": "Victory",
+                "champion": "Gwen",
+                "date": "2026-08-11 22:50:13",
+                "events": [
+                    {"type":"GameStart","subtype":null,"time":0.0,"description":"Partida Iniciada"},
+                    {"type":"ChampionKill","subtype":"death","time":335.5,"description":"Te mató Lanaria"},
+                    {"type":"ChampionKill","subtype":"kill","time":399.5,"description":"Mataste a Sunny"},
+                    {"type":"GameEnd","subtype":"win","time":2488.6,"description":"Victoria"}
+                ],
+                "timeline_markers": [
+                    {"time":334.4,"event_type":"death","description":"Muerte"},
+                    {"time":398.4,"event_type":"kill","description":"Asesinato"}
+                ],
+                "item_purchases": [{"time":13.9,"item_id":1055}]
+            }"#,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn lleva_las_marcas_al_instante_real_del_video() {
+        let mut m = partida_con_carga_larga();
+        assert!(realign_to_video_time(&mut m));
+
+        let offset = m.video_offset.unwrap();
+        assert!((offset - 107.5).abs() < 1.0, "offset estimado: {offset}");
+        // Muerte del minuto 5:34 de partida -> 7:22 de vídeo (±1,5 s de estimación).
+        assert!((m.events[1].time - 441.9).abs() < 1.5, "evento: {}", m.events[1].time);
+        assert!(
+            (m.timeline_markers[0].time - 441.9).abs() < 1.5,
+            "marcador: {}",
+            m.timeline_markers[0].time
+        );
+        // El evento en directo y su marcador de Riot acaban en el mismo sitio.
+        assert!((m.events[1].time - m.timeline_markers[0].time).abs() < 0.1);
+        // La compra se mueve con todo lo demás.
+        assert!((m.item_purchases[0].time - 121.4).abs() < 1.5);
+        // El GameStart lo apunta la grabadora: ya estaba en tiempo de vídeo.
+        assert_eq!(m.events[0].time, 0.0);
+    }
+
+    #[test]
+    fn no_vuelve_a_desplazar_lo_ya_realineado() {
+        let mut m = partida_con_carga_larga();
+        assert!(realign_to_video_time(&mut m));
+        let ya_alineado = m.clone();
+        assert!(!realign_to_video_time(&mut m));
+        assert_eq!(m.events[1].time, ya_alineado.events[1].time);
+        assert_eq!(m.timeline_markers[0].time, ya_alineado.timeline_markers[0].time);
+    }
+
+    #[test]
+    fn se_abstiene_sin_datos_con_los_que_estimar() {
+        // Sin marcadores de Riot no hay nada desalineado ni referencia que usar.
+        let mut sin_marcadores = partida_con_carga_larga();
+        sin_marcadores.timeline_markers.clear();
+        assert!(!realign_to_video_time(&mut sin_marcadores));
+        assert!(sin_marcadores.video_offset.is_none());
+
+        // El GameEnd de respaldo ya va en tiempo de vídeo: no sirve de referencia.
+        let mut sin_game_end = partida_con_carga_larga();
+        sin_game_end.events.retain(|e| e.r#type != "GameEnd");
+        sin_game_end.events.push(MatchEvent {
+            r#type: "GameEnd".to_string(),
+            subtype: None,
+            time: 2595.0,
+            description: "Grabación finalizada".to_string(),
+        });
+        assert!(!realign_to_video_time(&mut sin_game_end));
+    }
+
+    #[test]
+    fn la_curva_de_apm_se_corre_con_el_video() {
+        // Rampa 0..10 sobre 100 s de partida; con 20 s de carga por delante, lo que
+        // estaba en el segundo 0 pasa al 20 y el arranque queda a 0.
+        let serie: Vec<f64> = (0..11).map(|i| i as f64).collect();
+        let movida = shift_apm_series(&serie, 100.0, 20.0);
+        assert_eq!(movida.len(), serie.len());
+        assert_eq!(movida[0], 0.0);
+        assert_eq!(movida[1], 0.0); // t=10 s de vídeo: la partida aún no ha empezado
+        assert!((movida[2] - 0.0).abs() < 1e-9); // t=20 s: justo el 0:00 de la partida
+        assert!((movida[4] - 2.0).abs() < 1e-9); // t=40 s de vídeo = 20 s de partida
+        assert!((movida[10] - 8.0).abs() < 1e-9);
     }
 }

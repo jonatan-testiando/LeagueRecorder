@@ -4,10 +4,10 @@
 //! de mensajes JSON delimitados por '\n' (ver `leaguerec-obs/src/main.cpp`):
 //!   -> {"cmd":"start", ...}   <- {"ok":true,"file":"..."}
 //!   -> {"cmd":"stop"}         <- {"ok":true,"file":"..."}
-//!   -> {"cmd":"status"}       <- {"ok":true,"active":bool}
+//!   -> {"cmd":"status"}       <- {"ok":true,"active":bool}   (lo sirve el servidor; este cliente
+//!                                                              no lo usa: el estado de grabación
+//!                                                              lo lleva `RecorderState`)
 //!   -> {"cmd":"shutdown"}     <- {"ok":true}
-//!
-//! Fase 2: cliente aislado y verificable. La Fase 3 lo enchufa dentro de `recorder.rs`.
 
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -29,7 +29,8 @@ pub struct StartConfig {
     pub exe: String,
     pub out: String,
     pub fps: i32,
-    pub bitrate: i32,
+    /// Calidad constante (CQP) del encoder: menor = más nitidez y más peso.
+    pub cqp: i32,
 }
 
 impl Default for StartConfig {
@@ -40,7 +41,7 @@ impl Default for StartConfig {
             exe: String::new(),
             out: String::new(),
             fps: 60,
-            bitrate: 12000,
+            cqp: 23,
         }
     }
 }
@@ -52,8 +53,6 @@ struct Resp {
     error: Option<String>,
     #[serde(default)]
     file: Option<String>,
-    #[serde(default)]
-    active: Option<bool>,
 }
 
 /// Cliente conectado al servidor de grabación.
@@ -114,16 +113,6 @@ impl ObsClient {
                 ))
             }
         }
-    }
-
-    /// Conecta a un servidor ya lanzado (sin gestionar su ciclo de vida).
-    pub fn connect(pipe: &str) -> Result<Self, String> {
-        let (reader, writer) = Self::open_pipe(pipe, Duration::from_secs(10))?;
-        Ok(Self {
-            child: None,
-            reader,
-            writer,
-        })
     }
 
     fn open_pipe(pipe: &str, timeout: Duration) -> Result<(BufReader<File>, File), String> {
@@ -208,12 +197,6 @@ impl ObsClient {
         } else {
             Err(r.error.unwrap_or_else(|| "save_replay falló".into()))
         }
-    }
-
-    /// ¿Hay una grabación activa?
-    pub fn status(&mut self) -> Result<bool, String> {
-        let r = self.request(r#"{"cmd":"status"}"#)?;
-        Ok(r.active.unwrap_or(false))
     }
 
     /// Ordena al servidor apagarse y espera a que el proceso termine.

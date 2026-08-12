@@ -16,7 +16,7 @@ param(
   [string]$Out = "$env:USERPROFILE\Desktop\leaguerec-smoke.mp4",
   [int]$Seconds = 10,
   [int]$Fps = 60,
-  [int]$Bitrate = 12000,
+  [int]$Cqp = 23,
   [string]$ObsDir = (Join-Path $PSScriptRoot "..\..\third_party\obs-studio"),
   [string]$BuildDir = (Join-Path $PSScriptRoot "..\build")
 )
@@ -27,8 +27,11 @@ $ObsDir = [System.IO.Path]::GetFullPath($ObsDir)
 $rundir = Join-Path $ObsDir "build_x64\rundir\RelWithDebInfo"
 if (-not (Test-Path $rundir)) { throw "Rundir de OBS no encontrado: $rundir. ¿Compilaste OBS?" }
 
-$exe = Join-Path ([System.IO.Path]::GetFullPath($BuildDir)) "RelWithDebInfo\leaguerec-obs.exe"
-if (-not (Test-Path $exe)) { throw "leaguerec-obs.exe no encontrado. Ejecuta build-server.ps1." }
+# OJO con el nombre: PowerShell no distingue mayúsculas en las variables, así que llamar a esto
+# $exe pisaría el parámetro -Exe (el ejecutable del JUEGO a capturar) y el script acabaría
+# pasándose a sí mismo como --exe.
+$serverExe = Join-Path ([System.IO.Path]::GetFullPath($BuildDir)) "RelWithDebInfo\leaguerec-obs.exe"
+if (-not (Test-Path $serverExe)) { throw "leaguerec-obs.exe no encontrado. Ejecuta build-server.ps1." }
 
 # El PATH necesita DOS directorios de OBS:
 #   - bin/64bit          -> obs.dll y libobs-*.dll
@@ -36,11 +39,18 @@ if (-not (Test-Path $exe)) { throw "leaguerec-obs.exe no encontrado. Ejecuta bui
 # (el rundir de OBS no copia las de ffmpeg; hay que exponerlas nosotros)
 $binDir  = Join-Path $rundir "bin\64bit"
 # La carpeta de deps lleva fecha en el nombre (obs-deps-YYYY-MM-DD-x64) y cambia por versión de OBS.
+# HAY QUE EXCLUIR la de Qt: "obs-deps-qt6-...-x64" también casa con el filtro y, al ordenar por
+# nombre descendente, 'q' gana a '2' y salía elegida siempre. Esa carpeta no tiene ffmpeg, así que
+# obs.dll no resolvía avcodec-61.dll y el proceso moría con "DLL no encontrada" antes de main.
 $depsRoot = Join-Path $ObsDir ".deps"
 $depsBin = Get-ChildItem $depsRoot -Directory -Filter "obs-deps-*-x64" -ErrorAction SilentlyContinue |
+           Where-Object { $_.Name -notmatch 'qt' } |
            Sort-Object Name -Descending | Select-Object -First 1 |
            ForEach-Object { Join-Path $_.FullName "bin" }
 if (-not $depsBin -or -not (Test-Path $depsBin)) { throw "DLLs de deps no encontradas bajo $depsRoot" }
+if (-not (Test-Path (Join-Path $depsBin "avcodec-61.dll"))) {
+  throw "En $depsBin no están las DLLs de ffmpeg que obs.dll necesita. ¿Deps incompletas?"
+}
 
 $env:OBS_RUNDIR = $rundir
 $env:PATH = $binDir + ";" + $depsBin + ";" + $env:PATH
@@ -49,9 +59,9 @@ $env:PATH = $binDir + ";" + $depsBin + ";" + $env:PATH
 # (espera <exe>/../../data/libobs). Por eso el server debe ejecutarse desde bin/64bit,
 # junto a obs.dll y data/, igual que hace ascent-obs. Copiamos el exe ahí.
 $exeInBin = Join-Path $binDir "leaguerec-obs.exe"
-Copy-Item $exe $exeInBin -Force
+Copy-Item $serverExe $exeInBin -Force
 
-$args = @("--source", $Source, "--out", $Out, "--seconds", $Seconds, "--fps", $Fps, "--bitrate", $Bitrate)
+$args = @("--source", $Source, "--out", $Out, "--seconds", $Seconds, "--fps", $Fps, "--cqp", $Cqp)
 if ($Window) { $args += @("--window", $Window) }
 if ($Exe)    { $args += @("--exe", $Exe) }
 

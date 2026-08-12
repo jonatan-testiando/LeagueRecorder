@@ -2,7 +2,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 #include <vector>
@@ -38,8 +40,14 @@ bool compute_window_crop(const std::string &title, obs_sceneitem_crop *crop) {
 
 namespace {
 
-// Elige el mejor encoder de vídeo H.264 disponible, por prioridad de hardware.
-// Robusto entre versiones de OBS (ids cambian: jim_nvenc, obs_nvenc_h264_tex, h264_texture_amf...).
+// Elige el mejor encoder de vídeo H.264 disponible.
+//
+// Se piden ids CONCRETOS y en orden de preferencia, no "el primero que contenga nvenc": el orden
+// en que se registran los plugins no está garantizado (y en el runtime ensamblado obs-nvenc.dll
+// llega a cargarse dos veces, ver los avisos "Encoder id already exists"), así que buscar por
+// subcadena podía devolver el encoder por software o el shim antiguo en vez del bueno. Eso importa
+// porque cada uno lee las opciones con nombres distintos: obs_nvenc_h264_tex usa "preset" y
+// jim_nvenc usa "preset2".
 std::string pick_h264_encoder() {
     std::vector<std::string> ids;
     const char *id = nullptr;
@@ -49,16 +57,29 @@ std::string pick_h264_encoder() {
         if (codec && std::strcmp(codec, "h264") == 0)
             ids.emplace_back(id);
     }
-    auto find_with = [&](const char *needle) -> std::string {
-        for (auto &e : ids)
-            if (e.find(needle) != std::string::npos) return e;
-        return {};
+
+    auto have = [&](const char *want) {
+        return std::find(ids.begin(), ids.end(), want) != ids.end();
     };
-    for (const char *needle : {"nvenc", "amf", "qsv", "x264"}) {
-        std::string hit = find_with(needle);
-        if (!hit.empty()) return hit;
+
+    // De mejor a peor: NVENC por textura (zero-copy desde la GPU) > NVENC por CUDA > shim de
+    // compatibilidad > AMD > Intel QSV > x264 (CPU, último recurso).
+    static const char *const kPreferred[] = {
+        "obs_nvenc_h264_tex", "obs_nvenc_h264_cuda", "obs_nvenc_h264_soft", "jim_nvenc",
+        "h264_texture_amf",   "h264_fallback_amf",   "obs_qsv11_v2",        "obs_qsv11",
+        "obs_x264",
+    };
+    for (const char *want : kPreferred)
+        if (have(want)) return want;
+
+    // GPU o versión de OBS que no contemplamos: cualquier cosa antes que fallar, pero avisando,
+    // porque las opciones de calidad que mandamos abajo pueden no aplicarse.
+    if (!ids.empty()) {
+        fprintf(stderr, "[leaguerec] aviso: encoder H.264 desconocido '%s'; la calidad puede no aplicarse\n",
+                ids.front().c_str());
+        return ids.front();
     }
-    return ids.empty() ? std::string("obs_x264") : ids.front();
+    return "obs_x264";
 }
 
 obs_source_t *make_video_source(const RecordConfig &cfg) {
@@ -129,6 +150,15 @@ obs_source_t *make_video_source(const RecordConfig &cfg) {
     return src;
 }
 
+// ¿Apuntan las dos rutas al mismo directorio? Las resuelve a absolutas (las relativas, contra el
+// directorio de trabajo actual, igual que hace libobs) y compara sin distinguir mayúsculas.
+bool same_dir(const std::string &a, const std::string &b) {
+    char fa[MAX_PATH], fb[MAX_PATH];
+    if (!GetFullPathNameA(a.c_str(), MAX_PATH, fa, nullptr)) return false;
+    if (!GetFullPathNameA(b.c_str(), MAX_PATH, fb, nullptr)) return false;
+    return _stricmp(fa, fb) == 0;
+}
+
 } // namespace
 
 bool Recorder::init(const std::string &rundir, std::string &err) {
@@ -162,9 +192,15 @@ bool Recorder::init(const std::string &rundir, std::string &err) {
         err = "rundir vacío";
         return false;
     }
+    // obs_startup ya registró la ruta relativa "../../obs-plugins/64bit" (add_default_module_paths
+    // en obs-windows.c) y el servidor se ejecuta obligatoriamente desde bin/64bit, así que esa
+    // relativa apunta al MISMO directorio que la nuestra. obs_add_module_path no deduplica, de modo
+    // que cada plugin se cargaba dos veces: de ahí los avisos "Encoder id '...' already exists!
+    // Duplicate library?" y que qué encoder ganaba dependiera del orden de registro.
     std::string plugin_bin = rundir_ + "/obs-plugins/64bit";
     std::string plugin_data = rundir_ + "/data/obs-plugins/%module%";
-    obs_add_module_path(plugin_bin.c_str(), plugin_data.c_str());
+    if (!same_dir(plugin_bin, "../../obs-plugins/64bit"))
+        obs_add_module_path(plugin_bin.c_str(), plugin_data.c_str());
     obs_load_all_modules();
     obs_post_load_modules();
     modules_loaded_ = true;
@@ -248,9 +284,18 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
 
     std::string venc_id = pick_h264_encoder();
     obs_data_t *venc_settings = obs_data_create();
-    obs_data_set_string(venc_settings, "rate_control", "CBR");
-    obs_data_set_int(venc_settings, "bitrate", cfg.bitrate);
-    obs_data_set_string(venc_settings, "preset", "quality");
+    // CQP y no CBR: el CBR gastaba el bitrate entero también en la tienda, la pantalla de muerte
+    // y el mapa quieto, que es la mayor parte de una partida de LoL. Con calidad constante el
+    // encoder solo gasta bits donde hay movimiento; a igual nitidez el archivo baja ~50-60%.
+    obs_data_set_string(venc_settings, "rate_control", "CQP");
+    obs_data_set_int(venc_settings, "cqp", cfg.cqp);
+    // El preset va por partida doble a propósito: el NVENC moderno (obs_nvenc_h264_tex) lee
+    // "preset", pero el shim de compatibilidad (jim_nvenc) lee "preset2", y pick_h264_encoder()
+    // puede devolver cualquiera de los dos. Además el valor DEBE ser p1..p7: get_nv_preset() no
+    // reconoce nombres como "quality" y cae silenciosamente a P5 (era el caso hasta ahora).
+    obs_data_set_string(venc_settings, "preset", "p6");
+    obs_data_set_string(venc_settings, "preset2", "p6");
+    obs_data_set_bool(venc_settings, "psycho_aq", true);
     venc_ = obs_video_encoder_create(venc_id.c_str(), "venc", venc_settings, nullptr);
     obs_data_release(venc_settings);
     obs_encoder_set_video(venc_, obs_get_video());

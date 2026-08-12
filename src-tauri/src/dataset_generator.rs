@@ -1,7 +1,7 @@
 use crate::storage::{MatchMetadata, MouseEventData};
 use rand::seq::SliceRandom;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 pub async fn generate_dataset(

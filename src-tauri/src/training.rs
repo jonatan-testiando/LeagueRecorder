@@ -70,27 +70,6 @@ impl Default for TrainingConfig {
     }
 }
 
-impl TrainingConfig {
-    /// Roles configurados, sin duplicados y en orden. Lo usan los drills y el metrónomo.
-    pub fn roles(&self) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
-        for b in &self.bindings {
-            if !out.contains(&b.role) {
-                out.push(b.role.clone());
-            }
-        }
-        out
-    }
-
-    /// Tecla asociada a un rol (la primera que lo referencie).
-    pub fn key_for_role(&self, role: &str) -> Option<String> {
-        self.bindings
-            .iter()
-            .find(|b| b.role.eq_ignore_ascii_case(role))
-            .map(|b| b.key.clone())
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Rutas y persistencia
 // ---------------------------------------------------------------------------
@@ -460,9 +439,12 @@ mod tests {
     #[test]
     fn config_por_defecto_mapea_los_cuatro_roles() {
         let cfg = TrainingConfig::default();
-        assert_eq!(cfg.roles(), vec!["TOP", "MID", "ADC", "SUPPORT"]);
-        assert_eq!(cfg.key_for_role("adc"), Some("3".to_string()));
-        assert_eq!(cfg.key_for_role("JUNGLE"), None);
+        let roles: Vec<&str> = cfg.bindings.iter().map(|b| b.role.as_str()).collect();
+        assert_eq!(roles, vec!["TOP", "MID", "ADC", "SUPPORT"]);
+        // La jungla se queda fuera a propósito (el reparto es de números superiores).
+        assert!(!roles.contains(&"JUNGLE"));
+        let adc = cfg.bindings.iter().find(|b| b.role == "ADC").unwrap();
+        assert_eq!(adc.key, "3");
     }
 
     fn cfg_metronomo() -> TrainingConfig {

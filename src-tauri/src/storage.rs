@@ -299,6 +299,8 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
         }
     };
 
+    // Una carpeta por partida. Los sueltos en la raíz ya no se contemplan: `migrate_flat_layout`
+    // los recoloca al arrancar.
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -308,8 +310,6 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
                         process_file(&sub_entry.path());
                     }
                 }
-            } else if path.is_file() {
-                process_file(&path);
             }
         }
     }
@@ -367,27 +367,123 @@ pub fn get_match_metadata(match_id: &str) -> Result<MatchMetadata, String> {
     Err("Match not found".to_string())
 }
 
+/// Marca de que la migración de disposición ya corrió en ese directorio.
+const LAYOUT_MARKER: &str = ".layout-v2";
+
+/// A qué partida pertenece un fichero suelto de la raíz, por su nombre:
+///   `match_x.json` / `match_x.mp4`        -> "match_x"
+///   `match_x_error_3.mp4` / `.json`       -> "match_x"
+/// Devuelve None para cualquier cosa que no sea un `.json`/`.mp4` (el propio marcador incluido).
+fn owner_id_of(file_name: &str) -> Option<String> {
+    let path = Path::new(file_name);
+    let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+    if ext != "json" && ext != "mp4" {
+        return None;
+    }
+    let stem = path.file_stem()?.to_str()?;
+    let id = match stem.find("_error_") {
+        Some(i) => &stem[..i],
+        None => stem,
+    };
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
+}
+
+/// Migra la disposición antigua (ficheros sueltos `<id>.json` / `<id>.mp4` / `<id>_error_*.mp4`
+/// en la raíz) a la actual: una carpeta `<id>/` por partida.
+///
+/// Se ejecuta una sola vez por directorio, marcada con un fichero `.layout-v2`. NO borra nada:
+/// solo mueve, y si el destino ya existe deja el original donde está y lo registra. Si algún
+/// movimiento falla no escribe el marcador, así que el siguiente arranque lo reintenta.
+///
+/// Devuelve la lista de ficheros movidos (para el log).
+pub fn migrate_flat_layout(root: &Path) -> Vec<String> {
+    let marker = root.join(LAYOUT_MARKER);
+    if marker.exists() {
+        return Vec::new();
+    }
+
+    let mut moved = Vec::new();
+    let mut failed = false;
+
+    let Ok(entries) = fs::read_dir(root) else {
+        return moved; // sin marcador: se reintenta en el próximo arranque
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let Some(id) = owner_id_of(name) else {
+            continue;
+        };
+
+        let dest_dir = root.join(&id);
+        if let Err(e) = fs::create_dir_all(&dest_dir) {
+            eprintln!("Migración: no se pudo crear {}: {e}", dest_dir.display());
+            failed = true;
+            continue;
+        }
+        let dest = dest_dir.join(name);
+        if dest.exists() {
+            eprintln!(
+                "Migración: {} ya existe; dejo {} sin tocar",
+                dest.display(),
+                path.display()
+            );
+            failed = true;
+            continue;
+        }
+        match fs::rename(&path, &dest) {
+            Ok(()) => moved.push(name.to_string()),
+            Err(e) => {
+                eprintln!("Migración: no se pudo mover {}: {e}", path.display());
+                failed = true;
+            }
+        }
+    }
+
+    if !failed {
+        let _ = fs::write(&marker, "1");
+    }
+    moved
+}
+
+/// Lanza la migración sobre los dos directorios que pueden tener partidas sueltas.
+pub fn migrate_storage_layout() {
+    for root in [get_videos_dir(), get_reviews_dir()] {
+        let moved = migrate_flat_layout(&root);
+        if !moved.is_empty() {
+            println!(
+                "Migración de disposición en {}: {} fichero(s) movidos a su carpeta",
+                root.display(),
+                moved.len()
+            );
+        }
+    }
+}
+
 /// Carga el metadata COMPLETO de una sola partida (incluye `mouse_events`) leyendo
 /// directamente su JSON, sin escanear toda la biblioteca.
+///
+/// Solo mira la disposición actual (`<base>/<id>/<id>.json`): de los sueltos antiguos en la raíz
+/// se encarga `migrate_flat_layout` al arrancar.
 pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
     let base = if id.starts_with("vod_") {
         get_reviews_dir()
     } else {
         get_videos_dir()
     };
-    let subfolder_file = base.join(id).join(format!("{}.json", id));
-    if let Ok(content) = fs::read_to_string(&subfolder_file) {
-        if let Ok(m) = serde_json::from_str::<MatchMetadata>(&content) {
-            return Some(m);
-        }
-    }
-    let legacy_flat_file = base.join(format!("{}.json", id));
-    if let Ok(content) = fs::read_to_string(&legacy_flat_file) {
-        if let Ok(m) = serde_json::from_str::<MatchMetadata>(&content) {
-            return Some(m);
-        }
-    }
-    None
+    let file = base.join(id).join(format!("{}.json", id));
+    let content = fs::read_to_string(file).ok()?;
+    serde_json::from_str::<MatchMetadata>(&content).ok()
 }
 
 /// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).
@@ -521,5 +617,90 @@ pub fn check_storage_quota() {
             Ok(()) => freed += size,
             Err(e) => eprintln!("Cuota: no se pudo borrar {}: {}", m.id, e),
         }
+    }
+}
+
+#[cfg(test)]
+mod layout_migration_tests {
+    use super::*;
+
+    fn temp_root(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("leaguerec-layout-{}-{}", std::process::id(), name));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(path: &Path) {
+        fs::write(path, b"x").unwrap();
+    }
+
+    #[test]
+    fn deriva_el_id_del_nombre() {
+        assert_eq!(owner_id_of("match_1.json").as_deref(), Some("match_1"));
+        assert_eq!(owner_id_of("match_1.mp4").as_deref(), Some("match_1"));
+        assert_eq!(owner_id_of("match_1_error_3.mp4").as_deref(), Some("match_1"));
+        assert_eq!(owner_id_of("match_1_error_3.json").as_deref(), Some("match_1"));
+        // Ni el marcador ni cualquier otra cosa se tocan.
+        assert_eq!(owner_id_of(".layout-v2"), None);
+        assert_eq!(owner_id_of("notas.txt"), None);
+    }
+
+    #[test]
+    fn agrupa_los_sueltos_en_su_carpeta() {
+        let root = temp_root("agrupa");
+        touch(&root.join("match_1.json"));
+        touch(&root.join("match_1.mp4"));
+        touch(&root.join("match_1_error_0.mp4"));
+        touch(&root.join("match_1_error_0.json"));
+        touch(&root.join("match_2.json"));
+
+        let moved = migrate_flat_layout(&root);
+        assert_eq!(moved.len(), 5);
+
+        for f in ["match_1.json", "match_1.mp4", "match_1_error_0.mp4", "match_1_error_0.json"] {
+            assert!(root.join("match_1").join(f).exists(), "falta {f}");
+            assert!(!root.join(f).exists(), "{f} sigue suelto en la raíz");
+        }
+        assert!(root.join("match_2").join("match_2.json").exists());
+        assert!(root.join(LAYOUT_MARKER).exists());
+    }
+
+    #[test]
+    fn no_toca_lo_que_ya_esta_migrado() {
+        let root = temp_root("idempotente");
+        touch(&root.join("match_1.json"));
+        assert_eq!(migrate_flat_layout(&root).len(), 1);
+        // Segunda pasada: el marcador la corta en seco.
+        touch(&root.join("match_9.json"));
+        assert!(migrate_flat_layout(&root).is_empty());
+        assert!(root.join("match_9.json").exists(), "no debería haberse movido");
+    }
+
+    #[test]
+    fn nunca_pisa_un_destino_existente() {
+        let root = temp_root("colision");
+        fs::create_dir_all(root.join("match_1")).unwrap();
+        fs::write(root.join("match_1").join("match_1.json"), b"el bueno").unwrap();
+        fs::write(root.join("match_1.json"), b"el suelto").unwrap();
+
+        assert!(migrate_flat_layout(&root).is_empty());
+        assert_eq!(fs::read(root.join("match_1").join("match_1.json")).unwrap(), b"el bueno");
+        assert!(root.join("match_1.json").exists(), "el suelto no se debe perder");
+        // Sin marcador: al haber quedado algo pendiente, el próximo arranque lo reintenta.
+        assert!(!root.join(LAYOUT_MARKER).exists());
+    }
+
+    #[test]
+    fn ignora_directorios_y_extensiones_ajenas() {
+        let root = temp_root("ignora");
+        fs::create_dir_all(root.join("VODsReviews")).unwrap();
+        fs::create_dir_all(root.join("dataset")).unwrap();
+        touch(&root.join("notas.txt"));
+
+        assert!(migrate_flat_layout(&root).is_empty());
+        assert!(root.join("VODsReviews").is_dir());
+        assert!(root.join("dataset").is_dir());
+        assert!(root.join("notas.txt").is_file());
     }
 }

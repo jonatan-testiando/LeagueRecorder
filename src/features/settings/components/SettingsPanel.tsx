@@ -456,9 +456,9 @@ export const SettingsPanel: React.FC = () => {
           </h3>
         </div>
         <p style={styles.cardText}>
-          Video is recorded at your monitor's native resolution via NVENC (GPU), with no FPS loss.
-          Choose the FPS and quality: quality sets the bitrate — i.e. how sharp the video is
-          versus the file size.
+          Video is recorded at 1080p via NVENC (GPU), with no FPS loss. If you play at a higher
+          resolution the image is scaled down to 1080p, keeping the full frame. Choose the FPS and
+          quality: quality trades sharpness against file size.
         </p>
         
         <div style={styles.videoSettingsGrid}>
@@ -491,12 +491,12 @@ export const SettingsPanel: React.FC = () => {
           </div>
 
           <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Quality (bitrate)</span>
+            <span style={styles.videoSetLabel}>Quality</span>
             <div style={styles.buttonGroup}>
               {([
-                { key: "High", label: "High", hint: "22 Mbps" },
-                { key: "Medium", label: "Medium", hint: "14 Mbps" },
-                { key: "Low", label: "Low", hint: "8 Mbps" },
+                { key: "High", label: "High", hint: "CQ 20 · sharpest" },
+                { key: "Medium", label: "Medium", hint: "CQ 23 · balanced" },
+                { key: "Low", label: "Low", hint: "CQ 26 · smallest" },
               ] as const).map((q) => {
                 const sel = video?.quality === q.key;
                 return (
@@ -522,8 +522,9 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.infoNote}>
           <Monitor size={14} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: "2px" }} />
           <span>
-            Captured at your game's native resolution (no rescaling, so no FPS drop). The higher the
-            bitrate, the sharper the motion but the larger the file.
+            Recording uses constant quality, so the encoder only spends bits where there is motion
+            and quiet stretches take up almost nothing. File size therefore varies with the match:
+            a lower CQ number means a sharper, heavier video.
           </span>
         </div>
       </motion.div>

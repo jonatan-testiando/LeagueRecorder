@@ -10,20 +10,18 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Scissors, Gamepad2, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle, Crosshair } from "lucide-react";
+import { Scissors, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle, Crosshair } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
 
-type Tab = "games" | "clips" | "errors" | "review" | "vod" | "training" | "settings";
+type Tab = "clips" | "errors" | "review" | "vod" | "training" | "settings";
 
-/** Paneles con contenido propio. "review" no está: reutiliza el de "/games". */
-type Panel = "/games" | "/clips" | "/errors" | "/vod" | "/training" | "/settings";
+type Panel = "/review" | "/clips" | "/errors" | "/vod" | "/training" | "/settings";
 
 const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode }[] = [
-  { key: "games", path: "/games", label: "Games", icon: <Gamepad2 size={18} /> },
+  { key: "review", path: "/review", label: "Review", icon: <MonitorPlay size={18} /> },
   { key: "clips", path: "/clips", label: "Clips", icon: <Film size={18} /> },
   { key: "errors", path: "/errors", label: "Errors", icon: <AlertTriangle size={18} /> },
-  { key: "review", path: "/review", label: "Review", icon: <MonitorPlay size={18} /> },
   { key: "vod", path: "/vod", label: "VOD Analysis", icon: <Film size={18} /> },
   { key: "training", path: "/training", label: "Training", icon: <Crosshair size={18} /> },
 ];
@@ -44,9 +42,11 @@ export const App: React.FC = () => {
 
   const currentPath = location.pathname;
 
+  // "/games" era una segunda entrada al mismo panel que "/review"; se quitó del menú, pero la
+  // ruta se redirige para no romper el estado de navegación guardado de versiones anteriores.
   React.useEffect(() => {
-    if (currentPath === "/") {
-      navigate("/games", { replace: true });
+    if (currentPath === "/" || currentPath.startsWith("/games")) {
+      navigate("/review", { replace: true });
     }
   }, [currentPath, navigate]);
 
@@ -67,16 +67,12 @@ export const App: React.FC = () => {
     ? matchedNav.key
     : currentPath.startsWith("/settings")
       ? "settings"
-      : "games";
+      : "review";
 
-  // Panel visible ahora mismo. "Review" comparte panel con "Games": es la lista de
-  // partidas desde la que se abre una para revisarla, como antes de las rutas.
   const activePanel: Panel =
     currentPath.startsWith("/settings")
       ? "/settings"
-      : activeTabKey === "review"
-        ? "/games"
-        : ((matchedNav?.path ?? "/games") as Panel);
+      : ((matchedNav?.path ?? "/review") as Panel);
 
   // Los paneles se quedan montados una vez visitados para no perder su estado (el
   // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo
@@ -184,7 +180,7 @@ export const App: React.FC = () => {
         )}
 
         {panel(
-          "/games",
+          "/review",
           selectedMatch ? (
             <div style={styles.playerWrapper}>
               <div style={styles.playerTopBar}>

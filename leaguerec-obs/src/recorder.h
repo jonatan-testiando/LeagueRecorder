@@ -14,7 +14,8 @@ struct RecordConfig {
     int fps = 60;
     int width = 1920;
     int height = 1080;
-    int bitrate = 12000;           // kbps CBR
+    int cqp = 23;                  // calidad constante (menor = mejor y más pesado). 20 ≈ visualmente
+                                   // intacto, 26 ya se nota. Ver la nota de CQP en recorder.cpp.
 };
 
 class Recorder {

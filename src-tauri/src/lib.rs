@@ -4,7 +4,6 @@ mod camera_snaps;
 mod commands;
 mod cv_analyzer;
 mod dataset_generator;
-mod detector;
 mod obs_client;
 mod overlay;
 mod proc;
@@ -61,6 +60,10 @@ pub fn run() {
     tauri::Builder::default()
         .manage(cv_analyzer::AnalyzerState::default())
         .setup(move |app| {
+            // Antes de que nada lea la biblioteca: recoloca las partidas de versiones antiguas
+            // que guardaban los ficheros sueltos en la raíz. Corre una sola vez por directorio.
+            crate::storage::migrate_storage_layout();
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;

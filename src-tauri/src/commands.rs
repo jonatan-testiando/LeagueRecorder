@@ -1259,6 +1259,8 @@ pub async fn export_error_clip(
 #[tauri::command]
 pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
     let mut errors = Vec::new();
+    // Los dos directorios NO son un apaño heredado: los VOD analizados (`vod_*`) viven en
+    // VODsReviews y las partidas grabadas en la raíz de vídeos (ver `get_match_dir`).
     let dirs = vec![crate::storage::get_videos_dir(), crate::storage::get_reviews_dir()];
 
     for root_dir in dirs {
@@ -1291,28 +1293,6 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                             }
                         }
                     }
-                } else if entry.path().is_file() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    if name.contains("_error_") && name.ends_with(".mp4") {
-                        let size = entry.metadata().await.map(|m| m.len()).unwrap_or(0);
-                        let json_path = entry.path().with_extension("json");
-                        let mut note = String::new();
-                        let mut events = Vec::new();
-                        if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-                            if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
-                                note = meta.note;
-                                events = meta.events;
-                            }
-                        }
-                        errors.push(ErrorClipMetadata {
-                            path: entry.path().to_string_lossy().to_string(),
-                            name: name.clone(),
-                            match_id: "".to_string(),
-                            size,
-                            note,
-                            events,
-                        });
-                    }
                 }
             }
         }
@@ -1321,40 +1301,63 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
     errors
 }
 
+/// Lee la metadata de un clip de error, o devuelve una recién inventada si el `.json` no existe
+/// o no se puede parsear. La ausencia es un caso NORMAL: los clips de versiones anteriores se
+/// grabaron sin `.json`, y la primera nota o el primer evento son justamente lo que lo crea.
+async fn load_or_init_clip_meta(mp4_path: &std::path::Path) -> ErrorClipMetadata {
+    let json_path = mp4_path.with_extension("json");
+    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+        if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
+            return meta;
+        }
+    }
+    ErrorClipMetadata {
+        path: mp4_path.to_string_lossy().to_string(),
+        name: mp4_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        match_id: String::new(),
+        size: tokio::fs::metadata(mp4_path)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0),
+        note: String::new(),
+        events: Vec::new(),
+    }
+}
+
+/// Lee la metadata de un clip que DEBE existir ya. La usan editar y borrar eventos: si llegan
+/// aquí es porque la UI acaba de listar ese evento, así que un `.json` ausente o corrupto es una
+/// inconsistencia real y hay que decirlo, no fingir que se guardó.
+async fn load_clip_meta(mp4_path: &std::path::Path) -> Result<ErrorClipMetadata, String> {
+    let json_path = mp4_path.with_extension("json");
+    let content = tokio::fs::read_to_string(&json_path)
+        .await
+        .map_err(|e| format!("No se encontró la metadata de {}: {e}", json_path.display()))?;
+    serde_json::from_str::<ErrorClipMetadata>(&content)
+        .map_err(|e| format!("Metadata ilegible en {}: {e}", json_path.display()))
+}
+
+/// Guarda la metadata junto al mp4 (mismo nombre, extensión `.json`).
+async fn write_clip_meta(
+    mp4_path: &std::path::Path,
+    meta: &ErrorClipMetadata,
+) -> Result<(), String> {
+    let json_path = mp4_path.with_extension("json");
+    let body = serde_json::to_string_pretty(meta).map_err(|e| e.to_string())?;
+    tokio::fs::write(&json_path, body)
+        .await
+        .map_err(|e| format!("No se pudo guardar {}: {e}", json_path.display()))
+}
+
 #[tauri::command]
 pub async fn update_error_note(path: String, note: String) -> Result<(), String> {
     let mp4_path = std::path::Path::new(&path);
-    let json_path = mp4_path.with_extension("json");
-
-    let mut meta = if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-        serde_json::from_str::<ErrorClipMetadata>(&content).unwrap_or_else(|_| ErrorClipMetadata {
-            path: path.clone(),
-            name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-            match_id: "".to_string(),
-            size: std::fs::metadata(mp4_path).map(|m| m.len()).unwrap_or(0),
-            note: note.clone(),
-            events: Vec::new(),
-        })
-    } else {
-        ErrorClipMetadata {
-            path: path.clone(),
-            name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-            match_id: "".to_string(),
-            size: std::fs::metadata(mp4_path).map(|m| m.len()).unwrap_or(0),
-            note: note.clone(),
-            events: Vec::new(),
-        }
-    };
-
+    let mut meta = load_or_init_clip_meta(mp4_path).await;
     meta.note = note;
-
-    tokio::fs::write(
-        &json_path,
-        serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
-    Ok(())
+    write_clip_meta(mp4_path, &meta).await
 }
 
 #[tauri::command]
@@ -1365,26 +1368,7 @@ pub async fn add_error_event(
     category: String,
 ) -> Result<String, String> {
     let mp4_path = std::path::Path::new(&path);
-    let json_path = mp4_path.with_extension("json");
-    let mut meta = if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-        serde_json::from_str::<ErrorClipMetadata>(&content).unwrap_or_else(|_| ErrorClipMetadata {
-            path: path.clone(),
-            name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-            match_id: "".to_string(),
-            size: std::fs::metadata(mp4_path).map(|m| m.len()).unwrap_or(0),
-            note: "".to_string(),
-            events: Vec::new(),
-        })
-    } else {
-        ErrorClipMetadata {
-            path: path.clone(),
-            name: mp4_path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-            match_id: "".to_string(),
-            size: std::fs::metadata(mp4_path).map(|m| m.len()).unwrap_or(0),
-            note: "".to_string(),
-            events: Vec::new(),
-        }
-    };
+    let mut meta = load_or_init_clip_meta(mp4_path).await;
 
     let id = uuid::Uuid::new_v4().to_string();
     meta.events.push(ErrorEvent {
@@ -1398,26 +1382,22 @@ pub async fn add_error_event(
             .partial_cmp(&b.time)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    tokio::fs::write(&json_path, serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?)
-        .await
-        .map_err(|e| e.to_string())?;
+    write_clip_meta(mp4_path, &meta).await?;
     Ok(id)
 }
 
 #[tauri::command]
 pub async fn delete_error_event(path: String, event_id: String) -> Result<(), String> {
     let mp4_path = std::path::Path::new(&path);
-    let json_path = mp4_path.with_extension("json");
-    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-        if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
-            meta.events.retain(|e| e.id != event_id);
-            tokio::fs::write(&json_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
-                .await
-                .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
+    let mut meta = load_clip_meta(mp4_path).await?;
+
+    let before = meta.events.len();
+    meta.events.retain(|e| e.id != event_id);
+    if meta.events.len() == before {
+        return Err(format!("El evento {event_id} ya no existe en este clip"));
     }
-    Ok(())
+
+    write_clip_meta(mp4_path, &meta).await
 }
 
 #[tauri::command]
@@ -1428,20 +1408,17 @@ pub async fn edit_error_event(
     category: String,
 ) -> Result<(), String> {
     let mp4_path = std::path::Path::new(&path);
-    let json_path = mp4_path.with_extension("json");
-    if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
-        if let Ok(mut meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
-            if let Some(ev) = meta.events.iter_mut().find(|e| e.id == event_id) {
-                ev.text = text;
-                ev.category = category;
-            }
-            tokio::fs::write(&json_path, serde_json::to_string_pretty(&meta).unwrap_or_default())
-                .await
-                .map_err(|e| e.to_string())?;
-            return Ok(());
-        }
-    }
-    Ok(())
+    let mut meta = load_clip_meta(mp4_path).await?;
+
+    // Antes se escribía el fichero aunque el evento no estuviera: la UI daba el cambio por
+    // guardado y al recargar reaparecía el texto viejo.
+    let Some(ev) = meta.events.iter_mut().find(|e| e.id == event_id) else {
+        return Err(format!("El evento {event_id} ya no existe en este clip"));
+    };
+    ev.text = text;
+    ev.category = category;
+
+    write_clip_meta(mp4_path, &meta).await
 }
 
 #[tauri::command]
@@ -1525,5 +1502,96 @@ pub async fn upload_clip(path: String, expiry: String) -> Result<String, String>
         Err(format!("Error en el servidor de subida ({})", status))
     } else {
         Err(format!("Error al subir: {}", body))
+    }
+}
+
+#[cfg(test)]
+mod error_clip_tests {
+    use super::*;
+
+    /// Crea un mp4 de mentira en una carpeta temporal propia de cada test. No hace falta que sea
+    /// un vídeo válido: estos comandos solo tocan el `.json` de al lado.
+    fn temp_clip(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("leaguerec-test-{}-{}", std::process::id(), name));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mp4 = dir.join("2026-01-01_error_0.mp4");
+        std::fs::write(&mp4, b"no soy un video").unwrap();
+        mp4
+    }
+
+    async fn add_one(mp4: &std::path::Path) -> String {
+        add_error_event(
+            mp4.to_string_lossy().to_string(),
+            12.5,
+            "ward mal puesto".to_string(),
+            "vision".to_string(),
+        )
+        .await
+        .expect("añadir un evento debería crear la metadata")
+    }
+
+    #[tokio::test]
+    async fn anadir_crea_la_metadata_si_no_existe() {
+        let mp4 = temp_clip("add");
+        let id = add_one(&mp4).await;
+        let meta = load_clip_meta(&mp4).await.expect("el .json debe existir ya");
+        assert_eq!(meta.events.len(), 1);
+        assert_eq!(meta.events[0].id, id);
+    }
+
+    #[tokio::test]
+    async fn borrar_sin_metadata_es_error() {
+        let mp4 = temp_clip("del-sin-meta");
+        let err = delete_error_event(mp4.to_string_lossy().to_string(), "cualquiera".to_string())
+            .await
+            .expect_err("sin .json no se puede borrar nada");
+        assert!(err.contains("No se encontró la metadata"), "mensaje inesperado: {err}");
+    }
+
+    #[tokio::test]
+    async fn borrar_un_id_que_no_esta_es_error() {
+        let mp4 = temp_clip("del-id-raro");
+        add_one(&mp4).await;
+        let err = delete_error_event(mp4.to_string_lossy().to_string(), "otro-id".to_string())
+            .await
+            .expect_err("un id inexistente no puede reportar éxito");
+        assert!(err.contains("ya no existe"), "mensaje inesperado: {err}");
+    }
+
+    #[tokio::test]
+    async fn borrar_de_verdad_quita_el_evento() {
+        let mp4 = temp_clip("del-ok");
+        let id = add_one(&mp4).await;
+        delete_error_event(mp4.to_string_lossy().to_string(), id).await.unwrap();
+        assert!(load_clip_meta(&mp4).await.unwrap().events.is_empty());
+    }
+
+    #[tokio::test]
+    async fn editar_un_id_que_no_esta_no_toca_el_fichero() {
+        let mp4 = temp_clip("edit-id-raro");
+        add_one(&mp4).await;
+        let err = edit_error_event(
+            mp4.to_string_lossy().to_string(),
+            "otro-id".to_string(),
+            "texto nuevo".to_string(),
+            "macro".to_string(),
+        )
+        .await
+        .expect_err("editar un id inexistente no puede reportar éxito");
+        assert!(err.contains("ya no existe"), "mensaje inesperado: {err}");
+
+        // El evento original debe seguir intacto: antes se reescribía el fichero igualmente.
+        let meta = load_clip_meta(&mp4).await.unwrap();
+        assert_eq!(meta.events[0].text, "ward mal puesto");
+    }
+
+    #[tokio::test]
+    async fn la_nota_se_guarda_aunque_no_hubiera_metadata() {
+        let mp4 = temp_clip("nota");
+        update_error_note(mp4.to_string_lossy().to_string(), "revisar esto".to_string())
+            .await
+            .unwrap();
+        assert_eq!(load_clip_meta(&mp4).await.unwrap().note, "revisar esto");
     }
 }

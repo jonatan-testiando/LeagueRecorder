@@ -132,13 +132,15 @@ fn resolve_obs_root_dev() -> Result<PathBuf, String> {
     Err("no se encontró el runtime de OBS (empaqueta obs-runtime, compila leaguerec-obs, o define LEAGUEREC_OBS_ROOT)".into())
 }
 
-/// Bitrate CBR (kbps) según la calidad configurada.
-fn bitrate_for(quality: &str) -> i32 {
+/// CQP (calidad constante de NVENC) según la calidad configurada. Menor = más nitidez y más peso.
+/// Ojo con la escala: es inversa al bitrate que había antes, y cada -6 puntos duplica el tamaño
+/// aproximadamente. Por debajo de 18 no se gana nada visible y el archivo se dispara.
+fn cqp_for(quality: &str) -> i32 {
     match quality {
-        "High" => 18000,
-        "Medium" => 10000,
-        "Low" => 6000,
-        _ => 12000,
+        "High" => 20,
+        "Medium" => 23,
+        "Low" => 26,
+        _ => 23,
     }
 }
 
@@ -177,7 +179,7 @@ pub fn start_recording(
         window: GAME_WINDOW.to_string(),
         out: out_str.clone(),
         fps: settings.fps,
-        bitrate: bitrate_for(&settings.quality),
+        cqp: cqp_for(&settings.quality),
         ..Default::default()
     };
 

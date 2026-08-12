@@ -44,6 +44,9 @@ pub struct TeamDto {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+// Los nombres replican el JSON de Riot tal cual (igual que ObjCount más abajo): renombrarlos
+// obligaría a un #[serde(rename)] por campo sin ganar nada.
+#[allow(non_snake_case)]
 pub struct ObjectivesDto {
     #[serde(default)]
     pub baron: ObjCount,
@@ -363,7 +366,7 @@ fn process_timeline_full(
     let opp_participant_id = participants
         .iter()
         .enumerate()
-        .find(|(i, p)| {
+        .find(|(_i, p)| {
             p.teamId != self_team_id
                 && ((!self_pos.is_empty()
                     && (p.teamPosition == self_pos || p.individualPosition == self_pos))

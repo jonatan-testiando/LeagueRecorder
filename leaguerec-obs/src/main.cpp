@@ -5,7 +5,7 @@
 //   2) Servidor IPC (named pipe): leaguerec-obs.exe --pipe leaguerec-obs
 //
 // Protocolo IPC: mensajes JSON delimitados por '\n' sobre \\.\pipe\<nombre>.
-//   -> {"cmd":"start","source":"game","window":"...","out":"C:\\...\\clip.mp4","fps":60,"bitrate":12000}
+//   -> {"cmd":"start","source":"game","window":"...","out":"C:\\...\\clip.mp4","fps":60,"cqp":23}
 //   -> {"cmd":"stop"}      <- {"ok":true,"file":"C:\\...\\clip.mp4"}
 //   -> {"cmd":"status"}    <- {"ok":true,"active":true}
 //   -> {"cmd":"shutdown"}  <- {"ok":true}
@@ -76,11 +76,11 @@ std::string handle_command(Recorder &rec, const std::string &line, bool &running
         obs_data_set_default_int(in, "fps", 60);
         obs_data_set_default_int(in, "width", 1920);
         obs_data_set_default_int(in, "height", 1080);
-        obs_data_set_default_int(in, "bitrate", 12000);
+        obs_data_set_default_int(in, "cqp", 23);
         cfg.fps = static_cast<int>(obs_data_get_int(in, "fps"));
         cfg.width = static_cast<int>(obs_data_get_int(in, "width"));
         cfg.height = static_cast<int>(obs_data_get_int(in, "height"));
-        cfg.bitrate = static_cast<int>(obs_data_get_int(in, "bitrate"));
+        cfg.cqp = static_cast<int>(obs_data_get_int(in, "cqp"));
 
         std::string err;
         if (cfg.out.empty()) {
@@ -101,10 +101,10 @@ std::string handle_command(Recorder &rec, const std::string &line, bool &running
         cfg.exe = obs_data_get_string(in, "exe");
         cfg.out = obs_data_get_string(in, "out");
         obs_data_set_default_int(in, "fps", 60);
-        obs_data_set_default_int(in, "bitrate", 12000);
+        obs_data_set_default_int(in, "cqp", 23);
         obs_data_set_default_int(in, "buffer_seconds", 30);
         cfg.fps = static_cast<int>(obs_data_get_int(in, "fps"));
-        cfg.bitrate = static_cast<int>(obs_data_get_int(in, "bitrate"));
+        cfg.cqp = static_cast<int>(obs_data_get_int(in, "cqp"));
         int buffer = static_cast<int>(obs_data_get_int(in, "buffer_seconds"));
 
         std::string err;
@@ -256,7 +256,7 @@ int main(int argc, char **argv) {
         else if (a == "--out")      one.cfg.out = next(i);
         else if (a == "--seconds")  one.seconds = std::atoi(next(i).c_str());
         else if (a == "--fps")      one.cfg.fps = std::atoi(next(i).c_str());
-        else if (a == "--bitrate")  one.cfg.bitrate = std::atoi(next(i).c_str());
+        else if (a == "--cqp")      one.cfg.cqp = std::atoi(next(i).c_str());
         else if (a == "--replay")   one.replay = true;
         else if (a == "--buffer")   one.buffer = std::atoi(next(i).c_str());
     }

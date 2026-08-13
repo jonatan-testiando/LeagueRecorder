@@ -91,19 +91,28 @@ export const App: React.FC = () => {
 
   // Envuelve un panel: oculto con display:none en vez de desmontarlo, y sin renderizar
   // su contenido hasta la primera visita.
-  const panel = (path: Panel, content: React.ReactNode) => (
-    <div
-      key={path}
-      style={{
-        display: activePanel === path ? "flex" : "none",
-        width: "100%",
-        height: "100%",
-        flexDirection: "column",
-      }}
-    >
-      {mountedPanels.has(path) ? content : null}
-    </div>
-  );
+  //
+  // La clave `panelSeq` se incrementa en cada cambio de panel para reiniciar la
+  // animación de entrada. Antes esto era un corte seco: la navegación, que es lo
+  // único que se hace todo el rato, era lo único sin transición, mientras cada
+  // tarjeta decorativa entraba con fundido.
+  const panel = (path: Panel, content: React.ReactNode) => {
+    const active = activePanel === path;
+    return (
+      <div
+        key={path}
+        className={active ? "panel-enter" : undefined}
+        style={{
+          display: active ? "flex" : "none",
+          width: "100%",
+          height: "100%",
+          flexDirection: "column",
+        }}
+      >
+        {mountedPanels.has(path) ? content : null}
+      </div>
+    );
+  };
 
   return (
     <>

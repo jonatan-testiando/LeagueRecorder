@@ -176,14 +176,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     setMuted(false);
   };
 
+  // Un salto grande anima el cursor; avanzar reproduciendo, no. La regla del
+  // sistema: si el movimiento lo causa el sistema, curva; si lo causa la mano
+  // del usuario o el propio vídeo, latencia cero.
+  const [isSeeking, setIsSeeking] = useState(false);
+  const seekAnimRef = useRef<number | null>(null);
+
   const seekTo = useCallback((seconds: number, play: boolean) => {
     const v = videoRef.current;
     if (!v) return;
     const target = Math.max(0, Math.min(seconds, duration || seconds));
+    const jumped = Math.abs(target - v.currentTime) > 1.5;
     v.currentTime = target;
     setCurrentTime(target);
+    if (jumped) {
+      setIsSeeking(true);
+      if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
+      // 240ms = --t-base con un margen, para no cortar la transición a medias.
+      seekAnimRef.current = window.setTimeout(() => setIsSeeking(false), 240);
+    }
     if (play && v.paused) v.play().catch(() => {});
   }, [duration]);
+
+  useEffect(() => () => {
+    if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
+  }, []);
 
   const jumpToClip = useCallback((eventTime: number) => {
     clipEndRef.current = eventTime + CLIP_AFTER;
@@ -841,8 +858,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               );
             })}
 
-            {/* Current Time Line */}
-            <div style={{ ...styles.playhead, left: `${progressPct}%` }} />
+            {/* Cursor de reproducción. Durante la reproducción va pegado al vídeo
+                (sin transición); cuando el salto lo provoca un evento o un
+                comentario, recorre la distancia en --t-base para que se vea
+                hacia qué lado y cuánto te has movido dentro de la partida. */}
+            <div
+              style={{
+                ...styles.playhead,
+                left: `${progressPct}%`,
+                transition: isSeeking ? "left var(--t-base) var(--e-move)" : "none",
+              }}
+            />
             
             {/* Hover Scrubber Line */}
             {hoverPct !== null && (

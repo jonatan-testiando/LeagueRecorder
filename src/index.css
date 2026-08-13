@@ -1,95 +1,96 @@
 :root {
   /* =========================================================================
-     Sistema de Diseño — Tema "Ascent / Flat Dark"
+     Sistema de diseño — piel "Rift"
+
+     Los valores son los tokens del propio cliente de League: #F0E6D2 y #A09B8C
+     son los grises cálidos de Riot, #C8AA6E su oro hextech y #0AC8B9 su
+     turquesa. De ahí sale el reconocimiento, no de poner degradados por encima.
+
+     Trece roles y cuatro tintes. Cada tinte tiene un trabajo y solo uno:
+       oro      -> estructura y objetivos. Nunca relleno.
+       turquesa -> interacción y datos. Victoria y kills.
+       rojo     -> grabación, derrota, muerte.
+       violeta  -> lo que ha encontrado el analizador.
      ========================================================================= */
+
+  /* Superficies */
+  --ground: #08131A;     /* fondo de ventana */
+  --panel: #0E1D26;      /* rail, barras, tarjetas, inspector */
+  --raised: #16303B;     /* elemento activo, hover, botón */
+  --sunken: #040C11;     /* campos y pistas hundidas */
+
+  --line: #204450;       /* bordes y divisiones */
+  --line-soft: #142832;  /* separadores tenues */
+  --hairline: rgba(200, 170, 110, 0.32); /* filete dorado, gesto del marco de Riot */
+
+  /* Texto */
+  --text: #F0E6D2;       /* Riot Grey 1, hueso cálido */
+  --muted: #A09B8C;      /* Riot Grey 2 */
+  --faint: #5F7A80;      /* etiquetas y metadatos */
+
+  /* Tintes */
+  --brand: #C8AA6E;      /* oro hextech: marca, nav activa, filete */
+  --signal: #E84057;     /* rojo Riot: grabando y acción destructiva */
+  --flag: #9B6DFF;       /* hallazgo del analizador */
+  --cool: #0AC8B9;       /* turquesa hextech: interacción, datos, foco */
+
+  /* Semánticos (se apoyan en los mismos cuatro tintes) */
+  --win: #0AC8B9;
+  --loss: #E84057;
+  --gold: #C8AA6E;
+
+  /* El APM y demás series ambientales van sin tinte, para no competir con las
+     marcas de eventos. Se derivan del gris secundario. */
+  --apm-fill: color-mix(in srgb, var(--muted) 13%, transparent);
+  --apm-line: color-mix(in srgb, var(--muted) 48%, transparent);
 
   /* =========================================================================
-     Sistema de Diseño — Paleta "Obsidian Slate" (Legibilidad & Alto Contraste)
+     Alias heredados. Los componentes todavía usan estos nombres; apuntan a los
+     roles de arriba para que la piel se cambie en un sitio. Se van borrando a
+     medida que cada pantalla pasa a los nombres nuevos.
      ========================================================================= */
+  --bg-app: var(--ground);
+  --bg-sidebar: var(--panel);
+  --bg-card: var(--panel);
+  --bg-elevated: var(--raised);
+  --bg-hover: var(--raised);
 
-  /* Superficies de Pizarra Azulada (Obsidian Slate Surfaces) */
-  --bg-app: #0d1117;              /* Fondo general de la app */
-  --bg-sidebar: #121721;          /* Barra de título y navegación lateral */
-  --bg-card: #18202d;             /* Tarjetas iluminadas elevadas */
-  --bg-card-linear: #1c2636;      /* Tarjetas de análisis eSports */
-  --bg-elevated: #212c3e;         /* Modales y paneles emergentes */
-  --bg-hover: #263348;            /* Estado hover sobre filas y tarjetas */
+  --border-subtle: var(--line-soft);
+  --border-strong: var(--line);
+  --border-focus: var(--cool);
 
-  /* Tokens de Estética Linear & eSports HUD */
-  --bg-carbon: #0d1117;
-  --bg-surface-linear: #121721;
-  
-  --border-subtle: #283448;        /* Bordes claros nítidos */
-  --border-strong: #3b4d6a;        /* Bordes de foco y división */
-  --border-focus: #38bdf8;         /* Cían táctico */
-  --border-linear: rgba(255, 255, 255, 0.12);
-  --border-linear-hover: rgba(255, 255, 255, 0.22);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-muted: var(--faint);
 
-  /* Texto — Anti-glare de alto contraste (WCAG 2.1 AAA) */
-  --text-primary: #f0f6fc;        /* Blanco suave de alta legibilidad */
-  --text-secondary: #a3b1c6;      /* Texto secundario claro */
-  --text-muted: #8b949e;         /* Fechas y etiquetas secundarias */
+  --accent-violet: var(--cool);          /* acento general de interacción */
+  --accent-violet-hover: #3FE0D2;
+  --accent-violet-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+  --accent-gold: var(--gold);
+  --accent-blue: var(--cool);
+  --accent-teal: var(--cool);
+  --danger-soft: color-mix(in srgb, var(--loss) 14%, transparent);
 
-  /* Neones de Indicación de Datos */
-  --neon-emerald: #22c55e;
-  --neon-emerald-glow: rgba(34, 197, 94, 0.35);
+  --color-victory: var(--win);
+  --color-defeat: var(--loss);
+  --color-kill: var(--win);
+  --color-death: var(--loss);
+  --color-assist: var(--win);
+  --color-objective: var(--gold);
 
-  --neon-crimson: #ef4444;
-  --neon-crimson-glow: rgba(239, 68, 68, 0.35);
+  --gradient-violet: linear-gradient(135deg, #0AC8B9, #0596AA);
 
-  --neon-amber: #f59e0b;
-  --neon-amber-glow: rgba(245, 158, 11, 0.35);
+  /* =========================================================================
+     Tipografía. La identidad la lleva la mono: en esta app el 80% del texto son
+     etiquetas, códigos de tiempo y cifras, y una mesa de montaje se etiqueta en
+     mono. La sans queda para prosa. El display serif se retiró (competía con
+     los datos en vez de ordenarlos) y sus ficheros ya no se descargan.
 
-  --neon-violet: #a855f7;
-  --neon-violet-glow: rgba(168, 85, 247, 0.35);
-
-  --neon-cyan: #38bdf8;
-  --neon-cyan-glow: rgba(56, 189, 248, 0.35);
-
-  /* Acentos de marca */
-  --accent-gold: #fbbf24;
-  --accent-blue: #38bdf8;
-  --accent-teal: #2dd4bf;
-  --accent-violet: #818cf8;
-  --accent-violet-hover: #93c5fd;
-  --accent-violet-soft: rgba(129, 140, 248, 0.18);
-
-  /* Resultados y eventos */
-  --color-victory: #22c55e;
-  --color-defeat: #ef4444;
-  --color-kill: #fbbf24;
-  --color-death: #ef4444;
-  --color-assist: #38bdf8;
-  --color-objective: #f59e0b;
-  /* Primario = Azul Hextech. Se conserva el nombre --accent-violet para no romper referencias. */
-  --accent-violet: #3d8bfd;
-  --accent-violet-hover: #5b9dff;
-  --accent-violet-soft: rgba(61, 139, 253, 0.16); /* fondo tenue para estado activo */
-  --danger-soft: rgba(255, 77, 106, 0.14);
-
-  /* Familias tipográficas (del template: Instrument Serif display + Instrument Sans + JetBrains Mono) */
+     Las dos familias van empaquetadas en public/fonts, no son fuentes del
+     sistema: así la app se ve igual en una instalación limpia que aquí.
+     ========================================================================= */
   --font-sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
-  --font-display: 'Instrument Serif', Georgia, 'Times New Roman', serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
-
-  /* Resultados y eventos */
-  --color-victory: #4dffb8;
-  --color-defeat: #ff4d6a;
-
-  --color-kill: #ffb84d;
-  --color-death: #ff4d6a;
-  --color-assist: #4dffb8;
-  --color-objective: #d9a441; /* ámbar: objetivos (dragón/barón) distintos del primario azul */
-
-  /* Gradientes (menos marcados, más flat) */
-  --gradient-app: var(--bg-app);
-  --gradient-teal: linear-gradient(135deg, #4dffff, #4da6ff);
-  --gradient-violet: linear-gradient(135deg, #5b9dff, #3d8bfd);
-
-  /* Sombras (planas y suaves) */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 8px 16px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.3);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   /* Espaciado */
   --space-1: 4px;
@@ -111,6 +112,21 @@
 
   /* Altura de la barra de título personalizada */
   --titlebar-h: 36px;
+
+  /* =========================================================================
+     Movimiento — cuatro duraciones, tres curvas, ningún rebote.
+     Regla: si el movimiento lo causa la mano del usuario (arrastrar el scrub,
+     mover el cursor de reproducción), latencia cero y sin transición. Si lo
+     causa el sistema, una de estas curvas.
+     ========================================================================= */
+  --t-instant: 80ms;   /* feedback de estado: hover, pulsación, foco */
+  --t-quick: 140ms;    /* aparece o desaparece algo pequeño */
+  --t-base: 220ms;     /* cambio de panel o pestaña, salto temporal */
+  --t-slow: 320ms;     /* superficies grandes: modal, panel lateral */
+
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1);   /* algo entra: rápido y se posa */
+  --e-in: cubic-bezier(0.4, 0, 1, 1);       /* algo sale: acelera y se va */
+  --e-move: cubic-bezier(0.2, 0, 0, 1);     /* algo que ya existe va de A a B */
 
   /* Tipografía */
   --font-xs: 12px;
@@ -164,11 +180,38 @@ body {
   overflow: hidden;
 }
 
-/* Títulos de página en serif display (Instrument Serif) al estilo del template. */
+/* Los títulos van en sans con peso, no en serif display: en una herramienta que
+   se opera y se escanea, el serif compite con los datos en vez de ordenarlos. */
 h1 {
-  font-family: var(--font-display);
-  font-weight: 400 !important;
-  letter-spacing: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* =========================================================================
+   Utilidades tipográficas — la "voz de instrumento"
+
+   .u-label   etiqueta de columna o de campo (mayúsculas, mono, tracking)
+   .u-metric  una cifra que se compara con otras en columna (mono tabular)
+   .u-meta    metadato secundario: fecha, cola, duración
+   ========================================================================= */
+.u-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.u-metric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.u-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--faint);
 }
 h2, h3, h4 {
   letter-spacing: -0.01em;
@@ -176,8 +219,11 @@ h2, h3, h4 {
 
 /* Transiciones suaves globales */
 button, a, input {
-  transition: background-color 0.15s ease, border-color 0.15s ease,
-    color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  transition: background-color var(--t-instant) var(--e-move),
+    border-color var(--t-instant) var(--e-move),
+    color var(--t-instant) var(--e-move),
+    box-shadow var(--t-instant) var(--e-move),
+    transform var(--t-instant) var(--e-move);
 }
 
 button:not(:disabled):active {
@@ -265,8 +311,9 @@ a:focus:not(:focus-visible) {
   padding-left: var(--space-4);
 }
 .titlebar__title {
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
   letter-spacing: 0.06em;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -288,7 +335,7 @@ a:focus:not(:focus-visible) {
   padding: 0;
   border-radius: 0;
   box-shadow: none;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .titlebar__btn:hover {
   background: var(--bg-hover);
@@ -314,23 +361,27 @@ a:focus:not(:focus-visible) {
   border-radius: var(--radius-md);
   padding: var(--space-3) var(--space-4);
   text-align: left;
-  font-size: var(--font-sm);
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   box-shadow: none;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .nav-btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
+/* La sección activa es el único sitio de la navegación donde entra el oro, y
+   entra como estructura (una barra de 2px), nunca como relleno. */
 .nav-btn--active {
-  background: var(--accent-violet-soft);
-  color: #fff;
+  background: var(--raised);
+  color: var(--text);
   font-weight: 700;
 }
 .nav-btn--active::before {
@@ -339,9 +390,9 @@ a:focus:not(:focus-visible) {
   left: 0;
   top: 22%;
   bottom: 22%;
-  width: 3px;
-  border-radius: var(--radius-full);
-  background: var(--accent-violet);
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--brand);
 }
 
 /* =========================================================================
@@ -351,43 +402,39 @@ a:focus:not(:focus-visible) {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  animation: card-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: card-in var(--t-base) var(--e-out) both;
 }
+/* El hover no desplaza el elemento: cambia el fondo y el borde, y punto. Mover
+   la fila bajo el cursor en una lista densa produce temblor, y a 350ms con
+   sobreimpulso se siente como un juguete. 80ms se percibe como respuesta. */
 .card-interactive {
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-    border-color 0.2s ease, box-shadow 0.25s ease, background-color 0.15s ease;
+  transition: border-color var(--t-instant) var(--e-move),
+    background-color var(--t-instant) var(--e-move);
 }
 .card-interactive:hover {
-  transform: translateY(-4px);
   border-color: var(--border-strong);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  background: var(--bg-hover);
 }
+/* Sin `animation: card-in`: esta fila la pinta una lista virtualizada
+   (@tanstack/react-virtual en MatchGallery), así que se monta y se desmonta al
+   hacer scroll. Con la animación de entrada puesta, se redisparaba cada vez que
+   una fila volvía al DOM y desplazarse era un desfile de filas apareciendo. */
 .game-row {
   background: var(--bg-card);
-  animation: card-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
-  transition: background-color 0.15s ease, border-color 0.2s ease,
-    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+  transition: background-color var(--t-instant) var(--e-move),
+    border-color var(--t-instant) var(--e-move);
 }
 .game-row:hover {
   background: var(--bg-hover);
   border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
-/* Entrada suave de tarjetas/paneles (del template) */
+/* Entrada suave de tarjetas/paneles. El desplazamiento escala con el tamaño del
+   elemento: 4px para una tarjeta, no 10. A más distancia, el ojo lo lee como
+   algo que llega de fuera de la pantalla en vez de como algo que se asienta. */
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-/* Utilidad: elevación "springy" al hover (para tarjetas). */
-.hover-lift {
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
-}
-.hover-lift:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
 }
 
 /* Accesibilidad: respetar "reducir movimiento". */
@@ -403,9 +450,11 @@ a:focus:not(:focus-visible) {
 /* =========================================================================
    Botones reutilizables
    ========================================================================= */
+/* Turquesa con texto oscuro: sobre #0AC8B9 el blanco tiene mal contraste y el
+   texto sobre el fondo lo tiene de sobra. */
 .btn-primary {
-  background: var(--accent-violet);
-  color: #fff;
+  background: var(--cool);
+  color: var(--ground);
   border: none;
   border-radius: var(--radius-md);
   font-weight: 600;
@@ -414,12 +463,13 @@ a:focus:not(:focus-visible) {
   align-items: center;
   gap: var(--space-2);
   box-shadow: none;
-  transition: background-color 0.15s ease, box-shadow 0.15s ease,
-    transform 0.1s ease;
+  transition: background-color var(--t-instant) var(--e-move),
+    box-shadow var(--t-instant) var(--e-move),
+    transform var(--t-instant) var(--e-move);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-violet-hover);
-  box-shadow: 0 4px 14px rgba(61, 139, 253, 0.35);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--cool) 30%, transparent);
 }
 .btn-ghost {
   background: transparent;
@@ -432,8 +482,8 @@ a:focus:not(:focus-visible) {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  transition: background-color 0.15s ease, border-color 0.15s ease,
-    color 0.15s ease;
+  transition: background-color var(--t-instant) var(--e-move), border-color var(--t-instant) var(--e-move),
+    color var(--t-instant) var(--e-move);
 }
 .btn-ghost:hover {
   background: var(--bg-hover);
@@ -452,7 +502,7 @@ a:focus:not(:focus-visible) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .icon-btn:hover {
   background: var(--bg-hover);
@@ -488,7 +538,7 @@ a:focus:not(:focus-visible) {
 }
 .empty-state__title {
   font-size: var(--font-md);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin: 0;
 }

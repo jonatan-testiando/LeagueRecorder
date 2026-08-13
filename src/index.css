@@ -41,8 +41,8 @@
 
   /* El APM y demás series ambientales van sin tinte, para no competir con las
      marcas de eventos. Se derivan del gris secundario. */
-  --apm-fill: color-mix(in srgb, var(--muted) 13%, transparent);
-  --apm-line: color-mix(in srgb, var(--muted) 48%, transparent);
+  --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
+  --apm-line: color-mix(in srgb, var(--muted) 34%, transparent);
 
   /* =========================================================================
      Alias heredados. Los componentes todavía usan estos nombres; apuntan a los
@@ -563,4 +563,169 @@ a:focus:not(:focus-visible) {
 @keyframes skeleton-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
+}
+
+/* =========================================================================
+   Turquesa atenuado para superficies grandes.
+
+   Visto en la app: el turquesa pleno funciona como marca de 2px y grita como
+   relleno de 300px. La regla del oro ("estructura, nunca relleno") le falta al
+   turquesa, y sin ella la barra de almacenamiento era lo mas brillante de la
+   pantalla para decir un dato que no es urgente.
+   ========================================================================= */
+:root {
+  --cool-fill: color-mix(in srgb, var(--cool) 55%, var(--panel));
+  --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+}
+
+/* =========================================================================
+   Primitivos de UI
+   ========================================================================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  box-shadow: none;
+  border: 1px solid transparent;
+  transition: background-color var(--t-instant) var(--e-move),
+    border-color var(--t-instant) var(--e-move),
+    color var(--t-instant) var(--e-move);
+}
+.btn--md { padding: var(--space-2) var(--space-4); }
+.btn--sm { padding: 5px var(--space-3); font-size: 11px; }
+
+.btn--primary { background: var(--cool); color: var(--ground); font-weight: 600; }
+.btn--primary:hover:not(:disabled) { background: var(--accent-violet-hover); }
+
+.btn--ghost { background: transparent; border-color: var(--line); color: var(--muted); }
+.btn--ghost:hover:not(:disabled) { border-color: var(--faint); color: var(--text); }
+.btn--ghost[aria-pressed="true"] { background: var(--raised); color: var(--text); border-color: var(--line); }
+
+.btn--danger { background: transparent; border-color: transparent; color: var(--faint); }
+.btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
+
+.btn--icon {
+  background: transparent;
+  border-color: transparent;
+  color: var(--faint);
+  padding: var(--space-2);
+}
+.btn--icon:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.metric__value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+.metric__label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 3px;
+}
+
+.card--interactive {
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move),
+    border-color var(--t-instant) var(--e-move);
+}
+.card--interactive:hover { background: var(--raised); border-color: var(--line); }
+.card--in { animation: card-in var(--t-base) var(--e-out) both; }
+
+/* =========================================================================
+   Linea de tiempo de partida
+   ========================================================================= */
+.mtl { margin-top: var(--space-2); }
+.mtl__plot { position: relative; width: 100%; }
+.mtl__plot svg { display: block; width: 100%; height: 100%; }
+
+/* Sin transicion: lo que sigue al cursor se pega a el. */
+.mtl__scrub {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--cool);
+  pointer-events: none;
+}
+.mtl__tip {
+  position: absolute;
+  top: -6px;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ground);
+  background: var(--cool);
+  padding: 1px 5px;
+  border-radius: 2px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.mtl__axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+/* =========================================================================
+   Transicion de panel: la navegacion es lo unico que se hace todo el rato y
+   era lo unico sin transicion, mientras cada tarjeta decorativa entraba con
+   fundido.
+   ========================================================================= */
+.panel-enter { animation: panel-in var(--t-base) var(--e-out) both; }
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Punto de grabacion. La app siempre encendida necesita que su estado mas
+   importante se lea sin buscarlo. */
+.rec-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: rec-beat 2s ease-out infinite;
+}
+@keyframes rec-beat {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 50%, transparent); }
+  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--signal) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 0%, transparent); }
+}
+
+.metric { min-width: 84px; }
+
+/* Muestras de color de la leyenda de la linea de tiempo */
+.mtl-legend span { display: inline-flex; align-items: center; }
+.mtl-legend i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 1px;
+  margin-right: 6px;
 }

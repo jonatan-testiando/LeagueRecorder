@@ -10,7 +10,7 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Scissors, Settings, MonitorPlay, Film, ArrowLeft, AlertTriangle, Crosshair } from "lucide-react";
+import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
 
@@ -18,12 +18,17 @@ type Tab = "clips" | "errors" | "review" | "vod" | "training" | "settings";
 
 type Panel = "/review" | "/clips" | "/errors" | "/vod" | "/training" | "/settings";
 
+// Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
+// compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
+// dónde estás. Trazo de 1.6 y 17px en todos, para que pesen igual entre sí.
+const NAV_ICON = { size: 17, strokeWidth: 1.6 } as const;
+
 const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode }[] = [
-  { key: "review", path: "/review", label: "Review", icon: <MonitorPlay size={18} /> },
-  { key: "clips", path: "/clips", label: "Clips", icon: <Film size={18} /> },
-  { key: "errors", path: "/errors", label: "Errors", icon: <AlertTriangle size={18} /> },
-  { key: "vod", path: "/vod", label: "VOD Analysis", icon: <Film size={18} /> },
-  { key: "training", path: "/training", label: "Training", icon: <Crosshair size={18} /> },
+  { key: "review", path: "/review", label: "Library", icon: <Library {...NAV_ICON} /> },
+  { key: "clips", path: "/clips", label: "Clips", icon: <Film {...NAV_ICON} /> },
+  { key: "errors", path: "/errors", label: "Errors", icon: <TriangleAlert {...NAV_ICON} /> },
+  { key: "vod", path: "/vod", label: "Analysis", icon: <ScanSearch {...NAV_ICON} /> },
+  { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
 ];
 
 export const App: React.FC = () => {
@@ -106,8 +111,10 @@ export const App: React.FC = () => {
       <div className="app-body" style={styles.appContainer}>
       {/* Sidebar (Ascent Style) */}
       <div style={styles.sidebar}>
+        {/* La marca es una grabadora, no unas tijeras: las tijeras son "recortar
+            un clip", que es una función más, no lo que hace la app. */}
         <div style={styles.logoArea}>
-          <Scissors color="var(--accent-violet)" size={28} strokeWidth={2.5} style={{ transform: "rotate(-45deg)" }} />
+          <Video color="var(--brand)" size={20} strokeWidth={1.8} />
           <span style={styles.logoText}>LeagueRecorder</span>
         </div>
 
@@ -127,11 +134,11 @@ export const App: React.FC = () => {
             className={`nav-btn${activeTabKey === "settings" ? " nav-btn--active" : ""}`}
             style={{ marginTop: "auto" }}
           >
-            <Settings size={18} />
+            <Settings2 {...NAV_ICON} />
             Settings
           </button>
           {appVersion && (
-            <div style={{ textAlign: "center", marginTop: "var(--space-2)", fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>
+            <div className="u-meta" style={{ textAlign: "center", marginTop: "var(--space-2)" }}>
               v{appVersion}
             </div>
           )}
@@ -229,45 +236,10 @@ const styles: Record<string, React.CSSProperties> = {
     paddingBottom: "var(--space-8)",
   },
   logoText: {
-    fontWeight: 800,
-    fontSize: "var(--font-xl)",
-    letterSpacing: "0.05em",
-    color: "#fff",
-  },
-  navSection: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-3)",
-    marginBottom: "var(--space-8)",
-  },
-  navHeader: {
-    fontSize: "11px",
     fontWeight: 700,
-    color: "var(--text-muted)",
-    letterSpacing: "0.1em",
-  },
-  navItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    cursor: "pointer",
-  },
-  commIcon: {
-    width: "28px",
-    height: "28px",
-    borderRadius: "6px",
-    backgroundColor: "#fff",
-    color: "#000",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "9px",
-    fontWeight: 800,
-  },
-  navText: {
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    color: "var(--text-secondary)",
+    fontSize: "var(--font-lg)",
+    letterSpacing: "0.02em",
+    color: "var(--text)",
   },
   navLinks: {
     display: "flex",
@@ -314,8 +286,8 @@ const styles: Record<string, React.CSSProperties> = {
   playerTitle: {
     margin: 0,
     fontSize: "var(--font-lg)",
-    color: "#fff",
-    fontWeight: 700,
+    color: "var(--text)",
+    fontWeight: 600,
   },
   playerSub: {
     fontSize: "var(--font-xs)",

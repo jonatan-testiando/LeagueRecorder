@@ -137,7 +137,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               const resultColor =
                 res === "victory" ? "var(--color-victory)" : res === "defeat" ? "var(--color-defeat)" : "var(--border-strong)";
               const resultBadgeBg =
-                res === "victory" ? "rgba(77,255,184,0.14)" : res === "defeat" ? "rgba(255,77,106,0.14)" : "rgba(255,255,255,0.06)";
+                res === "victory" ? "color-mix(in srgb, var(--win) 16%, transparent)" : res === "defeat" ? "color-mix(in srgb, var(--loss) 16%, transparent)" : "var(--raised)";
               const resultLabel = res === "victory" ? "Victoria" : res === "defeat" ? "Derrota" : "Sin resultado";
 
               return (
@@ -181,9 +181,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "4px",
-                                background: match.gold_diff_15 >= 0 ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
-                                color: match.gold_diff_15 >= 0 ? "#10b981" : "#ef4444",
-                                border: `1px solid ${match.gold_diff_15 >= 0 ? "rgba(16, 185, 129, 0.3)" : "rgba(239, 68, 68, 0.3)"}`,
+                                background: match.gold_diff_15 >= 0 ? "color-mix(in srgb, var(--win) 15%, transparent)" : "color-mix(in srgb, var(--loss) 15%, transparent)",
+                                color: match.gold_diff_15 >= 0 ? "var(--win)" : "var(--loss)",
+                                border: `1px solid ${match.gold_diff_15 >= 0 ? "color-mix(in srgb, var(--win) 30%, transparent)" : "color-mix(in srgb, var(--loss) 30%, transparent)"}`,
                               }}
                               title={`Diferencia de Oro a min 15 (${match.lane_result ?? "Even"})`}
                             >
@@ -200,9 +200,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "4px",
-                                background: "rgba(139, 92, 246, 0.15)",
-                                color: "#a78bfa",
-                                border: "1px solid rgba(139, 92, 246, 0.3)",
+                                background: "color-mix(in srgb, var(--flag) 15%, transparent)",
+                                color: "var(--flag)",
+                                border: "1px solid color-mix(in srgb, var(--flag) 30%, transparent)",
                               }}
                               title="Diferencia de CS de Jungla a min 15"
                             >
@@ -219,9 +219,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: "4px",
-                                background: "rgba(245, 158, 11, 0.15)",
-                                color: "#fbbf24",
-                                border: "1px solid rgba(245, 158, 11, 0.3)",
+                                background: "color-mix(in srgb, var(--gold) 15%, transparent)",
+                                color: "var(--gold)",
+                                border: "1px solid color-mix(in srgb, var(--gold) 30%, transparent)",
                               }}
                               title="Participación en ganks en los primeros 15 min"
                             >
@@ -291,7 +291,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: "var(--font-2xl)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
   },
   pageSubtitle: {
     margin: "var(--space-2) 0 0 0",
@@ -330,7 +330,7 @@ const styles: Record<string, React.CSSProperties> = {
   storageTitle: {
     fontSize: "var(--font-sm)",
     fontWeight: 600,
-    color: "#fff",
+    color: "var(--text)",
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
@@ -341,7 +341,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   proBadge: {
     backgroundColor: "var(--accent-violet)",
-    color: "#fff",
+    color: "var(--text)",
     fontSize: "10px",
     padding: "2px 6px",
     borderRadius: "4px",
@@ -351,7 +351,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: "auto",
     fontSize: "var(--font-lg)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
   },
   storageBarBg: {
     height: "4px",
@@ -386,7 +386,7 @@ const styles: Record<string, React.CSSProperties> = {
   searchInput: {
     background: "transparent",
     border: "none",
-    color: "#fff",
+    color: "var(--text)",
     outline: "none",
     width: "100%",
     fontSize: "var(--font-sm)",
@@ -399,7 +399,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tabBtnActive: {
     backgroundColor: "var(--accent-violet)",
-    color: "#fff",
+    color: "var(--text)",
     border: "none",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-2) var(--space-4)",
@@ -424,7 +424,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
   tabBadge: {
-    backgroundColor: "rgba(0,0,0,0.2)",
+    backgroundColor: "var(--sunken)",
     padding: "2px 6px",
     borderRadius: "var(--radius-full)",
     fontSize: "11px",
@@ -509,7 +509,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "2px 8px",
     borderRadius: "var(--radius-full)",
     color: "var(--text-muted)",
-    background: "rgba(255,255,255,0.04)",
+    background: "var(--raised)",
     border: "1px solid var(--border-strong)",
   },
   td: {
@@ -532,7 +532,7 @@ const styles: Record<string, React.CSSProperties> = {
   champName: {
     fontSize: "var(--font-md)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
     marginBottom: "2px",
   },
   gameType: {
@@ -552,7 +552,7 @@ const styles: Record<string, React.CSSProperties> = {
   primaryText: {
     fontSize: "var(--font-sm)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
     marginBottom: "4px",
   },
   secondaryText: {

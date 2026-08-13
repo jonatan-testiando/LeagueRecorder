@@ -1,0 +1,1312 @@
+<title>LeagueRecorder — Revisión de diseño y propuesta</title>
+
+<style>
+/* ==========================================================================
+   Committed single-theme dark. Every color painted explicitly from a token,
+   so the page holds on either host ground.
+   ========================================================================== */
+:root{
+  --ground:#0F1213;
+  --panel:#161A1B;
+  --raised:#1E2325;
+  --sunken:#0A0C0D;
+  --line:#2B3235;
+  --line-soft:#202628;
+
+  --text:#E9EBE8;
+  --muted:#8A9391;
+  --faint:#5D6664;
+
+  --brand:#FF5A36;
+  --signal:#FF5A36;
+  --signal-dim:rgba(255,90,54,.14);
+  --flag:#FF5A36;
+  --cool:#6FC3D0;
+
+  --win:#5EA97C;
+  --loss:#C4574C;
+  --gold:#C79A4B;
+
+  --mono:"Cascadia Mono","Cascadia Code",ui-monospace,"JetBrains Mono",Consolas,"SF Mono",monospace;
+  --sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif;
+
+  --r-sm:3px; --r-md:5px; --r-lg:8px;
+
+  /* ---- Movimiento: cuatro duraciones, tres curvas, ningún rebote ---- */
+  --t-instant:80ms;   /* feedback de estado: hover, pulsación, foco */
+  --t-quick:140ms;    /* aparece o desaparece algo pequeño */
+  --t-base:220ms;     /* cambio de panel, pestaña, salto temporal */
+  --t-slow:320ms;     /* superficies grandes: modal, panel lateral */
+  --e-out:cubic-bezier(.16,1,.3,1);   /* algo entra: rápido y se posa */
+  --e-in:cubic-bezier(.4,0,1,1);      /* algo sale: acelera y se va */
+  --e-move:cubic-bezier(.2,0,0,1);    /* algo que ya existe se mueve de A a B */
+}
+
+/* --------------------------------------------------------------------------
+   Dos pieles sobre el MISMO sistema de roles. Los frames y la rejilla de tokens
+   redeclaran los tokens localmente, así que cambiar de piel es cambiar valores,
+   nunca componentes. Ese es justamente el punto que demuestra el interruptor.
+   -------------------------------------------------------------------------- */
+.frame,.tokens{
+  --ground:#0F1213; --panel:#161A1B; --raised:#1E2325; --sunken:#0A0C0D;
+  --line:#2B3235; --line-soft:#202628;
+  --text:#E9EBE8; --muted:#8A9391; --faint:#5D6664;
+  --brand:#FF5A36; --signal:#FF5A36; --flag:#B18AE0;
+  --cool:#6FC3D0;
+  --win:#5EA97C; --loss:#C4574C; --gold:#C79A4B;
+  --hairline:transparent;
+  /* El APM es contexto ambiental, no un suceso: va sin tinte para no competir
+     con las marcas de eventos. Se deriva del gris secundario de cada piel. */
+  --apm-fill:color-mix(in srgb,var(--muted) 13%,transparent);
+  --apm-line:color-mix(in srgb,var(--muted) 48%,transparent);
+}
+/* Piel "Rift": los valores son los tokens reales del cliente de Riot
+   (#F0E6D2 Grey 1, #A09B8C Grey 2, #C8AA6E Gold, #0AC8B9 Hextech) sobre un
+   grafito que vira a azul-verde profundo en vez del gris de GitHub. */
+:root[data-skin="rift"] .frame,
+:root[data-skin="rift"] .tokens{
+  --ground:#08131A; --panel:#0E1D26; --raised:#16303B; --sunken:#040C11;
+  --line:#204450; --line-soft:#142832;
+  --text:#F0E6D2; --muted:#A09B8C; --faint:#5F7A80;
+  --brand:#C8AA6E; --signal:#E84057; --flag:#9B6DFF;
+  --cool:#0AC8B9;
+  --win:#0AC8B9; --loss:#E84057; --gold:#C8AA6E;
+  --hairline:rgba(200,170,110,.32);
+}
+
+*{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--text);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.6;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:56px 28px 96px}
+
+/* ---------- shared type ---------- */
+.eyebrow{
+  font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 10px;
+}
+h1{
+  font-family:var(--sans);font-weight:600;font-size:clamp(28px,4vw,40px);
+  letter-spacing:-.02em;line-height:1.12;margin:0 0 14px;text-wrap:balance;color:var(--text);
+}
+h2{
+  font-family:var(--sans);font-weight:600;font-size:22px;letter-spacing:-.015em;
+  margin:0 0 8px;color:var(--text);text-wrap:balance;
+}
+h3{font-family:var(--sans);font-weight:600;font-size:16px;letter-spacing:-.01em;margin:0 0 6px}
+p{margin:0 0 14px;max-width:66ch;color:var(--muted)}
+p strong{color:var(--text);font-weight:600}
+code{font-family:var(--mono);font-size:.88em;color:var(--cool);background:var(--sunken);
+  padding:1px 5px;border-radius:var(--r-sm);border:1px solid var(--line-soft)}
+a{color:var(--cool)}
+
+.lede{font-size:17px;line-height:1.62;color:var(--muted);max-width:64ch}
+.lede b{color:var(--text);font-weight:600}
+
+section{margin-top:72px}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:22px;
+  border-bottom:1px solid var(--line-soft);padding-bottom:14px}
+.sec-head .num{font-family:var(--mono);font-size:12px;color:var(--signal);letter-spacing:.1em}
+
+/* ---------- evidence grid ---------- */
+.evidence{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden}
+.ev{background:var(--panel);padding:20px 20px 22px}
+.ev .metric{font-family:var(--mono);font-size:30px;font-weight:600;color:var(--text);
+  letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.ev .metric.bad{color:var(--signal)}
+.ev .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--faint);margin:8px 0 8px}
+.ev p{font-size:13.5px;line-height:1.55;margin:0;color:var(--muted)}
+
+.findings{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden}
+.findings li{background:var(--panel);padding:16px 20px;display:grid;
+  grid-template-columns:88px 1fr;gap:18px;align-items:start}
+.findings .tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 0;color:var(--faint);border-top:2px solid var(--line);margin-top:5px}
+.findings .tag.crit{color:var(--signal);border-top-color:var(--signal)}
+.findings .body{font-size:14px;color:var(--muted);line-height:1.55}
+.findings .body b{color:var(--text);font-weight:600;display:block;margin-bottom:2px}
+
+/* ==========================================================================
+   APP MOCKUP
+   ========================================================================== */
+.frame{
+  border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;
+  background:var(--ground);box-shadow:0 24px 60px rgba(0,0,0,.5);
+}
+.frame-cap{display:flex;justify-content:space-between;align-items:baseline;
+  font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);margin:0 2px 10px}
+
+/* titlebar */
+.tb{height:30px;background:var(--panel);border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;justify-content:space-between;padding-left:12px}
+.tb .id{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.tb .dot{width:7px;height:7px;border-radius:50%;background:var(--signal)}
+.tb .ctl{display:flex}
+.tb .ctl span{width:38px;height:30px;display:grid;place-items:center;color:var(--faint);font-size:11px;font-family:var(--mono)}
+
+.shell{display:flex;min-height:600px}
+
+/* rail */
+.rail{width:54px;background:var(--panel);border-right:1px solid var(--line-soft);
+  display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex-shrink:0}
+.rail button{
+  width:38px;height:38px;border:0;background:transparent;border-radius:var(--r-md);
+  display:grid;place-items:center;cursor:pointer;color:var(--faint);position:relative;
+  transition:color var(--t-instant) var(--e-move),background-color var(--t-instant) var(--e-move);
+}
+.rail button:hover{background:var(--raised);color:var(--text)}
+.rail button:focus-visible{outline:2px solid var(--cool);outline-offset:1px}
+.rail button[aria-current="page"]{color:var(--text);background:var(--raised)}
+.rail button[aria-current="page"]::before{
+  content:"";position:absolute;left:-10px;top:9px;bottom:9px;width:2px;
+  background:var(--brand);border-radius:0 2px 2px 0}
+.rail .spacer{flex:1}
+.rail svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* main */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--ground)}
+
+/* status strip — the thing an always-on capture tool must show first */
+.status{
+  display:flex;align-items:stretch;border-bottom:1px solid var(--line-soft);background:var(--panel);
+}
+.st{padding:11px 18px;border-right:1px solid var(--line-soft);display:flex;flex-direction:column;gap:3px;min-width:0}
+.st .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.st .v{font-family:var(--mono);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;gap:7px;white-space:nowrap}
+.st.live .v{color:var(--signal)}
+.rec{width:8px;height:8px;border-radius:50%;background:var(--signal);animation:beat 2s ease-out infinite}
+@keyframes beat{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--signal) 50%,transparent)}
+  70%{box-shadow:0 0 0 7px color-mix(in srgb,var(--signal) 0%,transparent)}
+  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--signal) 0%,transparent)}
+}
+.st.grow{flex:1;border-right:0;justify-content:center}
+.meter{height:3px;background:var(--sunken);border-radius:2px;overflow:hidden;width:100%;max-width:220px;margin-top:2px}
+.meter i{display:block;height:100%;background:var(--cool);border-radius:2px}
+
+/* content */
+.content{padding:22px 24px 26px;flex:1;overflow:hidden}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
+.page-head h4{margin:0;font-size:19px;font-weight:600;letter-spacing:-.015em;color:var(--text)}
+.page-head .sub{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:.06em;margin-top:3px}
+
+.tools{display:flex;gap:8px;align-items:center}
+.field{display:flex;align-items:center;gap:8px;background:var(--sunken);border:1px solid var(--line-soft);
+  border-radius:var(--r-md);padding:6px 10px;min-width:190px}
+.field input{background:transparent;border:0;color:var(--text);font-family:var(--mono);font-size:12px;
+  outline:none;width:100%}
+.field input::placeholder{color:var(--faint)}
+.field svg{width:13px;height:13px;stroke:var(--faint);fill:none;stroke-width:1.7}
+.chip{font-family:var(--mono);font-size:11px;letter-spacing:.04em;padding:6px 11px;border-radius:var(--r-md);
+  border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
+  transition:border-color var(--t-instant) var(--e-move),color var(--t-instant) var(--e-move)}
+.chip:hover{border-color:var(--faint);color:var(--text)}
+.chip[data-on]{background:var(--raised);border-color:var(--line);color:var(--text)}
+.chip:focus-visible{outline:2px solid var(--cool);outline-offset:1px}
+
+/* ---------- the signature device: a match IS its timeline ---------- */
+.strip-head{display:grid;grid-template-columns:1fr 78px 62px 78px 58px;gap:14px;
+  padding:0 14px 8px;border-bottom:1px solid var(--line-soft);position:relative;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.strip-head span:not(:first-child){text-align:right}
+/* Filete dorado: el único gesto ornamental, tomado del marco del cliente de
+   Riot. En la piel de sala de control el token es transparente y desaparece. */
+.strip-head::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg,var(--hairline),transparent 58%)}
+
+.list{display:flex;flex-direction:column}
+.strip{
+  position:relative;padding:13px 14px 11px;border-bottom:1px solid var(--line-soft);
+  cursor:pointer;background:transparent;transition:background-color var(--t-instant) var(--e-move);
+}
+.strip:hover{background:var(--panel)}
+.strip::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--line)}
+.strip[data-res="win"]::before{background:var(--win)}
+.strip[data-res="loss"]::before{background:var(--loss)}
+
+.strip-top{display:grid;grid-template-columns:1fr 78px 62px 78px 58px;gap:14px;align-items:center}
+.who{display:flex;align-items:center;gap:11px;min-width:0}
+.av{width:34px;height:34px;border-radius:var(--r-md);background:var(--raised);display:grid;place-items:center;
+  font-family:var(--mono);font-size:12px;font-weight:600;color:var(--muted);flex-shrink:0;
+  border:1px solid var(--line)}
+.strip[data-res="win"] .av{border-color:color-mix(in srgb,var(--win) 45%,transparent);color:var(--win)}
+.strip[data-res="loss"] .av{border-color:color-mix(in srgb,var(--loss) 42%,transparent);color:var(--loss)}
+.who .name{font-size:14.5px;font-weight:600;letter-spacing:-.01em;color:var(--text);line-height:1.25}
+.who .meta{font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.05em;
+  display:flex;gap:8px;align-items:center;margin-top:2px}
+.who .meta em{font-style:normal;color:var(--muted)}
+.res{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
+.res.w{color:var(--win)} .res.l{color:var(--loss)}
+
+.num{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+.num small{display:block;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-top:2px}
+.num .d{color:var(--loss)}
+.num .up{color:var(--win)} .num .dn{color:var(--loss)}
+
+/* timeline */
+.tl{position:relative;margin-top:10px;height:38px}
+.tl svg{display:block;width:100%;height:38px;overflow:visible}
+.tl .scrub{position:absolute;top:0;bottom:0;width:1px;background:var(--cool);opacity:0;
+  pointer-events:none;transition:opacity var(--t-quick) var(--e-out)}
+.tl .tip{position:absolute;top:-4px;transform:translateX(-50%);font-family:var(--mono);font-size:10px;
+  color:var(--ground);background:var(--cool);padding:1px 5px;border-radius:2px;opacity:0;
+  pointer-events:none;white-space:nowrap;transition:opacity var(--t-quick) var(--e-out)}
+.strip:hover .tl .scrub,.strip:hover .tl .tip{opacity:1}
+.tl-axis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;
+  color:var(--faint);letter-spacing:.08em;margin-top:1px}
+
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;padding:0 14px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.legend i{display:inline-block;width:7px;height:7px;border-radius:1px;margin-right:6px;vertical-align:middle}
+
+/* ---------- review screen ---------- */
+.review{display:grid;grid-template-columns:1fr 262px;min-height:520px}
+.stage{display:flex;flex-direction:column;background:var(--sunken);min-width:0}
+.viewport{flex:1;position:relative;display:grid;place-items:center;
+  background:
+    radial-gradient(120% 90% at 50% 40%, #14201f 0%, #0A0C0D 72%);
+  min-height:300px;overflow:hidden}
+.viewport .ph{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#2E3A39}
+.viewport .tc{position:absolute;left:14px;top:12px;font-family:var(--mono);font-size:11px;
+  color:var(--muted);background:rgba(10,12,13,.72);padding:3px 8px;border-radius:var(--r-sm);
+  border:1px solid var(--line-soft);font-variant-numeric:tabular-nums}
+.viewport .mark{position:absolute;right:14px;top:12px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--flag);
+  background:color-mix(in srgb,var(--flag) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--flag) 35%,transparent);padding:3px 8px;border-radius:var(--r-sm)}
+
+.transport{background:var(--panel);border-top:1px solid var(--line-soft);padding:10px 14px 12px}
+.tbar{display:flex;align-items:center;gap:12px;margin-bottom:9px}
+.tbar button{width:30px;height:30px;border-radius:var(--r-md);border:1px solid var(--line);
+  background:var(--raised);color:var(--text);display:grid;place-items:center;cursor:pointer;
+  transition:border-color var(--t-instant) var(--e-move)}
+.tbar button:hover{border-color:var(--faint)}
+.tbar button:focus-visible{outline:2px solid var(--cool);outline-offset:1px}
+.tbar svg{width:13px;height:13px;fill:currentColor}
+.tbar .time{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tbar .time b{color:var(--text);font-weight:600}
+.tbar .rate{margin-left:auto;display:flex;gap:5px}
+
+.track{position:relative;height:44px;background:var(--sunken);border:1px solid var(--line-soft);
+  border-radius:var(--r-sm);overflow:hidden}
+.track svg{display:block;width:100%;height:44px}
+/* El cursor ocupa todo el ancho de la pista y se mueve con transform: así el
+   salto va por el compositor y no provoca layout. La línea visible es el hijo. */
+.playhead{position:absolute;top:-3px;bottom:-3px;left:0;width:100%;pointer-events:none;
+  transition:transform var(--t-base) var(--e-move)}
+.playhead i{position:absolute;left:0;top:0;bottom:0;width:1.5px;background:var(--signal)}
+.playhead i::after{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:7px;height:7px;background:var(--signal);border-radius:1px}
+.evt[data-sel]{background:color-mix(in srgb,var(--flag) 10%,transparent)}
+.evt[data-sel] .evt-label{color:var(--text)}
+.tbar .time b,.viewport .tc{transition:color var(--t-quick) var(--e-out)}
+
+/* inspector */
+.inspector{background:var(--panel);border-left:1px solid var(--line-soft);display:flex;flex-direction:column;min-width:0}
+.tabs{display:flex;border-bottom:1px solid var(--line-soft)}
+.tabs button{flex:1;padding:10px 4px;background:transparent;border:0;border-bottom:2px solid transparent;
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+  cursor:pointer;transition:color var(--t-instant) var(--e-move)}
+.tabs button:hover{color:var(--muted)}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--brand)}
+.tabs button:focus-visible{outline:2px solid var(--cool);outline-offset:-2px}
+
+.insp-body{padding:14px;display:flex;flex-direction:column;gap:14px;overflow:hidden}
+.kv{display:grid;grid-template-columns:1fr auto;gap:6px 10px;font-family:var(--mono);font-size:11.5px}
+.kv dt{color:var(--faint);letter-spacing:.05em}
+.kv dd{margin:0;text-align:right;color:var(--text);font-variant-numeric:tabular-nums}
+.kv dd.up{color:var(--win)} .kv dd.dn{color:var(--loss)}
+
+.blk-title{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);padding-bottom:7px;border-bottom:1px solid var(--line-soft);margin-bottom:10px}
+
+.evt{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.evt:last-child{border-bottom:0}
+.evt:hover .evt-label{color:var(--text)}
+.evt .t{font-family:var(--mono);font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums;width:38px;flex-shrink:0}
+.evt .bar{width:2px;height:15px;border-radius:1px;flex-shrink:0}
+.evt-label{font-size:12.5px;color:var(--muted);transition:color var(--t-instant) var(--e-move);min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.evt .sev{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--faint);flex-shrink:0}
+
+/* ---------- token system table ---------- */
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden}
+.tok{background:var(--panel);padding:14px}
+.tok .sw{height:40px;border-radius:var(--r-sm);border:1px solid var(--line);margin-bottom:10px}
+.tok .nm{font-family:var(--mono);font-size:11px;color:var(--text);letter-spacing:.02em}
+.tok .hx{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:2px}
+.tok .use{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+
+.steps{list-style:none;counter-reset:s;padding:0;margin:20px 0 0;display:flex;flex-direction:column;gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden}
+.steps li{background:var(--panel);padding:15px 20px;display:grid;grid-template-columns:30px 1fr;gap:16px;counter-increment:s}
+.steps li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:12px;
+  color:var(--signal);letter-spacing:.05em;padding-top:2px}
+.steps b{display:block;font-size:14.5px;font-weight:600;color:var(--text);margin-bottom:3px;letter-spacing:-.01em}
+.steps span{font-size:13.5px;color:var(--muted);line-height:1.55}
+
+.note{border-left:2px solid var(--signal);padding:2px 0 2px 16px;margin:22px 0 0}
+.note p{margin:0;font-size:14px}
+
+/* interruptor de piel */
+.skin-switch{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:12px 16px;margin:0 0 22px;background:var(--panel);
+  border:1px solid var(--line-soft);border-radius:var(--r-lg)}
+.skin-switch .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint);margin-right:2px}
+.skin-switch button{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;
+  padding:7px 14px;border-radius:var(--r-md);border:1px solid var(--line);
+  background:transparent;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:8px;
+  transition:border-color var(--t-instant) var(--e-move),color var(--t-instant) var(--e-move),background-color var(--t-instant) var(--e-move)}
+.skin-switch button:hover{border-color:var(--faint);color:var(--text)}
+.skin-switch button[aria-pressed="true"]{background:var(--raised);color:var(--text);border-color:var(--faint)}
+.skin-switch button:focus-visible{outline:2px solid var(--cool);outline-offset:1px}
+.skin-switch .dots{display:flex;gap:3px}
+.skin-switch .dots i{width:9px;height:9px;border-radius:2px;display:block}
+.skin-switch .hint{margin-left:auto;font-size:12.5px;color:var(--faint);max-width:38ch;line-height:1.45}
+
+/* ==========================================================================
+   MOVIMIENTO — banco de pruebas
+   ========================================================================== */
+.ab{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line-soft);
+  border:1px solid var(--line-soft);border-radius:var(--r-lg);overflow:hidden;margin-top:22px}
+.ab-col{background:var(--panel);padding:16px 18px 20px}
+.ab-col > .h{display:flex;align-items:baseline;gap:9px;margin-bottom:4px}
+.ab-col .h b{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.ab-col.old .h b{color:var(--loss)}
+.ab-col.new .h b{color:var(--win)}
+.ab-col .h span{font-size:13px;color:var(--muted)}
+.ab-col .why{font-size:12.5px;color:var(--faint);line-height:1.5;margin:0 0 14px;max-width:44ch}
+
+/* fila de prueba, marcado idéntico en las dos columnas */
+.dr{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:var(--r-md);
+  border:1px solid var(--line-soft);background:var(--ground);cursor:pointer;position:relative;overflow:hidden}
+.dr + .dr{margin-top:8px}
+.dr .av{width:30px;height:30px;border-radius:var(--r-sm);background:var(--raised);display:grid;
+  place-items:center;font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0}
+.dr .nm{font-size:13.5px;font-weight:600;color:var(--text)}
+.dr .mt{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em}
+.dr .kd{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* --- comportamiento de HOY: rebote de 350 ms + entrada por fila --- */
+.ab-col.old .dr{
+  transition:transform .35s cubic-bezier(.34,1.56,.64,1),
+             box-shadow .25s ease, background-color .15s ease, border-color .2s ease;
+}
+.ab-col.old .dr:hover{
+  transform:translateY(-4px);background:var(--raised);
+  border-color:var(--line);box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+.ab-col.old[data-run] .dr{animation:card-in-demo .45s cubic-bezier(.22,1,.36,1) both}
+.ab-col.old[data-run] .dr:nth-child(2){animation-delay:.06s}
+.ab-col.old[data-run] .dr:nth-child(3){animation-delay:.12s}
+@keyframes card-in-demo{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* --- comportamiento PROPUESTO: 80 ms, sin desplazamiento, franja de estado --- */
+.ab-col.new .dr{
+  transition:background-color var(--t-instant) var(--e-move),
+             border-color var(--t-instant) var(--e-move);
+}
+.ab-col.new .dr::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--cool);
+  transform:scaleY(0);transform-origin:50% 50%;
+  transition:transform var(--t-instant) var(--e-out);
+}
+.ab-col.new .dr:hover{background:var(--raised);border-color:var(--line)}
+.ab-col.new .dr:hover::before{transform:scaleY(1)}
+.ab-col.new[data-run] .dr-list{animation:fade-demo var(--t-base) var(--e-out) both}
+@keyframes fade-demo{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.ab-foot{grid-column:1/-1;background:var(--panel);border-top:1px solid var(--line-soft);
+  padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ab-foot .t{font-size:12.5px;color:var(--faint);line-height:1.45}
+
+.play-btn{font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;padding:7px 14px;
+  border-radius:var(--r-md);border:1px solid var(--line);background:var(--raised);color:var(--text);
+  cursor:pointer;display:inline-flex;align-items:center;gap:8px;
+  transition:border-color var(--t-instant) var(--e-move)}
+.play-btn:hover{border-color:var(--faint)}
+.play-btn:focus-visible{outline:2px solid var(--cool);outline-offset:1px}
+
+/* --- curvas --- */
+.curves{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1px;
+  background:var(--line-soft);border:1px solid var(--line-soft);border-radius:var(--r-lg);
+  overflow:hidden;margin-top:22px}
+.curve{background:var(--panel);padding:16px 18px 18px}
+.curve .nm{font-family:var(--mono);font-size:11px;color:var(--text)}
+.curve .fn{font-family:var(--mono);font-size:10px;color:var(--faint);margin:2px 0 12px;word-break:break-all}
+.curve .use{font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:12px}
+.curve svg{display:block;width:100%;height:58px;overflow:visible}
+.curve .rail-t{position:relative;height:16px;margin-top:10px;background:var(--sunken);
+  border-radius:var(--r-sm);border:1px solid var(--line-soft)}
+.curve .pip{position:absolute;top:3px;left:3px;width:8px;height:8px;border-radius:1px;background:var(--cool)}
+.curve[data-run] .pip{animation:pip-run 1s var(--pip-e) both}
+@keyframes pip-run{from{left:3px}to{left:calc(100% - 11px)}}
+
+/* --- escala de duración --- */
+.scale{display:grid;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);
+  border-radius:var(--r-lg);overflow:hidden;margin-top:22px}
+.scale-row{background:var(--panel);padding:13px 18px;display:grid;
+  grid-template-columns:96px 62px 1fr;gap:16px;align-items:center}
+.scale-row .tk{font-family:var(--mono);font-size:11.5px;color:var(--text)}
+.scale-row .ms{font-family:var(--mono);font-size:11.5px;color:var(--cool);text-align:right;
+  font-variant-numeric:tabular-nums}
+.scale-row .ds{font-size:13px;color:var(--muted);line-height:1.45}
+.scale-row.head{background:var(--sunken)}
+.scale-row.head span{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint)}
+.scale-row.head .ms{color:var(--faint)}
+
+@media (max-width:760px){
+  .ab{grid-template-columns:1fr}
+  .scale-row{grid-template-columns:1fr 56px;gap:8px}
+  .scale-row .ds{grid-column:1/-1}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+}
+@media (max-width:840px){
+  .review{grid-template-columns:1fr}
+  .inspector{border-left:0;border-top:1px solid var(--line-soft)}
+  .strip-head,.strip-top{grid-template-columns:1fr 64px 56px}
+  .strip-head span:nth-child(4),.strip-head span:nth-child(5),
+  .strip-top .num:nth-child(4),.strip-top .num:nth-child(5){display:none}
+}
+.scroll-x{overflow-x:auto}
+</style>
+
+<div class="wrap">
+
+  <p class="eyebrow">LeagueRecorder · revisión de diseño</p>
+  <h1>No es feo por falta de gusto. Es que no hay un sistema debajo.</h1>
+  <p class="lede">
+    La sensación de «amateur» que notas tiene causas medibles en el código, no de opinión.
+    La app tiene <b>tres sistemas de diseño superpuestos</b> y ninguno gana: unos tokens CSS que se
+    contradicen a sí mismos, 369 objetos de estilo en línea que los ignoran, y 224 colores escritos a
+    mano encima de todo. Abajo está el diagnóstico con las cifras, y después una propuesta completa
+    de la pantalla principal y la de revisión.
+  </p>
+
+  <!-- ===================== DIAGNÓSTICO ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>Qué está pasando realmente</h2></div>
+
+    <div class="evidence">
+      <div class="ev">
+        <div class="metric bad">224</div>
+        <div class="lbl">colores literales en .tsx</div>
+        <p>Hex escritos a mano dentro de componentes. <code>#fff</code> aparece 87 veces; hay cuatro rojos distintos (<code>#ef4444</code>, <code>#C4574C</code>, <code>#ff4d6a</code>, <code>#dc2626</code>) haciendo el mismo trabajo. Nada de eso pasa por los tokens.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">369</div>
+        <div class="lbl">objetos style en línea</div>
+        <p>Cada pantalla define su propio <code>const styles</code> al final del archivo. La misma «tarjeta» está redibujada desde cero en cinco sitios, y por eso ninguna es idéntica a la anterior.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">12</div>
+        <div class="lbl">tamaños de fuente distintos</div>
+        <p>Existe una escala (<code>--font-xs…3xl</code>), pero los componentes la esquivan: 51 usos de <code>11px</code>, 36 de <code>10px</code>, más 9px, 13px, 15px. Sin escala no hay jerarquía, y sin jerarquía todo pesa lo mismo.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">9</div>
+        <div class="lbl">tokens declarados dos veces</div>
+        <p><code>--accent-violet</code> y sus dos variantes, más los seis <code>--color-*</code> de resultados y eventos: cada uno aparece dos veces en el mismo <code>:root</code> con valores distintos. Gana el último y el nombre miente — <code>--accent-violet</code> acaba siendo azul.</p>
+      </div>
+    </div>
+
+    <ul class="findings">
+      <li>
+        <span class="tag crit">identidad</span>
+        <span class="body"><b>La paleta no dice nada del producto.</b>
+        El fondo es <code>#0d1117</code> — el gris de GitHub — con acento azul y seis «neones» sin usar de forma consistente. Es la piel por defecto de cualquier dashboard. Una herramienta que graba y revisa partidas debería parecerse a un equipo de vídeo, no a un panel de admin.</span>
+      </li>
+      <li>
+        <span class="tag crit">jerarquía</span>
+        <span class="body"><b>Las filas de partida gritan todas a la vez.</b>
+        Cada fila puede mostrar hasta cinco insignias de colores (resultado, cola, oro@15, JG CS, gank%), todas con el mismo peso, el mismo tamaño y fondos translúcidos distintos. Al no haber nada dominante, no hay nada que leer primero.</span>
+      </li>
+      <li>
+        <span class="tag">estructura</span>
+        <span class="body"><b>Espacio desperdiciado en una app de escritorio.</b>
+        Barra lateral fija de 240 px + <code>padding: 0 10%</code> en el contenido: en una ventana de 1440 px, casi 500 px se van en aire antes de que empiece la información. En web pasa; en una app que se abre junto al juego, no.</span>
+      </li>
+      <li>
+        <span class="tag">confianza</span>
+        <span class="body"><b>Controles falsos a la vista.</b>
+        El buscador de la biblioteca está <code>disabled</code> con el placeholder «Search games…», y la fila de pestañas tiene una sola pestaña siempre activa. Un control que existe pero no hace nada es lo que más rápido delata a un prototipo.</span>
+      </li>
+      <li>
+        <span class="tag">acabado</span>
+        <span class="body"><b>Dos idiomas en la misma pantalla.</b>
+        «Game Library / Browse and manage your recorded games» encabeza una tabla cuyas filas dicen «Victoria», «Clasif. Solo/Dúo» y «Acciones por minuto». Es el detalle que hace que el conjunto parezca inacabado aunque cada parte funcione.</span>
+      </li>
+      <li>
+        <span class="tag">movimiento</span>
+        <span class="body"><b>Animación de más.</b>
+        Cada tarjeta y cada fila entra con <code>card-in</code> y sube 4 px al pasar el ratón con una curva elástica (<code>cubic-bezier(.34,1.56,.64,1)</code>). Sobre una lista virtualizada de 60 partidas eso es un rebote constante: cansa y abarata.</span>
+      </li>
+    </ul>
+
+    <div class="note">
+      <p>Nada de esto es difícil de arreglar. Ninguna de las cinco cosas requiere tocar el backend, el pipeline de captura ni el analizador. Es un problema de sistema, y un sistema se define una vez.</p>
+    </div>
+  </section>
+
+  <!-- ===================== PROPUESTA ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>La propuesta</h2></div>
+    <p class="lede" style="margin-bottom:26px">
+      Una idea rectora: <b>una partida es una línea de tiempo, no una fila de tabla</b>. Todo lo que
+      guarda esta app —muertes, objetivos, APM, errores detectados— ya está anclado a un instante del
+      juego. La biblioteca debería enseñar esa forma directamente, para que reconozcas una partida por
+      su silueta antes de leer una sola cifra. El resto del sistema —tipografía monoespaciada de
+      equipo de vídeo, superficies planas, un solo acento por trabajo— existe para que ese gráfico
+      sea lo único que llame la atención.
+    </p>
+    <p class="lede" style="margin-bottom:26px">
+      Sobre esa estructura van <b>dos pieles</b>. <b>Rift</b> toma los tokens reales del cliente de
+      League (el oro hextech, el turquesa, los grises cálidos de Riot) y es la que reconoces como
+      «esto es de LoL». <b>Sala de control</b> es neutra, de mesa de montaje. La estructura, el
+      espaciado y los componentes son idénticos en las dos: solo cambian los valores.
+    </p>
+
+    <div class="skin-switch">
+      <span class="k">Piel</span>
+      <button type="button" data-skin-btn="control" aria-pressed="true">
+        <span class="dots"><i style="background:#FF5A36"></i><i style="background:#6FC3D0"></i><i style="background:#5EA97C"></i></span>
+        Sala de control
+      </button>
+      <button type="button" data-skin-btn="rift" aria-pressed="false">
+        <span class="dots"><i style="background:#C8AA6E"></i><i style="background:#0AC8B9"></i><i style="background:#E84057"></i></span>
+        Rift
+      </button>
+      <span class="hint">Las dos pantallas y la tabla de tokens cambian a la vez. No cambia ni un componente: solo los valores.</span>
+    </div>
+
+    <p class="frame-cap"><span>Pantalla 01 — Biblioteca</span><span>1440 × 900</span></p>
+    <div class="frame">
+      <div class="tb">
+        <div class="id"><span class="dot"></span> LeagueRecorder</div>
+        <div class="ctl"><span>—</span><span>▫</span><span>✕</span></div>
+      </div>
+
+      <div class="shell">
+        <nav class="rail" aria-label="Secciones">
+          <button aria-current="page" title="Biblioteca" aria-label="Biblioteca">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+          </button>
+          <button title="Clips" aria-label="Clips">
+            <svg viewBox="0 0 24 24"><path d="M4 4l12 12M20 4L8 16"/><circle cx="6" cy="19" r="2.4"/><circle cx="18" cy="19" r="2.4"/></svg>
+          </button>
+          <button title="Errores" aria-label="Errores">
+            <svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.5v.01"/></svg>
+          </button>
+          <button title="Análisis" aria-label="Análisis">
+            <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19h-20"/></svg>
+          </button>
+          <button title="Entrenamiento" aria-label="Entrenamiento">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <span class="spacer"></span>
+          <button title="Ajustes" aria-label="Ajustes">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+          </button>
+        </nav>
+
+        <div class="main">
+          <!-- estado del capturador: lo primero que importa en una app siempre encendida -->
+          <div class="status">
+            <div class="st live">
+              <span class="k">Captura</span>
+              <span class="v"><span class="rec"></span> Grabando · 24:07</span>
+            </div>
+            <div class="st">
+              <span class="k">Codificador</span>
+              <span class="v">NVENC · 1080p60 · 4.2 ms/frame</span>
+            </div>
+            <div class="st">
+              <span class="k">Audio</span>
+              <span class="v">VB-Cable + micro</span>
+            </div>
+            <div class="st grow">
+              <span class="k">Almacenamiento · 62,4 / 100 GB</span>
+              <span class="meter"><i style="width:62%"></i></span>
+            </div>
+          </div>
+
+          <div class="content">
+            <div class="page-head">
+              <div>
+                <h4>Biblioteca</h4>
+                <div class="sub">64 partidas · 21 con análisis · 8 sin revisar</div>
+              </div>
+              <div class="tools">
+                <label class="field">
+                  <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                  <input type="text" placeholder="campeón, cola, fecha…" aria-label="Filtrar partidas">
+                </label>
+                <button class="chip" data-on>Todas</button>
+                <button class="chip">Sin revisar</button>
+                <button class="chip">Derrotas</button>
+              </div>
+            </div>
+
+            <div class="strip-head">
+              <span>Partida</span><span>KDA</span><span>APM</span><span>Oro @15</span><span>Duración</span>
+            </div>
+
+            <div class="list" id="list"><!-- inyectado --></div>
+
+            <div class="legend">
+              <span><i style="background:var(--loss)"></i>Muerte</span>
+              <span><i style="background:var(--win)"></i>Kill / asistencia</span>
+              <span><i style="background:var(--gold)"></i>Objetivo</span>
+              <span><i style="background:var(--flag)"></i>Error detectado</span>
+              <span><i style="background:var(--apm-line)"></i>APM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      <strong>Qué cambia respecto a la fila actual.</strong> Las cinco insignias de colores desaparecen:
+      el resultado pasa a ser una franja de 2 px en el borde, la cola baja a texto secundario, y las
+      métricas se alinean en columnas con cifras tabulares para poder compararlas de un vistazo entre
+      filas. Lo único que ocupa espacio de verdad es la línea de tiempo — porque es lo único que no
+      podrías haber deducido de un marcador.
+    </p>
+  </section>
+
+  <section>
+    <p class="frame-cap"><span>Pantalla 02 — Revisión</span><span>Reproductor + inspector</span></p>
+    <div class="frame">
+      <div class="tb">
+        <div class="id"><span class="dot" style="background:var(--faint)"></span> LeagueRecorder</div>
+        <div class="ctl"><span>—</span><span>▫</span><span>✕</span></div>
+      </div>
+      <div class="review">
+        <div class="stage">
+          <div class="viewport">
+            <span class="tc">18:42.06 / 31:15</span>
+            <span class="mark">Error 04 · posicionamiento</span>
+            <span class="ph">vídeo</span>
+          </div>
+          <div class="transport">
+            <div class="tbar">
+              <button aria-label="Fotograma anterior"><svg viewBox="0 0 24 24"><path d="M18 5v14L7 12zM6 5h2v14H6z"/></svg></button>
+              <button aria-label="Reproducir"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+              <button aria-label="Fotograma siguiente"><svg viewBox="0 0 24 24"><path d="M6 5v14l11-7zM16 5h2v14h-2z"/></svg></button>
+              <span class="time"><b>18:42.06</b> / 31:15</span>
+              <span class="rate">
+                <button class="chip" style="padding:4px 9px">0,25×</button>
+                <button class="chip" style="padding:4px 9px" data-on>1×</button>
+                <button class="chip" style="padding:4px 9px">2×</button>
+              </span>
+            </div>
+            <div class="track" id="track"><!-- inyectado --></div>
+          </div>
+        </div>
+
+        <aside class="inspector">
+          <div class="tabs" role="tablist">
+            <button role="tab" aria-selected="true">Eventos</button>
+            <button role="tab" aria-selected="false">Métricas</button>
+            <button role="tab" aria-selected="false">Notas</button>
+          </div>
+          <div class="insp-body">
+            <div>
+              <div class="blk-title">Partida</div>
+              <dl class="kv">
+                <dt>Campeón</dt><dd>Viego</dd>
+                <dt>Cola</dt><dd>Solo/Dúo</dd>
+                <dt>KDA</dt><dd>8 / 4 / 11</dd>
+                <dt>Oro @15</dt><dd class="up">+842</dd>
+                <dt>JG CS @15</dt><dd class="dn">−7</dd>
+                <dt>APM medio</dt><dd>121</dd>
+              </dl>
+            </div>
+            <div>
+              <div class="blk-title">Errores detectados · 6</div>
+              <div id="events"><!-- inyectado --></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      El reproductor deja de ser una página con un vídeo dentro: el vídeo ocupa todo lo que puede, y
+      el resto es transporte. La pista bajo el vídeo es la misma línea de tiempo de la biblioteca a
+      mayor escala, así que la lectura que aprendiste en la lista sigue valiendo aquí. Los errores
+      detectados por el analizador se listan a la derecha con su marca de tiempo, y hacer clic salta a
+      ese instante — que es literalmente lo único que se hace en esta pantalla.
+    </p>
+  </section>
+
+  <!-- ===================== SISTEMA ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>El sistema: trece roles, cuatro tintes</h2></div>
+    <p>Trece tokens sustituyen a los cuarenta y tantos actuales, y solo <strong>cuatro de ellos son
+      tintes</strong> — el resto son grises y reutilizaciones. Ahí está la diferencia con lo que hay
+      hoy: no es que haya menos color, es que cada tinte tiene un trabajo y solo uno. En la piel Rift,
+      el oro es estructura (nunca relleno), el turquesa son datos, el rojo es estado y el violeta es
+      lo que ha encontrado el analizador.</p>
+    <p>Los valores de la piel Rift no son «colores de gaming» inventados: son los tokens del propio
+      cliente de League — <code>#F0E6D2</code> y <code>#A09B8C</code> son los grises cálidos de Riot,
+      <code>#C8AA6E</code> su oro hextech y <code>#0AC8B9</code> su turquesa. De ahí sale el
+      reconocimiento, no de poner degradados azules por encima.</p>
+    <p>Usa el interruptor de arriba para ver la tabla en cualquiera de las dos.</p>
+
+    <div class="tokens" id="tokens"><!-- inyectado --></div>
+
+    <p style="margin-top:24px"><strong>Tipografía.</strong> Cascadia Mono para todo lo que sea etiqueta,
+      código de tiempo o cifra —que en esta app es el 80 % del texto— y la sans del sistema solo para
+      prosa. No es un capricho: los números en columna solo se comparan si son tabulares, y una mesa
+      de montaje se etiqueta en mono. Escala cerrada de seis pasos: 9,5 · 10,5 · 12 · 13 · 14,5 · 19.</p>
+  </section>
+
+  <!-- ===================== MOVIMIENTO ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>El movimiento</h2></div>
+    <p class="lede" style="margin-bottom:26px">
+      Aquí pasa lo mismo que con el color, agravado: <b>hay cuatro sistemas de animación conviviendo</b>
+      y ninguno se habla con los otros. Pero hay algo peor que la incoherencia, y es que la app
+      <b>anima lo decorativo y no anima lo que significa algo</b>. Esa inversión es exactamente lo que
+      se percibe como tosco.
+    </p>
+
+    <div class="evidence">
+      <div class="ev">
+        <div class="metric bad">4</div>
+        <div class="lbl">sistemas a la vez</div>
+        <p>Keyframes CSS en <code>index.css</code>, transiciones sueltas dentro de <code>style={}</code>, <code>framer-motion</code> en cuatro componentes, y una transición global sobre <code>button, a, input</code>. Sobre una misma tarjeta llegan a solaparse dos.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">9</div>
+        <div class="lbl">duraciones distintas</div>
+        <p>0,1 · 0,12 · 0,15 · 0,2 · 0,25 · 0,3 · 0,35 · 0,4 · 0,45 s, repartidas sin criterio. Dos controles idénticos responden a velocidades distintas según el archivo en el que estén.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">10</div>
+        <div class="lbl">usos de <code>transition: all</code></div>
+        <p>Anima todas las propiedades que cambien, incluidas las que provocan <em>layout</em>. Es la causa habitual de que un hover se sienta pastoso sin que se vea por qué.</p>
+      </div>
+      <div class="ev">
+        <div class="metric bad">13</div>
+        <div class="lbl">usos de <code>ease</code></div>
+        <p>La curva por defecto del navegador, simétrica: acelera y frena igual. Es la que hace que cualquier interfaz parezca genérica, porque no se parece a cómo se mueve nada real.</p>
+      </div>
+    </div>
+
+    <ul class="findings">
+      <li>
+        <span class="tag crit">bug</span>
+        <span class="body"><b>La lista re-anima cada fila al hacer scroll.</b>
+        <code>card-in</code> está aplicado a <code>.game-row</code> en <code>index.css</code>, y la biblioteca usa <code>@tanstack/react-virtual</code>: las filas se montan y se desmontan al desplazarte. Resultado: la animación de entrada se dispara <em>cada vez</em> que una fila vuelve al DOM. No es cuestión de gusto — desplazarse por la biblioteca es un desfile continuo de filas apareciendo.</span>
+      </li>
+      <li>
+        <span class="tag crit">tacto</span>
+        <span class="body"><b>El hover rebota y dura 350 ms.</b>
+        <code>cubic-bezier(.34,1.56,.64,1)</code> pasa de 1: es un muelle con sobreimpulso. En una lista densa, mover el ratón por encima hace que las filas se levanten, se pasen de frenada y vuelvan. El feedback de hover se tiene que sentir instantáneo — 80 ms y sin desplazamiento.</span>
+      </li>
+      <li>
+        <span class="tag">contexto</span>
+        <span class="body"><b>Cambiar de panel es un corte seco.</b>
+        En <code>App.tsx</code> los paneles se ocultan con <code>display: none</code>. La navegación —lo único que el usuario hace todo el rato— es lo único que no tiene transición, mientras cada tarjeta decorativa entra con fundido.</span>
+      </li>
+      <li>
+        <span class="tag">escala</span>
+        <span class="body"><b>Los desplazamientos son demasiado largos.</b>
+        <code>ErrorPlayer</code> hace entrar elementos desde <code>y: -20</code> y <code>x: 20</code>. Veinte píxeles es un viaje para un elemento de 40 px de alto; el ojo lo lee como algo que llega de fuera de la pantalla. La distancia debe escalar con el tamaño: 4–6 px.</span>
+      </li>
+      <li>
+        <span class="tag">coste</span>
+        <span class="body"><b><code>whileHover={{ scale: 1.02 }}</code> sobre tarjetas con texto.</b>
+        En <code>ClipsGallery</code> y <code>ErrorsGallery</code>. Escalar un contenedor con texto lo remuestrea: durante la transición el texto se ve ligeramente borroso. Es un efecto pequeño y constante que abarata mucho.</span>
+      </li>
+      <li>
+        <span class="tag" style="color:var(--win);border-top-color:var(--win)">bien</span>
+        <span class="body"><b><code>prefers-reduced-motion</code> ya está respetado.</b>
+        El bloque está en <code>index.css</code> y es correcto. Eso se mantiene tal cual.</span>
+      </li>
+    </ul>
+
+    <h3 style="margin-top:44px">Compáralo con el ratón</h3>
+    <p>Mismo marcado en las dos columnas, distinto movimiento. Pasa el ratón por encima de las filas,
+      y usa el botón para ver la animación de entrada.</p>
+
+    <div class="ab" id="ab">
+      <div class="ab-col old">
+        <div class="h"><b>Hoy</b><span>rebote de 350 ms + entrada por fila</span></div>
+        <p class="why">La fila se levanta 4 px con sobreimpulso. Al recorrer la lista, todo lo que
+          tocas se mueve. La entrada se anima fila a fila, y con virtualización se repite al scrollear.</p>
+        <div class="dr-list">
+          <div class="dr"><span class="av">VG</span><span><span class="nm">Viego</span><br><span class="mt">Solo/Dúo · 31:15</span></span><span class="kd">8 / 4 / 11</span></div>
+          <div class="dr"><span class="av">KZ</span><span><span class="nm">Kha'Zix</span><br><span class="mt">Solo/Dúo · 25:42</span></span><span class="kd">14 / 2 / 6</span></div>
+          <div class="dr"><span class="av">LS</span><span><span class="nm">Lee Sin</span><br><span class="mt">Flexible · 36:50</span></span><span class="kd">5 / 9 / 9</span></div>
+        </div>
+      </div>
+
+      <div class="ab-col new">
+        <div class="h"><b>Propuesta</b><span>80 ms, sin desplazamiento</span></div>
+        <p class="why">La fila no se mueve: cambia de fondo y aparece una franja de estado en el borde.
+          Se siente más rápido porque lo es, y porque nada se desplaza bajo el cursor. La entrada la
+          anima el contenedor una sola vez, no cada fila.</p>
+        <div class="dr-list">
+          <div class="dr"><span class="av">VG</span><span><span class="nm">Viego</span><br><span class="mt">Solo/Dúo · 31:15</span></span><span class="kd">8 / 4 / 11</span></div>
+          <div class="dr"><span class="av">KZ</span><span><span class="nm">Kha'Zix</span><br><span class="mt">Solo/Dúo · 25:42</span></span><span class="kd">14 / 2 / 6</span></div>
+          <div class="dr"><span class="av">LS</span><span><span class="nm">Lee Sin</span><br><span class="mt">Flexible · 36:50</span></span><span class="kd">5 / 9 / 9</span></div>
+        </div>
+      </div>
+
+      <div class="ab-foot">
+        <button class="play-btn" type="button" id="ab-play">▶ Reproducir entrada</button>
+        <span class="t">Fíjate en que la columna de la izquierda anima tres elementos y la derecha uno.
+          Con 60 partidas en pantalla, esa diferencia se multiplica por 60.</span>
+      </div>
+    </div>
+
+    <h3 style="margin-top:44px">Tres curvas, ningún rebote</h3>
+    <p>Una curva describe cómo se reparte el movimiento en el tiempo. Las tres de abajo cubren todo
+      lo que hace falta, y ninguna se pasa de frenada: el sobreimpulso funciona en un juguete y
+      trabaja en tu contra en una herramienta que vas a usar horas.</p>
+
+    <div class="curves" id="curves"><!-- inyectado --></div>
+
+    <h3 style="margin-top:44px">Cuatro duraciones</h3>
+    <div class="scale">
+      <div class="scale-row head"><span class="tk">Token</span><span class="ms">Valor</span><span class="ds">Para qué</span></div>
+      <div class="scale-row"><span class="tk">--t-instant</span><span class="ms">80 ms</span><span class="ds">Feedback de estado: hover, pulsación, foco. Por debajo de 100 ms se percibe como respuesta, no como animación.</span></div>
+      <div class="scale-row"><span class="tk">--t-quick</span><span class="ms">140 ms</span><span class="ds">Aparece o desaparece algo pequeño: un tooltip, un chip, el marcador de scrub.</span></div>
+      <div class="scale-row"><span class="tk">--t-base</span><span class="ms">220 ms</span><span class="ds">Cambio de panel o de pestaña, y el salto del cursor de reproducción a un evento.</span></div>
+      <div class="scale-row"><span class="tk">--t-slow</span><span class="ms">320 ms</span><span class="ds">Superficies grandes que entran: un modal, el inspector desplegándose. El techo — nada dura más.</span></div>
+    </div>
+
+    <h3 style="margin-top:44px">Y lo que falta: movimiento que informa</h3>
+    <p>Quitar el movimiento decorativo es la mitad. La otra mitad es ponerlo donde ahora no hay nada,
+      porque en esta app el movimiento puede llevar información que un corte seco destruye.</p>
+
+    <ul class="findings">
+      <li>
+        <span class="tag" style="color:var(--cool);border-top-color:var(--cool)">salto</span>
+        <span class="body"><b>Ir a un evento no debe teletransportar el cursor.</b>
+        Cuando pulsas un error en el inspector, si el cursor de reproducción salta de golpe pierdes
+        <em>dónde estabas</em>. Recorriendo la distancia en 220 ms ves hacia qué lado y cuánto te has
+        movido dentro de la partida. Eso es literalmente el trabajo de esta app.
+        <b style="display:block;margin-top:8px;font-weight:400;color:var(--faint)">Pruébalo en la pantalla 02: pulsa cualquier error de la lista de la derecha.</b></span>
+      </li>
+      <li>
+        <span class="tag" style="color:var(--cool);border-top-color:var(--cool)">arrastre</span>
+        <span class="body"><b>Lo que sigue al cursor no se anima: se pega a él.</b>
+        El scrub de la línea de tiempo y el cursor de reproducción tienen que ir a 0 ms. Poner una
+        transición ahí introduce un retardo que se siente como lag, no como suavidad. Regla: si el
+        movimiento lo causa tu mano, latencia cero; si lo causa el sistema, curva.</span>
+      </li>
+      <li>
+        <span class="tag" style="color:var(--cool);border-top-color:var(--cool)">estado</span>
+        <span class="body"><b>Empezar a grabar es un cambio de estado, no un punto que parpadea.</b>
+        La transición de inactivo a grabando debería recorrer la barra de estado entera en 220 ms.
+        Es la información más importante que da la app y ahora mismo la anuncia un círculo de 8 px.</span>
+      </li>
+      <li>
+        <span class="tag" style="color:var(--cool);border-top-color:var(--cool)">cifras</span>
+        <span class="body"><b>Los números que cambian se interpolan.</b>
+        El APM en directo y los GB usados saltan de un valor a otro. Interpolarlos en 220 ms deja ver
+        la dirección del cambio, y cuesta cuatro líneas.</span>
+      </li>
+      <li>
+        <span class="tag" style="color:var(--cool);border-top-color:var(--cool)">análisis</span>
+        <span class="body"><b>Cuando el analizador termina, que se note.</b>
+        Los marcadores de error deberían aparecer sobre la línea de tiempo en cascada de 40 ms según
+        su instante. Es el único sitio de toda la app donde una animación escalonada está justificada:
+        el orden de aparición <em>es</em> el orden temporal.</span>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ===================== CÓMO SE LLEGA ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Cómo se llega desde donde estás</h2></div>
+    <p>En este orden. Los tres primeros pasos son mecánicos y ya cambian la percepción del conjunto;
+      el rediseño de la lista viene después, cuando hay un sistema que lo sostenga.</p>
+
+    <div class="note" style="margin:0 0 24px">
+      <p><strong>La trampa del orden obvio:</strong> cambiar la paleta a Rift en el primer commit es
+      tentador y sale mal. Los 343 literales escritos a mano en los componentes no siguen a los
+      tokens, así que la app quedaría mitad Rift y mitad paleta vieja — peor de lo que está hoy.
+      La piel se enciende <em>al final</em> de cada pantalla, no al principio de todas.</p>
+    </div>
+
+    <ol class="steps">
+      <li><span><b>Limpiar <code>index.css</code></b><span>Quitar las redefiniciones duplicadas de <code>--accent-violet</code>, <code>--color-victory</code> y <code>--color-assist</code>, y borrar los tokens neón que no usa nadie. Es media hora y elimina la fuente de las incoherencias.</span></span></li>
+      <li><span><b>Sustituir la paleta por los once valores</b><span>Un único <code>:root</code>, mapeando los nombres viejos a los nuevos como alias para no tocar todavía los componentes. La app cambia de piel entera en un commit.</span></span></li>
+      <li><span><b>Cazar los literales, por pantalla y no de golpe</b><span><code>#fff</code> → <code>var(--text)</code>, los cuatro rojos → <code>var(--loss)</code>, y así. Contando <code>rgba()</code> son 343 y están muy mal repartidos: la biblioteca son 29 entre <code>MatchGallery</code> y <code>App</code>, mientras que el reproductor y sus widgets concentran 260 — el 76 %. Por eso conviene convertir una pantalla entera y no una capa horizontal.</span></span></li>
+      <li><span><b>Extraer los componentes repetidos</b><span><code>Card</code>, <code>Badge</code>, <code>Metric</code>, <code>EmptyState</code> y <code>Button</code> como componentes de verdad. Los cinco <code>const styles</code> gigantes se vacían solos a medida que caen.</span></span></li>
+      <li><span><b>Rehacer la fila de partida como línea de tiempo</b><span>El único paso con diseño nuevo de por medio. Los datos ya existen: <code>events[]</code> lleva el timestamp de cada suceso y <code>apm</code> la serie.</span></span></li>
+      <li><span><b>Quitar <code>card-in</code> de <code>.game-row</code></b><span>Es el arreglo con mejor relación esfuerzo/resultado de toda la lista: una línea borrada en <code>index.css</code> y la biblioteca deja de re-animar cada fila al hacer scroll. Hazlo antes que nada si quieres notar el cambio hoy mismo.</span></span></li>
+      <li><span><b>Cuatro duraciones y tres curvas</b><span>Añadir los tokens <code>--t-*</code> y <code>--e-*</code>, sustituir los <code>transition: all</code> por la propiedad concreta, y bajar todos los hover a <code>--t-instant</code> sin desplazamiento.</span></span></li>
+      <li><span><b>Elegir un solo sistema de animación</b><span>Si <code>framer-motion</code> se queda, que sea solo para orquestación real (<code>AnimatePresence</code> en el reproductor) y CSS para estado. Nunca los dos sobre el mismo elemento, que es lo que pasa hoy.</span></span></li>
+      <li><span><b>Poner el movimiento que informa</b><span>Transición de panel, salto del cursor a un evento, entrada en cascada de los marcadores al terminar el análisis. Es lo único de esta lista que añade código en vez de quitarlo.</span></span></li>
+      <li><span><b>Barrer los restos</b><span>Unificar los textos a un idioma, y quitar el buscador desactivado y la fila de una sola pestaña.</span></span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // Datos de ejemplo con la forma real que ya guarda la app: eventos con timestamp,
+  // serie de APM, y los diferenciales del minuto 15.
+  var MATCHES = [
+    { champ:"Viego", init:"VG", res:"loss", queue:"Solo/Dúo", when:"hoy · 21:14", dur:1875,
+      k:8,d:4,a:11, apm:121, gold:842, unreviewed:true,
+      ev:[[212,"k"],[418,"d"],[605,"o"],[712,"k"],[860,"e"],[905,"d"],[1120,"o"],[1244,"k"],
+          [1390,"e"],[1455,"d"],[1580,"o"],[1702,"k"],[1806,"d"]],
+      curve:[.35,.5,.42,.7,.55,.62,.8,.58,.72,.9,.66,.78,.6,.85,.7,.55] },
+    { champ:"Kha'Zix", init:"KZ", res:"win", queue:"Solo/Dúo", when:"hoy · 20:03", dur:1542,
+      k:14,d:2,a:6, apm:138, gold:1610, unreviewed:true,
+      ev:[[180,"k"],[330,"k"],[498,"o"],[640,"k"],[705,"d"],[880,"k"],[1010,"o"],[1150,"k"],
+          [1288,"e"],[1400,"k"],[1502,"o"]],
+      curve:[.5,.62,.58,.75,.68,.82,.7,.88,.76,.92,.8,.95,.72,.86,.9,.8] },
+    { champ:"Lee Sin", init:"LS", res:"loss", queue:"Flexible", when:"ayer · 23:41", dur:2210,
+      k:5,d:9,a:9, apm:104, gold:-1204, unreviewed:false,
+      ev:[[260,"d"],[400,"e"],[520,"d"],[690,"k"],[840,"d"],[970,"o"],[1105,"d"],[1230,"e"],
+          [1360,"d"],[1490,"k"],[1620,"d"],[1780,"o"],[1930,"d"],[2090,"e"]],
+      curve:[.42,.38,.5,.44,.55,.4,.48,.36,.52,.45,.38,.5,.42,.35,.44,.3] },
+    { champ:"Nidalee", init:"ND", res:"win", queue:"Solo/Dúo", when:"ayer · 22:18", dur:1698,
+      k:11,d:5,a:14, apm:149, gold:520, unreviewed:false,
+      ev:[[150,"k"],[295,"o"],[440,"k"],[588,"d"],[700,"k"],[812,"o"],[940,"k"],[1090,"e"],
+          [1210,"k"],[1350,"o"],[1480,"k"],[1610,"k"]],
+      curve:[.6,.72,.65,.8,.74,.88,.78,.9,.82,.95,.86,.92,.88,.98,.9,.84] }
+  ];
+
+  var COL = { k:"var(--win)", d:"var(--loss)", o:"var(--gold)", e:"var(--flag)" };
+  var LBL = { k:"Kill", d:"Muerte", o:"Objetivo", e:"Error" };
+
+  function mmss(s){
+    var m = Math.floor(s/60), r = Math.round(s%60);
+    return m + ":" + (r<10?"0":"") + r;
+  }
+
+  // Curva de APM suavizada, dibujada como área. W/H en unidades de viewBox.
+  function apmPath(curve, w, h, close){
+    var n = curve.length, d = "", i, x, y;
+    for(i=0;i<n;i++){
+      x = (i/(n-1))*w;
+      y = h - curve[i]*h*0.82 - h*0.08;
+      if(i===0){ d += "M"+x.toFixed(1)+" "+y.toFixed(1); }
+      else{
+        var px = ((i-1)/(n-1))*w, py = h - curve[i-1]*h*0.82 - h*0.08;
+        var cx = (px+x)/2;
+        d += "C"+cx.toFixed(1)+" "+py.toFixed(1)+","+cx.toFixed(1)+" "+y.toFixed(1)+","+x.toFixed(1)+" "+y.toFixed(1);
+      }
+    }
+    if(close){ d += "L"+w+" "+h+"L0 "+h+"Z"; }
+    return d;
+  }
+
+  function timelineSVG(m, h){
+    var W = 1000, H = h;
+    var parts = [];
+    parts.push('<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" aria-hidden="true">');
+    // rejilla cada 5 min
+    var mins = m.dur/60, t;
+    for(t=5;t<mins;t+=5){
+      var gx = (t*60/m.dur)*W;
+      parts.push('<line x1="'+gx.toFixed(1)+'" y1="0" x2="'+gx.toFixed(1)+'" y2="'+H+'" stroke="var(--line-soft)" stroke-width="1" vector-effect="non-scaling-stroke"/>');
+    }
+    // área APM
+    parts.push('<path d="'+apmPath(m.curve,W,H,true)+'" fill="var(--apm-fill)"/>');
+    parts.push('<path d="'+apmPath(m.curve,W,H,false)+'" fill="none" stroke="var(--apm-line)" stroke-width="1.25" vector-effect="non-scaling-stroke"/>');
+    // línea base
+    parts.push('<line x1="0" y1="'+(H-1)+'" x2="'+W+'" y2="'+(H-1)+'" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>');
+    // eventos
+    m.ev.forEach(function(e){
+      var ex = (e[0]/m.dur)*W, kind = e[1];
+      var top = kind==="d" ? H*0.10 : kind==="e" ? H*0.02 : H*0.40;
+      var bot = H-1;
+      parts.push('<line x1="'+ex.toFixed(1)+'" y1="'+top.toFixed(1)+'" x2="'+ex.toFixed(1)+'" y2="'+bot+'" stroke="'+COL[kind]+'" stroke-width="'+(kind==="e"?2:1.6)+'" vector-effect="non-scaling-stroke"/>');
+      if(kind==="e"){
+        parts.push('<rect x="'+(ex-2.5).toFixed(1)+'" y="0" width="5" height="4" fill="'+COL[kind]+'"/>');
+      }
+    });
+    parts.push('</svg>');
+    return parts.join("");
+  }
+
+  function strip(m){
+    var el = document.createElement("div");
+    el.className = "strip";
+    el.setAttribute("data-res", m.res);
+    el.setAttribute("role","button");
+    el.setAttribute("tabindex","0");
+    var goldTxt = (m.gold>=0? "+" : "−") + Math.abs(m.gold).toLocaleString("es-ES");
+    el.innerHTML =
+      '<div class="strip-top">'+
+        '<div class="who">'+
+          '<span class="av">'+m.init+'</span>'+
+          '<span style="min-width:0">'+
+            '<span class="name">'+m.champ+'</span>'+
+            '<span class="meta">'+
+              '<span class="res '+(m.res==="win"?"w":"l")+'">'+(m.res==="win"?"Victoria":"Derrota")+'</span>'+
+              '<em>'+m.queue+'</em><span>'+m.when+'</span>'+
+              (m.unreviewed?'<span style="color:var(--flag)">· sin revisar</span>':'')+
+            '</span>'+
+          '</span>'+
+        '</div>'+
+        '<div class="num">'+m.k+' <span class="d">'+m.d+'</span> '+m.a+'<small>K D A</small></div>'+
+        '<div class="num">'+m.apm+'<small>apm</small></div>'+
+        '<div class="num"><span class="'+(m.gold>=0?"up":"dn")+'">'+goldTxt+'</span><small>oro @15</small></div>'+
+        '<div class="num">'+mmss(m.dur)+'<small>dur.</small></div>'+
+      '</div>'+
+      '<div class="tl">'+timelineSVG(m,38)+
+        '<span class="scrub"></span><span class="tip"></span>'+
+      '</div>'+
+      '<div class="tl-axis"><span>0:00</span><span>'+mmss(m.dur/2)+'</span><span>'+mmss(m.dur)+'</span></div>';
+
+    // Scrub: al pasar el ratón sobre la línea, se lee el minuto exacto.
+    var tl = el.querySelector(".tl");
+    var scrub = el.querySelector(".scrub");
+    var tip = el.querySelector(".tip");
+    tl.addEventListener("mousemove", function(ev){
+      var r = tl.getBoundingClientRect();
+      var p = Math.max(0, Math.min(1, (ev.clientX - r.left)/r.width));
+      scrub.style.left = (p*100) + "%";
+      tip.style.left = (p*100) + "%";
+      tip.textContent = mmss(p*m.dur);
+    });
+    return el;
+  }
+
+  var list = document.getElementById("list");
+  if(list){ MATCHES.forEach(function(m){ list.appendChild(strip(m)); }); }
+
+  // Pista del reproductor: la misma lectura, a mayor escala.
+  var track = document.getElementById("track");
+  if(track){
+    var m = MATCHES[0];
+    track.insertAdjacentHTML("afterbegin", timelineSVG(m,44));
+    var ph = document.createElement("span");
+    ph.className = "playhead";
+    ph.innerHTML = "<i></i>";
+    ph.style.transform = "translateX(" + ((1122/m.dur)*100) + "%)";
+    track.appendChild(ph);
+  }
+
+  // Lista de errores del inspector.
+  var events = document.getElementById("events");
+  if(events){
+    var ERR = [
+      [ "04:52", "e", "Recall sin visión en río",         "media" ],
+      [ "09:18", "d", "Muerte 1v2 en jungla enemiga",     "alta"  ],
+      [ "13:40", "e", "Gank sin control de oleada",       "baja"  ],
+      [ "18:42", "e", "Posicionamiento en pelea de dragón","alta" ],
+      [ "23:05", "d", "Muerte por cámara fija en bot",    "alta"  ],
+      [ "27:31", "e", "Barón sin visión previa",          "media" ]
+    ];
+    ERR.forEach(function(e){
+      var row = document.createElement("div");
+      row.className = "evt";
+      row.setAttribute("role","button");
+      row.setAttribute("tabindex","0");
+      row.title = e[0] + " · " + e[2];
+      row.setAttribute("data-at", e[0]);
+      row.setAttribute("data-what", e[2]);
+      row.innerHTML = '<span class="t">'+e[0]+'</span>'+
+                      '<span class="bar" style="background:'+COL[e[1]]+'"></span>'+
+                      '<span class="evt-label">'+e[2]+'</span>'+
+                      '<span class="sev">'+e[3]+'</span>';
+      events.appendChild(row);
+    });
+
+    // Salto a un evento: el cursor RECORRE la distancia en --t-base en vez de
+    // teletransportarse, para no perder de vista dónde estabas en la partida.
+    var dur = MATCHES[0].dur;
+    var head = track && track.querySelector(".playhead");
+    var tcBig = document.querySelector(".tbar .time b");
+    var tcSmall = document.querySelector(".viewport .tc");
+    var markEl = document.querySelector(".viewport .mark");
+
+    function seek(row){
+      var at = row.getAttribute("data-at");
+      var bits = at.split(":");
+      var secs = parseInt(bits[0],10)*60 + parseInt(bits[1],10);
+      var pct = Math.max(0, Math.min(100, (secs/dur)*100));
+      if(head){ head.style.transform = "translateX("+pct.toFixed(2)+"%)"; }
+      if(tcBig){ tcBig.textContent = at + ".00"; }
+      if(tcSmall){ tcSmall.textContent = at + ".00 / " + mmss(dur); }
+      if(markEl){ markEl.textContent = row.getAttribute("data-what"); }
+      Array.prototype.forEach.call(events.children, function(r){ r.removeAttribute("data-sel"); });
+      row.setAttribute("data-sel","");
+    }
+
+    Array.prototype.forEach.call(events.children, function(r){
+      r.addEventListener("click", function(){ seek(r); });
+      r.addEventListener("keydown", function(ev){
+        if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); seek(r); }
+      });
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // Banco de pruebas de movimiento.
+  // ------------------------------------------------------------------
+  var CURVES = [
+    { nm:"--e-out",  fn:"cubic-bezier(.16,1,.3,1)",
+      p:[.16,1,.3,1],  use:"Algo entra o aparece. Arranca rápido y se posa sin rebotar." },
+    { nm:"--e-move", fn:"cubic-bezier(.2,0,0,1)",
+      p:[.2,0,0,1],    use:"Algo que ya existe va de A a B: el cursor saltando a un evento, un panel deslizándose." },
+    { nm:"--e-in",   fn:"cubic-bezier(.4,0,1,1)",
+      p:[.4,0,1,1],    use:"Algo se va. Acelera hasta desaparecer: no interesa mirarlo mientras sale." },
+    { nm:"rebote",   fn:"cubic-bezier(.34,1.56,.64,1)", bad:true,
+      p:[.34,1.56,.64,1], use:"La que usa la app hoy en cada hover. Se pasa de frenada y vuelve — es la sensación de juguete." }
+  ];
+
+  function curveCard(c){
+    // La curva es y=progreso, x=tiempo. Se invierte la Y porque en SVG crece hacia abajo.
+    var W = 100, H = 100;
+    var y1 = (1-c.p[1])*H, y2 = (1-c.p[3])*H;
+    var top = Math.min(0, y1, y2) - 8;
+    var vb = "-4 " + top.toFixed(0) + " 108 " + (H - top + 10).toFixed(0);
+    var stroke = c.bad ? "var(--loss)" : "var(--cool)";
+    return '<div class="curve" data-e="'+c.fn+'" style="--pip-e:'+c.fn+'">'+
+      '<div class="nm" style="color:'+(c.bad?"var(--loss)":"var(--text)")+'">'+c.nm+(c.bad?" · descartada":"")+'</div>'+
+      '<div class="fn">'+c.fn+'</div>'+
+      '<svg viewBox="'+vb+'" aria-hidden="true">'+
+        '<line x1="0" y1="'+H+'" x2="'+W+'" y2="'+H+'" stroke="var(--line)" stroke-width="1" vector-effect="non-scaling-stroke"/>'+
+        '<line x1="0" y1="0" x2="'+W+'" y2="0" stroke="var(--line)" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>'+
+        '<path d="M0 '+H+' C'+(c.p[0]*W).toFixed(1)+' '+y1.toFixed(1)+','+(c.p[2]*W).toFixed(1)+' '+y2.toFixed(1)+','+W+' 0" '+
+          'fill="none" stroke="'+stroke+'" stroke-width="2" vector-effect="non-scaling-stroke"/>'+
+      '</svg>'+
+      '<div class="rail-t"><span class="pip" style="background:'+stroke+'"></span></div>'+
+      '<div class="use">'+c.use+'</div>'+
+    '</div>';
+  }
+
+  var curvesEl = document.getElementById("curves");
+  if(curvesEl){
+    curvesEl.innerHTML = CURVES.map(curveCard).join("");
+    // Todas corren a la vez y con la misma duración: así lo único que se compara
+    // es la forma de la curva.
+    function runPips(){
+      var cards = curvesEl.querySelectorAll(".curve");
+      Array.prototype.forEach.call(cards, function(c){ c.removeAttribute("data-run"); });
+      void curvesEl.offsetWidth;
+      Array.prototype.forEach.call(cards, function(c){ c.setAttribute("data-run",""); });
+    }
+    curvesEl.addEventListener("mouseenter", runPips);
+    Array.prototype.forEach.call(curvesEl.querySelectorAll(".curve"), function(c){
+      c.addEventListener("click", runPips);
+    });
+    runPips();
+  }
+
+  var abPlay = document.getElementById("ab-play");
+  var ab = document.getElementById("ab");
+  if(abPlay && ab){
+    abPlay.addEventListener("click", function(){
+      var cols = ab.querySelectorAll(".ab-col");
+      Array.prototype.forEach.call(cols, function(c){ c.removeAttribute("data-run"); });
+      void ab.offsetWidth;
+      Array.prototype.forEach.call(cols, function(c){ c.setAttribute("data-run",""); });
+    });
+  }
+
+  // Los chips y pestañas del mockup responden, para que se vea que son controles reales.
+  function group(sel, attr){
+    var nodes = document.querySelectorAll(sel);
+    Array.prototype.forEach.call(nodes, function(n){
+      n.addEventListener("click", function(){
+        Array.prototype.forEach.call(n.parentNode.children, function(s){
+          if(attr === "data-on"){ s.removeAttribute("data-on"); }
+          else { s.setAttribute("aria-selected","false"); }
+        });
+        if(attr === "data-on"){ n.setAttribute("data-on",""); }
+        else { n.setAttribute("aria-selected","true"); }
+      });
+    });
+  }
+  group(".tools .chip", "data-on");
+  group(".rate .chip", "data-on");
+  group(".tabs button", "aria-selected");
+
+  // ------------------------------------------------------------------
+  // Pieles. Mismos nombres de rol, distintos valores. Los componentes no
+  // saben cuál está puesta.
+  // ------------------------------------------------------------------
+  var ROLES = [
+    ["--ground", "Fondo de ventana"],
+    ["--panel",  "Rail, barras, inspector"],
+    ["--raised", "Elemento activo, botón"],
+    ["--line",   "Bordes y separadores"],
+    ["--text",   "Texto y cifras"],
+    ["--muted",  "Secundario"],
+    ["--brand",  "Marca, pestaña y sección activa"],
+    ["--signal", "REC y acción primaria"],
+    ["--flag",   "Hallazgo del analizador"],
+    ["--cool",   "Foco de teclado y cursor"],
+    ["--win",    "Victoria, diferencial +"],
+    ["--loss",   "Derrota, muerte, −"],
+    ["--gold",   "Objetivos (dragón, barón)"]
+  ];
+
+  var SKINS = {
+    control:{
+      "--ground":"#0F1213","--panel":"#161A1B","--raised":"#1E2325","--line":"#2B3235",
+      "--text":"#E9EBE8","--muted":"#8A9391","--brand":"#FF5A36","--signal":"#FF5A36",
+      "--flag":"#B18AE0","--cool":"#6FC3D0","--win":"#5EA97C","--loss":"#C4574C","--gold":"#C79A4B"
+    },
+    rift:{
+      "--ground":"#08131A","--panel":"#0E1D26","--raised":"#16303B","--line":"#204450",
+      "--text":"#F0E6D2","--muted":"#A09B8C","--brand":"#C8AA6E","--signal":"#E84057",
+      "--flag":"#9B6DFF","--cool":"#0AC8B9","--win":"#0AC8B9","--loss":"#E84057","--gold":"#C8AA6E"
+    }
+  };
+
+  var tokens = document.getElementById("tokens");
+  function paintTokens(skin){
+    if(!tokens) return;
+    var pal = SKINS[skin];
+    tokens.innerHTML = ROLES.map(function(r){
+      return '<div class="tok">'+
+        '<div class="sw" style="background:'+pal[r[0]]+'"></div>'+
+        '<div class="nm">'+r[0]+'</div>'+
+        '<div class="hx">'+pal[r[0]]+'</div>'+
+        '<div class="use">'+r[1]+'</div>'+
+      '</div>';
+    }).join("");
+  }
+
+  function setSkin(skin){
+    document.documentElement.setAttribute("data-skin", skin);
+    Array.prototype.forEach.call(document.querySelectorAll("[data-skin-btn]"), function(b){
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-skin-btn") === skin));
+    });
+    paintTokens(skin);
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-skin-btn]"), function(b){
+    b.addEventListener("click", function(){ setSkin(b.getAttribute("data-skin-btn")); });
+  });
+  setSkin("rift");
+})();
+</script>

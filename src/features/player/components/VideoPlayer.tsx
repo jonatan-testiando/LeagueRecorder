@@ -777,14 +777,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* APM Graph (línea + área rellena) */}
             {apmSeries.length >= 2 && (
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={styles.graphSvg}>
-                <defs>
-                  <linearGradient id="apmFill" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent-violet)" stopOpacity="0.42" />
-                    <stop offset="100%" stopColor="var(--accent-violet)" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                <path d={apmAreaPath} fill="url(#apmFill)" stroke="none" />
-                <path d={apmLinePath} fill="none" stroke="var(--accent-violet)" strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+                <path d={apmAreaPath} fill="var(--apm-fill)" stroke="none" />
+                <path d={apmLinePath} fill="none" stroke="var(--apm-line)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
               </svg>
             )}
 
@@ -817,13 +811,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     left: `${pos}%`,
                     width: "28px",
                     height: "28px",
-                    borderColor: meta.color,
-                    background: isActive ? meta.color : "radial-gradient(circle at center, color-mix(in srgb, var(--panel) 95%, transparent), color-mix(in srgb, var(--ground) 98%, transparent))",
-                    transform: `translateX(-50%) scale(${isActive ? 1.25 : 1})`,
-                    boxShadow: isActive
-                      ? `0 0 20px ${meta.color}, 0 0 6px ${meta.color}`
-                      : `0 0 10px ${mix(meta.color, 38)}, 0 3px 8px rgba(0,0,0,0.6)`,
-                    backdropFilter: "blur(8px)",
+                    borderColor: isActive ? meta.color : mix(meta.color, 55),
+                    background: isActive ? meta.color : "var(--panel)",
+                    transform: "translateX(-50%)",
+                    boxShadow: "none",
                     zIndex: isActive ? 10 : 5,
                   }}
                   title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label}${e.description ? " – " + e.description : ""}`).join("\n")}
@@ -951,41 +942,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       {/* Right Column: Game Review */}
       {!isFullscreen && (
       <div style={{ ...styles.rightColumn, width: sidebarWidth }}>
-        <div style={styles.resizeHandle} onPointerDown={startResize} title="Arrastra para redimensionar" />
+        <div style={styles.resizeHandle} onPointerDown={startResize} title="Drag to resize" />
         <div style={styles.tabBar}>
           <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>Stats</button>
-          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>Analítica</button>
-          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Análisis" : "Eventos"}</button>
-          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comentarios</button>
+          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>Analytics</button>
+          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Analysis" : "Events"}</button>
+          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comments</button>
         </div>
 
         {tab === "stats" && (
           <div style={styles.tabScroll}>
             {match.is_vod ? (
-              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, color-mix(in srgb, var(--accent-blue) 10%, transparent) 0%, transparent 100%)" }}>
-                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), var(--accent-blue))", boxShadow: "0 0 20px color-mix(in srgb, var(--accent-blue) 40%, transparent)" }}>
-                  <MousePointer2 size={28} color="var(--text)" />
+              <div style={{ ...styles.reviewScoreCard, borderLeft: "2px solid var(--cool)" }}>
+                <MousePointer2 size={18} color="var(--cool)" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...styles.scoreText, color: "var(--cool)" }}>Imported VOD</div>
+                  <p style={styles.scoreSub}>Cursor and APM analysis.</p>
                 </div>
-                <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
-                <p style={styles.scoreSub}>Análisis de cursor y APM de la partida importada.</p>
               </div>
             ) : (
-              <div style={{ ...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, color-mix(in srgb, var(--accent-blue) 10%, transparent) 0%, transparent 100%)" : "linear-gradient(180deg, color-mix(in srgb, var(--color-defeat) 10%, transparent) 0%, transparent 100%)" }}>
-                <div style={{ ...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, var(--color-defeat), var(--color-defeat))", boxShadow: isWin ? "0 0 20px color-mix(in srgb, var(--accent-blue) 40%, transparent)" : "0 0 20px color-mix(in srgb, var(--color-defeat) 40%, transparent)" }}>
-                  {isWin ? <Trophy size={28} color="var(--text)" /> : <XCircle size={28} color="var(--text)" />}
+              <div style={{ ...styles.reviewScoreCard, borderLeft: `2px solid ${isWin ? "var(--win)" : "var(--loss)"}` }}>
+                {isWin ? <Trophy size={18} color="var(--win)" /> : <XCircle size={18} color="var(--loss)" />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ ...styles.scoreText, color: isWin ? "var(--win)" : "var(--loss)" }}>
+                    {isWin ? "Victory" : "Defeat"}
+                  </div>
+                  <p style={styles.scoreSub}>{match.champion} · {formatTime(duration)}</p>
                 </div>
-                <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>{isWin ? "Victory" : "Defeat"}</h2>
-                <p style={styles.scoreSub}>Tú y tu equipo {isWin ? "ganasteis" : "perdisteis"} la partida.</p>
               </div>
             )}
 
             <div style={styles.statGrid}>
               {match.kda && <div style={styles.statTile}><span style={styles.statLabel}>KDA</span><span style={styles.statValue}>{match.kda}</span></div>}
               {!!match.apm && <div style={styles.statTile}><span style={styles.statLabel}>APM</span><span style={styles.statValue}>{Math.round(match.apm)}</span></div>}
-              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>Oro</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
-              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>Daño</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
-              <div style={styles.statTile}><span style={styles.statLabel}>Duración</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
-              <div style={styles.statTile}><span style={styles.statLabel}>Eventos</span><span style={styles.statValue}>{timedEvents.length}</span></div>
+              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>Gold</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
+              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>Damage</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
+              <div style={styles.statTile}><span style={styles.statLabel}>Duration</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
+              <div style={styles.statTile}><span style={styles.statLabel}>Events</span><span style={styles.statValue}>{timedEvents.length}</span></div>
             </div>
 
             {/* Scoreboard de los 10 jugadores (API Match-V5 de Riot), estilo Ascent */}
@@ -998,10 +991,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <div key={teamId} style={styles.team}>
                     <div style={styles.teamHeader}>
                       <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                        {teamId === 100 ? "Equipo Azul" : "Equipo Rojo"}
+                        {teamId === 100 ? "Blue Team" : "Red Team"}
                       </span>
                       <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)", fontSize: "11px", fontWeight: 700 }}>
-                        {won ? "Victoria" : "Derrota"}
+                        {won ? "Victory" : "Defeat"}
                       </span>
                     </div>
                     {team.map((p, i) => {
@@ -1058,18 +1051,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div style={styles.perfHeader}>
                   <img src={champIcon(selfP.champion)} alt={selfP.champion} style={styles.perfChamp} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
                   <div>
-                    <div style={styles.perfTitle}>Tu rendimiento</div>
-                    <div style={styles.perfSub}>{selfP.champion} · Nivel {selfP.level}</div>
+                    <div style={styles.perfTitle}>Your performance</div>
+                    <div style={styles.perfSub}>{selfP.champion} · Level {selfP.level}</div>
                   </div>
                 </div>
                 <div style={styles.perfList}>
                   <div style={styles.perfRow}><span>Kill Participation</span><b>{teamKills > 0 ? Math.round(((selfP.kills + selfP.assists) / teamKills) * 100) + "%" : "—"}</b></div>
                   <div style={styles.perfRow}><span>CS / min</span><b>{durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"}</b></div>
-                  <div style={styles.perfRow}><span>Daño a campeones</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
+                  <div style={styles.perfRow}><span>Damage to champions</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
                   <div style={styles.perfRow}><span>Damage Share</span><b>{teamDamage > 0 ? (100 * (selfP.damage ?? 0) / teamDamage).toFixed(1) + "%" : "—"}</b></div>
-                  <div style={styles.perfRow}><span>Daño / min</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
+                  <div style={styles.perfRow}><span>Damage / min</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
                   <div style={styles.perfRow}><span>Vision Score</span><b>{selfP.vision_score ?? 0}</b></div>
-                  <div style={styles.perfRow}><span>Wards colocados</span><b>{selfP.wards_placed ?? 0}</b></div>
+                  <div style={styles.perfRow}><span>Wards placed</span><b>{selfP.wards_placed ?? 0}</b></div>
                 </div>
                 <div style={styles.perfItems}>
                   {Array.from({ length: 7 }).map((_, k) => {
@@ -1095,7 +1088,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     return (
                       <div key={tid} style={styles.objCol}>
                         <div style={{ ...styles.objTeam, color: o.win ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                          {tid === 100 ? "Equipo Azul" : "Equipo Rojo"}
+                          {tid === 100 ? "Blue Team" : "Red Team"}
                         </div>
                         <div style={styles.objRow}><span>Dragones</span><b>{o.dragons}</b></div>
                         <div style={styles.objRow}><span>Barones</span><b>{o.barons}</b></div>
@@ -1177,7 +1170,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Oro</span>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Gold difference</span>
                       <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
                         {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g` : `${match.gold_diff_15}g`}
                       </div>
@@ -1374,7 +1367,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   })}
                   {shown.length === 0 && (
                     <div style={styles.emptyEvents}>
-                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : "Sin eventos en este filtro."}
+                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : "No events match this filter."}
                     </div>
                   )}
                 </div>
@@ -1397,7 +1390,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               )}
               {comments.map((c, i) => (
                 <div key={i} style={styles.commentCard}>
-                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title="Ir a este momento">
+                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title="Jump to this moment">
                     {formatTime(c.time)}
                   </button>
                   <span style={styles.commentText}>{c.text}</span>
@@ -1406,7 +1399,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               ))}
             </div>
             <div style={styles.commentInputRow}>
-              <span style={styles.commentAtTime} title="Se anclará a este momento">{formatTime(currentTime)}</span>
+              <span style={styles.commentAtTime} title="Will be anchored to this moment">{formatTime(currentTime)}</span>
               <input
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
@@ -1414,7 +1407,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 placeholder="Comenta este momento…"
                 style={styles.commentInput}
               />
-              <button style={styles.commentSend} onClick={addComment} title="Añadir en el minuto actual"><Send size={16} /></button>
+              <button style={styles.commentSend} onClick={addComment} title="Add at current time"><Send size={16} /></button>
             </div>
           </div>
         )}
@@ -1436,7 +1429,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             )}
             <div>
               <div style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>
-                {exportType === "clip" ? "Exportar Clip de Video" : "Marcar Error"}
+                {exportType === "clip" ? "Exportar Clip de Video" : "Mark error"}
               </div>
               <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
                 {formatTime(clipStart)} - {formatTime(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)

@@ -120,10 +120,10 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
                 border: `1px solid ${teamGoldDiff >= 0 ? "color-mix(in srgb, var(--color-victory) 40%, transparent)" : "color-mix(in srgb, var(--color-defeat) 40%, transparent)"}`,
                 transition: "all 0.1s linear",
               }}
-              title="Diferencia de Oro total de tu Equipo vs Equipo Enemigo (Actualizado en tiempo real segundo a segundo)"
+              title="Your team's total gold lead over the enemy team, updated second by second"
             >
               {teamGoldDiff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              <span>{teamGoldDiff >= 0 ? `+${teamGoldDiff.toLocaleString()}g Equipo` : `${teamGoldDiff.toLocaleString()}g Equipo`}</span>
+              <span>{teamGoldDiff >= 0 ? `+${teamGoldDiff.toLocaleString()}g team` : `${teamGoldDiff.toLocaleString()}g team`}</span>
             </div>
           ) : (
             <div
@@ -159,7 +159,7 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
               title="Tu diferencia de Oro individual contra tu rival directo de rol (Jungla rival) en tiempo real"
             >
               <UserCheck size={12} />
-              <span>{selfGoldDiff >= 0 ? `+${selfGoldDiff.toLocaleString()}g vs Rival` : `${selfGoldDiff.toLocaleString()}g vs Rival`}</span>
+              <span>{selfGoldDiff >= 0 ? `+${selfGoldDiff.toLocaleString()}g vs lane` : `${selfGoldDiff.toLocaleString()}g vs lane`}</span>
             </div>
           )}
         </div>

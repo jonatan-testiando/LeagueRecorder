@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
 import { AudioStatus, VideoSettings } from "../../../types";
-import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen } from "lucide-react";
+import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen, KeyRound, ArrowUpCircle } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { check } from "@tauri-apps/plugin-updater";
@@ -315,7 +315,7 @@ export const SettingsPanel: React.FC = () => {
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔑</span>
+            <KeyRound size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
             <h3 style={styles.cardTitle}>Riot Developer API</h3>
           </div>
         </div>
@@ -346,7 +346,7 @@ export const SettingsPanel: React.FC = () => {
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>🚀</span>
+            <ArrowUpCircle size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
             <h3 style={styles.cardTitle}>Updates</h3>
           </div>
         </div>
@@ -382,7 +382,21 @@ export const SettingsPanel: React.FC = () => {
                 <button 
                   onClick={checkForUpdates} 
                   disabled={isUpdating}
-                  style={{ ...styles.btn, backgroundColor: "var(--accent-violet)", flex: 1, opacity: isUpdating ? 0.7 : 1, transition: "opacity 0.2s" }}
+                  // Buscar actualizaciones no es la acción principal de esta
+                  // pantalla: un relleno turquesa a ancho completo la convertía
+                  // en lo más brillante de la vista.
+                  style={{
+                    ...styles.btn,
+                    background: "transparent",
+                    border: "1px solid var(--line)",
+                    color: "var(--text)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    flex: 1,
+                    opacity: isUpdating ? 0.7 : 1,
+                    transition: "opacity var(--t-quick) var(--e-out)",
+                  }}
                 >
                   {isUpdating ? updateMsg || "Checking…" : "Check for Updates"}
                 </button>
@@ -665,6 +679,55 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: "var(--space-3)",
+  },
+  // Estas siete faltaban: el código las usaba (`styles.settingInfo`, etc.) pero
+  // nunca se definieron, así que llegaban a React como `undefined` y esos
+  // elementos se pintaban sin estilo. De ahí que la etiqueta y su descripción
+  // salieran pegadas ("Save locationDirectory where videos…").
+  cardHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    marginBottom: "var(--space-4)",
+  },
+  cardBody: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "var(--space-4)",
+  },
+  settingRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "var(--space-4)",
+  },
+  settingInfo: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "3px",
+    minWidth: 0,
+    flex: 1,
+  },
+  settingLabel: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    color: "var(--text)",
+  },
+  settingDesc: {
+    fontSize: "var(--font-xs)",
+    lineHeight: 1.5,
+    color: "var(--muted)",
+    maxWidth: "48ch",
+  },
+  button: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "12px",
+    padding: "var(--space-2) var(--space-4)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--line)",
+    background: "var(--raised)",
+    color: "var(--text)",
+    cursor: "pointer",
   },
   ghostBtn: {
     background: "transparent",

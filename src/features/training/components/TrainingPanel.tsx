@@ -165,7 +165,7 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  pageTitle: { margin: 0, fontSize: "var(--font-2xl)", fontWeight: 800, color: "#fff" },
+  pageTitle: { margin: 0, fontSize: "var(--font-2xl)", fontWeight: 800, color: "var(--text)" },
   pageSub: {
     margin: "var(--space-2) 0 0",
     fontSize: "var(--font-sm)",

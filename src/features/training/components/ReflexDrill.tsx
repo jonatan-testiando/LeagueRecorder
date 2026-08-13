@@ -460,7 +460,7 @@ const Stat: React.FC<{ label: string; value: string; good?: boolean }> = ({
     <span
       style={{
         ...styles.statValue,
-        color: good === undefined ? "#fff" : good ? "var(--color-victory)" : "var(--accent-gold)",
+        color: good === undefined ? "var(--text)" : good ? "var(--color-victory)" : "var(--accent-gold)",
       }}
     >
       {value}
@@ -544,7 +544,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "#fff" },
+  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)", maxWidth: 560 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
   optionLabel: {
@@ -582,7 +582,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 56,
     fontWeight: 800,
     letterSpacing: "0.06em",
-    color: "#fff",
+    color: "var(--text)",
   },
   champWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-3)" },
   champImg: {
@@ -601,7 +601,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 32,
     color: "var(--text-secondary)",
   },
-  champName: { fontSize: "var(--font-xl)", fontWeight: 700, color: "#fff" },
+  champName: { fontSize: "var(--font-xl)", fontWeight: 700, color: "var(--text)" },
   feedback: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" },
   feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 700, fontFamily: "var(--font-mono)" },
   progressRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
@@ -686,7 +686,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: -13,
     borderRadius: "var(--radius-full)",
     background: "var(--accent-teal)",
-    boxShadow: "0 0 12px rgba(77,255,255,0.5)",
+    boxShadow: "0 0 12px color-mix(in srgb, var(--accent-blue) 50%, transparent)",
   },
   trackHint: {
     position: "absolute",

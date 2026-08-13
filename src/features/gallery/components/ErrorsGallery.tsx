@@ -70,7 +70,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <AlertTriangle size={48} color="var(--color-defeat)" style={{ opacity: 0.5, marginBottom: 16 }} />
-          <h3 style={{ color: "#fff", margin: 0 }}>No errors flagged yet</h3>
+          <h3 style={{ color: "var(--text)", margin: 0 }}>No errors flagged yet</h3>
           <p style={{ color: "var(--text-muted)", marginTop: 8, textAlign: "center", maxWidth: 360 }}>
             Use the Error tool in the video player to save the mistakes you make and track your progress over time.
           </p>
@@ -107,7 +107,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                   preload="metadata"
                 />
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.3)" }}>
-                  <Play size={32} color="#fff" style={{ opacity: 0.8 }} />
+                  <Play size={32} color="var(--text)" style={{ opacity: 0.8 }} />
                 </div>
               </div>
               <div style={styles.cardInfo}>
@@ -148,7 +148,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 0 var(--space-6) 0",
   },
   title: {
-    color: "#fff",
+    color: "var(--text)",
     margin: 0,
     fontSize: "var(--font-xl)",
   },
@@ -179,7 +179,7 @@ const styles: Record<string, React.CSSProperties> = {
   thumbnailWrapper: {
     width: "100%",
     aspectRatio: "16/9",
-    backgroundColor: "#000",
+    backgroundColor: "var(--sunken)",
     position: "relative",
   },
   videoPreview: {
@@ -241,7 +241,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: "100%",
     boxSizing: "border-box",
     backgroundColor: "rgba(0,0,0,0.4)",
-    color: "#fff",
+    color: "var(--text)",
     border: "1px solid var(--accent-violet)",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-3)",
@@ -264,7 +264,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "4px",
     background: "var(--accent-violet)",
-    color: "#fff",
+    color: "var(--text)",
     border: "none",
     borderRadius: "4px",
     cursor: "pointer",

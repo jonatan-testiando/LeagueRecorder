@@ -91,7 +91,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
           />
           <div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: "13px" }}>
+            <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "13px" }}>
               Tendencias con {currentMatch.champion}
             </div>
             <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
@@ -100,9 +100,9 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(129, 140, 248, 0.12)", padding: "4px 10px", borderRadius: "12px", border: "1px solid rgba(129, 140, 248, 0.3)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "color-mix(in srgb, var(--flag) 12%, transparent)", padding: "4px 10px", borderRadius: "12px", border: "1px solid color-mix(in srgb, var(--flag) 30%, transparent)" }}>
           <ShieldCheck size={14} color="var(--accent-violet)" />
-          <span style={{ fontSize: "11px", fontWeight: 800, color: "#fff" }}>
+          <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--text)" }}>
             {winRate}% Winrate
           </span>
         </div>
@@ -114,7 +114,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
         <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
           <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia Oro @15m</span>
           <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: currGoldDiff15 >= 0 ? "#22c55e" : "#ef4444" }}>
+            <span style={{ fontSize: "16px", fontWeight: 800, color: currGoldDiff15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
               {currGoldDiff15 >= 0 ? `+${currGoldDiff15}g` : `${currGoldDiff15}g`}
             </span>
             {hasHistory && (
@@ -124,7 +124,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
             )}
           </div>
           {hasHistory && (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: goldDelta >= 0 ? "#22c55e" : "#ef4444" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: goldDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
               {goldDelta > 0 ? <TrendingUp size={12} /> : goldDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
               <span>{goldDelta > 0 ? `+${goldDelta}g superior a tu media` : goldDelta < 0 ? `${goldDelta}g inferior a tu media` : "Igual a tu media"}</span>
             </div>
@@ -135,7 +135,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
         <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
           <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Presión de Ganks</span>
           <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: "#fbbf24" }}>
+            <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--color-objective)" }}>
               {currGankImpact}%
             </span>
             {hasHistory && (
@@ -145,7 +145,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
             )}
           </div>
           {hasHistory && (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: gankDelta >= 0 ? "#22c55e" : "#ef4444" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: gankDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
               {gankDelta > 0 ? <TrendingUp size={12} /> : gankDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
               <span>{gankDelta > 0 ? `+${gankDelta}% más activo` : gankDelta < 0 ? `${gankDelta}% menos activo` : "En tu media"}</span>
             </div>
@@ -157,7 +157,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
           <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
             <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Ritmo APM</span>
             <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-              <span style={{ fontSize: "16px", fontWeight: 800, color: "#38bdf8" }}>
+              <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--accent-blue)" }}>
                 {currApm} APM
               </span>
               {hasHistory && avgApm > 0 && (
@@ -167,7 +167,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
               )}
             </div>
             {hasHistory && avgApm > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: apmDelta >= 0 ? "#22c55e" : "#ef4444" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: apmDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
                 {apmDelta > 0 ? <TrendingUp size={12} /> : apmDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
                 <span>{apmDelta > 0 ? `+${apmDelta} APM más veloz` : apmDelta < 0 ? `${apmDelta} APM por debajo` : "Ritmo idéntico"}</span>
               </div>
@@ -180,7 +180,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
           <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
             <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>KDA de la Partida</span>
             <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-              <span style={{ fontSize: "16px", fontWeight: 800, color: "#fff" }}>
+              <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--text)" }}>
                 {currentMatch.kda}
               </span>
             </div>

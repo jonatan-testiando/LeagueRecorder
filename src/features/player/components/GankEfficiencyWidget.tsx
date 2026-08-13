@@ -88,7 +88,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
       style={{
         backgroundColor: "var(--bg-card)",
         border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid #22c55e",
+        borderTop: "3px solid var(--color-victory)",
         borderRadius: "var(--radius-lg)",
         padding: "16px",
         display: "flex",
@@ -99,8 +99,8 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
     >
       {/* Cabecera con Métricas Totales */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
-          <Crosshair size={16} color="#22c55e" />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
+          <Crosshair size={16} color="var(--color-victory)" />
           <span>Análisis Táctico de Ganks e Impacto en Líneas</span>
         </div>
         {gankImpact15 !== undefined && (
@@ -110,9 +110,9 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
               fontWeight: 800,
               padding: "2px 8px",
               borderRadius: "12px",
-              background: "rgba(34, 197, 94, 0.15)",
-              color: "#22c55e",
-              border: "1px solid rgba(34, 197, 94, 0.3)",
+              background: "color-mix(in srgb, var(--color-victory) 15%, transparent)",
+              color: "var(--color-victory)",
+              border: "1px solid color-mix(in srgb, var(--color-victory) 30%, transparent)",
             }}
           >
             {gankImpact15}% Presión de Gank
@@ -125,17 +125,17 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <div
           onClick={() => setSelectedLane(selectedLane === "top" ? "all" : "top")}
           style={{
-            background: selectedLane === "top" ? "rgba(56, 189, 248, 0.15)" : "var(--bg-app)",
+            background: selectedLane === "top" ? "color-mix(in srgb, var(--accent-blue) 15%, transparent)" : "var(--bg-app)",
             padding: "8px",
             borderRadius: "6px",
-            border: `1px solid ${selectedLane === "top" ? "#38bdf8" : "var(--border-subtle)"}`,
+            border: `1px solid ${selectedLane === "top" ? "var(--accent-blue)" : "var(--border-subtle)"}`,
             textAlign: "center",
             cursor: "pointer",
             transition: "all 0.15s ease",
           }}
         >
           <span style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Top Lane</span>
-          <div style={{ fontSize: "15px", fontWeight: 800, color: "#38bdf8", marginTop: "2px" }}>
+          <div style={{ fontSize: "15px", fontWeight: 800, color: "var(--accent-blue)", marginTop: "2px" }}>
             {topGanks.length} Ganks
           </div>
         </div>
@@ -143,17 +143,17 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <div
           onClick={() => setSelectedLane(selectedLane === "mid" ? "all" : "mid")}
           style={{
-            background: selectedLane === "mid" ? "rgba(251, 191, 36, 0.15)" : "var(--bg-app)",
+            background: selectedLane === "mid" ? "color-mix(in srgb, var(--color-objective) 15%, transparent)" : "var(--bg-app)",
             padding: "8px",
             borderRadius: "6px",
-            border: `1px solid ${selectedLane === "mid" ? "#fbbf24" : "var(--border-subtle)"}`,
+            border: `1px solid ${selectedLane === "mid" ? "var(--color-objective)" : "var(--border-subtle)"}`,
             textAlign: "center",
             cursor: "pointer",
             transition: "all 0.15s ease",
           }}
         >
           <span style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Mid Lane</span>
-          <div style={{ fontSize: "15px", fontWeight: 800, color: "#fbbf24", marginTop: "2px" }}>
+          <div style={{ fontSize: "15px", fontWeight: 800, color: "var(--color-objective)", marginTop: "2px" }}>
             {midGanks.length} Ganks
           </div>
         </div>
@@ -161,17 +161,17 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <div
           onClick={() => setSelectedLane(selectedLane === "bot" ? "all" : "bot")}
           style={{
-            background: selectedLane === "bot" ? "rgba(168, 85, 247, 0.15)" : "var(--bg-app)",
+            background: selectedLane === "bot" ? "color-mix(in srgb, var(--flag) 15%, transparent)" : "var(--bg-app)",
             padding: "8px",
             borderRadius: "6px",
-            border: `1px solid ${selectedLane === "bot" ? "#a855f7" : "var(--border-subtle)"}`,
+            border: `1px solid ${selectedLane === "bot" ? "var(--flag)" : "var(--border-subtle)"}`,
             textAlign: "center",
             cursor: "pointer",
             transition: "all 0.15s ease",
           }}
         >
           <span style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Bot Lane</span>
-          <div style={{ fontSize: "15px", fontWeight: 800, color: "#a855f7", marginTop: "2px" }}>
+          <div style={{ fontSize: "15px", fontWeight: 800, color: "var(--flag)", marginTop: "2px" }}>
             {botGanks.length} Ganks
           </div>
         </div>
@@ -186,7 +186,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
           onClick={() => setSelectedOutcome("all")}
           style={{
             background: selectedOutcome === "all" ? "var(--accent-violet-soft)" : "var(--bg-app)",
-            color: selectedOutcome === "all" ? "#fff" : "var(--text-muted)",
+            color: selectedOutcome === "all" ? "var(--text)" : "var(--text-muted)",
             border: "1px solid var(--border-subtle)",
             borderRadius: "4px",
             padding: "3px 8px",
@@ -200,8 +200,8 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <button
           onClick={() => setSelectedOutcome("success")}
           style={{
-            background: selectedOutcome === "success" ? "rgba(34, 197, 94, 0.2)" : "var(--bg-app)",
-            color: selectedOutcome === "success" ? "#22c55e" : "var(--text-muted)",
+            background: selectedOutcome === "success" ? "color-mix(in srgb, var(--color-victory) 20%, transparent)" : "var(--bg-app)",
+            color: selectedOutcome === "success" ? "var(--color-victory)" : "var(--text-muted)",
             border: "1px solid var(--border-subtle)",
             borderRadius: "4px",
             padding: "3px 8px",
@@ -215,8 +215,8 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <button
           onClick={() => setSelectedOutcome("neutral")}
           style={{
-            background: selectedOutcome === "neutral" ? "rgba(251, 191, 36, 0.2)" : "var(--bg-app)",
-            color: selectedOutcome === "neutral" ? "#fbbf24" : "var(--text-muted)",
+            background: selectedOutcome === "neutral" ? "color-mix(in srgb, var(--color-objective) 20%, transparent)" : "var(--bg-app)",
+            color: selectedOutcome === "neutral" ? "var(--color-objective)" : "var(--text-muted)",
             border: "1px solid var(--border-subtle)",
             borderRadius: "4px",
             padding: "3px 8px",
@@ -230,8 +230,8 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
         <button
           onClick={() => setSelectedOutcome("failed")}
           style={{
-            background: selectedOutcome === "failed" ? "rgba(239, 68, 68, 0.2)" : "var(--bg-app)",
-            color: selectedOutcome === "failed" ? "#ef4444" : "var(--text-muted)",
+            background: selectedOutcome === "failed" ? "color-mix(in srgb, var(--color-defeat) 20%, transparent)" : "var(--bg-app)",
+            color: selectedOutcome === "failed" ? "var(--color-defeat)" : "var(--text-muted)",
             border: "1px solid var(--border-subtle)",
             borderRadius: "4px",
             padding: "3px 8px",
@@ -252,7 +252,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
             const isNeutral = item.outcome === "neutral";
             const isFailed = item.outcome === "failed";
 
-            const accentColor = isSuccess ? "#22c55e" : isNeutral ? "#fbbf24" : "#ef4444";
+            const accentColor = isSuccess ? "var(--color-victory)" : isNeutral ? "var(--color-objective)" : "var(--color-defeat)";
 
             return (
               <div
@@ -285,7 +285,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                     >
                       {formatTime(item.marker.time)}
                     </span>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#fff" }}>
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>
                       {item.marker.description}
                     </span>
                     <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800 }}>
@@ -295,17 +295,17 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
 
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     {isSuccess && (
-                      <span style={{ fontSize: "11px", color: "#22c55e", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: "11px", color: "var(--color-victory)", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
                         <CheckCircle2 size={13} /> Efectivo
                       </span>
                     )}
                     {isNeutral && (
-                      <span style={{ fontSize: "11px", color: "#fbbf24", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: "11px", color: "var(--color-objective)", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
                         <AlertCircle size={13} /> Sin resultado
                       </span>
                     )}
                     {isFailed && (
-                      <span style={{ fontSize: "11px", color: "#ef4444", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
+                      <span style={{ fontSize: "11px", color: "var(--color-defeat)", fontWeight: 800, display: "flex", alignItems: "center", gap: 3 }}>
                         <XCircle size={13} /> Fallido / Muerte
                       </span>
                     )}
@@ -318,21 +318,21 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                 {/* Análisis Táctico de Entrada (Flanqueo vs Entrada Directa) */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255, 255, 255, 0.03)", padding: "4px 8px", borderRadius: "4px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>
-                    <Compass size={12} color={item.isFlank ? "#38bdf8" : "var(--text-muted)"} />
+                    <Compass size={12} color={item.isFlank ? "var(--accent-blue)" : "var(--text-muted)"} />
                     <span>Ángulo de Entrada: <b>{item.isFlank ? "Cortar Paso / Flanqueo por detrás" : "Entrada Frontal / Directa en línea"}</b></span>
                   </div>
                 </div>
 
                 {/* Consejo de Coaching Práctico */}
                 {isNeutral && !item.isFlank && (
-                  <div style={{ fontSize: "11px", color: "#fbbf24", display: "flex", alignItems: "center", gap: "6px", background: "rgba(251, 191, 36, 0.08)", padding: "6px", borderRadius: "4px" }}>
+                  <div style={{ fontSize: "11px", color: "var(--color-objective)", display: "flex", alignItems: "center", gap: "6px", background: "color-mix(in srgb, var(--color-objective) 8%, transparent)", padding: "6px", borderRadius: "4px" }}>
                     <Lightbulb size={13} />
                     <span>Consejo: Entrada frontal detectada. Entrar en línea recta facilitó la huida del rival. En la próxima, rodea por el río/tribush para cortarle el paso hacia su torre.</span>
                   </div>
                 )}
 
                 {isNeutral && item.isFlank && (
-                  <div style={{ fontSize: "11px", color: "#38bdf8", display: "flex", alignItems: "center", gap: "6px", background: "rgba(56, 189, 248, 0.08)", padding: "6px", borderRadius: "4px" }}>
+                  <div style={{ fontSize: "11px", color: "var(--accent-blue)", display: "flex", alignItems: "center", gap: "6px", background: "color-mix(in srgb, var(--accent-blue) 8%, transparent)", padding: "6px", borderRadius: "4px" }}>
                     <Lightbulb size={13} />
                     <span>Consejo: Excelente ángulo cortando la retirada. Revisa el clip para comprobar si usó Destello o si faltó sincronizar tu habilidad de control (CC).</span>
                   </div>

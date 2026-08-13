@@ -254,7 +254,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 720,
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "#fff" },
+  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)" },
   bindings: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
   bindingRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },

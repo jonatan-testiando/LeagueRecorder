@@ -86,7 +86,7 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
         {/* Badge Superior Izquierdo: Telemetría de Oro en Tiempo Real y Reloj MM:SS */}
         <div
           style={{
-            background: "rgba(13, 17, 23, 0.9)",
+            background: "color-mix(in srgb, var(--ground) 90%, transparent)",
             backdropFilter: "blur(12px)",
             border: "1px solid rgba(255, 255, 255, 0.15)",
             borderRadius: "8px",
@@ -99,7 +99,7 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
         >
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <Tv size={14} color="var(--accent-violet)" />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 800, color: "#fff" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 800, color: "var(--text)" }}>
               {formattedClock}
             </span>
           </div>
@@ -115,9 +115,9 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
                 fontWeight: 800,
                 padding: "3px 8px",
                 borderRadius: "6px",
-                background: teamGoldDiff >= 0 ? "rgba(34, 197, 94, 0.25)" : "rgba(239, 68, 68, 0.25)",
-                color: teamGoldDiff >= 0 ? "#22c55e" : "#ef4444",
-                border: `1px solid ${teamGoldDiff >= 0 ? "rgba(34, 197, 94, 0.4)" : "rgba(239, 68, 68, 0.4)"}`,
+                background: teamGoldDiff >= 0 ? "color-mix(in srgb, var(--color-victory) 25%, transparent)" : "color-mix(in srgb, var(--color-defeat) 25%, transparent)",
+                color: teamGoldDiff >= 0 ? "var(--color-victory)" : "var(--color-defeat)",
+                border: `1px solid ${teamGoldDiff >= 0 ? "color-mix(in srgb, var(--color-victory) 40%, transparent)" : "color-mix(in srgb, var(--color-defeat) 40%, transparent)"}`,
                 transition: "all 0.1s linear",
               }}
               title="Diferencia de Oro total de tu Equipo vs Equipo Enemigo (Actualizado en tiempo real segundo a segundo)"
@@ -151,9 +151,9 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
                 fontWeight: 800,
                 padding: "3px 8px",
                 borderRadius: "6px",
-                background: selfGoldDiff >= 0 ? "rgba(56, 189, 248, 0.25)" : "rgba(251, 191, 36, 0.25)",
-                color: selfGoldDiff >= 0 ? "#38bdf8" : "#fbbf24",
-                border: `1px solid ${selfGoldDiff >= 0 ? "rgba(56, 189, 248, 0.4)" : "rgba(251, 191, 36, 0.4)"}`,
+                background: selfGoldDiff >= 0 ? "color-mix(in srgb, var(--accent-blue) 25%, transparent)" : "color-mix(in srgb, var(--color-objective) 25%, transparent)",
+                color: selfGoldDiff >= 0 ? "var(--accent-blue)" : "var(--color-objective)",
+                border: `1px solid ${selfGoldDiff >= 0 ? "color-mix(in srgb, var(--accent-blue) 40%, transparent)" : "color-mix(in srgb, var(--color-objective) 40%, transparent)"}`,
                 transition: "all 0.1s linear",
               }}
               title="Tu diferencia de Oro individual contra tu rival directo de rol (Jungla rival) en tiempo real"
@@ -170,8 +170,8 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
           {isCameraSnap && (
             <div
               style={{
-                background: "linear-gradient(135deg, rgba(129, 140, 248, 0.9), rgba(59, 130, 246, 0.9))",
-                color: "#fff",
+                background: "linear-gradient(135deg, color-mix(in srgb, var(--flag) 90%, transparent), color-mix(in srgb, var(--accent-blue) 90%, transparent))",
+                color: "var(--text)",
                 fontSize: "11px",
                 fontWeight: 800,
                 padding: "6px 12px",
@@ -179,7 +179,7 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
-                boxShadow: "0 0 16px rgba(129, 140, 248, 0.6)",
+                boxShadow: "0 0 16px color-mix(in srgb, var(--flag) 60%, transparent)",
                 animation: "pulse 1s infinite alternate",
               }}
             >
@@ -192,14 +192,14 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
           {match.apm && (
             <div
               style={{
-                background: "rgba(13, 17, 23, 0.9)",
+                background: "color-mix(in srgb, var(--ground) 90%, transparent)",
                 backdropFilter: "blur(12px)",
                 border: "1px solid rgba(255, 255, 255, 0.15)",
                 borderRadius: "8px",
                 padding: "6px 10px",
                 fontSize: "11px",
                 fontWeight: 800,
-                color: "#38bdf8",
+                color: "var(--accent-blue)",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px",
@@ -219,12 +219,12 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
           style={{
             alignSelf: "center",
             marginBottom: "40px",
-            background: "rgba(18, 23, 33, 0.92)",
+            background: "color-mix(in srgb, var(--panel) 92%, transparent)",
             backdropFilter: "blur(16px)",
             border: "1px solid var(--accent-violet-soft)",
             borderRadius: "30px",
             padding: "8px 18px",
-            color: "#fff",
+            color: "var(--text)",
             fontSize: "12px",
             fontWeight: 800,
             display: "flex",

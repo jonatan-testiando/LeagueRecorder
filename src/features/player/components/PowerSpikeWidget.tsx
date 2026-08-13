@@ -43,7 +43,7 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
       style={{
         backgroundColor: "var(--bg-card)",
         border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid #fbbf24",
+        borderTop: "3px solid var(--color-objective)",
         borderRadius: "var(--radius-lg)",
         padding: "16px",
         display: "flex",
@@ -53,8 +53,8 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
-          <Zap size={16} color="#fbbf24" />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
+          <Zap size={16} color="var(--color-objective)" />
           <span>Línea de Compras y Power Spikes</span>
         </div>
         <span
@@ -63,9 +63,9 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: "12px",
-            background: "rgba(251, 191, 36, 0.15)",
-            color: "#fbbf24",
-            border: "1px solid rgba(251, 191, 36, 0.3)",
+            background: "color-mix(in srgb, var(--color-objective) 15%, transparent)",
+            color: "var(--color-objective)",
+            border: "1px solid color-mix(in srgb, var(--color-objective) 30%, transparent)",
           }}
         >
           {itemPurchases.length} Compras clave
@@ -115,7 +115,7 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
                 {formatTime(item.purchase.time)}
               </span>
               {item.killsAfter > 0 && (
-                <span style={{ fontSize: "10px", color: "#22c55e", fontWeight: 800 }}>
+                <span style={{ fontSize: "10px", color: "var(--color-victory)", fontWeight: 800 }}>
                   +{item.killsAfter} Kills
                 </span>
               )}

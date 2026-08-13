@@ -117,9 +117,9 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
           
           {hardwareInfo && isProcessing && (
             <span style={{
-              color: "#10b981",
+              color: "var(--color-victory)",
               fontSize: "12px",
-              backgroundColor: "rgba(16, 185, 129, 0.1)",
+              backgroundColor: "color-mix(in srgb, var(--color-victory) 10%, transparent)",
               padding: "4px 8px",
               borderRadius: "4px",
               display: "inline-block",
@@ -163,7 +163,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
         {vods.map((vod) => (
           <div key={vod.id} className="card card-interactive" style={styles.card}>
             <div style={styles.cardInfo}>
-              <h4 style={{ margin: 0, color: "#fff" }}>{vod.champion}</h4>
+              <h4 style={{ margin: 0, color: "var(--text)" }}>{vod.champion}</h4>
               <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>{vod.date}</span>
             </div>
             <div style={{display: "flex", alignItems: "center", gap: "var(--space-2)"}}>
@@ -209,7 +209,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: "var(--font-2xl)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
   },
   pageSubtitle: {
     margin: "var(--space-2) 0 0 0",
@@ -228,7 +228,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
     padding: "var(--space-3) var(--space-6)",
     backgroundColor: "var(--accent-violet)",
-    color: "#fff",
+    color: "var(--text)",
     border: "none",
     borderRadius: "var(--radius-md)",
     fontWeight: 600,

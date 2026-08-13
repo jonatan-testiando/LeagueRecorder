@@ -41,11 +41,11 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
   };
 
   const getMarkerColor = (type: string) => {
-    if (type === "kill") return "#22c55e";
-    if (type === "death") return "#ef4444";
-    if (type === "dragon" || type === "herald") return "#f59e0b";
-    if (type === "tower" || type === "plate") return "#38bdf8";
-    return "#818cf8";
+    if (type === "kill") return "var(--color-victory)";
+    if (type === "death") return "var(--color-defeat)";
+    if (type === "dragon" || type === "herald") return "var(--color-objective)";
+    if (type === "tower" || type === "plate") return "var(--accent-blue)";
+    return "var(--flag)";
   };
 
   return (
@@ -60,7 +60,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
       boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
           <Map size={16} color="var(--accent-violet)" />
           <span>Mapa Táctico de la Grieta ({validMarkers.length} Eventos)</span>
         </div>
@@ -69,7 +69,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
             onClick={() => setFilter("all")}
             style={{
               background: filter === "all" ? "var(--accent-violet-soft)" : "transparent",
-              color: filter === "all" ? "#fff" : "var(--text-muted)",
+              color: filter === "all" ? "var(--text)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -83,8 +83,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
           <button
             onClick={() => setFilter("kill")}
             style={{
-              background: filter === "kill" ? "rgba(34, 197, 94, 0.2)" : "transparent",
-              color: filter === "kill" ? "#22c55e" : "var(--text-muted)",
+              background: filter === "kill" ? "color-mix(in srgb, var(--color-victory) 20%, transparent)" : "transparent",
+              color: filter === "kill" ? "var(--color-victory)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -98,8 +98,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
           <button
             onClick={() => setFilter("death")}
             style={{
-              background: filter === "death" ? "rgba(239, 68, 68, 0.2)" : "transparent",
-              color: filter === "death" ? "#ef4444" : "var(--text-muted)",
+              background: filter === "death" ? "color-mix(in srgb, var(--color-defeat) 20%, transparent)" : "transparent",
+              color: filter === "death" ? "var(--color-defeat)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -117,7 +117,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
         position: "relative",
         width: "100%",
         aspectRatio: "1 / 1",
-        background: "#090d14",
+        background: "var(--sunken)",
         borderRadius: "var(--radius-md)",
         overflow: "hidden",
         border: "1px solid var(--border-subtle)",
@@ -158,7 +158,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
                 height: "18px",
                 borderRadius: "50%",
                 background: color,
-                border: "2px solid #fff",
+                border: "2px solid var(--text)",
                 boxShadow: `0 0 10px ${color}`,
                 cursor: "pointer",
                 zIndex: activeMarker === m ? 20 : 10,
@@ -175,12 +175,12 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
             bottom: "12px",
             left: "12px",
             right: "12px",
-            background: "rgba(18, 23, 33, 0.95)",
+            background: "color-mix(in srgb, var(--panel) 95%, transparent)",
             border: "1px solid var(--border-strong)",
             borderRadius: "6px",
             padding: "8px 12px",
             fontSize: "12px",
-            color: "#fff",
+            color: "var(--text)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",

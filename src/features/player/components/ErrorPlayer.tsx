@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { motion, AnimatePresence } from "framer-motion";
+import { mix } from "../../../core/color";
 
 const streamUrl = (path: string): string => `http://stream.localhost/${encodeURIComponent(path)}`;
 
@@ -157,7 +158,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             <button style={styles.backBtn} onClick={onClose}>
               <ChevronLeft size={20} /> Back to Gallery
             </button>
-            <div style={{ color: "#fff", fontWeight: "bold" }}>{clip.name}</div>
+            <div style={{ color: "var(--text)", fontWeight: "bold" }}>{clip.name}</div>
             <div style={{ width: "120px" }}></div>
           </div>
 
@@ -233,7 +234,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             })}
             <div style={{ 
               position: "absolute", top: 0, bottom: 0, width: "2px", 
-              backgroundColor: "#fff", left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, 
+              backgroundColor: "var(--text)", left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, 
               boxShadow: "0 0 8px rgba(255,255,255,0.8)", zIndex: 5, pointerEvents: "none" 
             }} />
           </div>
@@ -313,7 +314,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                       {formatTime(ev.time)}
                     </span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                      <div style={{...styles.toneBadge, color: conf.color, backgroundColor: `${conf.color}22`}}>
+                      <div style={{...styles.toneBadge, color: conf.color, backgroundColor: mix(conf.color, 13)}}>
                         {conf.icon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{ev.category}</span>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); setEditEventId(ev.id); setNoteText(ev.text); setNoteCategory(ev.category); seekTo(ev.time, false); setIsAddingMode(true); }} style={styles.iconBtn}>
@@ -339,9 +340,9 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { display: "flex", width: "100%", height: "100%", backgroundColor: "#000", overflow: "hidden" },
+  container: { display: "flex", width: "100%", height: "100%", backgroundColor: "var(--sunken)", overflow: "hidden" },
   leftColumn: { flex: 1, display: "flex", flexDirection: "column", position: "relative" },
-  videoWrapper: { flex: 1, position: "relative", backgroundColor: "#000", display: "flex", flexDirection: "column" },
+  videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--sunken)", display: "flex", flexDirection: "column" },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "16px", background: "linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
   backBtn: { background: "transparent", color: "var(--text-secondary)", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: "bold" },
   video: { width: "100%", height: "100%", objectFit: "contain", flex: 1 },
@@ -350,25 +351,25 @@ const styles: Record<string, React.CSSProperties> = {
     background: "linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%)",
     display: "flex", alignItems: "center", gap: "16px", zIndex: 20,
   },
-  videoPlayBtn: { background: "transparent", border: "none", color: "#fff", cursor: "pointer", display: "flex" },
+  videoPlayBtn: { background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", display: "flex" },
   volumeContainer: { display: "flex", alignItems: "center", gap: "8px" },
-  videoTime: { color: "#fff", fontSize: "13px", fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+  videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   timelineArea: { height: "60px", backgroundColor: "var(--bg-panel)", borderTop: "1px solid var(--border-subtle)", padding: "26px 32px" },
   timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--bg-card)", borderRadius: "4px", cursor: "pointer" },
   rightColumn: { width: "340px", backgroundColor: "var(--bg-sidebar)", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" },
   reviewHeader: { padding: "20px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex" },
-  reviewTitle: { fontSize: "18px", fontWeight: 800, color: "#fff" },
+  reviewTitle: { fontSize: "18px", fontWeight: 800, color: "var(--text)" },
   reviewList: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
   reviewCard: { padding: "12px", borderRadius: "8px", border: "1px solid var(--border-subtle)", cursor: "pointer", transition: "all 0.2s" },
   reviewCardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
   toneBadge: { padding: "2px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" },
   reviewCardBody: { fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 },
   reviewCardTitle: { wordBreak: "break-word" },
-  addBtn: { background: "var(--accent-violet)", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" },
+  addBtn: { background: "var(--accent-violet)", color: "var(--text)", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" },
   addForm: { backgroundColor: "var(--bg-card)", padding: "16px", borderRadius: "8px", border: "1px solid var(--accent-violet)" },
-  select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "#fff", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
-  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "#fff", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
+  select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
+  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
   cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
-  saveBtn: { background: "var(--accent-violet)", color: "#fff", border: "none", padding: "6px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
+  saveBtn: { background: "var(--accent-violet)", color: "var(--text)", border: "none", padding: "6px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

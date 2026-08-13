@@ -42,7 +42,7 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
       style={{
         backgroundColor: "var(--bg-card)",
         border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid #ef4444",
+        borderTop: "3px solid var(--color-defeat)",
         borderRadius: "var(--radius-lg)",
         padding: "16px",
         display: "flex",
@@ -52,8 +52,8 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
-          <EyeOff size={16} color="#ef4444" />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
+          <EyeOff size={16} color="var(--color-defeat)" />
           <span>Diagnóstico de Conciencia de Mapa</span>
         </div>
         <span
@@ -62,9 +62,9 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
             fontWeight: 800,
             padding: "2px 8px",
             borderRadius: "12px",
-            background: totalBlindCount > 0 ? "rgba(239, 68, 68, 0.15)" : "rgba(34, 197, 94, 0.15)",
-            color: totalBlindCount > 0 ? "#ef4444" : "#22c55e",
-            border: `1px solid ${totalBlindCount > 0 ? "rgba(239, 68, 68, 0.3)" : "rgba(34, 197, 94, 0.3)"}`,
+            background: totalBlindCount > 0 ? "color-mix(in srgb, var(--color-defeat) 15%, transparent)" : "color-mix(in srgb, var(--color-victory) 15%, transparent)",
+            color: totalBlindCount > 0 ? "var(--color-defeat)" : "var(--color-victory)",
+            border: `1px solid ${totalBlindCount > 0 ? "color-mix(in srgb, var(--color-defeat) 30%, transparent)" : "color-mix(in srgb, var(--color-victory) 30%, transparent)"}`,
           }}
         >
           {totalBlindCount > 0 ? `${totalBlindCount} Muertes a ciegas` : "Excelente visión"}
@@ -105,16 +105,16 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
               >
                 {formatTime(item.marker.time)}
               </span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "#fff" }}>
+              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)" }}>
                 {item.isBlind ? "Muerte sin información previa" : "Chequeo de mapa registrado"}
               </span>
             </div>
             {item.isBlind ? (
-              <span style={{ fontSize: "11px", color: "#ef4444", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontSize: "11px", color: "var(--color-defeat)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
                 <AlertTriangle size={12} /> A ciegas
               </span>
             ) : (
-              <span style={{ fontSize: "11px", color: "#22c55e", fontWeight: 700 }}>
+              <span style={{ fontSize: "11px", color: "var(--color-victory)", fontWeight: 700 }}>
                 {item.snapsCount} miradas
               </span>
             )}

@@ -315,7 +315,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
     fontSize: "var(--font-md)",
     fontWeight: 700,
-    color: "#fff",
+    color: "var(--text)",
   },
   recordDate: { fontSize: "var(--font-xs)", color: "var(--text-muted)", fontWeight: 500 },
   recordMeta: {
@@ -347,7 +347,7 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.08em",
     fontWeight: 700,
   },
-  statValue: { fontSize: "var(--font-xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "#fff" },
+  statValue: { fontSize: "var(--font-xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text)" },
   splitText: { fontSize: "var(--font-xs)", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)" },
   question: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
@@ -356,7 +356,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-3)",
     fontSize: "var(--font-md)",
-    color: "#fff",
+    color: "var(--text)",
     fontWeight: 600,
   },
   questionNum: {

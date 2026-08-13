@@ -370,7 +370,7 @@ export const SettingsPanel: React.FC = () => {
                   width: `${downloadProgress}%`, 
                   height: "100%", 
                   background: "var(--gradient-violet)",
-                  boxShadow: "0 0 10px rgba(168, 85, 247, 0.5)",
+                  boxShadow: "0 0 10px color-mix(in srgb, var(--flag) 50%, transparent)",
                   transition: "width 0.2s ease-out",
                   borderRadius: "5px"
                 }} />
@@ -471,7 +471,7 @@ export const SettingsPanel: React.FC = () => {
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--bg-app)",
                   borderColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.fps === 60 ? "#fff" : "var(--text-secondary)"
+                  color: video?.fps === 60 ? "var(--text)" : "var(--text-secondary)"
                 }}
               >
                 60 FPS
@@ -482,7 +482,7 @@ export const SettingsPanel: React.FC = () => {
                   ...styles.selectBtn,
                   backgroundColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--bg-app)",
                   borderColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--border-strong)",
-                  color: video?.fps === 30 ? "#fff" : "var(--text-secondary)"
+                  color: video?.fps === 30 ? "var(--text)" : "var(--text-secondary)"
                 }}
               >
                 30 FPS
@@ -507,7 +507,7 @@ export const SettingsPanel: React.FC = () => {
                       ...styles.qualityBtn,
                       backgroundColor: sel ? "var(--accent-blue)" : "var(--bg-app)",
                       borderColor: sel ? "var(--accent-blue)" : "var(--border-strong)",
-                      color: sel ? "#fff" : "var(--text-secondary)",
+                      color: sel ? "var(--text)" : "var(--text-secondary)",
                     }}
                   >
                     <span>{q.label}</span>
@@ -822,7 +822,7 @@ const styles: Record<string, React.CSSProperties> = {
   btn: {
     border: "none",
     borderRadius: "var(--radius-md)",
-    color: "#fff",
+    color: "var(--text)",
     fontSize: "var(--font-sm)",
     fontWeight: 700,
     padding: "var(--space-3) var(--space-6)",

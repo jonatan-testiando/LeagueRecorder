@@ -21,6 +21,7 @@ import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
 import { styles } from "./videoPlayerStyles";
+import { mix } from "../../../core/color";
 import {
   champIcon,
   itemIcon,
@@ -565,9 +566,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
           ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
           ctx.lineWidth = 2.5 + ageRatio * 4;
-          const r = Math.floor(255 + ageRatio * (0 - 255));
-          const g = Math.floor(200 + ageRatio * (150 - 200));
-          const b = Math.floor(50 + ageRatio * (255 - 50));
+          // Rampa oro -> turquesa: lo viejo se apaga hacia el oro, lo reciente
+          // llega en turquesa. Va en números porque es canvas y `fillStyle` no
+          // entiende var(); son los mismos dos tintes del sistema.
+          const r = Math.floor(200 + ageRatio * (10 - 200));
+          const g = Math.floor(170 + ageRatio * (200 - 170));
+          const b = Math.floor(110 + ageRatio * (185 - 110));
           ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ageRatio})`;
           ctx.stroke();
         }
@@ -629,7 +633,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             preload="auto"
           />
           {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "#fff", marginTop: 8 }}>Couldn't load the video</span></div>}
+          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>Couldn't load the video</span></div>}
           <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
           
           {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
@@ -671,11 +675,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
               </button>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: "#8b949e", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
                   <MousePointer2 size={12} /> Sync
                 </span>
                 <input type="range" min="-3" max="3" step="0.1" value={mouseSync} onChange={(e) => { const val = parseFloat(e.target.value); setMouseSync(val); localStorage.setItem("mouseSyncOffset", val.toString()); }} style={{...styles.volumeSlider, width: "60px"}} />
-                <span style={{ color: "#8b949e", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
               </div>
             </div>
             <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
@@ -797,17 +801,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     width: "28px",
                     height: "28px",
                     borderColor: meta.color,
-                    background: isActive ? meta.color : "radial-gradient(circle at center, rgba(24, 28, 38, 0.95), rgba(10, 12, 16, 0.98))",
+                    background: isActive ? meta.color : "radial-gradient(circle at center, color-mix(in srgb, var(--panel) 95%, transparent), color-mix(in srgb, var(--ground) 98%, transparent))",
                     transform: `translateX(-50%) scale(${isActive ? 1.25 : 1})`,
                     boxShadow: isActive
                       ? `0 0 20px ${meta.color}, 0 0 6px ${meta.color}`
-                      : `0 0 10px ${meta.color}60, 0 3px 8px rgba(0,0,0,0.6)`,
+                      : `0 0 10px ${mix(meta.color, 38)}, 0 3px 8px rgba(0,0,0,0.6)`,
                     backdropFilter: "blur(8px)",
                     zIndex: isActive ? 10 : 5,
                   }}
                   title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label}${e.description ? " – " + e.description : ""}`).join("\n")}
                 >
-                  <span style={{ color: isActive ? "#fff" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ color: isActive ? "var(--text)" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.icon}
                   </span>
                   {count > 1 && (
@@ -819,9 +823,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       height: "16px",
                       padding: "0 4px",
                       borderRadius: "10px",
-                      background: "rgba(10, 12, 16, 0.95)",
+                      background: "color-mix(in srgb, var(--ground) 95%, transparent)",
                       border: `1.5px solid ${meta.color}`,
-                      color: "#fff",
+                      color: "var(--text)",
                       fontSize: "10px",
                       fontWeight: 800,
                       fontFamily: "var(--font-mono)",
@@ -873,7 +877,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 gap: "4px",
                 minWidth: "120px"
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", color: "#fff" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", color: "var(--text)" }}>
                   <span>{formatTime(hoverPct * duration)}</span>
                   <span style={{ color: "var(--accent-violet)" }}>
                     {apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0} APM
@@ -898,7 +902,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 top: 0, bottom: 0,
                 left: `${(clipStart / duration) * 100}%`,
                 width: `${((clipEnd - clipStart) / duration) * 100}%`,
-                backgroundColor: "rgba(61, 139, 253, 0.35)",
+                backgroundColor: "color-mix(in srgb, var(--accent-blue) 35%, transparent)",
                 borderLeft: "2px solid var(--accent-violet)",
                 borderRight: "2px solid var(--accent-violet)",
                 zIndex: 10,
@@ -932,17 +936,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         {tab === "stats" && (
           <div style={styles.tabScroll}>
             {match.is_vod ? (
-              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, rgba(61, 139, 253, 0.1) 0%, transparent 100%)" }}>
-                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), #1e5fd0)", boxShadow: "0 0 20px rgba(61,139,253,0.4)" }}>
-                  <MousePointer2 size={28} color="#fff" />
+              <div style={{ ...styles.reviewScoreCard, background: "linear-gradient(180deg, color-mix(in srgb, var(--accent-blue) 10%, transparent) 0%, transparent 100%)" }}>
+                <div style={{ ...styles.scoreIcon, background: "linear-gradient(135deg, var(--accent-violet), var(--accent-blue))", boxShadow: "0 0 20px color-mix(in srgb, var(--accent-blue) 40%, transparent)" }}>
+                  <MousePointer2 size={28} color="var(--text)" />
                 </div>
                 <h2 style={{ ...styles.scoreText, color: "var(--accent-violet)" }}>VOD</h2>
                 <p style={styles.scoreSub}>Análisis de cursor y APM de la partida importada.</p>
               </div>
             ) : (
-              <div style={{ ...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, rgba(77, 166, 255, 0.1) 0%, transparent 100%)" : "linear-gradient(180deg, rgba(255, 77, 77, 0.1) 0%, transparent 100%)" }}>
-                <div style={{ ...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, #ff4d4d, #cc0000)", boxShadow: isWin ? "0 0 20px rgba(77,166,255,0.4)" : "0 0 20px rgba(255,77,77,0.4)" }}>
-                  {isWin ? <Trophy size={28} color="#fff" /> : <XCircle size={28} color="#fff" />}
+              <div style={{ ...styles.reviewScoreCard, background: isWin ? "linear-gradient(180deg, color-mix(in srgb, var(--accent-blue) 10%, transparent) 0%, transparent 100%)" : "linear-gradient(180deg, color-mix(in srgb, var(--color-defeat) 10%, transparent) 0%, transparent 100%)" }}>
+                <div style={{ ...styles.scoreIcon, background: isWin ? "linear-gradient(135deg, var(--accent-blue), var(--accent-teal))" : "linear-gradient(135deg, var(--color-defeat), var(--color-defeat))", boxShadow: isWin ? "0 0 20px color-mix(in srgb, var(--accent-blue) 40%, transparent)" : "0 0 20px color-mix(in srgb, var(--color-defeat) 40%, transparent)" }}>
+                  {isWin ? <Trophy size={28} color="var(--text)" /> : <XCircle size={28} color="var(--text)" />}
                 </div>
                 <h2 style={{ ...styles.scoreText, color: isWin ? "var(--color-victory)" : "var(--color-defeat)" }}>{isWin ? "Victory" : "Defeat"}</h2>
                 <p style={styles.scoreSub}>Tú y tu equipo {isWin ? "ganasteis" : "perdisteis"} la partida.</p>
@@ -1123,7 +1127,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
                     <Sparkles size={16} color="var(--accent-violet)" />
                     <span>Fase Temprana (@15 min)</span>
                   </div>
@@ -1135,9 +1139,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       borderRadius: "12px",
                       textTransform: "uppercase",
                       letterSpacing: "0.5px",
-                      background: match.lane_result === "Win" ? "rgba(16, 185, 129, 0.15)" : match.lane_result === "Loss" ? "rgba(239, 68, 68, 0.15)" : "rgba(255, 255, 255, 0.1)",
-                      color: match.lane_result === "Win" ? "#10b981" : match.lane_result === "Loss" ? "#ef4444" : "var(--text-secondary)",
-                      border: `1px solid ${match.lane_result === "Win" ? "rgba(16, 185, 129, 0.3)" : match.lane_result === "Loss" ? "rgba(239, 68, 68, 0.3)" : "rgba(255, 255, 255, 0.15)"}`,
+                      background: match.lane_result === "Win" ? "color-mix(in srgb, var(--color-victory) 15%, transparent)" : match.lane_result === "Loss" ? "color-mix(in srgb, var(--color-defeat) 15%, transparent)" : "rgba(255, 255, 255, 0.1)",
+                      color: match.lane_result === "Win" ? "var(--color-victory)" : match.lane_result === "Loss" ? "var(--color-defeat)" : "var(--text-secondary)",
+                      border: `1px solid ${match.lane_result === "Win" ? "color-mix(in srgb, var(--color-victory) 30%, transparent)" : match.lane_result === "Loss" ? "color-mix(in srgb, var(--color-defeat) 30%, transparent)" : "rgba(255, 255, 255, 0.15)"}`,
                     }}>
                       {match.lane_result === "Win" ? "Victoria de Línea" : match.lane_result === "Loss" ? "Derrota de Línea" : "Línea Igualada"}
                     </span>
@@ -1148,7 +1152,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
                       <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Oro</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "#10b981" : "#ef4444" }}>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
                         {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g` : `${match.gold_diff_15}g`}
                       </div>
                     </div>
@@ -1157,7 +1161,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {match.xp_diff_15 !== undefined && match.xp_diff_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
                       <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de XP</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.xp_diff_15 >= 0 ? "#10b981" : "#ef4444" }}>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.xp_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
                         {match.xp_diff_15 >= 0 ? `+${match.xp_diff_15} XP` : `${match.xp_diff_15} XP`}
                       </div>
                     </div>
@@ -1166,7 +1170,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {match.jungle_cs_diff_15 !== undefined && match.jungle_cs_diff_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
                       <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Jungla</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "#a78bfa" }}>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "var(--flag)" }}>
                         {match.jungle_cs_diff_15 >= 0 ? `+${match.jungle_cs_diff_15} CS` : `${match.jungle_cs_diff_15} CS`}
                       </div>
                     </div>
@@ -1175,7 +1179,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {match.gank_impact_15 !== undefined && match.gank_impact_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
                       <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Presión de Ganks</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "#fbbf24" }}>
+                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "var(--color-objective)" }}>
                         {match.gank_impact_15}%
                       </div>
                     </div>
@@ -1290,14 +1294,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                           borderRadius: "8px",
                           cursor: "pointer",
                           background: isActive
-                            ? "rgba(61, 139, 253, 0.15)"
-                            : "rgba(18, 21, 29, 0.6)",
+                            ? "color-mix(in srgb, var(--accent-blue) 15%, transparent)"
+                            : "color-mix(in srgb, var(--panel) 60%, transparent)",
                           border: isActive
-                            ? "1px solid rgba(61, 139, 253, 0.4)"
+                            ? "1px solid color-mix(in srgb, var(--accent-blue) 40%, transparent)"
                             : "1px solid rgba(255, 255, 255, 0.08)",
                           borderLeft: `4px solid ${meta.color}`,
                           boxShadow: isActive
-                            ? `0 0 16px ${meta.color}30`
+                            ? `0 0 16px ${mix(meta.color, 19)}`
                             : "0 2px 8px rgba(0, 0, 0, 0.25)",
                           transition: "all 0.15s ease",
                         }}
@@ -1316,7 +1320,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {meta.icon}
                         </div>
-                        <span style={{ color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+                        <span style={{ color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
                           {meta.label}
                         </span>
                         {ev.description && (
@@ -1334,8 +1338,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                           marginLeft: "auto",
                           padding: "2px 8px",
                           borderRadius: "12px",
-                          background: `${t.color}15`,
-                          border: `1px solid ${t.color}30`,
+                          background: mix(t.color, 8),
+                          border: `1px solid ${mix(t.color, 19)}`,
                         }}>
                           {t.icon} {t.text}
                         </span>
@@ -1458,7 +1462,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               style={{
                 ...styles.ghostBtn, 
                 backgroundColor: exportType === "clip" ? "var(--accent-violet)" : "var(--color-defeat)", 
-                color: "#fff", 
+                color: "var(--text)", 
                 border: "none",
                 marginLeft: exportType === "clip" ? "auto" : 0,
                 padding: "6px 16px",

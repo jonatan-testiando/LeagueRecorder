@@ -322,7 +322,7 @@ export const RecallDrill: React.FC<{
           ) : (
             <div style={styles.gradeRow}>
               <span style={styles.gradePrompt}>
-                You said <strong style={{ color: "#fff" }}>{chosen}</strong> — were you right?
+                You said <strong style={{ color: "var(--text)" }}>{chosen}</strong> — were you right?
               </span>
               <button className="btn-ghost" style={styles.gradeBtn} onClick={() => grade(true)}>
                 <Check size={16} color="var(--color-victory)" /> Yes
@@ -349,7 +349,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "#fff" },
+  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)", maxWidth: 620 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
   optionLabel: {
@@ -370,7 +370,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#000",
+    background: "var(--sunken)",
     borderRadius: "var(--radius-lg)",
     border: "1px solid var(--border-subtle)",
     overflow: "hidden",
@@ -383,7 +383,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     letterSpacing: "0.04em",
   },
-  questionText: { fontSize: "var(--font-md)", fontWeight: 600, color: "#fff" },
+  questionText: { fontSize: "var(--font-md)", fontWeight: 600, color: "var(--text)" },
   options: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" },
   option: { padding: "8px 18px", fontSize: "var(--font-sm)" },
   gradeRow: { display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" },
@@ -413,5 +413,5 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.08em",
     fontWeight: 700,
   },
-  statValue: { fontSize: "var(--font-2xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "#fff" },
+  statValue: { fontSize: "var(--font-2xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text)" },
 };

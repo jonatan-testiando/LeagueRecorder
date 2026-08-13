@@ -207,7 +207,7 @@ export const ClipsGallery: React.FC = () => {
       <div style={styles.container}>
         <div style={styles.emptyState}>
           <Film size={48} color="var(--text-muted)" style={{ opacity: 0.5, marginBottom: 16 }} />
-          <h3 style={{ color: "#fff", margin: 0 }}>No clips yet</h3>
+          <h3 style={{ color: "var(--text)", margin: 0 }}>No clips yet</h3>
           <p style={{ color: "var(--text-muted)", marginTop: 8, textAlign: "center", maxWidth: 360 }}>
             Use the clipping tool in the player to create clips of your best moments.
           </p>
@@ -383,7 +383,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "0 0 var(--space-6) 0",
   },
   title: {
-    color: "#fff",
+    color: "var(--text)",
     margin: 0,
     fontSize: "var(--font-xl)",
   },
@@ -409,7 +409,7 @@ const styles: Record<string, React.CSSProperties> = {
   thumbnailWrapper: {
     width: "100%",
     aspectRatio: "16/9",
-    backgroundColor: "#000",
+    backgroundColor: "var(--sunken)",
     position: "relative",
   },
   videoPreview: {
@@ -424,7 +424,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
   },
   clipName: {
-    color: "#fff",
+    color: "var(--text)",
     fontSize: "var(--font-md)",
     fontWeight: 600,
     whiteSpace: "nowrap",
@@ -483,7 +483,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     background: "var(--accent-violet)",
     border: "none",
-    color: "#fff",
+    color: "var(--text)",
   },
   warn: {
     color: "var(--color-defeat)",
@@ -503,7 +503,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     minWidth: 0,
     background: "transparent",
-    color: "#fff",
+    color: "var(--text)",
     border: "none",
     fontSize: "11px",
     outline: "none",
@@ -515,7 +515,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     background: "var(--accent-blue)",
     border: "none",
-    color: "#fff",
+    color: "var(--text)",
     borderRadius: "4px",
     padding: "6px",
     cursor: "pointer",

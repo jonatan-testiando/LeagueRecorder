@@ -81,7 +81,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
       boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#fff", fontWeight: 700, fontSize: "13px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
           <TrendingUp size={16} color="var(--accent-violet)" />
           <span>Curva de Ventaja de Partida</span>
         </div>
@@ -90,7 +90,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
             onClick={() => setMode("team_gold")}
             style={{
               background: mode === "team_gold" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "team_gold" ? "#fff" : "var(--text-muted)",
+              color: mode === "team_gold" ? "var(--text)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -105,7 +105,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
             onClick={() => setMode("self_gold")}
             style={{
               background: mode === "self_gold" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "self_gold" ? "#fff" : "var(--text-muted)",
+              color: mode === "self_gold" ? "var(--text)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -120,7 +120,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
             onClick={() => setMode("self_xp")}
             style={{
               background: mode === "self_xp" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "self_xp" ? "#fff" : "var(--text-muted)",
+              color: mode === "self_xp" ? "var(--text)" : "var(--text-muted)",
               border: "none",
               borderRadius: "4px",
               padding: "4px 8px",
@@ -145,8 +145,8 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
         >
           <defs>
             <linearGradient id="goldPosGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#22c55e" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#22c55e" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="var(--color-victory)" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="var(--color-victory)" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -163,7 +163,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
           {hoverP && (
             <>
               <line x1={hoverP.x} y1="0" x2={hoverP.x} y2={height} stroke="rgba(255,255,255,0.4)" strokeDasharray="2 2" />
-              <circle cx={hoverP.x} cy={hoverP.y} r="5" fill="#fff" stroke="var(--accent-violet)" strokeWidth="2" />
+              <circle cx={hoverP.x} cy={hoverP.y} r="5" fill="var(--text)" stroke="var(--accent-violet)" strokeWidth="2" />
             </>
           )}
         </svg>
@@ -175,20 +175,20 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
             top: "-36px",
             left: `${(hoverP.x / width) * 100}%`,
             transform: "translateX(-50%)",
-            background: "rgba(18, 23, 33, 0.95)",
+            background: "color-mix(in srgb, var(--panel) 95%, transparent)",
             border: "1px solid var(--border-strong)",
             borderRadius: "6px",
             padding: "4px 8px",
             fontSize: "11px",
             fontWeight: 800,
-            color: "#fff",
+            color: "var(--text)",
             pointerEvents: "none",
             boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
             whiteSpace: "nowrap",
             zIndex: 10,
           }}>
             Min {hoverP.minute}:00 ·{" "}
-            <span style={{ color: hoverP.val >= 0 ? "#22c55e" : "#ef4444" }}>
+            <span style={{ color: hoverP.val >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
               {hoverP.val >= 0 ? `+${hoverP.val.toLocaleString()}` : hoverP.val.toLocaleString()} {mode.includes("gold") ? "g" : "XP"}
             </span>
           </div>

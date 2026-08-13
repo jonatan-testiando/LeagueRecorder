@@ -1,8 +1,13 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { HardDrive, Search, Trash2, Gamepad2 } from "lucide-react";
+import { MatchTimeline } from "./MatchTimeline";
+import { Badge } from "../../../components/ui/Badge";
+import { Metric } from "../../../components/ui/Metric";
+import { Button } from "../../../components/ui/Button";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { HardDrive, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
@@ -14,19 +19,21 @@ interface DiskSpaceInfo {
 // queueId de Riot → nombre legible de la cola.
 const queueLabel = (q?: number): string => {
   switch (q) {
-    case 420: return "Clasif. Solo/Dúo";
-    case 440: return "Clasif. Flexible";
+    case 420: return "Ranked Solo/Duo";
+    case 440: return "Ranked Flex";
     case 400: return "Normal Draft";
     case 430: return "Normal Blind";
     case 490: return "Normal";
     case 450: return "ARAM";
     case 700: return "Clash";
-    case 830: case 840: case 850: return "Co-op vs IA";
+    case 830: case 840: case 850: return "Co-op vs AI";
     case 900: case 1010: case 1900: return "URF";
-    case 0: return "Personalizada";
-    default: return "Sincronizada";
+    case 0: return "Custom";
+    default: return "Synced";
   }
 };
+
+type Filter = "all" | "unreviewed" | "defeats";
 
 interface MatchGalleryProps {
   matches: MatchMetadata[];
@@ -42,15 +49,35 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   isRecording,
 }) => {
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
 
   const parentRef = useRef<HTMLDivElement>(null);
 
+  // El buscador y los filtros existen de verdad: antes el campo estaba
+  // `disabled` con un placeholder y la fila de pestañas tenía una sola pestaña
+  // siempre activa. Un control que se ve pero no hace nada es lo que más rápido
+  // delata un prototipo, y los datos para filtrar ya estaban aquí.
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return matches.filter((m) => {
+      if (filter === "defeats" && outcome(m.result) !== "defeat") return false;
+      if (filter === "unreviewed" && (m.comments?.length ?? 0) > 0) return false;
+      if (!q) return true;
+      return (
+        m.champion.toLowerCase().includes(q) ||
+        queueLabel(m.queue).toLowerCase().includes(q) ||
+        m.date.toLowerCase().includes(q)
+      );
+    });
+  }, [matches, query, filter]);
+
   const rowVirtualizer = useVirtualizer({
-    count: matches.length,
+    count: visible.length,
     getScrollElement: () => parentRef.current,
-    // Estimación inicial; la altura real se mide con `measureElement` por si los
-    // badges hacen dos líneas en ventanas estrechas.
-    estimateSize: () => 76,
+    // Estimación inicial; la altura real se mide con `measureElement` porque la
+    // línea de tiempo hace que la fila sea más alta de lo que parece.
+    estimateSize: () => 116,
     overscan: 5,
   });
 
@@ -63,82 +90,109 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const usedGb = (diskSpace.used_bytes / (1024 * 1024 * 1024)).toFixed(1);
   const totalGb = (diskSpace.total_bytes / (1024 * 1024 * 1024)).toFixed(0);
   const pct = Math.min(100, Math.round((diskSpace.used_bytes / diskSpace.total_bytes) * 100));
+  // El disco solo pide atención cuando queda poco. Por debajo del 85% es un
+  // dato, no un aviso, y se pinta apagado.
+  const diskTight = pct >= 85;
+
+  const reviewed = matches.filter((m) => (m.comments?.length ?? 0) > 0).length;
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
-        <h1 style={styles.pageTitle}>Game Library</h1>
-        <p style={styles.pageSubtitle}>Browse and manage your recorded games</p>
-      </div>
+        <div>
+          <h1 style={styles.pageTitle}>Library</h1>
+          <div className="u-meta" style={{ marginTop: 4 }}>
+            {matches.length} games · {reviewed} reviewed · {matches.length - reviewed} to review
+          </div>
+        </div>
 
-      <div style={styles.storageCardsRow}>
-        <div className="card" style={styles.storageCard}>
-          <div style={styles.storageHeader}>
-            <div style={styles.storageIconWrapper}>
-              <HardDrive size={18} color="var(--accent-violet)" />
-            </div>
-            <div>
-              <div style={styles.storageTitle}>Local Storage</div>
-              <div style={styles.storageSubtitle}>LeagueRecorder Folder</div>
-            </div>
-            <div style={styles.storagePercent}>{pct}%</div>
-          </div>
-          <div style={styles.storageBarBg}>
-            <div style={{ ...styles.storageBarFill, width: `${pct}%`, background: "var(--accent-violet)" }} />
-          </div>
-          <div style={styles.storageFooter}>
-            <span>Used Space</span>
-            <span>{usedGb} GB of {totalGb} GB</span>
-          </div>
+        <div style={styles.tools}>
+          <label style={styles.searchBox}>
+            <Search size={14} color="var(--faint)" />
+            <input
+              type="text"
+              placeholder="champion, queue, date…"
+              aria-label="Filter games"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={styles.searchInput}
+            />
+          </label>
+          {([["all", "All"], ["unreviewed", "To review"], ["defeats", "Defeats"]] as const).map(([key, label]) => (
+            <Button
+              key={key}
+              variant="ghost"
+              size="sm"
+              aria-pressed={filter === key}
+              onClick={() => setFilter(key)}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
       </div>
 
-      <div style={styles.filtersRow}>
-        <div style={styles.searchBox}>
-          <Search size={16} color="var(--text-muted)" />
-          <input type="text" placeholder="Search games..." style={styles.searchInput} disabled />
+      <div style={styles.statusRow}>
+        <div style={styles.statusItem}>
+          <HardDrive size={14} color="var(--faint)" />
+          <span className="u-metric" style={{ fontSize: 12 }}>
+            {usedGb} / {totalGb} GB
+          </span>
+          <span style={styles.barBg}>
+            <span
+              style={{
+                ...styles.barFill,
+                width: `${pct}%`,
+                background: diskTight ? "var(--loss)" : "var(--cool-fill)",
+              }}
+            />
+          </span>
+          <span className="u-meta">{pct}%</span>
         </div>
-      </div>
 
-      <div style={styles.tabsRow}>
-        <button style={styles.tabBtnActive}>
-          League of Legends <span style={styles.tabBadge}>{matches.length}</span>
-        </button>
         {isRecording && (
-          <div style={styles.recordingIndicator}>
-            <span style={styles.recordingDot} /> RECORDING IN PROGRESS
+          <div style={styles.recording}>
+            <span className="rec-dot" /> RECORDING
           </div>
         )}
       </div>
 
       <div style={styles.tableHeader}>
-        <div style={{ ...styles.th, flex: 2 }}>GAME</div>
-        <div style={{ ...styles.th, flex: 1.5 }}>TIME</div>
-        <div style={{ ...styles.th, flex: 1.5 }}>STATS (APM)</div>
-        <div style={{ ...styles.th, flex: 1.5 }}>KDA</div>
-        <div style={{ ...styles.th, width: "40px" }} />
+        <span className="u-label" style={{ flex: 1 }}>Game</span>
+        <span className="u-label" style={styles.thNum}>KDA</span>
+        <span className="u-label" style={styles.thNum}>APM</span>
+        <span className="u-label" style={styles.thNum}>Gold @15</span>
+        <span className="u-label" style={styles.thNum}>Duration</span>
+        <span style={{ width: 36 }} />
       </div>
 
       <div style={styles.list} ref={parentRef}>
         {matches.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state__icon">
-              <Gamepad2 size={32} color="var(--text-muted)" />
-            </div>
-            <p className="empty-state__title">No games recorded yet</p>
-            <p className="empty-state__text">Play a match and it will show up here automatically.</p>
-          </div>
+          <EmptyState
+            icon={<Gamepad2 size={30} color="var(--faint)" />}
+            title="No games recorded yet"
+            text="Play a match and it will show up here automatically."
+          />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            icon={<SearchX size={30} color="var(--faint)" />}
+            title="No games match this filter"
+            text="Try a different search term, or switch back to All."
+            action={
+              <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setFilter("all"); }}>
+                Clear filters
+              </Button>
+            }
+          />
         ) : (
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const match = matches[virtualRow.index];
+              const match = visible[virtualRow.index];
               const kda = computeKDA(match.events);
               const res = outcome(match.result);
-              const resultColor =
-                res === "victory" ? "var(--color-victory)" : res === "defeat" ? "var(--color-defeat)" : "var(--border-strong)";
-              const resultBadgeBg =
-                res === "victory" ? "color-mix(in srgb, var(--win) 16%, transparent)" : res === "defeat" ? "color-mix(in srgb, var(--loss) 16%, transparent)" : "var(--raised)";
-              const resultLabel = res === "victory" ? "Victoria" : res === "defeat" ? "Derrota" : "Sin resultado";
+              const accent =
+                res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--line)";
+              const unreviewed = (match.comments?.length ?? 0) === 0;
 
               return (
                 <div
@@ -150,126 +204,100 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                     top: 0,
                     left: 0,
                     width: "100%",
-                    // El hueco entre filas va como padding para que lo recoja la medida.
                     paddingBottom: "var(--space-2)",
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
+                  {/* Sin `animateIn`: esta lista está virtualizada y la
+                      animación de entrada se redispararía al hacer scroll. */}
                   <div
+                    className="card card--interactive"
+                    style={{ ...styles.row, borderLeft: `2px solid ${accent}` }}
                     onClick={() => onSelectMatch(match)}
-                    style={{ ...styles.card, borderLeftColor: resultColor }}
-                    className="game-row"
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectMatch(match); }
+                    }}
                   >
-                    <div style={{ ...styles.td, flex: 2, flexDirection: "row", alignItems: "center", gap: "var(--space-4)" }}>
-                      <div style={{ ...styles.avatarRing, boxShadow: `0 0 0 2px ${resultColor}` }}>
-                        <ChampionAvatar champion={match.champion} size={44} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={styles.champName}>{match.champion}</div>
-                        <div style={styles.badgeRow}>
-                          <span style={{ ...styles.resultBadge, color: resultColor, background: resultBadgeBg }}>{resultLabel}</span>
-                          <span style={match.riot_match_id ? styles.rankedBadge : styles.customBadge}>
-                            {match.riot_match_id ? queueLabel(match.queue) : "Personalizada"}
-                          </span>
-                          {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                background: match.gold_diff_15 >= 0 ? "color-mix(in srgb, var(--win) 15%, transparent)" : "color-mix(in srgb, var(--loss) 15%, transparent)",
-                                color: match.gold_diff_15 >= 0 ? "var(--win)" : "var(--loss)",
-                                border: `1px solid ${match.gold_diff_15 >= 0 ? "color-mix(in srgb, var(--win) 30%, transparent)" : "color-mix(in srgb, var(--loss) 30%, transparent)"}`,
-                              }}
-                              title={`Diferencia de Oro a min 15 (${match.lane_result ?? "Even"})`}
-                            >
-                              {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g @15` : `${match.gold_diff_15}g @15`}
+                    <div style={styles.rowTop}>
+                      <div style={styles.who}>
+                        <ChampionAvatar champion={match.champion} size={34} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={styles.champ}>{match.champion}</div>
+                          <div style={styles.meta}>
+                            <Badge tone={res === "victory" ? "win" : res === "defeat" ? "loss" : "neutral"}>
+                              {res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT"}
+                            </Badge>
+                            <span className="u-meta">
+                              {match.riot_match_id ? queueLabel(match.queue) : "Custom"}
                             </span>
-                          )}
-                          {match.jungle_cs_diff_15 !== undefined && match.jungle_cs_diff_15 !== null && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                background: "color-mix(in srgb, var(--flag) 15%, transparent)",
-                                color: "var(--flag)",
-                                border: "1px solid color-mix(in srgb, var(--flag) 30%, transparent)",
-                              }}
-                              title="Diferencia de CS de Jungla a min 15"
-                            >
-                              {match.jungle_cs_diff_15 >= 0 ? `+${match.jungle_cs_diff_15} JG CS` : `${match.jungle_cs_diff_15} JG CS`}
-                            </span>
-                          )}
-                          {match.gank_impact_15 !== undefined && match.gank_impact_15 !== null && (
-                            <span
-                              style={{
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                padding: "2px 6px",
-                                borderRadius: "4px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                background: "color-mix(in srgb, var(--gold) 15%, transparent)",
-                                color: "var(--gold)",
-                                border: "1px solid color-mix(in srgb, var(--gold) 30%, transparent)",
-                              }}
-                              title="Participación en ganks en los primeros 15 min"
-                            >
-                              Gank: {match.gank_impact_15}%
-                            </span>
-                          )}
+                            <span className="u-meta">{match.date.split(" ")[0]}</span>
+                            {unreviewed && (
+                              <span className="u-meta" style={{ color: "var(--flag)" }}>· to review</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div style={{ ...styles.td, flex: 1.5 }}>
-                      <div style={styles.primaryText}>{match.date.split(" ")[0]}</div>
-                      <div style={styles.secondaryText}>{formatDuration(match.game_duration)}</div>
-                    </div>
+                      <Metric
+                        value={
+                          match.kda
+                            ? match.kda.replace(/\//g, " / ")
+                            : <>{kda.kills} / <span style={{ color: "var(--loss)" }}>{kda.deaths}</span> / {kda.assists}</>
+                        }
+                        label="K D A"
+                        title={`${kdaRatio(kda)} KDA`}
+                      />
+                      <Metric value={Math.round(match.apm || 0)} label="APM" />
+                      <Metric
+                        value={
+                          match.gold_diff_15 === undefined || match.gold_diff_15 === null
+                            ? "—"
+                            : `${match.gold_diff_15 >= 0 ? "+" : "−"}${Math.abs(match.gold_diff_15)}`
+                        }
+                        label="Gold @15"
+                        tone={
+                          match.gold_diff_15 === undefined || match.gold_diff_15 === null
+                            ? "muted"
+                            : match.gold_diff_15 >= 0 ? "win" : "loss"
+                        }
+                        title={match.lane_result ? `Lane: ${match.lane_result}` : undefined}
+                      />
+                      <Metric value={formatDuration(match.game_duration)} label="Dur." />
 
-                    <div style={{ ...styles.td, flex: 1.5 }}>
-                      <div style={styles.primaryText}>{Math.round(match.apm || 0)} <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 500 }}>APM</span></div>
-                      <div style={styles.secondaryText}>Acciones por minuto</div>
-                    </div>
-
-                    <div style={{ ...styles.td, flex: 1.5 }}>
-                      <div style={styles.primaryText}>
-                        {match.kda ? (
-                          <span>{match.kda.replace(/\//g, " / ")}</span>
-                        ) : (
-                          <>{kda.kills} / <span style={{ color: "var(--color-defeat)" }}>{kda.deaths}</span> / {kda.assists}</>
-                        )}
+                      <div style={{ width: 36, display: "flex", justifyContent: "flex-end" }}>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          title="Delete game"
+                          aria-label={`Delete ${match.champion} game`}
+                          onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
+                          icon={<Trash2 size={15} />}
+                        />
                       </div>
-                      <div style={styles.secondaryText}>
-                        {match.gold_earned ? `${(match.gold_earned / 1000).toFixed(1)}k oro` : `${kdaRatio(kda)} KDA`}
-                      </div>
                     </div>
 
-                    <div style={{ ...styles.td, width: "40px", justifyContent: "center", alignItems: "flex-end" }}>
-                      <button
-                        className="icon-btn icon-btn--danger"
-                        onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                        title="Eliminar partida"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
+                    <MatchTimeline
+                      events={match.events}
+                      duration={match.game_duration}
+                      apmSeries={match.apm_series}
+                      cameraSnaps={match.camera_snaps}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+      </div>
+
+      <div className="mtl-legend" style={styles.legend}>
+        <span><i style={{ background: "var(--loss)" }} />Death</span>
+        <span><i style={{ background: "var(--win)" }} />Kill</span>
+        <span><i style={{ background: "var(--gold)" }} />Objective</span>
+        <span><i style={{ background: "var(--cool-fill)" }} />Structure</span>
+        <span><i style={{ background: "var(--apm-line)" }} />APM</span>
       </div>
     </div>
   );
@@ -281,107 +309,34 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    padding: "var(--space-8) 10%",
+    padding: "var(--space-6) var(--space-8)",
     boxSizing: "border-box",
   },
   header: {
-    marginBottom: "var(--space-6)",
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: "var(--space-5)",
+    marginBottom: "var(--space-4)",
   },
   pageTitle: {
     margin: 0,
-    fontSize: "var(--font-2xl)",
-    fontWeight: 700,
-    color: "var(--text)",
+    fontSize: "var(--font-xl)",
   },
-  pageSubtitle: {
-    margin: "var(--space-2) 0 0 0",
-    fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
-  },
-  storageCardsRow: {
-    display: "flex",
-    gap: "var(--space-4)",
-    marginBottom: "var(--space-6)",
-  },
-  storageCard: {
-    flex: 1,
-    backgroundColor: "var(--bg-card)",
-    borderRadius: "var(--radius-lg)",
-    padding: "var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-    border: "1px solid var(--border-subtle)",
-  },
-  storageHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-  },
-  storageIconWrapper: {
-    width: "36px",
-    height: "36px",
-    borderRadius: "var(--radius-md)",
-    backgroundColor: "var(--bg-elevated)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  storageTitle: {
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    color: "var(--text)",
+  tools: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
-  },
-  storageSubtitle: {
-    fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
-  },
-  proBadge: {
-    backgroundColor: "var(--accent-violet)",
-    color: "var(--text)",
-    fontSize: "10px",
-    padding: "2px 6px",
-    borderRadius: "4px",
-    fontWeight: 700,
-  },
-  storagePercent: {
-    marginLeft: "auto",
-    fontSize: "var(--font-lg)",
-    fontWeight: 700,
-    color: "var(--text)",
-  },
-  storageBarBg: {
-    height: "4px",
-    backgroundColor: "var(--bg-elevated)",
-    borderRadius: "var(--radius-full)",
-    overflow: "hidden",
-  },
-  storageBarFill: {
-    height: "100%",
-    borderRadius: "var(--radius-full)",
-  },
-  storageFooter: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
-  },
-  filtersRow: {
-    display: "flex",
-    marginBottom: "var(--space-4)",
   },
   searchBox: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
-    backgroundColor: "var(--bg-card)",
-    border: "1px solid var(--border-subtle)",
+    background: "var(--sunken)",
+    border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-md)",
-    padding: "var(--space-2) var(--space-3)",
-    width: "300px",
+    padding: "5px var(--space-3)",
+    minWidth: "210px",
   },
   searchInput: {
     background: "transparent",
@@ -389,74 +344,55 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text)",
     outline: "none",
     width: "100%",
-    fontSize: "var(--font-sm)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "12px",
   },
-  tabsRow: {
+  statusRow: {
     display: "flex",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    padding: "var(--space-3) 0",
+    borderTop: "1px solid var(--line-soft)",
+    borderBottom: "1px solid var(--line-soft)",
+    marginBottom: "var(--space-4)",
+  },
+  statusItem: {
+    display: "flex",
+    alignItems: "center",
     gap: "var(--space-3)",
-    marginBottom: "var(--space-6)",
-    alignItems: "center",
   },
-  tabBtnActive: {
-    backgroundColor: "var(--accent-violet)",
-    color: "var(--text)",
-    border: "none",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-2) var(--space-4)",
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    cursor: "pointer",
-  },
-  tabBtnDefault: {
-    backgroundColor: "transparent",
-    color: "var(--text-secondary)",
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-2) var(--space-4)",
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    cursor: "pointer",
-  },
-  tabBadge: {
-    backgroundColor: "var(--sunken)",
-    padding: "2px 6px",
+  barBg: {
+    width: "160px",
+    height: "3px",
+    background: "var(--sunken)",
     borderRadius: "var(--radius-full)",
-    fontSize: "11px",
+    overflow: "hidden",
   },
-  recordingIndicator: {
+  barFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: "var(--radius-full)",
+  },
+  recording: {
     marginLeft: "auto",
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
-    fontSize: "11px",
-    fontWeight: 800,
-    color: "var(--color-defeat)",
-  },
-  recordingDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "var(--radius-full)",
-    backgroundColor: "var(--color-defeat)",
-    boxShadow: "0 0 8px var(--color-defeat)",
-    animation: "pulse 1.5s infinite",
+    fontFamily: "var(--font-mono)",
+    fontSize: "10px",
+    letterSpacing: "0.14em",
+    color: "var(--signal)",
   },
   tableHeader: {
     display: "flex",
-    padding: "0 var(--space-4) var(--space-3) var(--space-4)",
-    borderBottom: "1px solid var(--border-subtle)",
-    marginBottom: "var(--space-2)",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    padding: "0 var(--space-4) var(--space-2)",
+    borderBottom: "1px solid var(--line-soft)",
   },
-  th: {
-    fontSize: "11px",
-    fontWeight: 700,
-    color: "var(--text-muted)",
-    letterSpacing: "0.05em",
+  thNum: {
+    width: "84px",
+    textAlign: "right",
   },
   list: {
     display: "flex",
@@ -464,118 +400,46 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     overflowY: "auto",
     position: "relative",
+    paddingTop: "var(--space-2)",
   },
-  card: {
-    display: "flex",
-    alignItems: "stretch",
+  row: {
     padding: "var(--space-3) var(--space-4)",
-    border: "1px solid var(--border-subtle)",
-    borderLeft: "3px solid var(--border-strong)",
     borderRadius: "var(--radius-md)",
-    cursor: "pointer",
-    transition: "background 0.15s, border-color 0.15s, transform 0.1s",
   },
-  avatarRing: {
-    position: "relative",
-    borderRadius: "var(--radius-full)",
-    flexShrink: 0,
+  rowTop: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-4)",
   },
-  badgeRow: {
+  who: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    flex: 1,
+    minWidth: 0,
+  },
+  champ: {
+    fontSize: "var(--font-sm)",
+    fontWeight: 600,
+    color: "var(--text)",
+    lineHeight: 1.25,
+  },
+  meta: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
-    marginTop: "3px",
+    marginTop: "2px",
+    flexWrap: "wrap",
   },
-  resultBadge: {
-    fontSize: "10px",
-    fontWeight: 800,
-    padding: "2px 8px",
-    borderRadius: "var(--radius-full)",
+  legend: {
+    display: "flex",
+    gap: "var(--space-4)",
+    flexWrap: "wrap",
+    paddingTop: "var(--space-3)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "9px",
+    letterSpacing: "0.12em",
     textTransform: "uppercase",
-    letterSpacing: "0.4px",
+    color: "var(--faint)",
   },
-  rankedBadge: {
-    fontSize: "10px",
-    fontWeight: 700,
-    padding: "2px 8px",
-    borderRadius: "var(--radius-full)",
-    color: "var(--accent-violet)",
-    background: "var(--accent-violet-soft)",
-    border: "1px solid var(--accent-violet)",
-  },
-  customBadge: {
-    fontSize: "10px",
-    fontWeight: 700,
-    padding: "2px 8px",
-    borderRadius: "var(--radius-full)",
-    color: "var(--text-muted)",
-    background: "var(--raised)",
-    border: "1px solid var(--border-strong)",
-  },
-  td: {
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-  },
-  avatarWrapper: {
-    position: "relative",
-  },
-  resultDot: {
-    position: "absolute",
-    top: "-2px",
-    left: "-2px",
-    width: "12px",
-    height: "12px",
-    borderRadius: "var(--radius-full)",
-    border: "2px solid var(--bg-app)",
-  },
-  champName: {
-    fontSize: "var(--font-md)",
-    fontWeight: 700,
-    color: "var(--text)",
-    marginBottom: "2px",
-  },
-  gameType: {
-    fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  localBadge: {
-    fontSize: "10px",
-    border: "1px solid var(--border-strong)",
-    padding: "2px 6px",
-    borderRadius: "4px",
-    color: "var(--text-muted)",
-  },
-  primaryText: {
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-    color: "var(--text)",
-    marginBottom: "4px",
-  },
-  secondaryText: {
-    fontSize: "12px",
-    color: "var(--text-secondary)",
-  },
-  actionBtn: {
-    background: "transparent",
-    border: "none",
-    color: "var(--text-muted)",
-    cursor: "pointer",
-    padding: "var(--space-2)",
-  },
-  emptyState: {
-    padding: "var(--space-12)",
-    textAlign: "center",
-    color: "var(--text-muted)",
-  },
-  emptyIcon: {
-    fontSize: "48px",
-  },
-  emptyText: {
-    marginTop: "var(--space-4)",
-    fontSize: "var(--font-sm)",
-  }
 };

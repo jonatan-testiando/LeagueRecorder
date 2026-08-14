@@ -551,8 +551,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const resizeObserver = new ResizeObserver(() => {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
+      // En pixeles de dispositivo, no CSS: en una pantalla HiDPI el trazo salia
+      // borroso porque el buffer tenia menos resolucion que la pantalla.
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
     });
     resizeObserver.observe(canvas);
     const ctx = canvas.getContext("2d");
@@ -573,8 +576,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       const videoW = v.videoWidth || 1920;
       const videoH = v.videoHeight || 1080;
       const [spaceW, spaceH] = mouseSpace(match, videoW, videoH);
-      const scaleX = canvas.width / spaceW;
-      const scaleY = canvas.height / spaceH;
+
+      // El <video> se pinta con `object-fit: contain`, asi que cuando la
+      // proporcion del contenedor no coincide con la del video quedan barras y
+      // la imagen ocupa solo una parte. El canvas, en cambio, cubre el
+      // contenedor entero. Mapear sobre `canvas.width/height` estiraba la estela
+      // sobre las barras y la dejaba desplazada; solo cuadraba en pantalla
+      // completa, que es justo cuando las proporciones coinciden y no hay barras.
+      //
+      // Hay que mapear sobre el rectangulo donde el video se pinta de verdad.
+      const fit = Math.min(canvas.width / videoW, canvas.height / videoH);
+      const paintedW = videoW * fit;
+      const paintedH = videoH * fit;
+      const offX = (canvas.width - paintedW) / 2;
+      const offY = (canvas.height - paintedH) / 2;
+      const scaleX = paintedW / spaceW;
+      const scaleY = paintedH / spaceH;
+      const px = (x: number) => offX + x * scaleX;
+      const py = (y: number) => offY + y * scaleY;
       
       const TRAIL_DURATION = 1.0;
       const adjustedCt = ct - mouseSync;
@@ -589,8 +608,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           const p2 = moves[i+1];
           const ageRatio = Math.max(0, 1 - (adjustedCt - p2.t) / TRAIL_DURATION);
           ctx.beginPath();
-          ctx.moveTo(p1.x * scaleX, p1.y * scaleY);
-          ctx.lineTo(p2.x * scaleX, p2.y * scaleY);
+          ctx.moveTo(px(p1.x), py(p1.y));
+          ctx.lineTo(px(p2.x), py(p2.y));
           ctx.lineWidth = 2.5 + ageRatio * 4;
           // Rampa oro -> turquesa: lo viejo se apaga hacia el oro, lo reciente
           // llega en turquesa. Va en números porque es canvas y `fillStyle` no
@@ -620,14 +639,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         
         // Anillo exterior
         ctx.beginPath();
-        ctx.arc(click.x * scaleX, click.y * scaleY, radius, 0, Math.PI * 2);
+        ctx.arc(px(click.x), py(click.y), radius, 0, Math.PI * 2);
         ctx.lineWidth = 4;
         ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity * 0.8})`;
         ctx.stroke();
 
         // Núcleo interior brillante
         ctx.beginPath();
-        ctx.arc(click.x * scaleX, click.y * scaleY, radius * 0.4, 0, Math.PI * 2);
+        ctx.arc(px(click.x), py(click.y), radius * 0.4, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
         ctx.fill();
         ctx.restore();
@@ -639,6 +658,119 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       resizeObserver.disconnect();
     };
   }, [mouseEvents, mouseSync]);
+
+  // Transporte. Lo que se hace en esta pantalla es saltar entre momentos, así que
+  // eso manda en el centro; los ajustes crípticos (sincronía del rastro del ratón,
+  // capas del overlay) se van a un menú con nombres de verdad en vez de vivir
+  // sueltos y sin etiqueta en la barra principal.
+  //
+  // Va acoplado a la baraja, y solo flota sobre el vídeo en pantalla completa,
+  // que es cuando la baraja no existe.
+  const transportBar = (
+        <div className="tp" style={isFullscreen ? styles.transportOverlay : styles.transportDocked}>
+          <button
+            className="tp-b"
+            onClick={() => goToAdjacentEvent(-1)}
+            title="Previous moment"
+            aria-label="Previous moment"
+          >
+            <SkipBack size={14} fill="currentColor" />
+          </button>
+          <button
+            className="tp-b tp-b--primary"
+            onClick={handlePlayPause}
+            title={isPlaying ? "Pause" : "Play"}
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
+          </button>
+          <button
+            className="tp-b"
+            onClick={() => goToAdjacentEvent(1)}
+            title="Next moment"
+            aria-label="Next moment"
+          >
+            <SkipForward size={14} fill="currentColor" />
+          </button>
+
+          {/* Centesimas: en una herramienta de revision hace falta senalar un
+              instante, no un minuto. */}
+          <span className="tp-tc">
+            <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+            <span className="tp-tc__total"> / {formatTime(duration)}</span>
+          </span>
+
+          <span className="tp-sep" />
+
+          {/* Segmentado y no desplegable: durante una revision la velocidad se
+              cambia constantemente y un desplegable son dos clics cada vez. */}
+          <span className="tp-seg" role="group" aria-label="Playback speed">
+            {[0.25, 0.5, 1, 2].map((r) => (
+              <button
+                key={r}
+                onClick={() => setPlaybackRate(r)}
+                aria-pressed={playbackRate === r}
+                data-on={playbackRate === r ? "" : undefined}
+              >
+                {r}&times;
+              </button>
+            ))}
+          </span>
+
+          <span style={{ flex: 1, minWidth: 12 }} />
+
+          <div className="tp-vol">
+            <button className="tp-b" onClick={toggleMute} title={muted ? "Unmute" : "Mute"} aria-label={muted ? "Unmute" : "Mute"}>
+              {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
+            </button>
+            <input
+              type="range" min="0" max="1" step="0.05"
+              value={muted ? 0 : volume}
+              onChange={handleVolumeChange}
+              aria-label="Volume"
+              style={styles.volumeSlider}
+            />
+          </div>
+
+          <details className="tp-more">
+            <summary title="Playback settings" aria-label="Playback settings">
+              <MoreHorizontal size={15} />
+            </summary>
+            <div className="tp-pop">
+              <label className="tp-pop__row">
+                <span>Broadcast overlay</span>
+                <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
+              </label>
+              <label className="tp-pop__row">
+                <span>Mouse trail</span>
+                <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
+              </label>
+              <div className="tp-pop__row tp-pop__row--stack">
+                <span>
+                  Mouse trail sync
+                  <em>Shifts the trail against the video, in seconds.</em>
+                </span>
+                <div className="tp-pop__sync">
+                  <input
+                    type="range" min="-3" max="3" step="0.1" value={mouseSync}
+                    aria-label="Mouse trail sync"
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setMouseSync(val);
+                      localStorage.setItem("mouseSyncOffset", val.toString());
+                    }}
+                  />
+                  <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
+            <Maximize size={15} />
+          </button>
+        </div>
+  );
 
   return (
     <div ref={containerRef} style={styles.container}>
@@ -669,116 +801,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             visible={showEsportsHud}
           />
 
-          {/* Transporte. Lo que se hace en esta pantalla es saltar entre momentos,
-              asi que eso manda en el centro; los ajustes cripticos (sincronia del
-              rastro del raton, capas del overlay) se van a un menu con nombres de
-              verdad en vez de vivir sueltos y sin etiqueta en la barra principal. */}
-          <div className="tp" style={styles.videoProgressWrapper}>
-            <button
-              className="tp-b"
-              onClick={() => goToAdjacentEvent(-1)}
-              title="Previous moment"
-              aria-label="Previous moment"
-            >
-              <SkipBack size={14} fill="currentColor" />
-            </button>
-            <button
-              className="tp-b tp-b--primary"
-              onClick={handlePlayPause}
-              title={isPlaying ? "Pause" : "Play"}
-              aria-label={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
-            </button>
-            <button
-              className="tp-b"
-              onClick={() => goToAdjacentEvent(1)}
-              title="Next moment"
-              aria-label="Next moment"
-            >
-              <SkipForward size={14} fill="currentColor" />
-            </button>
-
-            {/* Centesimas: en una herramienta de revision hace falta senalar un
-                instante, no un minuto. */}
-            <span className="tp-tc">
-              <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-              <span className="tp-tc__total"> / {formatTime(duration)}</span>
-            </span>
-
-            <span className="tp-sep" />
-
-            {/* Segmentado y no desplegable: durante una revision la velocidad se
-                cambia constantemente y un desplegable son dos clics cada vez. */}
-            <span className="tp-seg" role="group" aria-label="Playback speed">
-              {[0.25, 0.5, 1, 2].map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setPlaybackRate(r)}
-                  aria-pressed={playbackRate === r}
-                  data-on={playbackRate === r ? "" : undefined}
-                >
-                  {r}&times;
-                </button>
-              ))}
-            </span>
-
-            <span style={{ flex: 1, minWidth: 12 }} />
-
-            <div className="tp-vol">
-              <button className="tp-b" onClick={toggleMute} title={muted ? "Unmute" : "Mute"} aria-label={muted ? "Unmute" : "Mute"}>
-                {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
-              </button>
-              <input
-                type="range" min="0" max="1" step="0.05"
-                value={muted ? 0 : volume}
-                onChange={handleVolumeChange}
-                aria-label="Volume"
-                style={styles.volumeSlider}
-              />
-            </div>
-
-            <details className="tp-more">
-              <summary title="Playback settings" aria-label="Playback settings">
-                <MoreHorizontal size={15} />
-              </summary>
-              <div className="tp-pop">
-                <label className="tp-pop__row">
-                  <span>Broadcast overlay</span>
-                  <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
-                </label>
-                <label className="tp-pop__row">
-                  <span>Mouse trail</span>
-                  <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
-                </label>
-                <div className="tp-pop__row tp-pop__row--stack">
-                  <span>
-                    Mouse trail sync
-                    <em>Shifts the trail against the video, in seconds.</em>
-                  </span>
-                  <div className="tp-pop__sync">
-                    <input
-                      type="range" min="-3" max="3" step="0.1" value={mouseSync}
-                      aria-label="Mouse trail sync"
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value);
-                        setMouseSync(val);
-                        localStorage.setItem("mouseSyncOffset", val.toString());
-                      }}
-                    />
-                    <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
-              <Maximize size={15} />
-            </button>
-          </div>
+          {isFullscreen && transportBar}
         </div>
+        {/* Transporte y linea de tiempo son la misma herramienta: antes eran una
+            barra flotando sobre el video y, separada y mas abajo, una tira con el
+            APM y los eventos que ademas hacia de barra de busqueda. Por eso el
+            centro del transporte estaba vacio: le faltaba su mitad. */}
         {!isFullscreen && (
-        <div style={styles.timelineArea}>
+        <div style={styles.deck}>
+          {transportBar}
           <div style={styles.timelineHeaderRow}>
             <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
             {/* Métricas de uso de las teclas de cámara aliada. */}

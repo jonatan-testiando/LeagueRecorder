@@ -74,16 +74,27 @@ export const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.7)",
   },
-  videoProgressWrapper: {
+  // En pantalla completa no hay baraja, asi que el transporte vuelve a flotar
+  // sobre el video.
+  transportOverlay: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     padding: "var(--space-3) var(--space-4)",
-    background: "linear-gradient(to top, rgba(0,0,0,0.8), transparent)",
+    background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)",
     display: "flex",
     alignItems: "center",
-    gap: "var(--space-3)",
+    gap: "var(--space-2)",
+  },
+  // Acoplado a la baraja: sin degradado encima del video, y separado de la tira
+  // por una linea, no por un hueco. Son una sola herramienta.
+  transportDocked: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "0 0 var(--space-3) 0",
+    borderBottom: "1px solid var(--line-soft)",
   },
   videoPlayBtn: {
     background: "transparent",
@@ -126,18 +137,19 @@ export const styles: Record<string, React.CSSProperties> = {
     appearance: "none",
     background: "var(--bg-card)",
   },
-  timelineArea: {
-    height: "150px", // Un poco más de altura para respirar
-    backgroundColor: "rgba(30, 32, 36, 0.65)", // Fondo oscuro semitransparente
+  // La "baraja": transporte + linea de tiempo + acciones, una sola superficie.
+  // Antes era un panel de cristal esmerilado flotando aparte; el desenfoque y la
+  // sombra grande son de los detalles que mas envejecen una interfaz, y ademas
+  // reforzaban la idea de que la tira era otra cosa distinta del transporte.
+  deck: {
+    height: "178px",
+    background: "var(--panel)",
     borderRadius: "var(--radius-lg)",
-    border: "1px solid rgba(255, 255, 255, 0.05)", // Borde de luz sutil
-    padding: "20px 24px", // Espaciado más generoso
+    border: "1px solid var(--line-soft)",
+    padding: "var(--space-3) var(--space-4) var(--space-4)",
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
-    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)", // Elevación suave
-    backdropFilter: "blur(12px)", // Efecto Glassmorphism
-    WebkitBackdropFilter: "blur(12px)",
+    gap: "var(--space-3)",
   },
   timelineHeaderRow: {
     display: "flex",

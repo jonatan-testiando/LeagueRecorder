@@ -112,6 +112,16 @@ pub fn save_match_comments(
     crate::storage::save_comments(&match_id, comments)
 }
 
+/// Marca o desmarca un suceso como revisado, para la cola de revisión.
+///
+/// Se guarda en el propio JSON de la partida, junto a los comentarios: revisar
+/// una partida es una tarea con estado, y ese estado tiene que sobrevivir a
+/// cerrar la app.
+#[tauri::command]
+pub fn set_event_reviewed(match_id: String, time: f64, reviewed: bool) -> Result<(), String> {
+    crate::storage::set_event_reviewed(&match_id, time, reviewed)
+}
+
 /// Rellena el scoreboard (10 jugadores) de una partida ya sincronizada con Riot. Devuelve la
 /// metadata actualizada. Para partidas antiguas sin `participants`.
 #[tauri::command]
@@ -216,24 +226,9 @@ pub async fn stop_manual_recording(
             champion: active_match.champion.lock().await.clone(),
             date: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             events: vec![
-                MatchEvent {
-                    r#type: "GameStart".to_string(),
-                    subtype: None,
-                    time: 0.0,
-                    description: "Inicio de grabación manual".to_string(),
-                },
-                MatchEvent {
-                    r#type: "ChampionKill".to_string(),
-                    subtype: Some("kill".to_string()),
-                    time: 12.5,
-                    description: "Asesinato de prueba".to_string(),
-                },
-                MatchEvent {
-                    r#type: "GameEnd".to_string(),
-                    subtype: None,
-                    time: 25.0,
-                    description: "Grabación manual finalizada".to_string(),
-                },
+                MatchEvent::plain("GameStart", None, 0.0, "Manual recording started".to_string()),
+                MatchEvent::plain("ChampionKill", Some("kill"), 12.5, "Test kill".to_string()),
+                MatchEvent::plain("GameEnd", None, 25.0, "Manual recording finished".to_string()),
             ],
             apm: 0.0,
             apm_series: Vec::new(),
@@ -357,12 +352,12 @@ pub fn spawn_background_monitor(
                     ult_state.mouse_events.lock().unwrap().clear();
 
                     // Registrar evento inicial
-                    active_match.events.lock().await.push(MatchEvent {
-                        r#type: "GameStart".to_string(),
-                        subtype: None,
-                        time: 0.0,
-                        description: "Partida Iniciada".to_string(),
-                    });
+                    active_match.events.lock().await.push(MatchEvent::plain(
+                        "GameStart",
+                        None,
+                        0.0,
+                        "Game start".to_string(),
+                    ));
 
                     // Iniciar grabación
                     let settings = video_settings_state.lock().unwrap().clone();
@@ -463,12 +458,12 @@ pub fn spawn_background_monitor(
                             // Debouncing de 8s para evitar flood
                             if gt - last_ult_time < 8.0 { continue; } 
                             last_ult_time = gt;
-                            ult_events.push(MatchEvent {
-                                r#type: "Ultimate".to_string(),
-                                subtype: Some("R".to_string()),
-                                time: gt,
-                                description: "Usaste tu Ultimate (R)".to_string(),
-                            });
+                            ult_events.push(MatchEvent::plain(
+                                "Ultimate",
+                                Some("R"),
+                                gt,
+                                "Ultimate (R)".to_string(),
+                            ));
                         }
                         if !ult_events.is_empty() {
                             active_match.events.lock().await.extend(ult_events);
@@ -686,12 +681,12 @@ async fn finalize_match(
         }
     }
     if !has_game_end {
-        active_match.events.lock().await.push(MatchEvent {
-            r#type: "GameEnd".to_string(),
-            subtype: None,
-            time: duration,
-            description: "Grabación finalizada".to_string(),
-        });
+        active_match.events.lock().await.push(MatchEvent::plain(
+            "GameEnd",
+            None,
+            duration,
+            "Recording finished".to_string(),
+        ));
     }
 
     let mut final_duration = duration;
@@ -915,19 +910,26 @@ fn map_lol_event(
         .stolen
         .as_deref()
         .map_or(false, |s| s.eq_ignore_ascii_case("true"));
-    let stolen_txt = if stolen { " (¡robado!)" } else { "" };
+    let stolen_txt = if stolen { " (stolen)" } else { "" };
+
+    // Datos estructurados del suceso. Los rellena cada rama que tenga algo que
+    // decir; el frontend compone la frase a partir de ellos y solo cae a
+    // `description` cuando vienen vacíos (partidas grabadas antes de esto).
+    let mut actor: Option<String> = None;
+    let mut target: Option<String> = None;
+    let mut detail: Option<String> = None;
 
     // (tipo, subtype, descripción)
     let (ty, subtype, description): (&str, Option<&str>, String) = match ev.event_name.as_str() {
-        "GameStart" => ("GameStart", None, "Inicio de la partida".to_string()),
+        "GameStart" => ("GameStart", None, "Game start".to_string()),
         "GameEnd" => {
             let res = ev.result.as_deref().unwrap_or("");
             if res.eq_ignore_ascii_case("win") {
-                ("GameEnd", Some("win"), "Victoria".to_string())
+                ("GameEnd", Some("win"), "Victory".to_string())
             } else if res.eq_ignore_ascii_case("lose") {
-                ("GameEnd", Some("lose"), "Derrota".to_string())
+                ("GameEnd", Some("lose"), "Defeat".to_string())
             } else {
-                ("GameEnd", None, "Fin de la partida".to_string())
+                ("GameEnd", None, "Game over".to_string())
             }
         }
         "FirstBlood" => {
@@ -936,7 +938,7 @@ fn map_lol_event(
                 (
                     "FirstBlood",
                     Some("kill"),
-                    "¡Primera sangre! La conseguiste tú".to_string(),
+                    "First blood".to_string(),
                 )
             } else {
                 return None; // primera sangre ajena: no nos interesa
@@ -946,22 +948,32 @@ fn map_lol_event(
             let killer = ev.killer_name.as_deref().unwrap_or("");
             let victim = ev.victim_name.as_deref().unwrap_or("Enemigo");
             if strip_tag(killer) == an {
+                actor = Some(an.to_string());
+                target = Some(strip_tag(victim).to_string());
                 (
                     "ChampionKill",
                     Some("kill"),
-                    format!("Mataste a {}", victim),
+                    format!("Killed {}", strip_tag(victim)),
                 )
             } else if strip_tag(victim) == an {
-                ("ChampionKill", Some("death"), format!("Te mató {}", killer))
+                actor = Some(strip_tag(killer).to_string());
+                target = Some(an.to_string());
+                (
+                    "ChampionKill",
+                    Some("death"),
+                    format!("Killed by {}", strip_tag(killer)),
+                )
             } else if ev
                 .assisters
                 .as_ref()
                 .map_or(false, |a| a.iter().any(|n| strip_tag(n) == an))
             {
+                actor = Some(strip_tag(killer).to_string());
+                target = Some(strip_tag(victim).to_string());
                 (
                     "ChampionKill",
                     Some("assist"),
-                    format!("Asististe en la muerte de {}", victim),
+                    format!("Assisted killing {}", strip_tag(victim)),
                 )
             } else {
                 return None; // kill que no te involucra
@@ -972,13 +984,16 @@ fn map_lol_event(
             if strip_tag(killer) != an {
                 return None;
             }
-            let desc = match ev.kill_streak.unwrap_or(0) {
-                2 => "¡Doble asesinato!",
-                3 => "¡Triple asesinato!",
-                4 => "¡Cuádruple asesinato!",
-                5 => "¡PENTAKILL!",
-                _ => "¡Multi-asesinato!",
+            let streak = ev.kill_streak.unwrap_or(0);
+            let desc = match streak {
+                2 => "Double kill",
+                3 => "Triple kill",
+                4 => "Quadra kill",
+                5 => "Pentakill",
+                _ => "Multi kill",
             };
+            actor = Some(an.to_string());
+            detail = Some(streak.to_string());
             ("Multikill", Some("kill"), desc.to_string())
         }
         "TurretKilled" => {
@@ -995,14 +1010,14 @@ fn map_lol_event(
                 Some(owner) if owner == player_team => (
                     "TowerKill",
                     Some("ally"),
-                    "Perdiste una torre aliada".to_string(),
+                    "Lost an allied tower".to_string(),
                 ),
                 Some(_) => (
                     "TowerKill",
                     Some("enemy"),
-                    "Destruiste una torre enemiga".to_string(),
+                    "Destroyed an enemy tower".to_string(),
                 ),
-                None => ("TowerKill", None, "Torre destruida".to_string()),
+                None => ("TowerKill", None, "Tower destroyed".to_string()),
             }
         }
         "InhibKilled" => {
@@ -1019,14 +1034,14 @@ fn map_lol_event(
                 Some(owner) if owner == player_team => (
                     "InhibKill",
                     Some("ally"),
-                    "Perdiste un inhibidor".to_string(),
+                    "Lost an allied inhibitor".to_string(),
                 ),
                 Some(_) => (
                     "InhibKill",
                     Some("enemy"),
-                    "Destruiste un inhibidor".to_string(),
+                    "Destroyed an enemy inhibitor".to_string(),
                 ),
-                None => ("InhibKill", None, "Inhibidor destruido".to_string()),
+                None => ("InhibKill", None, "Inhibitor destroyed".to_string()),
             }
         }
         "DragonKill" => {
@@ -1037,10 +1052,11 @@ fn map_lol_event(
                 team_map,
             );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
+            detail = Some(dtype.to_string());
             let desc = match ally {
-                Some(true) => format!("Tu equipo tomó el Dragón {}{}", dtype, stolen_txt),
-                Some(false) => format!("El enemigo tomó el Dragón {}{}", dtype, stolen_txt),
-                None => format!("Dragón {}{}", dtype, stolen_txt),
+                Some(true) => format!("Your team took the {} Dragon{}", dtype, stolen_txt),
+                Some(false) => format!("Enemy took the {} Dragon{}", dtype, stolen_txt),
+                None => format!("{} Dragon{}", dtype, stolen_txt),
             };
             ("DragonKill", sub, desc)
         }
@@ -1052,9 +1068,9 @@ fn map_lol_event(
             );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
             let desc = match ally {
-                Some(true) => format!("Tu equipo tomó el Heraldo de la Grieta{}", stolen_txt),
-                Some(false) => format!("El enemigo tomó el Heraldo de la Grieta{}", stolen_txt),
-                None => format!("Heraldo de la Grieta{}", stolen_txt),
+                Some(true) => format!("Your team took Rift Herald{}", stolen_txt),
+                Some(false) => format!("Enemy took Rift Herald{}", stolen_txt),
+                None => format!("Rift Herald{}", stolen_txt),
             };
             ("HeraldKill", sub, desc)
         }
@@ -1066,9 +1082,9 @@ fn map_lol_event(
             );
             let sub = ally.map(|a| if a { "ally" } else { "enemy" });
             let desc = match ally {
-                Some(true) => format!("Tu equipo mató al Barón Nashor{}", stolen_txt),
-                Some(false) => format!("El enemigo mató al Barón Nashor{}", stolen_txt),
-                None => format!("Barón Nashor{}", stolen_txt),
+                Some(true) => format!("Your team killed Baron Nashor{}", stolen_txt),
+                Some(false) => format!("Enemy killed Baron Nashor{}", stolen_txt),
+                None => format!("Baron Nashor{}", stolen_txt),
             };
             ("BaronKill", sub, desc)
         }
@@ -1080,6 +1096,15 @@ fn map_lol_event(
         subtype: subtype.map(|s| s.to_string()),
         time: (ev.event_time - game_time_offset).max(0.0),
         description,
+        actor,
+        target,
+        // "stolen" es un matiz que ya venia en la frase; se saca aparte para que
+        // el frontend pueda pintarlo como quiera.
+        detail: if stolen_txt.is_empty() { detail } else { Some(match detail {
+            Some(d) => format!("{},stolen", d),
+            None => "stolen".to_string(),
+        }) },
+        reviewed: None,
     })
 }
 

@@ -2,12 +2,54 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Un suceso de la partida.
+///
+/// `description` es texto ya montado y en español: es lo que se guardaba antes y
+/// lo que llevan todas las partidas grabadas hasta ahora, así que se conserva
+/// para no romperlas. Los campos estructurados de abajo son los que se rellenan
+/// a partir de ahora, y permiten que sea el frontend quien componga la frase —
+/// en el idioma que sea— en vez de recibirla ya escrita desde aquí.
+///
+/// Todos son `Option` y se omiten al serializar si están vacíos: un JSON viejo
+/// deserializa sin tocar nada y uno nuevo no engorda con nulls.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchEvent {
     pub r#type: String,
     pub subtype: Option<String>,
     pub time: f64,
+    /// Frase ya montada. Legado: solo se usa si no hay campos estructurados.
     pub description: String,
+
+    /// Quién lo hizo (nombre de invocador, sin tag).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor: Option<String>,
+    /// Sobre quién o qué.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// Matiz: tipo de dragón, tamaño de la racha, "stolen"…
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+
+    /// Marcado como visto en la cola de revisión.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reviewed: Option<bool>,
+}
+
+impl MatchEvent {
+    /// Constructor para los sucesos que no llevan datos estructurados
+    /// (arranque de partida, ultimates, marcas del analizador…).
+    pub fn plain(ty: &str, subtype: Option<&str>, time: f64, description: String) -> Self {
+        MatchEvent {
+            r#type: ty.to_string(),
+            subtype: subtype.map(|s| s.to_string()),
+            time,
+            description,
+            actor: None,
+            target: None,
+            detail: None,
+            reviewed: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,6 +447,26 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
 pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
     let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
     m.comments = comments;
+    save_match_metadata(&m)
+}
+
+/// Marca (o desmarca) un suceso como revisado.
+///
+/// El suceso se identifica por su marca de tiempo, que es lo único estable que
+/// tiene: no hay ids de evento. Se compara con tolerancia porque los tiempos son
+/// `f64` y vienen de restas en coma flotante.
+pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), String> {
+    let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
+    let mut hit = false;
+    for ev in m.events.iter_mut() {
+        if (ev.time - time).abs() < 0.05 {
+            ev.reviewed = if reviewed { Some(true) } else { None };
+            hit = true;
+        }
+    }
+    if !hit {
+        return Err(format!("No hay ningún suceso en {:.2}s", time));
+    }
     save_match_metadata(&m)
 }
 
@@ -912,12 +974,12 @@ mod realineado_tests {
         // El GameEnd de respaldo ya va en tiempo de vídeo: no sirve de referencia.
         let mut sin_game_end = partida_con_carga_larga();
         sin_game_end.events.retain(|e| e.r#type != "GameEnd");
-        sin_game_end.events.push(MatchEvent {
-            r#type: "GameEnd".to_string(),
-            subtype: None,
-            time: 2595.0,
-            description: "Grabación finalizada".to_string(),
-        });
+        sin_game_end.events.push(MatchEvent::plain(
+            "GameEnd",
+            None,
+            2595.0,
+            "Recording finished".to_string(),
+        ));
         assert!(!realign_to_video_time(&mut sin_game_end));
     }
 

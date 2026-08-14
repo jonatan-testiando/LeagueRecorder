@@ -278,12 +278,12 @@ pub async fn process_vod(
         result: "Unknown".to_string(),
         champion: "VOD Analysis".to_string(),
         date: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
-        events: vec![MatchEvent {
-            r#type: "GameStart".to_string(),
-            subtype: None,
-            time: 0.0,
-            description: "VOD Procesado con OpenCV Python".to_string()
-        }],
+        events: vec![MatchEvent::plain(
+            "GameStart",
+            None,
+            0.0,
+            "VOD processed with OpenCV".to_string(),
+        )],
         apm: 0.0,
         apm_series: vec![],
         mouse_events: detected_clicks,

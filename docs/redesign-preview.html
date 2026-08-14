@@ -640,6 +640,101 @@ section{margin-top:72px}
 .tp-sep{width:1px;align-self:stretch;background:var(--line-soft);flex-shrink:0}
 .tp-note{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:9px}
 
+
+/* ==========================================================================
+   REIMAGINADO — pantallas nuevas
+   ========================================================================== */
+.rm{display:flex;min-height:600px}
+.rm-main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--ground)}
+
+/* tira de captura persistente */
+.rm-cap{display:flex;align-items:center;gap:16px;padding:8px 18px;
+  background:var(--panel);border-bottom:1px solid var(--line-soft);
+  font-family:var(--mono);font-size:10.5px;color:var(--faint);letter-spacing:.06em}
+.rm-cap b{color:var(--muted);font-weight:500}
+.rm-cap .idle{width:6px;height:6px;border-radius:50%;background:var(--faint);display:inline-block;margin-right:6px}
+
+.rm-body{padding:22px 24px 26px;flex:1;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+.rm-eyebrow{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+
+/* --- la tarjeta de foco --- */
+.focus{position:relative;border:1px solid var(--line);border-radius:var(--r-lg);
+  overflow:hidden;background:var(--panel)}
+/* Marca de agua: aqui va el splash oficial del campeon (Data Dragon), muy
+   oscurecido. Es el unico sitio de la app con imagen. */
+.focus__art{position:absolute;inset:0;
+  background:
+    radial-gradient(60% 120% at 78% 30%, rgba(200,170,110,.16) 0%, transparent 60%),
+    radial-gradient(80% 140% at 96% 70%, rgba(10,200,185,.12) 0%, transparent 55%),
+    linear-gradient(90deg, var(--panel) 34%, transparent 78%);
+  pointer-events:none}
+.focus__art::after{content:"splash del campeón";position:absolute;right:16px;bottom:10px;
+  font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--faint) 55%,transparent)}
+.focus__in{position:relative;padding:22px 24px;max-width:60ch}
+.focus__tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--loss);
+  background:color-mix(in srgb,var(--loss) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--loss) 30%,transparent);
+  padding:3px 9px;border-radius:var(--r-sm)}
+.focus__h{font-size:24px;font-weight:600;letter-spacing:-.02em;margin:12px 0 8px;color:var(--text)}
+.focus__p{font-size:13.5px;color:var(--muted);line-height:1.55;margin:0 0 16px}
+.focus__p b{color:var(--text);font-weight:600}
+.focus__acts{display:flex;gap:9px;flex-wrap:wrap}
+.focus__btn{font-family:var(--mono);font-size:11.5px;padding:8px 14px;border-radius:var(--r-md);
+  border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;
+  transition:border-color var(--t-instant) var(--e-move),color var(--t-instant) var(--e-move)}
+.focus__btn:hover{border-color:var(--faint);color:var(--text)}
+.focus__btn--go{background:var(--cool);border-color:var(--cool);color:var(--ground);font-weight:600}
+
+/* --- dos columnas inferiores --- */
+.rm-cols{display:grid;grid-template-columns:1.35fr 1fr;gap:18px;min-height:0;flex:1}
+.rm-card{border:1px solid var(--line-soft);border-radius:var(--r-lg);background:var(--panel);
+  padding:14px 16px 16px;display:flex;flex-direction:column;min-width:0}
+.rm-card__h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.rm-card__t{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint)}
+.rm-card__n{font-family:var(--mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.mini{display:grid;grid-template-columns:2px 1fr auto auto;gap:10px;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--line-soft);cursor:pointer}
+.mini:last-child{border-bottom:0}
+.mini:hover .mini__n{color:var(--text)}
+.mini__s{align-self:stretch;border-radius:1px}
+.mini__n{font-size:13px;color:var(--muted);transition:color var(--t-instant) var(--e-move)}
+.mini__n em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--faint);
+  display:block;margin-top:2px;letter-spacing:.05em}
+.mini__g{font-family:var(--mono);font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.mini__d{font-family:var(--mono);font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+/* --- reloj de muertes --- */
+.clock{display:flex;flex-direction:column;gap:3px;margin-top:2px}
+.clock__row{display:grid;grid-template-columns:52px 1fr 26px;gap:9px;align-items:center}
+.clock__t{font-family:var(--mono);font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums}
+.clock__bar{height:11px;border-radius:2px;background:var(--sunken);overflow:hidden}
+.clock__bar i{display:block;height:100%;border-radius:2px;background:var(--loss);opacity:.45}
+.clock__row[data-peak] .clock__bar i{opacity:1}
+.clock__row[data-peak] .clock__t{color:var(--loss)}
+.clock__v{font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;
+  font-variant-numeric:tabular-nums}
+
+.insight{margin-top:14px;padding:12px 14px;border-left:2px solid var(--loss);
+  background:color-mix(in srgb,var(--loss) 7%,transparent);border-radius:0 var(--r-sm) var(--r-sm) 0}
+.insight p{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted)}
+.insight b{color:var(--text);font-weight:600}
+
+/* --- barras de categoria --- */
+.cat{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.cat__row{display:grid;grid-template-columns:1fr 44px;gap:10px;align-items:center}
+.cat__l{font-size:12.5px;color:var(--muted)}
+.cat__t{height:4px;background:var(--sunken);border-radius:2px;overflow:hidden;margin-top:5px}
+.cat__t i{display:block;height:100%;border-radius:2px}
+.cat__v{font-family:var(--mono);font-size:11px;color:var(--muted);text-align:right;
+  font-variant-numeric:tabular-nums}
+
+@media (max-width:840px){ .rm-cols{grid-template-columns:1fr} }
+
 .scroll-x{overflow-x:auto}
 </style>
 
@@ -1319,9 +1414,252 @@ section{margin-top:72px}
     </div>
   </section>
 
+  <!-- ===================== REIMAGINADO ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Si lo empezara de cero</h2></div>
+    <p class="lede" style="margin-bottom:26px">
+      Todo lo anterior mejora lo que hay. Esto es otra cosa: qu&eacute; ser&iacute;a la app si se dise&ntilde;ara
+      desde el trabajo que haces y no desde los archivos que produce.
+      <b>Hoy est&aacute; organizada por tipo de fichero</b> &mdash; Biblioteca (v&iacute;deos), Clips (clips),
+      Errores (clips de error), An&aacute;lisis (VODs), Entrenamiento (drills). Cinco secciones y cada una
+      es un caj&oacute;n. Eso contesta &laquo;&iquest;d&oacute;nde est&aacute;n mis cosas?&raquo;, que no es tu pregunta.
+    </p>
+
+    <ul class="findings">
+      <li>
+        <span class="tag crit">estructura</span>
+        <span class="body"><b>Las cinco secciones no se hablan.</b>
+        Marcas un error y se queda en su caj&oacute;n. Revisas una partida y no produce nada. Entrenas un
+        drill que no sabe cu&aacute;l es tu punto d&eacute;bil. <em>Nada se acumula</em>: cada pieza funciona y
+        ninguna alimenta a la siguiente, as&iacute; que despu&eacute;s de veinte partidas la app sabe exactamente
+        lo mismo de ti que despu&eacute;s de una.</span>
+      </li>
+      <li>
+        <span class="tag crit">desperdicio</span>
+        <span class="body"><b>Tiene el dato y no lo dice.</b>
+        Con tus 19 partidas ya grabadas se puede calcular en qu&eacute; minuto mueres, agregado. Sale una
+        forma muy clara &mdash; y la app nunca te la ha ense&ntilde;ado, porque no hay ninguna pantalla que
+        mire m&aacute;s de una partida a la vez.</span>
+      </li>
+      <li>
+        <span class="tag">jerarqu&iacute;a</span>
+        <span class="body"><b>Al abrirla, lo primero es una lista de ficheros.</b>
+        Lo primero deber&iacute;a ser en qu&eacute; est&aacute;s trabajando.</span>
+      </li>
+    </ul>
+
+    <h3 style="margin-top:44px">La idea: el bucle, no el caj&oacute;n</h3>
+    <p>Lo que haces de verdad es un ciclo: <strong>juegas &rarr; revisas &rarr; detectas un patr&oacute;n &rarr;
+      lo entrenas &rarr; juegas</strong>. Las cinco secciones se colapsan en cuatro que son las fases de
+      ese ciclo, y el objeto central deja de ser un v&iacute;deo para pasar a ser <strong>una debilidad en
+      la que est&aacute;s trabajando</strong>.</p>
+    <p>La grabaci&oacute;n baja a una tira de estado permanente: es algo que la app <em>hace</em>, no un sitio
+      al que vas.</p>
+
+    <p class="frame-cap" style="margin-top:22px"><span>Pantalla A &mdash; Hoy</span><span>en qu&eacute; est&aacute;s trabajando</span></p>
+    <div class="frame">
+      <div class="tb">
+        <div class="id"><span class="dot" style="background:var(--faint)"></span> LeagueRecorder</div>
+        <div class="ctl"><span>&#8212;</span><span>&#9723;</span><span>&#10005;</span></div>
+      </div>
+      <div class="rm">
+        <nav class="rail" aria-label="Secciones">          <button aria-current="page" title="Hoy" aria-label="Hoy">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+          </button>
+          <button title="Partidas" aria-label="Partidas">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+          </button>
+          <button title="Patrones" aria-label="Patrones">
+            <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19h-20"/></svg>
+          </button>
+          <button title="Entrenar" aria-label="Entrenar">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <span class="spacer"></span>
+          <button title="Ajustes" aria-label="Ajustes">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+          </button></nav>
+        <div class="rm-main">
+          <div class="rm-cap">
+            <span><span class="idle"></span>En espera &mdash; se graba sola al detectar partida</span>
+            <span><b>NVENC</b> 1080p60</span>
+            <span><b>62,4</b> / 100 GB</span>
+          </div>
+
+          <div class="rm-body">
+            <div>
+              <div class="rm-eyebrow">Tu foco esta semana</div>
+              <div class="focus">
+                <div class="focus__art"></div>
+                <div class="focus__in">
+                  <span class="focus__tag">14 muertes &middot; 6 partidas</span>
+                  <h4 class="focus__h">Te mueres entre el 15 y el 20</h4>
+                  <p class="focus__p">
+                    Es tu peor ventana con diferencia: <b>14 de tus 66 muertes</b> caen ah&iacute;, m&aacute;s que en
+                    ninguna otra franja de cinco minutos. Coincide con el segundo dragón y con el
+                    momento en que sueles quedarte sin visión.
+                  </p>
+                  <div class="focus__acts">
+                    <button class="focus__btn focus__btn--go">Ver esos 14 momentos</button>
+                    <button class="focus__btn">Entrenar visión de río</button>
+                    <button class="focus__btn">Cambiar de foco</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rm-cols">
+              <div class="rm-card">
+                <div class="rm-card__h">
+                  <span class="rm-card__t">Por revisar</span>
+                  <span class="rm-card__n">3 partidas &middot; 11 momentos</span>
+                </div>
+                <div class="mini">
+                  <span class="mini__s" style="background:var(--loss)"></span>
+                  <span class="mini__n">Viego<em>derrota &middot; hoy</em></span>
+                  <span class="mini__g" style="color:var(--loss)">&minus;707</span>
+                  <span class="mini__d">32:23</span>
+                </div>
+                <div class="mini">
+                  <span class="mini__s" style="background:var(--win)"></span>
+                  <span class="mini__n">Kha'Zix<em>victoria &middot; hoy</em></span>
+                  <span class="mini__g" style="color:var(--win)">+1015</span>
+                  <span class="mini__d">34:41</span>
+                </div>
+                <div class="mini">
+                  <span class="mini__s" style="background:var(--win)"></span>
+                  <span class="mini__n">Gwen<em>victoria &middot; ayer</em></span>
+                  <span class="mini__g" style="color:var(--win)">+2565</span>
+                  <span class="mini__d">23:40</span>
+                </div>
+              </div>
+
+              <div class="rm-card">
+                <div class="rm-card__h">
+                  <span class="rm-card__t">Muertes por minuto de partida</span>
+                  <span class="rm-card__n">19 partidas</span>
+                </div>
+                <div class="clock" id="rm-clock"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      La tarjeta de foco es <strong>lo &uacute;nico que ocupa la parte de arriba</strong>, y es la &uacute;nica
+      superficie de toda la app con imagen: el splash oficial del campe&oacute;n, muy oscurecido. Un solo
+      sitio con arte, y que sea el que quieres mirar.
+    </p>
+
+    <p class="frame-cap" style="margin-top:38px"><span>Pantalla B &mdash; Patrones</span><span>lo que ninguna partida sola te dice</span></p>
+    <div class="frame">
+      <div class="tb">
+        <div class="id"><span class="dot" style="background:var(--faint)"></span> LeagueRecorder</div>
+        <div class="ctl"><span>&#8212;</span><span>&#9723;</span><span>&#10005;</span></div>
+      </div>
+      <div class="rm">
+        <nav class="rail" aria-label="Secciones">          <button title="Hoy" aria-label="Hoy">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+          </button>
+          <button title="Partidas" aria-label="Partidas">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg>
+          </button>
+          <button aria-current="page" title="Patrones" aria-label="Patrones">
+            <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19h-20"/></svg>
+          </button>
+          <button title="Entrenar" aria-label="Entrenar">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <span class="spacer"></span>
+          <button title="Ajustes" aria-label="Ajustes">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+          </button></nav>
+        <div class="rm-main">
+          <div class="rm-body">
+            <div>
+              <div class="rm-eyebrow">Patrones &middot; &uacute;ltimas 19 partidas</div>
+              <div class="rm-cols" style="flex:none">
+                <div class="rm-card">
+                  <div class="rm-card__h">
+                    <span class="rm-card__t">Cu&aacute;ndo mueres</span>
+                    <span class="rm-card__n">66 muertes</span>
+                  </div>
+                  <div class="clock" id="rm-clock-b"></div>
+                  <div class="insight">
+                    <p><b>El 15&ndash;20 es tu ventana.</b> Concentra 14 muertes, un 21 % del total en
+                    solo el 12 % del tiempo de juego. Las partidas que pierdes tienen el pico ah&iacute;;
+                    las que ganas lo tienen entre el 5 y el 10.</p>
+                  </div>
+                </div>
+
+                <div class="rm-card">
+                  <div class="rm-card__h">
+                    <span class="rm-card__t">Qu&eacute; te marcas a ti mismo</span>
+                    <span class="rm-card__n">3 errores</span>
+                  </div>
+                  <div class="cat">
+                    <div class="cat__row">
+                      <span>
+                        <span class="cat__l">Decision Making</span>
+                        <span class="cat__t"><i style="width:67%;background:var(--gold)"></i></span>
+                      </span>
+                      <span class="cat__v">2</span>
+                    </div>
+                    <div class="cat__row">
+                      <span>
+                        <span class="cat__l">Positioning</span>
+                        <span class="cat__t"><i style="width:33%;background:var(--flag)"></i></span>
+                      </span>
+                      <span class="cat__v">1</span>
+                    </div>
+                    <div class="cat__row">
+                      <span>
+                        <span class="cat__l">Mechanics</span>
+                        <span class="cat__t"><i style="width:0%;background:var(--cool)"></i></span>
+                      </span>
+                      <span class="cat__v">0</span>
+                    </div>
+                  </div>
+                  <div class="insight" style="border-left-color:var(--gold);background:color-mix(in srgb,var(--gold) 7%,transparent)">
+                    <p><b>Marcas poco.</b> Tres errores en 19 partidas. La app tiene 66 muertes tuyas
+                    sin revisar &mdash; el patr&oacute;n de arriba sale de los datos, no de tus notas. Si
+                    etiquetaras aunque fuera una por partida, esto empezar&iacute;a a decirte por qu&eacute;.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      Esta pantalla no existe hoy y es la que justifica todo lo dem&aacute;s: <strong>es la &uacute;nica que mira
+      m&aacute;s de una partida a la vez</strong>. Sin ella la app es un reproductor con carpetas; con ella
+      es una herramienta que aprende de ti. Y f&iacute;jate en que puede ser honesta consigo misma: si
+      marcas poco, te lo dice, porque el valor sube cuanto m&aacute;s la usas.
+    </p>
+
+    <h3 style="margin-top:44px">Qu&eacute; se conserva</h3>
+    <p>Casi todo lo construido en esta sesi&oacute;n sigue en pie: la piel, los tokens, el sistema de
+      movimiento, los primitivos, la fila como l&iacute;nea de tiempo y la cola de revisi&oacute;n. Lo que cambia
+      es <strong>la navegaci&oacute;n y qu&eacute; ves al abrir</strong>. En t&eacute;rminos de trabajo: dos pantallas
+      nuevas (Hoy y Patrones), la agregaci&oacute;n entre partidas &mdash;que es c&oacute;digo, no dise&ntilde;o&mdash; y
+      fundir Clips, Errores y An&aacute;lisis dentro de Partidas como filtros en vez de secciones.</p>
+
+    <div class="note">
+      <p><strong>Y una advertencia honesta:</strong> esto solo merece la pena si de verdad vas a revisar
+      partidas con regularidad. Si la app es sobre todo una grabadora que usas de vez en cuando, la
+      versi&oacute;n incremental de las secciones 01&ndash;05 es la respuesta correcta y esta es sobreingenier&iacute;a.
+      La diferencia no la decide el dise&ntilde;o, la decides t&uacute; con el uso.</p>
+    </div>
+  </section>
+
   <!-- ===================== COMO SE LLEGA ===================== -->
   <section>
-    <div class="sec-head"><span class="num">06</span><h2>Cómo se llega desde donde estás</h2></div>
+    <div class="sec-head"><span class="num">07</span><h2>Cómo se llega desde donde estás</h2></div>
     <p>En este orden. Los tres primeros pasos son mecánicos y ya cambian la percepción del conjunto;
       el rediseño de la lista viene después, cuando hay un sistema que lo sostenga.</p>
 
@@ -1712,6 +2050,34 @@ section{margin-top:72px}
     paintProgress();
     seekTo(selected);
   }
+
+
+  // ------------------------------------------------------------------
+  // Reloj de muertes. Son los datos reales de las 19 partidas grabadas:
+  // 66 muertes agregadas en tramos de cinco minutos. Ninguna pantalla de la
+  // app actual mira mas de una partida a la vez, asi que este dato existe
+  // desde el primer dia y nunca se ha ensenado.
+  // ------------------------------------------------------------------
+  var DEATHS = [[0,4],[5,10],[10,7],[15,14],[20,9],[25,12],[30,7],[35,2],[40,1]];
+  (function () {
+    var peak = DEATHS.reduce(function (a, b) { return b[1] > a[1] ? b : a; })[0];
+    var max = DEATHS.reduce(function (a, b) { return Math.max(a, b[1]); }, 0);
+    var total = DEATHS.reduce(function (a, b) { return a + b[1]; }, 0);
+    ["rm-clock", "rm-clock-b"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = DEATHS.map(function (d) {
+        var pct = (d[1] / max) * 100;
+        var share = Math.round((d[1] / total) * 100);
+        return '<div class="clock__row"' + (d[0] === peak ? ' data-peak' : '') +
+          ' title="' + d[1] + ' muertes, el ' + share + '% del total">' +
+          '<span class="clock__t">' + d[0] + '–' + (d[0] + 5) + '</span>' +
+          '<span class="clock__bar"><i style="width:' + pct.toFixed(0) + '%"></i></span>' +
+          '<span class="clock__v">' + d[1] + '</span>' +
+          '</div>';
+      }).join("");
+    });
+  })();
 
   var abPlay = document.getElementById("ab-play");
   var ab = document.getElementById("ab");

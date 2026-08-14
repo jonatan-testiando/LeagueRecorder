@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
+import { PatternsPanel } from "./features/patterns/components/PatternsPanel";
 import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
 import { VodGallery } from "./features/vod/components/VodGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
@@ -10,13 +11,13 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target } from "lucide-react";
+import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
 
-type Tab = "clips" | "errors" | "review" | "vod" | "training" | "settings";
+type Tab = "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
 
-type Panel = "/review" | "/clips" | "/errors" | "/vod" | "/training" | "/settings";
+type Panel = "/review" | "/clips" | "/errors" | "/patterns" | "/vod" | "/training" | "/settings";
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
@@ -27,6 +28,8 @@ const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode 
   { key: "review", path: "/review", label: "Library", icon: <Library {...NAV_ICON} /> },
   { key: "clips", path: "/clips", label: "Clips", icon: <Film {...NAV_ICON} /> },
   { key: "errors", path: "/errors", label: "Errors", icon: <TriangleAlert {...NAV_ICON} /> },
+  // La unica seccion que mira mas de una partida a la vez.
+  { key: "patterns", path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn {...NAV_ICON} /> },
   { key: "vod", path: "/vod", label: "Analysis", icon: <ScanSearch {...NAV_ICON} /> },
   { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
 ];
@@ -161,6 +164,7 @@ export const App: React.FC = () => {
         {panel("/training", <TrainingPanel />)}
 
         {panel("/clips", <ClipsGallery />)}
+        {panel("/patterns", <PatternsPanel />)}
 
         {panel(
           "/vod",

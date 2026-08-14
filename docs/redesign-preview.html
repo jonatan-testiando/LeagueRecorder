@@ -489,6 +489,113 @@ section{margin-top:72px}
   .strip-head span:nth-child(4),.strip-head span:nth-child(5),
   .strip-top .num:nth-child(4),.strip-top .num:nth-child(5){display:none}
 }
+
+/* ==========================================================================
+   PANTALLA DE REVISIÓN — rediseño estructural
+   ========================================================================== */
+.rv{display:grid;grid-template-columns:1fr 300px;min-height:560px}
+.rv-stage{display:flex;flex-direction:column;background:var(--sunken);min-width:0}
+.rv-video{flex:1;position:relative;display:grid;place-items:center;min-height:280px;
+  background:radial-gradient(120% 90% at 50% 40%, #14201f 0%, #0A0C0D 72%)}
+.rv-video .ph{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:#2E3A39}
+.rv-hud{position:absolute;left:12px;top:11px;display:flex;gap:7px;align-items:center}
+.rv-chip{font-family:var(--mono);font-size:10px;letter-spacing:.05em;color:var(--muted);
+  background:rgba(8,12,14,.72);border:1px solid var(--line-soft);padding:3px 8px;border-radius:var(--r-sm);
+  font-variant-numeric:tabular-nums}
+.rv-chip b{color:var(--text);font-weight:600}
+.rv-now{position:absolute;right:12px;top:11px;font-family:var(--mono);font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--flag);
+  background:color-mix(in srgb,var(--flag) 14%,transparent);
+  border:1px solid color-mix(in srgb,var(--flag) 34%,transparent);padding:3px 9px;border-radius:var(--r-sm)}
+
+.rv-transport{background:var(--panel);border-top:1px solid var(--line-soft);padding:9px 13px 11px}
+.rv-tbar{display:flex;align-items:center;gap:11px;margin-bottom:8px;flex-wrap:wrap}
+.rv-tbar button{width:27px;height:27px;border-radius:var(--r-md);border:1px solid var(--line);
+  background:var(--raised);color:var(--text);display:grid;place-items:center;cursor:pointer;
+  transition:border-color var(--t-instant) var(--e-move)}
+.rv-tbar button:hover{border-color:var(--faint)}
+.rv-tbar svg{width:12px;height:12px;fill:currentColor}
+.rv-time{font-family:var(--mono);font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.rv-time b{color:var(--text);font-weight:600}
+.rv-step{margin-left:auto;display:flex;gap:6px;align-items:center;white-space:nowrap}
+.rv-step .lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);margin-right:2px}
+
+.rv-track{position:relative;height:40px;background:var(--sunken);border:1px solid var(--line-soft);
+  border-radius:var(--r-sm);overflow:hidden;cursor:pointer}
+.rv-track svg{display:block;width:100%;height:40px}
+.rv-head{position:absolute;top:0;bottom:0;left:0;width:100%;pointer-events:none;
+  transition:transform var(--t-base) var(--e-move)}
+.rv-head i{position:absolute;left:0;top:0;bottom:0;width:1.5px;background:var(--signal)}
+.rv-head i::after{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:7px;height:7px;background:var(--signal);border-radius:1px}
+
+/* ---- la barra lateral como lista de trabajo ---- */
+.rv-side{background:var(--panel);border-left:1px solid var(--line-soft);
+  display:flex;flex-direction:column;min-width:0}
+.rv-head-row{padding:11px 13px;border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;gap:9px}
+.rv-head-row .res{font-family:var(--mono);font-size:11px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--win)}
+.rv-head-row .sub{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:2px}
+
+.rv-progress{padding:10px 13px;border-bottom:1px solid var(--line-soft)}
+.rv-progress .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.rv-progress .ttl{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--faint)}
+.rv-progress .cnt{font-family:var(--mono);font-size:11.5px;color:var(--text);font-variant-numeric:tabular-nums}
+.rv-bar{height:3px;background:var(--sunken);border-radius:2px;overflow:hidden;display:flex;gap:2px}
+.rv-bar i{display:block;height:100%;background:var(--cool)}
+
+.rv-queue{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.rv-q-head{display:flex;gap:5px;padding:9px 13px 8px}
+.rv-q-head button{font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:4px 9px;
+  border-radius:var(--r-sm);border:1px solid var(--line);background:transparent;color:var(--muted);
+  cursor:pointer;transition:border-color var(--t-instant) var(--e-move),color var(--t-instant) var(--e-move)}
+.rv-q-head button[data-on]{background:var(--raised);color:var(--text)}
+.rv-q-head button:hover{color:var(--text)}
+
+.rv-item{display:grid;grid-template-columns:2px 40px 1fr auto;gap:9px;align-items:start;
+  padding:9px 13px;border-bottom:1px solid var(--line-soft);cursor:pointer;
+  transition:background-color var(--t-instant) var(--e-move)}
+.rv-item:hover{background:var(--raised)}
+.rv-item[data-sel]{background:var(--raised)}
+.rv-item .sev{width:2px;align-self:stretch;border-radius:1px}
+.rv-item .t{font-family:var(--mono);font-size:11px;color:var(--faint);font-variant-numeric:tabular-nums;padding-top:1px}
+.rv-item[data-sel] .t{color:var(--cool)}
+.rv-item .what{min-width:0}
+.rv-item .ttl{font-size:12.5px;color:var(--muted);line-height:1.35}
+.rv-item[data-sel] .ttl,.rv-item:hover .ttl{color:var(--text)}
+.rv-item .note{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:3px;
+  display:flex;align-items:center;gap:5px}
+.rv-item .done{width:14px;height:14px;border-radius:3px;border:1px solid var(--line);
+  display:grid;place-items:center;flex-shrink:0;margin-top:1px}
+.rv-item[data-done] .done{background:var(--cool);border-color:var(--cool)}
+.rv-item[data-done] .done::after{content:"";width:7px;height:4px;border-left:1.5px solid var(--ground);
+  border-bottom:1.5px solid var(--ground);transform:rotate(-45deg) translate(1px,-1px)}
+.rv-item[data-done] .ttl{color:var(--faint);text-decoration:line-through;text-decoration-color:var(--line)}
+
+.rv-fold{border-top:1px solid var(--line-soft)}
+.rv-fold summary{list-style:none;cursor:pointer;padding:10px 13px;display:flex;
+  align-items:center;justify-content:space-between;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.rv-fold summary::-webkit-details-marker{display:none}
+.rv-fold summary:hover{color:var(--text)}
+.rv-fold summary .chev{transition:transform var(--t-quick) var(--e-out)}
+.rv-fold[open] summary .chev{transform:rotate(90deg)}
+.rv-fold .body{padding:0 13px 12px}
+.rv-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.rv-stats div{min-width:0}
+.rv-stats .v{font-family:var(--mono);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums}
+.rv-stats .k{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--faint);margin-top:2px}
+
+@media (max-width:840px){
+  .rv{grid-template-columns:1fr}
+  .rv-side{border-left:0;border-top:1px solid var(--line-soft)}
+}
+
 .scroll-x{overflow-x:auto}
 </style>
 
@@ -942,9 +1049,166 @@ section{margin-top:72px}
     </ul>
   </section>
 
-  <!-- ===================== CÓMO SE LLEGA ===================== -->
+  <!-- ===================== PANTALLA DE REVISION ===================== -->
   <section>
-    <div class="sec-head"><span class="num">05</span><h2>Cómo se llega desde donde estás</h2></div>
+    <div class="sec-head"><span class="num">05</span><h2>La pantalla de revisi&oacute;n</h2></div>
+    <p class="lede" style="margin-bottom:26px">
+      Esta pantalla no ten&iacute;a un problema de color: ten&iacute;a un problema de prop&oacute;sito.
+      Es <b>un marcador de posguerra pegado a un reproductor</b>, cuando deber&iacute;a ser la herramienta
+      con la que haces el trabajo. La pregunta que contesta hoy es &laquo;&iquest;c&oacute;mo me fue?&raquo;.
+      La que deber&iacute;a contestar es <b>&laquo;&iquest;qu&eacute; miro, y ya lo he mirado?&raquo;</b>.
+    </p>
+
+    <ul class="findings">
+      <li>
+        <span class="tag crit">prop&oacute;sito</span>
+        <span class="body"><b>25 cifras y ninguna te dice qu&eacute; hacer.</b>
+        La pesta&ntilde;a por defecto es Stats: resultado, seis casillas de m&eacute;tricas, el marcador de los diez
+        jugadores y siete m&eacute;tricas m&aacute;s de rendimiento. Todo eso se lee una vez y no cambia nada de lo
+        que haces despu&eacute;s. Mientras tanto, lo que s&iacute; es accionable &mdash;tus muertes, los errores que
+        detect&oacute; el analizador&mdash; est&aacute; detr&aacute;s de un clic en otra pesta&ntilde;a.</span>
+      </li>
+      <li>
+        <span class="tag crit">jerarqu&iacute;a</span>
+        <span class="body"><b>Los 46 eventos pesan lo mismo.</b>
+        La app ya calcula el &laquo;tono&raquo; de cada suceso (excelente, impreciso, error, throw) y ya detecta
+        saltos de c&aacute;mara y errores de posicionamiento. Nada de eso ordena la lista: sale en orden
+        cronol&oacute;gico, un volcado. Tus 6 muertes est&aacute;n mezcladas con 19 usos de ultimate.</span>
+      </li>
+      <li>
+        <span class="tag">duplicidad</span>
+        <span class="body"><b>La misma informaci&oacute;n en dos sitios que no se hablan.</b>
+        La tira bajo el v&iacute;deo y la lista de la derecha son los mismos eventos. Pulsar en la lista no
+        se&ntilde;ala nada en la tira, y pasar por la tira no destaca nada en la lista.</span>
+      </li>
+      <li>
+        <span class="tag">cierre</span>
+        <span class="body"><b>No hay forma de terminar.</b>
+        Revisar una partida es una tarea con final: hay N momentos que mirar y los vas tachando. Hoy
+        no existe la noci&oacute;n de &laquo;visto&raquo;, as&iacute; que no sabes por d&oacute;nde ibas si lo dejas a medias, ni
+        cu&aacute;ndo has acabado. Es la diferencia entre un panel y una herramienta.</span>
+      </li>
+      <li>
+        <span class="tag">espacio</span>
+        <span class="body"><b>El v&iacute;deo cede sitio a lo que menos se mira.</b>
+        La barra lateral de 300px est&aacute; fija aunque est&eacute;s simplemente viendo, y su bloque m&aacute;s grande es
+        el marcador de los diez jugadores: 40 n&uacute;meros que ya sab&iacute;as.</span>
+      </li>
+    </ul>
+
+    <h3 style="margin-top:44px">La propuesta: una cola de revisi&oacute;n, no un marcador</h3>
+    <p>Tres cambios de estructura, no de piel. <strong>Uno:</strong> la barra lateral arranca con la
+      lista de momentos que merecen revisi&oacute;n, ordenada por gravedad y no por reloj. <strong>Dos:</strong>
+      cada momento se puede marcar como visto, y hay una barra de progreso &mdash; la pantalla se puede
+      terminar. <strong>Tres:</strong> las estad&iacute;sticas y el marcador siguen ah&iacute;, plegados, porque se
+      consultan una vez y no son el trabajo.</p>
+    <p>Pulsa un momento de la lista, y su casilla para marcarlo como visto.</p>
+
+    <p class="frame-cap" style="margin-top:22px"><span>Pantalla 03 &mdash; Revisi&oacute;n, redise&ntilde;ada</span><span>cola de trabajo</span></p>
+    <div class="frame">
+      <div class="tb">
+        <div class="id"><span class="dot" style="background:var(--faint)"></span> LeagueRecorder</div>
+        <div class="ctl"><span>&#8212;</span><span>&#9723;</span><span>&#10005;</span></div>
+      </div>
+
+      <div class="rv">
+        <div class="rv-stage">
+          <div class="rv-video">
+            <div class="rv-hud">
+              <span class="rv-chip"><b id="rv-hud-t">18:42</b> / 31:15</span>
+              <span class="rv-chip">+842g <b>team</b></span>
+              <span class="rv-chip">300 <b>APM</b></span>
+            </div>
+            <span class="rv-now" id="rv-now">Momento 4 de 7</span>
+            <span class="ph">v&iacute;deo</span>
+          </div>
+
+          <div class="rv-transport">
+            <div class="rv-tbar">
+              <button aria-label="Momento anterior"><svg viewBox="0 0 24 24"><path d="M18 5v14L7 12zM6 5h2v14H6z"/></svg></button>
+              <button aria-label="Reproducir"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+              <button aria-label="Momento siguiente"><svg viewBox="0 0 24 24"><path d="M6 5v14l11-7zM16 5h2v14h-2z"/></svg></button>
+              <span class="rv-time"><b id="rv-tc">18:42</b> / 31:15</span>
+              <span class="rv-step">
+                <span class="lbl">saltar entre</span>
+                <button class="chip" style="padding:3px 9px" data-on>momentos</button>
+                <button class="chip" style="padding:3px 9px">10 s</button>
+              </span>
+            </div>
+            <div class="rv-track" id="rv-track"></div>
+          </div>
+        </div>
+
+        <aside class="rv-side">
+          <div class="rv-head-row">
+            <div style="min-width:0">
+              <div class="res">Victory</div>
+              <div class="sub">Viego &middot; Solo/D&uacute;o &middot; 31:15</div>
+            </div>
+          </div>
+
+          <div class="rv-progress">
+            <div class="top">
+              <span class="ttl">Revisi&oacute;n</span>
+              <span class="cnt"><b id="rv-done">2</b> / 7</span>
+            </div>
+            <div class="rv-bar" id="rv-bar"></div>
+          </div>
+
+          <div class="rv-queue">
+            <div class="rv-q-head">
+              <button data-on>Por revisar</button>
+              <button>Todo (46)</button>
+            </div>
+            <div id="rv-list" style="overflow:auto"></div>
+          </div>
+
+          <details class="rv-fold">
+            <summary><span>Estad&iacute;sticas</span><span class="chev">&#9656;</span></summary>
+            <div class="body">
+              <div class="rv-stats">
+                <div><div class="v">8/4/11</div><div class="k">KDA</div></div>
+                <div><div class="v">300</div><div class="k">APM</div></div>
+                <div><div class="v">19.5k</div><div class="k">Oro</div></div>
+                <div><div class="v">+842</div><div class="k">Oro @15</div></div>
+                <div><div class="v">29.6k</div><div class="k">Da&ntilde;o</div></div>
+                <div><div class="v">41%</div><div class="k">KP</div></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="rv-fold">
+            <summary><span>Marcador</span><span class="chev">&#9656;</span></summary>
+            <div class="body">
+              <p style="font-size:12px;color:var(--faint);margin:0;line-height:1.5">
+                Los diez jugadores con su KDA, CS y objetos. Sigue disponible, pero deja de ocupar
+                el sitio de lo que s&iacute; se usa.
+              </p>
+            </div>
+          </details>
+        </aside>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">
+      <strong>Qu&eacute; hace distinta a esta pantalla.</strong> Al abrirla ya sabes que tienes siete cosas
+      que mirar y cu&aacute;les son. Pulsar una lleva el cursor hasta ese instante recorriendo la distancia,
+      y la tira de abajo se&ntilde;ala d&oacute;nde est&aacute;s. Cuando la marcas, la barra avanza. Cuando la barra se
+      llena, has terminado de revisar la partida &mdash; que es un estado que hoy no existe.
+    </p>
+
+    <div class="note">
+      <p><strong>Nada de esto necesita datos nuevos.</strong> La gravedad sale del <code>tone</code> que
+      ya calcula <code>eventMeta</code>; los momentos, de <code>events[]</code>, los errores detectados
+      y <code>camera_snaps</code>. Lo &uacute;nico que hay que persistir es qu&eacute; momentos has marcado como
+      vistos, y ya existe un sitio donde guardarlo: el JSON de la partida, junto a
+      <code>comments[]</code>.</p>
+    </div>
+  </section>
+
+  <!-- ===================== COMO SE LLEGA ===================== -->
+  <section>
+    <div class="sec-head"><span class="num">06</span><h2>Cómo se llega desde donde estás</h2></div>
     <p>En este orden. Los tres primeros pasos son mecánicos y ya cambian la percepción del conjunto;
       el rediseño de la lista viene después, cuando hay un sistema que lo sostenga.</p>
 
@@ -1218,6 +1482,122 @@ section{margin-top:72px}
       c.addEventListener("click", runPips);
     });
     runPips();
+  }
+
+
+  // ------------------------------------------------------------------
+  // Pantalla de revision: la barra lateral como cola de trabajo.
+  // La gravedad sale del `tone` que la app ya calcula por evento; el orden es
+  // por gravedad y no por reloj, porque el reloj ya lo da la tira de abajo.
+  // ------------------------------------------------------------------
+  var RV_DUR = 1875;
+  var RV_MOMENTS = [
+    { t: 1122, sev: "high", kind: "d", ttl: "Muerte 1v2 en jungla enemiga",       note: "sin vision de rio", done: false },
+    { t: 1385, sev: "high", kind: "e", ttl: "Posicionamiento en pelea de dragon", note: "detectado por el analizador", done: false },
+    { t: 1651, sev: "high", kind: "d", ttl: "Muerte por camara fija en bot",      note: "12 s sin mover camara", done: false },
+    { t: 292,  sev: "med",  kind: "e", ttl: "Recall sin vision en rio",           note: "detectado por el analizador", done: false },
+    { t: 820,  sev: "med",  kind: "d", ttl: "Muerte al invadir sin prio",         note: "", done: false },
+    { t: 640,  sev: "low",  kind: "e", ttl: "Gank sin control de oleada",         note: "", done: true },
+    { t: 1751, sev: "low",  kind: "e", ttl: "Baron sin vision previa",            note: "", done: true }
+  ];
+  var SEV_COLOR = { high: "var(--loss)", med: "var(--gold)", low: "var(--faint)" };
+  var SEV_ORDER = { high: 0, med: 1, low: 2 };
+
+  var rvList = document.getElementById("rv-list");
+  if (rvList) {
+    var rvTrack = document.getElementById("rv-track");
+    var rvBar   = document.getElementById("rv-bar");
+    var rvDone  = document.getElementById("rv-done");
+    var rvNow   = document.getElementById("rv-now");
+    var rvTc    = document.getElementById("rv-tc");
+    var rvHudT  = document.getElementById("rv-hud-t");
+    var selected = 1;
+
+    // La tira reutiliza exactamente el mismo dibujo que la biblioteca: si
+    // aprendiste a leerla alli, aqui no hay nada nuevo que aprender.
+    var trackMatch = {
+      dur: RV_DUR,
+      curve: MATCHES[0].curve,
+      ev: MATCHES[0].ev
+    };
+    var head;
+    if (rvTrack) {
+      rvTrack.insertAdjacentHTML("afterbegin", timelineSVG(trackMatch, 40));
+      head = document.createElement("span");
+      head.className = "rv-head";
+      head.innerHTML = "<i></i>";
+      rvTrack.appendChild(head);
+    }
+
+    function pending() {
+      return RV_MOMENTS.filter(function (m) { return !m.done; }).length;
+    }
+
+    function paintProgress() {
+      var total = RV_MOMENTS.length;
+      var done = total - pending();
+      if (rvDone) rvDone.textContent = String(done);
+      if (rvBar) {
+        rvBar.innerHTML = "";
+        for (var i = 0; i < total; i++) {
+          var seg = document.createElement("i");
+          seg.style.flex = "1";
+          seg.style.background = i < done ? "var(--cool)" : "var(--sunken)";
+          rvBar.appendChild(seg);
+        }
+      }
+    }
+
+    function seekTo(idx) {
+      selected = idx;
+      var m = RV_MOMENTS[idx];
+      if (head) head.style.transform = "translateX(" + ((m.t / RV_DUR) * 100).toFixed(2) + "%)";
+      if (rvTc) rvTc.textContent = mmss(m.t);
+      if (rvHudT) rvHudT.textContent = mmss(m.t);
+      if (rvNow) rvNow.textContent = m.ttl;
+      paintList();
+    }
+
+    function paintList() {
+      var order = RV_MOMENTS.map(function (m, i) { return { m: m, i: i }; })
+        .sort(function (a, b) {
+          if (a.m.done !== b.m.done) return a.m.done ? 1 : -1;
+          if (SEV_ORDER[a.m.sev] !== SEV_ORDER[b.m.sev]) return SEV_ORDER[a.m.sev] - SEV_ORDER[b.m.sev];
+          return a.m.t - b.m.t;
+        });
+
+      rvList.innerHTML = "";
+      order.forEach(function (o) {
+        var row = document.createElement("div");
+        row.className = "rv-item";
+        row.setAttribute("role", "button");
+        row.setAttribute("tabindex", "0");
+        if (o.i === selected) row.setAttribute("data-sel", "");
+        if (o.m.done) row.setAttribute("data-done", "");
+        row.innerHTML =
+          '<span class="sev" style="background:' + SEV_COLOR[o.m.sev] + '"></span>' +
+          '<span class="t">' + mmss(o.m.t) + "</span>" +
+          '<span class="what"><span class="ttl">' + o.m.ttl + "</span>" +
+          (o.m.note ? '<span class="note">' + o.m.note + "</span>" : "") +
+          "</span>" +
+          '<span class="done" role="checkbox" aria-checked="' + (o.m.done ? "true" : "false") +
+          '" aria-label="Marcar como visto"></span>';
+
+        row.addEventListener("click", function (ev) {
+          if (ev.target.classList.contains("done")) {
+            o.m.done = !o.m.done;
+            paintProgress();
+            paintList();
+            return;
+          }
+          seekTo(o.i);
+        });
+        rvList.appendChild(row);
+      });
+    }
+
+    paintProgress();
+    seekTo(selected);
   }
 
   var abPlay = document.getElementById("ab-play");

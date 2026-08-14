@@ -596,6 +596,50 @@ section{margin-top:72px}
   .rv-side{border-left:0;border-top:1px solid var(--line-soft)}
 }
 
+
+/* ---- transporte: comparativa ---- */
+.tp-wrap{display:grid;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);
+  border-radius:var(--r-lg);overflow:hidden;margin-top:22px}
+.tp-row{background:var(--panel);padding:15px 18px 18px}
+.tp-row > .h{display:flex;align-items:baseline;gap:9px;margin-bottom:3px}
+.tp-row .h b{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.tp-row.old .h b{color:var(--loss)}
+.tp-row.new .h b{color:var(--win)}
+.tp-row .h span{font-size:13px;color:var(--muted)}
+.tp-row .why{font-size:12.5px;color:var(--faint);line-height:1.5;margin:0 0 14px;max-width:70ch}
+
+.tp-bar{background:var(--sunken);border:1px solid var(--line-soft);border-radius:var(--r-md);
+  padding:9px 12px;display:flex;align-items:center;gap:11px;overflow-x:auto}
+.tp-bar svg{width:13px;height:13px;fill:currentColor;flex-shrink:0}
+.tp-btn{width:26px;height:26px;border-radius:var(--r-sm);border:1px solid transparent;
+  background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer;flex-shrink:0;
+  transition:color var(--t-instant) var(--e-move),background-color var(--t-instant) var(--e-move)}
+.tp-btn:hover{color:var(--text);background:var(--raised)}
+.tp-btn--primary{background:var(--raised);border-color:var(--line);color:var(--text);width:30px;height:30px}
+.tp-tc{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;
+  white-space:nowrap;flex-shrink:0}
+.tp-tc b{color:var(--text);font-weight:600}
+.tp-void{flex:1;min-width:20px}
+.tp-slider{width:64px;height:3px;background:var(--line);border-radius:2px;position:relative;flex-shrink:0}
+.tp-slider::after{content:"";position:absolute;left:60%;top:50%;transform:translate(-50%,-50%);
+  width:9px;height:9px;border-radius:50%;background:var(--cool)}
+.tp-select{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:3px 7px;flex-shrink:0}
+.tp-lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);flex-shrink:0}
+
+/* segmentado de velocidad */
+.tp-seg{display:flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;flex-shrink:0}
+.tp-seg button{font-family:var(--mono);font-size:11px;padding:4px 9px;background:transparent;
+  border:0;color:var(--faint);cursor:pointer;
+  transition:color var(--t-instant) var(--e-move),background-color var(--t-instant) var(--e-move)}
+.tp-seg button + button{border-left:1px solid var(--line)}
+.tp-seg button:hover{color:var(--text)}
+.tp-seg button[data-on]{background:var(--raised);color:var(--text)}
+
+.tp-sep{width:1px;align-self:stretch;background:var(--line-soft);flex-shrink:0}
+.tp-note{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:9px}
+
 .scroll-x{overflow-x:auto}
 </style>
 
@@ -1196,6 +1240,67 @@ section{margin-top:72px}
       y la tira de abajo se&ntilde;ala d&oacute;nde est&aacute;s. Cuando la marcas, la barra avanza. Cuando la barra se
       llena, has terminado de revisar la partida &mdash; que es un estado que hoy no existe.
     </p>
+
+
+    <h3 style="margin-top:44px">El transporte</h3>
+    <p>La barra bajo el v&iacute;deo es lo que m&aacute;s &laquo;anticuado&raquo; se siente, y tiene una causa concreta:
+      <strong>es una piel de reproductor multimedia gen&eacute;rico de hace quince a&ntilde;os</strong> &mdash; iconos
+      peque&ntilde;os sin etiqueta, un deslizador de volumen clavado en horizontal, y un vac&iacute;o enorme en
+      medio porque el control que deber&iacute;a ocuparlo (la barra de tiempo) vive en otro sitio.</p>
+
+    <div class="tp-wrap">
+      <div class="tp-row old">
+        <div class="h"><b>Hoy</b><span>reproductor gen&eacute;rico</span></div>
+        <p class="why">Siete controles, cuatro de ellos sin etiqueta, y ninguno relacionado con lo que
+          hace especial a esta pantalla: moverse entre momentos. El hueco del centro es donde deber&iacute;a
+          estar la l&iacute;nea de tiempo, que est&aacute; en una tira aparte m&aacute;s abajo.</p>
+        <div class="tp-bar">
+          <span class="tp-btn"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></span>
+          <span class="tp-btn"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/></svg></span>
+          <span class="tp-slider"></span>
+          <span class="tp-tc"><b>11:08</b> / 32:22</span>
+          <span class="tp-select">1.00x &#9662;</span>
+          <span class="tp-void"></span>
+          <span class="tp-btn"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/></svg></span>
+          <span class="tp-btn"><svg viewBox="0 0 24 24"><path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7zm0 11a4 4 0 110-8 4 4 0 010 8z"/></svg></span>
+          <span class="tp-lbl">Sync</span>
+          <span class="tp-slider"></span>
+          <span class="tp-tc">0.0s</span>
+          <span class="tp-btn"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"/></svg></span>
+        </div>
+        <div class="tp-note">4 iconos sin etiqueta &middot; volumen siempre desplegado &middot; velocidad en desplegable</div>
+      </div>
+
+      <div class="tp-row new">
+        <div class="h"><b>Propuesta</b><span>mesa de montaje</span></div>
+        <p class="why">Los botones de momento anterior y siguiente pasan al centro del transporte,
+          porque saltar entre momentos es lo que se hace en esta pantalla. La velocidad es un
+          segmentado: durante una revisi&oacute;n se cambia constantemente y un desplegable son dos clics
+          cada vez. El c&oacute;digo de tiempo lleva cent&eacute;simas, que es lo que se necesita para se&ntilde;alar un
+          instante. Y lo cr&iacute;ptico (sincron&iacute;a del rastro del rat&oacute;n, capas del overlay) se va a un men&uacute;
+          con nombres de verdad, en vez de vivir en la barra principal sin etiqueta.</p>
+        <div class="tp-bar">
+          <button class="tp-btn" title="Momento anterior" aria-label="Momento anterior"><svg viewBox="0 0 24 24"><path d="M18 5v14L7 12zM6 5h2v14H6z"/></svg></button>
+          <button class="tp-btn tp-btn--primary" title="Reproducir" aria-label="Reproducir"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg></button>
+          <button class="tp-btn" title="Momento siguiente" aria-label="Momento siguiente"><svg viewBox="0 0 24 24"><path d="M6 5v14l11-7zM16 5h2v14h-2z"/></svg></button>
+          <span class="tp-tc"><b>11:08.04</b> / 32:22</span>
+          <span class="tp-sep"></span>
+          <span class="tp-seg">
+            <button>0,25&times;</button><button>0,5&times;</button><button data-on>1&times;</button><button>2&times;</button>
+          </span>
+          <span class="tp-void"></span>
+          <button class="tp-btn" title="Volumen" aria-label="Volumen"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/></svg></button>
+          <button class="tp-btn" title="Ajustes de reproducci&oacute;n" aria-label="Ajustes de reproducci&oacute;n"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+          <button class="tp-btn" title="Pantalla completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4zm10 0h6v6h-2V6h-4V4zM4 14h2v4h4v2H4v-6zm14 0h2v6h-6v-2h4v-4z"/></svg></button>
+        </div>
+        <div class="tp-note">todo etiquetado &middot; velocidad a un clic &middot; el vac&iacute;o del centro lo ocupa la l&iacute;nea de tiempo, justo debajo</div>
+      </div>
+    </div>
+
+    <p style="margin-top:20px">El cambio de fondo es que <strong>el transporte y la l&iacute;nea de tiempo dejan de
+      ser dos cosas</strong>. Hoy hay una barra de controles y, m&aacute;s abajo y separada, una tira con el APM y
+      los eventos que adem&aacute;s hace de barra de b&uacute;squeda. Son la misma herramienta partida en dos, y por eso
+      el centro del transporte est&aacute; vac&iacute;o: le falta su mitad.</p>
 
     <div class="note">
       <p><strong>Nada de esto necesita datos nuevos.</strong> La gravedad sale del <code>tone</code> que

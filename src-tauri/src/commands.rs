@@ -1276,6 +1276,16 @@ pub struct ErrorClipMetadata {
     pub note: String,
     #[serde(default)]
     pub events: Vec<ErrorEvent>,
+    /// Segundo del video de origen en que empieza el recorte.
+    ///
+    /// Faltaba: `export_error_clip` lo recibia como parametro y lo usaba para
+    /// cortar, pero no lo guardaba. El resultado es que un error marcado perdia
+    /// su posicion en la partida en cuanto se exportaba, y no habia forma de
+    /// devolverlo a la linea de tiempo ni a la cola de revision.
+    ///
+    /// Los clips exportados antes de esto no lo llevan; de ahi el Option.
+    #[serde(default)]
+    pub start_time: Option<f64>,
 }
 
 #[tauri::command]
@@ -1305,6 +1315,7 @@ pub async fn export_error_clip(
         size: std::fs::metadata(&error_path).map(|m| m.len()).unwrap_or(0),
         note: note.clone(),
         events: Vec::new(),
+        start_time: Some(start_time),
     };
     let _ = tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
     Ok(error_path.to_string_lossy().to_string())
@@ -1330,10 +1341,12 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                                 let json_path = sub_entry.path().with_extension("json");
                                 let mut note = String::new();
                                 let mut events = Vec::new();
+                                let mut start_time: Option<f64> = None;
                                 if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
                                     if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
                                         note = meta.note;
                                         events = meta.events;
+                                        start_time = meta.start_time;
                                     }
                                 }
                                 errors.push(ErrorClipMetadata {
@@ -1342,6 +1355,7 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                                     match_id: match_id.clone(),
                                     size,
                                     note,
+                                    start_time,
                                     events,
                                 });
                             }
@@ -1379,6 +1393,7 @@ async fn load_or_init_clip_meta(mp4_path: &std::path::Path) -> ErrorClipMetadata
             .unwrap_or(0),
         note: String::new(),
         events: Vec::new(),
+            start_time: None,
     }
 }
 

@@ -47,6 +47,12 @@ export interface ErrorClipMetadata {
   size: number;
   note: string;
   events: ErrorEvent[];
+  /**
+   * Segundo del vídeo de origen en que empieza el recorte. Ausente en los clips
+   * exportados antes de que se guardara: hasta entonces la posición se perdía al
+   * exportar, así que un error marcado no podía volver a la línea de tiempo.
+   */
+  start_time?: number;
 }
 
 export const exportErrorClip = async (matchId: string, videoPath: string, startTime: number, duration: number, note: string): Promise<string> => {

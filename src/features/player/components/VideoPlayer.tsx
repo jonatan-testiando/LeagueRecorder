@@ -6,8 +6,9 @@ import { outcome } from "../../../core/matchStats";
 import {
   Eye, Sparkles, Trophy, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
-  XCircle, ChevronLeft, ChevronRight, MousePointer2, EyeOff,
-  Trash2, Send, RefreshCw, Check, MinusCircle, Tv
+  XCircle, ChevronLeft, ChevronRight, MousePointer2,
+  Trash2, Send, RefreshCw, Check, MinusCircle,
+  SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
 import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
@@ -668,46 +669,112 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             visible={showEsportsHud}
           />
 
-          <div style={styles.videoProgressWrapper}>
-            <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
-              {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
-            </button>
-            <div style={styles.volumeContainer}>
-              <button onClick={toggleMute} style={styles.videoPlayBtn}>
-                {muted || volume === 0 ? <VolumeX size={20} /> : volume < 0.5 ? <Volume1 size={20} /> : <Volume2 size={20} />}
-              </button>
-              <input type="range" min="0" max="1" step="0.05" value={muted ? 0 : volume} onChange={handleVolumeChange} style={styles.volumeSlider} />
-            </div>
-            <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
-            <select 
-              value={playbackRate} 
-              onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-              style={styles.playbackSelect}
+          {/* Transporte. Lo que se hace en esta pantalla es saltar entre momentos,
+              asi que eso manda en el centro; los ajustes cripticos (sincronia del
+              rastro del raton, capas del overlay) se van a un menu con nombres de
+              verdad en vez de vivir sueltos y sin etiqueta en la barra principal. */}
+          <div className="tp" style={styles.videoProgressWrapper}>
+            <button
+              className="tp-b"
+              onClick={() => goToAdjacentEvent(-1)}
+              title="Previous moment"
+              aria-label="Previous moment"
             >
-              <option value={0.25}>0.25x</option>
-              <option value={0.5}>0.50x</option>
-              <option value={0.75}>0.75x</option>
-              <option value={1}>1.00x</option>
-              <option value={1.5}>1.50x</option>
-              <option value={2}>2.00x</option>
-              <option value={4}>4.00x</option>
-            </select>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto", marginRight: "16px" }}>
-              <button onClick={() => setShowEsportsHud((h) => !h)} style={{ ...styles.videoPlayBtn, color: showEsportsHud ? "var(--accent-violet)" : "var(--text-muted)" }} title="Activar/Desactivar HUD eSports Broadcast">
-                <Tv size={16} />
+              <SkipBack size={14} fill="currentColor" />
+            </button>
+            <button
+              className="tp-b tp-b--primary"
+              onClick={handlePlayPause}
+              title={isPlaying ? "Pause" : "Play"}
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
+            </button>
+            <button
+              className="tp-b"
+              onClick={() => goToAdjacentEvent(1)}
+              title="Next moment"
+              aria-label="Next moment"
+            >
+              <SkipForward size={14} fill="currentColor" />
+            </button>
+
+            {/* Centesimas: en una herramienta de revision hace falta senalar un
+                instante, no un minuto. */}
+            <span className="tp-tc">
+              <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+              <span className="tp-tc__total"> / {formatTime(duration)}</span>
+            </span>
+
+            <span className="tp-sep" />
+
+            {/* Segmentado y no desplegable: durante una revision la velocidad se
+                cambia constantemente y un desplegable son dos clics cada vez. */}
+            <span className="tp-seg" role="group" aria-label="Playback speed">
+              {[0.25, 0.5, 1, 2].map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setPlaybackRate(r)}
+                  aria-pressed={playbackRate === r}
+                  data-on={playbackRate === r ? "" : undefined}
+                >
+                  {r}&times;
+                </button>
+              ))}
+            </span>
+
+            <span style={{ flex: 1, minWidth: 12 }} />
+
+            <div className="tp-vol">
+              <button className="tp-b" onClick={toggleMute} title={muted ? "Unmute" : "Mute"} aria-label={muted ? "Unmute" : "Mute"}>
+                {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
               </button>
-              <button onClick={() => setShowTracker(s => !s)} style={styles.videoPlayBtn} title="Show/Hide Cursor">
-                {showTracker ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: "var(--text-muted)", fontSize: "12px", display: "flex", alignItems: "center", gap: "4px" }}>
-                  <MousePointer2 size={12} /> Sync
-                </span>
-                <input type="range" min="-3" max="3" step="0.1" value={mouseSync} onChange={(e) => { const val = parseFloat(e.target.value); setMouseSync(val); localStorage.setItem("mouseSyncOffset", val.toString()); }} style={{...styles.volumeSlider, width: "60px"}} />
-                <span style={{ color: "var(--text-muted)", fontSize: "12px", width: "35px", textAlign: "right" }}>{mouseSync > 0 ? `+${mouseSync.toFixed(1)}s` : `${mouseSync.toFixed(1)}s`}</span>
-              </div>
+              <input
+                type="range" min="0" max="1" step="0.05"
+                value={muted ? 0 : volume}
+                onChange={handleVolumeChange}
+                aria-label="Volume"
+                style={styles.volumeSlider}
+              />
             </div>
-            <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
+
+            <details className="tp-more">
+              <summary title="Playback settings" aria-label="Playback settings">
+                <MoreHorizontal size={15} />
+              </summary>
+              <div className="tp-pop">
+                <label className="tp-pop__row">
+                  <span>Broadcast overlay</span>
+                  <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
+                </label>
+                <label className="tp-pop__row">
+                  <span>Mouse trail</span>
+                  <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
+                </label>
+                <div className="tp-pop__row tp-pop__row--stack">
+                  <span>
+                    Mouse trail sync
+                    <em>Shifts the trail against the video, in seconds.</em>
+                  </span>
+                  <div className="tp-pop__sync">
+                    <input
+                      type="range" min="-3" max="3" step="0.1" value={mouseSync}
+                      aria-label="Mouse trail sync"
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setMouseSync(val);
+                        localStorage.setItem("mouseSyncOffset", val.toString());
+                      }}
+                    />
+                    <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
+              <Maximize size={15} />
+            </button>
           </div>
         </div>
         {!isFullscreen && (

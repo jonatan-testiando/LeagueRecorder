@@ -807,3 +807,164 @@ a:focus:not(:focus-visible) {
   text-decoration: line-through;
   text-decoration-color: var(--line);
 }
+
+/* =========================================================================
+   Transporte del reproductor
+
+   La barra era una piel de reproductor multimedia generico: iconos pequenos
+   sin etiqueta, volumen clavado en horizontal y un vacio enorme en medio,
+   porque el control que deberia ocuparlo (la linea de tiempo) vive en la tira
+   de abajo. Lo que se hace en esta pantalla es saltar entre momentos, y eso es
+   lo que manda ahora en el centro.
+   ========================================================================= */
+.tp { gap: var(--space-2) !important; }
+
+.tp-b {
+  width: 27px;
+  height: 27px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: color var(--t-instant) var(--e-move),
+    background-color var(--t-instant) var(--e-move);
+}
+.tp-b:hover { color: var(--text); background: var(--raised); }
+.tp-b:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.tp-b--primary {
+  width: 31px;
+  height: 31px;
+  background: var(--raised);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.tp-tc {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: var(--space-2);
+}
+.tp-tc__total { color: var(--faint); }
+
+.tp-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line-soft);
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+}
+
+.tp-seg {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tp-seg button {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 9px;
+  background: transparent;
+  border: 0;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color var(--t-instant) var(--e-move),
+    background-color var(--t-instant) var(--e-move);
+}
+.tp-seg button + button { border-left: 1px solid var(--line); }
+.tp-seg button:hover { color: var(--text); }
+.tp-seg button[data-on] { background: var(--raised); color: var(--text); }
+
+/* El volumen se despliega al pasar por encima: se ajusta una vez y no merece
+   ocupar sitio permanente en horizontal. */
+.tp-vol { display: flex; align-items: center; flex-shrink: 0; }
+.tp-vol input[type="range"] {
+  width: 0;
+  opacity: 0;
+  transition: width var(--t-quick) var(--e-out), opacity var(--t-quick) var(--e-out),
+    margin-left var(--t-quick) var(--e-out);
+}
+.tp-vol:hover input[type="range"],
+.tp-vol:focus-within input[type="range"] {
+  width: 64px;
+  opacity: 1;
+  margin-left: var(--space-2);
+}
+
+/* Los ajustes cripticos, con nombre */
+.tp-more { position: relative; flex-shrink: 0; }
+.tp-more summary {
+  list-style: none;
+  width: 27px;
+  height: 27px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: color var(--t-instant) var(--e-move),
+    background-color var(--t-instant) var(--e-move);
+}
+.tp-more summary::-webkit-details-marker { display: none; }
+.tp-more summary:hover { color: var(--text); background: var(--raised); }
+.tp-more[open] summary { color: var(--text); background: var(--raised); }
+
+.tp-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 250px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: var(--space-2);
+  z-index: 40;
+  animation: pop-in var(--t-quick) var(--e-out) both;
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.tp-pop__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-xs);
+  color: var(--text);
+  cursor: pointer;
+}
+.tp-pop__row:hover { background: var(--raised); }
+.tp-pop__row--stack { flex-direction: column; align-items: stretch; cursor: default; }
+.tp-pop__row--stack:hover { background: transparent; }
+.tp-pop__row em {
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+.tp-pop__sync { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
+.tp-pop__sync input[type="range"] { flex: 1; }
+.tp-pop__val {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  width: 38px;
+  text-align: right;
+}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    Marca de LeagueRecorder.
+
+    Un marcapáginas: lo que hace la app es marcar el momento que duele para
+    volver a él. Una sola forma y un solo color, como las marcas de referencia
+    (Ascent, Insights): sin marco, sin segundo tinte y sin adorno, que es lo que
+    permite que a 16px en la barra de tareas siga siendo exactamente la misma
+    silueta que a 512.
+
+    Este fichero es la fuente. De aquí salen el icono de la ventana y del
+    instalador (`npx tauri icon`) y el componente `BrandMark` de la interfaz.
+  -->
+  <path d="M15 4 H49 V60 L32 46.5 L15 60 Z" fill="#C8AA6E"/>
+</svg>

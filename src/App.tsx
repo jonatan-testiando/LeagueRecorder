@@ -12,7 +12,8 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
+import { Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
+import { BrandMark } from "./components/BrandMark";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
@@ -130,10 +131,13 @@ export const App: React.FC = () => {
       <div className="app-body" style={styles.appContainer}>
       {/* Sidebar (Ascent Style) */}
       <div style={styles.sidebar}>
-        {/* La marca es una grabadora, no unas tijeras: las tijeras son "recortar
-            un clip", que es una función más, no lo que hace la app. */}
+        {/* La marca propia sustituye al icono prestado de la libreria: un
+            marcapaginas, que es lo que se hace aqui — marcar el momento que
+            duele para volver a el. */}
         <div style={styles.logoArea}>
-          <Video color="var(--brand)" size={20} strokeWidth={1.8} />
+          <span style={{ color: "var(--brand)", display: "flex" }}>
+            <BrandMark size={18} />
+          </span>
           <span style={styles.logoText}>LeagueRecorder</span>
         </div>
 

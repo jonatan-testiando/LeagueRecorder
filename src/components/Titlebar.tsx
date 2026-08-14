@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, Copy, X, Scissors } from "lucide-react";
+import { Minus, Square, Copy, X } from "lucide-react";
+import { BrandMark } from "./BrandMark";
 
 /**
  * Barra de título personalizada (la ventana se lanza con decorations:false).
@@ -30,12 +31,11 @@ export const Titlebar: React.FC = () => {
   return (
     <div className="titlebar">
       <div className="titlebar__drag" data-tauri-drag-region>
-        <Scissors
-          color="var(--accent-violet)"
-          size={15}
-          strokeWidth={2.5}
-          style={{ transform: "rotate(-45deg)", pointerEvents: "none" }}
-        />
+        {/* Eran unas tijeras giradas: "recortar un clip" es una funcion mas de
+            la app, no lo que la app es. */}
+        <span style={{ color: "var(--brand)", display: "flex", pointerEvents: "none" }}>
+          <BrandMark size={13} />
+        </span>
         <span className="titlebar__title" style={{ pointerEvents: "none" }}>
           LeagueRecorder
         </span>

@@ -13,14 +13,28 @@
        violeta  -> lo que ha encontrado el analizador.
      ========================================================================= */
 
-  /* Superficies */
-  --ground: #08131A;     /* fondo de ventana */
-  --panel: #0E1D26;      /* rail, barras, tarjetas, inspector */
-  --raised: #16303B;     /* elemento activo, hover, botón */
-  --sunken: #040C11;     /* campos y pistas hundidas */
+  /* =========================================================================
+     Superficies.
 
-  --line: #204450;       /* bordes y divisiones */
-  --line-soft: #142832;  /* separadores tenues */
+     El croma de esta escala CRECE hacia arriba en cuanto se deja: el fondo
+     tenía 6 de croma, los paneles 9, y los bordes 14 — o sea que lo más
+     saturado de todo el cromo eran las aristas, más que el texto. En una
+     interfaz densa eso son cientos de bordes teñidos, y se lee como ruido.
+
+     Ahora el croma es plano y bajo (2–3,4) en toda la escala, con el mismo
+     tono, y la separación entre fondo y panel sube de 4,5 a 5,7 de L*: la
+     estructura la marca el valor, no el color.
+
+     La identidad Rift no vive aquí. Vive en --text (el hueso cálido de Riot),
+     el oro y el turquesa, que no se tocan.
+     ========================================================================= */
+  --ground: #0E1215;     /* fondo de ventana */
+  --panel: #1A1E21;      /* rail, barras, tarjetas, inspector */
+  --raised: #2A2F32;     /* elemento activo, hover, botón */
+  --sunken: #050A0E;     /* campos y pistas hundidas */
+
+  --line: #3B4144;       /* bordes y divisiones */
+  --line-soft: #222629;  /* separadores tenues */
   --hairline: rgba(200, 170, 110, 0.32); /* filete dorado, gesto del marco de Riot */
 
   /* Texto */

@@ -23,18 +23,18 @@ import { BarChart3 } from "lucide-react";
 
 const CONFIDENCE_COPY: Record<Confidence, { label: string; note: string; color: string }> = {
   low: {
-    label: "Indicio",
-    note: "Con menos de 15 partidas esto marca una tendencia, no una conclusión. Sigue grabando y se afina.",
+    label: "Early signal",
+    note: "Under 15 games this points at a tendency, not a conclusion. It sharpens as you record more.",
     color: "var(--faint)",
   },
   medium: {
-    label: "Patrón probable",
-    note: "La muestra ya da para orientarse, aunque las diferencias pequeñas entre tramos siguen siendo ruido.",
+    label: "Likely pattern",
+    note: "Enough games to steer by, though small gaps between windows are still noise.",
     color: "var(--gold)",
   },
   good: {
-    label: "Patrón sólido",
-    note: "Muestra suficiente para fiarse de la forma general.",
+    label: "Solid pattern",
+    note: "Enough games to trust the overall shape.",
     color: "var(--win)",
   },
 };

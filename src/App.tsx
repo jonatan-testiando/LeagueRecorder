@@ -4,6 +4,7 @@ import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
 import { PatternsPanel } from "./features/patterns/components/PatternsPanel";
+import { HomePanel } from "./features/home/components/HomePanel";
 import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
 import { VodGallery } from "./features/vod/components/VodGallery";
 import { VideoPlayer } from "./features/player/components/VideoPlayer";
@@ -11,13 +12,13 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn } from "lucide-react";
+import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
 
-type Tab = "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
+type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
 
-type Panel = "/review" | "/clips" | "/errors" | "/patterns" | "/vod" | "/training" | "/settings";
+type Panel = "/home" | "/review" | "/clips" | "/errors" | "/patterns" | "/vod" | "/training" | "/settings";
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
@@ -25,6 +26,10 @@ type Panel = "/review" | "/clips" | "/errors" | "/patterns" | "/vod" | "/trainin
 const NAV_ICON = { size: 17, strokeWidth: 1.6 } as const;
 
 const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode }[] = [
+  // Lo primero al abrir deja de ser una lista de ficheros y pasa a ser en que
+  // estas trabajando. La app estaba organizada por tipo de archivo, y eso
+  // contesta "donde estan mis cosas", que no es la pregunta de nadie.
+  { key: "home", path: "/home", label: "Today", icon: <CircleDot {...NAV_ICON} /> },
   { key: "review", path: "/review", label: "Library", icon: <Library {...NAV_ICON} /> },
   { key: "clips", path: "/clips", label: "Clips", icon: <Film {...NAV_ICON} /> },
   { key: "errors", path: "/errors", label: "Errors", icon: <TriangleAlert {...NAV_ICON} /> },
@@ -54,7 +59,7 @@ export const App: React.FC = () => {
   // ruta se redirige para no romper el estado de navegación guardado de versiones anteriores.
   React.useEffect(() => {
     if (currentPath === "/" || currentPath.startsWith("/games")) {
-      navigate("/review", { replace: true });
+      navigate("/home", { replace: true });
     }
   }, [currentPath, navigate]);
 
@@ -75,12 +80,12 @@ export const App: React.FC = () => {
     ? matchedNav.key
     : currentPath.startsWith("/settings")
       ? "settings"
-      : "review";
+      : "home";
 
   const activePanel: Panel =
     currentPath.startsWith("/settings")
       ? "/settings"
-      : ((matchedNav?.path ?? "/review") as Panel);
+      : ((matchedNav?.path ?? "/home") as Panel);
 
   // Los paneles se quedan montados una vez visitados para no perder su estado (el
   // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo
@@ -165,6 +170,16 @@ export const App: React.FC = () => {
 
         {panel("/clips", <ClipsGallery />)}
         {panel("/patterns", <PatternsPanel />)}
+
+        {panel(
+          "/home",
+          <HomePanel
+            matches={matches}
+            isRecording={isRecording}
+            onOpenMatch={(m) => { setSelectedMatch(m); navigate("/review"); }}
+            onGoTraining={() => navigate("/training")}
+          />
+        )}
 
         {panel(
           "/vod",

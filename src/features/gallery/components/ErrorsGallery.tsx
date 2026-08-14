@@ -20,6 +20,10 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 const streamUrl = (path: string): string =>
   `http://stream.localhost/${encodeURIComponent(path)}`;
 
+/** Quita los segundos: "2026-08-13 02:21:20" → "2026-08-13 02:21". */
+const trimSeconds = (d: string): string =>
+  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d) ? d.slice(0, 16) : d;
+
 /** `match_20260813_022120` → `2026-08-13 02:21`. */
 const dateFromMatchId = (id: string): string | null => {
   const m = /^match_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/.exec(id);
@@ -99,7 +103,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
         <div style={styles.grid}>
           {errors.map((err) => {
             const match = byId.get(err.match_id);
-            const when = match?.date ?? dateFromMatchId(err.match_id);
+            const when = match?.date ? trimSeconds(match.date) : dateFromMatchId(err.match_id);
             const first = err.events && err.events.length > 0 ? err.events[0] : null;
             const lesson = first ? first.text : err.note;
 
@@ -136,7 +140,9 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
 
                   <div style={styles.meta}>
                     {first?.category && <Badge tone="loss">{first.category}</Badge>}
-                    {match?.champion && <span className="u-meta">{match.champion}</span>}
+                    {match?.champion && (
+                      <span className="u-meta" style={{ color: "var(--muted)" }}>{match.champion}</span>
+                    )}
                     {when && <span className="u-meta">{when}</span>}
                     {err.events && err.events.length > 1 && (
                       <span className="u-meta">+{err.events.length - 1} more</span>

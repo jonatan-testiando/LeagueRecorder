@@ -251,6 +251,7 @@ pub async fn stop_manual_recording(
             timeline_markers: Vec::new(),
             minute_frames: Vec::new(),
             comments: Vec::new(),
+            reviewed_moments: Vec::new(),
             is_vod: false,
             camera_snaps: Vec::new(),
             // La grabación manual empieza y acaba con el vídeo: no hay carga que descontar.
@@ -681,9 +682,13 @@ async fn finalize_match(
         }
     }
     if !has_game_end {
+        // subtype "recording": marca que este GameEnd es el de respaldo, el que se
+        // inventa cuando el juego se cierra a lo bruto y no llega el de la API.
+        // La alineación necesita distinguirlo, y antes lo hacía comparando la
+        // frase, que es fragil.
         active_match.events.lock().await.push(MatchEvent::plain(
             "GameEnd",
-            None,
+            Some("recording"),
             duration,
             "Recording finished".to_string(),
         ));
@@ -763,6 +768,7 @@ async fn finalize_match(
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),
+        reviewed_moments: Vec::new(),
         is_vod: false,
         camera_snaps,
         video_offset,
@@ -1104,7 +1110,6 @@ fn map_lol_event(
             Some(d) => format!("{},stolen", d),
             None => "stolen".to_string(),
         }) },
-        reviewed: None,
     })
 }
 
@@ -1286,6 +1291,12 @@ pub struct ErrorClipMetadata {
     /// Los clips exportados antes de esto no lo llevan; de ahi el Option.
     #[serde(default)]
     pub start_time: Option<f64>,
+    /// Marcado como visto en la cola de revision.
+    ///
+    /// Vive aqui y no en MatchEvent porque un error marcado no es un suceso de
+    /// la partida: es un clip aparte con su propio JSON.
+    #[serde(default)]
+    pub reviewed: Option<bool>,
 }
 
 #[tauri::command]
@@ -1316,6 +1327,7 @@ pub async fn export_error_clip(
         note: note.clone(),
         events: Vec::new(),
         start_time: Some(start_time),
+        reviewed: None,
     };
     let _ = tokio::fs::write(&json_path, serde_json::to_string(&meta).unwrap_or_default()).await;
     Ok(error_path.to_string_lossy().to_string())
@@ -1342,11 +1354,13 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                                 let mut note = String::new();
                                 let mut events = Vec::new();
                                 let mut start_time: Option<f64> = None;
+                                let mut reviewed: Option<bool> = None;
                                 if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
                                     if let Ok(meta) = serde_json::from_str::<ErrorClipMetadata>(&content) {
                                         note = meta.note;
                                         events = meta.events;
                                         start_time = meta.start_time;
+                                        reviewed = meta.reviewed;
                                     }
                                 }
                                 errors.push(ErrorClipMetadata {
@@ -1356,6 +1370,7 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                                     size,
                                     note,
                                     start_time,
+                                    reviewed,
                                     events,
                                 });
                             }
@@ -1394,6 +1409,7 @@ async fn load_or_init_clip_meta(mp4_path: &std::path::Path) -> ErrorClipMetadata
         note: String::new(),
         events: Vec::new(),
             start_time: None,
+        reviewed: None,
     }
 }
 
@@ -1419,6 +1435,15 @@ async fn write_clip_meta(
     tokio::fs::write(&json_path, body)
         .await
         .map_err(|e| format!("No se pudo guardar {}: {e}", json_path.display()))
+}
+
+/// Marca o desmarca un clip de error como revisado, para la cola de revision.
+#[tauri::command]
+pub async fn set_error_clip_reviewed(path: String, reviewed: bool) -> Result<(), String> {
+    let mp4_path = std::path::Path::new(&path);
+    let mut meta = load_clip_meta(mp4_path).await?;
+    meta.reviewed = if reviewed { Some(true) } else { None };
+    write_clip_meta(mp4_path, &meta).await
 }
 
 #[tauri::command]

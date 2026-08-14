@@ -30,9 +30,6 @@ export interface MatchEvent {
   actor?: string;   // quién lo hizo
   target?: string;  // sobre quién o qué
   detail?: string;  // matiz: tipo de dragón, racha, "stolen" (separado por comas)
-
-  /** Marcado como visto en la cola de revisión. */
-  reviewed?: boolean;
 }
 
 export interface MouseEventData {
@@ -129,6 +126,15 @@ export interface MatchMetadata {
   timeline_markers?: TimelineMarker[];
   minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo
+  /**
+   * Segundos de los momentos ya revisados.
+   *
+   * Vive aquí y NO dentro de `events[]` a propósito: la lista de sucesos la
+   * reescriben varias rutas del backend, así que cualquier estado del usuario
+   * metido ahí dentro se pierde en silencio la próxima vez que algo regenere
+   * eventos. Que es exactamente lo que pasó.
+   */
+  reviewed_moments?: number[];
   is_vod?: boolean; // VOD importado/analizado: la UI oculta el panel Victoria/Derrota
   camera_snaps?: number[]; // segundos en que la cámara saltó (tecla de cámara aliada)
   // Segundos de vídeo anteriores al 0:00 de la partida (la pantalla de carga también se

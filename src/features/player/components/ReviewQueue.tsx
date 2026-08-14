@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { MatchMetadata } from "../../../types";
 import { describeEvent } from "../../../core/eventText";
 import { eventMeta, type Tone } from "./eventMeta";
-import { setEventReviewed } from "../../../core/tauri-ipc";
+import { setEventReviewed, setErrorClipReviewed, type ErrorClipMetadata } from "../../../core/tauri-ipc";
 
 /**
  * La barra lateral como cola de trabajo, no como marcador.
@@ -38,6 +38,14 @@ export interface Moment {
   title: string;
   note?: string;
   reviewed: boolean;
+  /**
+   * De dónde sale el momento. Importa porque el estado "visto" no se guarda en
+   * el mismo sitio: los sucesos viven en el JSON de la partida y los errores
+   * marcados en el JSON de su propio clip.
+   */
+  source: "event" | "error";
+  /** Ruta del clip, solo para los de tipo `error`. */
+  clipPath?: string;
 }
 
 const fmt = (s: number) => {
@@ -50,8 +58,13 @@ const fmt = (s: number) => {
  * De todos los sucesos, los que merecen una mirada. Un volcado cronológico de
  * los 46 eventos no es una cola de trabajo: 19 de ellos son ultimates.
  */
-export function buildQueue(match: MatchMetadata): Moment[] {
+export function buildQueue(
+  match: MatchMetadata,
+  errorClips: ErrorClipMetadata[] = []
+): Moment[] {
   const out: Moment[] = [];
+  const seen = match.reviewed_moments ?? [];
+  const isReviewed = (t: number) => seen.some((r) => Math.abs(r - t) < 0.05);
 
   for (const ev of match.events) {
     const meta = eventMeta(ev);
@@ -62,7 +75,28 @@ export function buildQueue(match: MatchMetadata): Moment[] {
       severity: sev,
       title: describeEvent(ev),
       note: meta.label,
-      reviewed: ev.reviewed === true,
+      reviewed: isReviewed(ev.time),
+      source: "event",
+    });
+  }
+
+  // Los errores que marcaste tú. Son la señal más deliberada que hay —dijiste
+  // explícitamente "esto estuvo mal"— así que entran arriba del todo.
+  //
+  // Solo los que conservan su posición: los exportados antes de que se guardara
+  // `start_time` no se pueden colocar en la línea de tiempo, y siguen estando en
+  // la pantalla de Errors.
+  for (const clip of errorClips) {
+    if (clip.start_time === undefined || clip.start_time === null) continue;
+    const first = clip.events && clip.events.length > 0 ? clip.events[0] : null;
+    out.push({
+      time: clip.start_time,
+      severity: "high",
+      title: (first ? first.text : clip.note) || "Flagged error",
+      note: first?.category ?? "you flagged this",
+      reviewed: clip.reviewed === true,
+      source: "error",
+      clipPath: clip.path,
     });
   }
 
@@ -75,7 +109,8 @@ export function buildQueue(match: MatchMetadata): Moment[] {
       severity: "low",
       title: "Camera jump",
       note: "detected by the analyzer",
-      reviewed: false,
+      reviewed: isReviewed(t),
+      source: "event",
     });
   }
 
@@ -117,12 +152,19 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
 
   const toggle = (m: Moment) => {
     const next = moments.map((x) =>
-      x.time === m.time ? { ...x, reviewed: !x.reviewed } : x
+      x.time === m.time && x.source === m.source ? { ...x, reviewed: !x.reviewed } : x
     );
     onChange(next);
+
+    // Cada fuente guarda en su sitio.
+    const save =
+      m.source === "error" && m.clipPath
+        ? setErrorClipReviewed(m.clipPath, !m.reviewed)
+        : setEventReviewed(matchId, m.time, !m.reviewed);
+
     // Si el guardado falla, se revierte: mejor que la casilla mienta sobre lo
     // que hay en disco.
-    setEventReviewed(matchId, m.time, !m.reviewed).catch((err) => {
+    save.catch((err) => {
       console.error("No se pudo guardar el estado de revisión:", err);
       onChange(moments);
     });
@@ -198,7 +240,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
             const active = Math.abs(currentTime - m.time) < 3;
             return (
               <div
-                key={`${m.time}-${i}`}
+                key={`${m.source}-${m.time}-${i}`}
                 className="rq-item"
                 data-sel={active ? "" : undefined}
                 data-done={m.reviewed ? "" : undefined}

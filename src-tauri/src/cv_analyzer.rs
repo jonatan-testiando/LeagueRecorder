@@ -307,6 +307,7 @@ pub async fn process_vod(
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),
+        reviewed_moments: Vec::new(),
         is_vod: true,
         camera_snaps: Vec::new(),
         // Todo lo que detecta el analizador ya está en tiempo de vídeo.

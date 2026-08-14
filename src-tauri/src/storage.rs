@@ -29,10 +29,6 @@ pub struct MatchEvent {
     /// Matiz: tipo de dragón, tamaño de la racha, "stolen"…
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
-
-    /// Marcado como visto en la cola de revisión.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reviewed: Option<bool>,
 }
 
 impl MatchEvent {
@@ -47,7 +43,6 @@ impl MatchEvent {
             actor: None,
             target: None,
             detail: None,
-            reviewed: None,
         }
     }
 }
@@ -203,6 +198,15 @@ pub struct MatchMetadata {
     /// Comentarios del usuario anclados a marcas de tiempo del vídeo.
     #[serde(default)]
     pub comments: Vec<Comment>,
+    /// Segundos de los momentos ya revisados, para la cola de revisión.
+    ///
+    /// Vive aquí y NO dentro de `events[]` a propósito: la lista de sucesos la
+    /// reescriben varias rutas (sincronización con Riot, realineado, análisis),
+    /// así que cualquier estado del usuario metido ahí dentro es carne de
+    /// cañón — se pierde en silencio la próxima vez que algo regenere eventos.
+    /// Una lista propia no la toca nadie más.
+    #[serde(default)]
+    pub reviewed_moments: Vec<f64>,
     /// True si es un VOD importado/analizado (no una partida propia grabada).
     /// Permite a la UI ocultar el panel de Victoria/Derrota, que no aplica.
     #[serde(default)]
@@ -256,10 +260,20 @@ pub fn realign_to_video_time(m: &mut MatchMetadata) -> bool {
 
     // El GameEnd de la API viene en tiempo de partida; el de respaldo ("Grabación
     // finalizada", que se inventa cuando el juego se cierra a lo bruto) ya es de vídeo.
+    // Se distingue por `subtype`, no por el texto. Esto comparaba la descripción
+    // contra la cadena "Grabación finalizada", asi que en cuanto esa frase cambió
+    // de idioma la condición dejó de cumplirse en silencio: un acoplamiento a
+    // texto legible dentro de la lógica de alineación.
+    //
+    // Las partidas viejas no llevan el subtype, de ahi que se siga aceptando la
+    // frase antigua como respaldo.
+    let is_fallback_end = |e: &MatchEvent| {
+        e.subtype.as_deref() == Some("recording") || e.description == "Grabación finalizada"
+    };
     let game_end = m
         .events
         .iter()
-        .find(|e| e.r#type == "GameEnd" && e.description != "Grabación finalizada")
+        .find(|e| e.r#type == "GameEnd" && !is_fallback_end(e))
         .map(|e| e.time);
     let game_end = match game_end {
         Some(t) => t,
@@ -457,15 +471,13 @@ pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
 /// `f64` y vienen de restas en coma flotante.
 pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), String> {
     let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
-    let mut hit = false;
-    for ev in m.events.iter_mut() {
-        if (ev.time - time).abs() < 0.05 {
-            ev.reviewed = if reviewed { Some(true) } else { None };
-            hit = true;
+    let same = |a: f64, b: f64| (a - b).abs() < 0.05;
+    if reviewed {
+        if !m.reviewed_moments.iter().any(|t| same(*t, time)) {
+            m.reviewed_moments.push(time);
         }
-    }
-    if !hit {
-        return Err(format!("No hay ningún suceso en {:.2}s", time));
+    } else {
+        m.reviewed_moments.retain(|t| !same(*t, time));
     }
     save_match_metadata(&m)
 }

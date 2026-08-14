@@ -53,6 +53,8 @@ export interface ErrorClipMetadata {
    * exportar, así que un error marcado no podía volver a la línea de tiempo.
    */
   start_time?: number;
+  /** Marcado como visto en la cola de revisión. */
+  reviewed?: boolean;
 }
 
 export const exportErrorClip = async (matchId: string, videoPath: string, startTime: number, duration: number, note: string): Promise<string> => {
@@ -138,4 +140,13 @@ export const setEventReviewed = async (
   reviewed: boolean
 ): Promise<void> => {
   return await invoke<void>("set_event_reviewed", { matchId, time, reviewed });
+};
+
+// Marca o desmarca un clip de error como revisado. Vive en el JSON del clip y no
+// en el de la partida porque un error marcado no es un suceso de la partida.
+export const setErrorClipReviewed = async (
+  path: string,
+  reviewed: boolean
+): Promise<void> => {
+  return await invoke<void>("set_error_clip_reviewed", { path, reviewed });
 };

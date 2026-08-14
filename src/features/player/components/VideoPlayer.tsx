@@ -10,7 +10,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { exportErrorClip, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
+import { exportErrorClip, getAllErrorClips, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
 import { GoldXpChart } from "./GoldXpChart";
 import { TacticalMap } from "./TacticalMap";
@@ -77,9 +77,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // una partida lo que quieres saber es que mirar, no como te fue.
   const [tab, setTab] = useState<"review" | "stats" | "analytics" | "events" | "comments">("review");
 
-  // Los momentos que merecen una mirada. Se recalculan solo si cambia la partida.
+  // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
+  // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
+  // cola que faltaba.
   const [moments, setMoments] = useState<Moment[]>(() => buildQueue(match));
-  useEffect(() => { setMoments(buildQueue(match)); }, [match.id]);
+  useEffect(() => {
+    let alive = true;
+    setMoments(buildQueue(match));
+    getAllErrorClips()
+      .then((clips) => {
+        if (!alive) return;
+        setMoments(buildQueue(match, clips.filter((c) => c.match_id === match.id)));
+      })
+      .catch(console.error);
+    return () => { alive = false; };
+  }, [match.id]);
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);

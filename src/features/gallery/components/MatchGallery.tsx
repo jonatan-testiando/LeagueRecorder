@@ -416,6 +416,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "var(--radius-md)",
     padding: "5px var(--space-3)",
     minWidth: "210px",
+    boxShadow: "var(--inset-sunken)",
   },
   searchInput: {
     background: "transparent",
@@ -446,11 +447,13 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     borderRadius: "var(--radius-full)",
     overflow: "hidden",
+    boxShadow: "var(--inset-sunken)",
   },
   barFill: {
     display: "block",
     height: "100%",
     borderRadius: "var(--radius-full)",
+    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.22)",
   },
   recording: {
     marginLeft: "auto",

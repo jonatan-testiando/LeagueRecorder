@@ -166,7 +166,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
     boxSizing: "border-box",
     overflowY: "auto",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
   },
   center: { display: "grid", placeItems: "center", height: "100%" },
   header: { marginBottom: "var(--space-5)" },

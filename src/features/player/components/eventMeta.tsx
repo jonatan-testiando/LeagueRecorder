@@ -140,6 +140,11 @@ export function eventMeta(ev: MatchEvent): EvMeta {
   }
 }
 
+/**
+ * `text` es la cadena inglesa, que es la clave de i18n: quien la pinta la pasa
+ * por `t()`. Se quedo sin traducir hasta que se vio en pantalla — una columna
+ * de palabras en ingles en una interfaz en espanol.
+ */
 export function toneLabelAndIcon(tone: Tone) {
   switch (tone) {
     case "excellent": return { text: "Excellent", color: "var(--accent-gold)", icon: <Sparkles size={12} fill="currentColor" /> };

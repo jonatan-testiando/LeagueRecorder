@@ -244,7 +244,7 @@ export const TrainingSetup: React.FC<{
 
 const styles: Record<string, React.CSSProperties> = {
   panel: {
-    background: "var(--bg-card)",
+    background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-xl)",
     padding: "var(--space-6)",

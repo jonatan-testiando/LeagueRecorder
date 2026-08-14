@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>LeagueRecorder — arnés de navegador</title>
+<script>
+/* Doble de la capa IPC de Tauri: sirve para abrir la interfaz en un navegador,
+   con datos falsos, sin levantar la app. `npm run dev` y luego
+   http://localhost:1420/dev-harness.html#/<ruta>.
+
+   Vite solo empaqueta index.html, así que esto no viaja a la build. */
+(function () {
+  const champs = ["Gwen", "Viego", "Ahri", "Lee Sin", "Jinx", "Thresh"];
+  const now = Date.now();
+  const iso = (d) => new Date(d).toISOString().slice(0, 19).replace("T", " ");
+
+  const mkEvents = (dur) => {
+    const ev = [];
+    for (let i = 0; i < 14; i++) {
+      const t = Math.round((i + 1) * (dur / 16));
+      const kind = i % 3 === 0 ? "death" : i % 3 === 1 ? "kill" : "assist";
+      ev.push({ type: "ChampionKill", subtype: kind, time: t, description: kind });
+    }
+    ev.push({ type: "DragonKill", subtype: "ally", time: Math.round(dur * 0.4), description: "dragon" });
+    ev.push({ type: "TowerKill", subtype: "enemy", time: Math.round(dur * 0.6), description: "tower" });
+    return ev;
+  };
+
+  const matches = Array.from({ length: 9 }, (_, i) => {
+    const dur = 1650 + i * 137;
+    return {
+      id: "m" + i,
+      game_duration: dur,
+      video_path: "C:/vod/m" + i + ".mp4",
+      result: i % 3 === 0 ? "Victory" : "Defeat",
+      champion: champs[i % champs.length],
+      date: iso(now - i * 86400000 * 0.7),
+      events: mkEvents(dur),
+      apm: 240 + i * 6,
+      apm_series: Array.from({ length: 30 }, (_, k) => 200 + ((k * 37 + i * 11) % 120)),
+      kda: `${6 + i}/${3 + (i % 5)}/${8 + (i % 7)}`,
+      gold_earned: 12000 + i * 400,
+      gold_diff_15: (i % 2 ? 1 : -1) * (200 + i * 260),
+      xp_diff_15: (i % 2 ? -1 : 1) * (150 + i * 90),
+      queue: 420,
+      comments: i % 4 === 0 ? [{ time: 300, text: "revisar recall" }] : [],
+      reviewed_moments: [],
+      video_offset: 45,
+      is_vod: false,
+    };
+  });
+
+  // El primero lleva datos completos de Riot: es la partida con la que se mira
+  // el inspector del reproductor (marcador, objetivos, compras).
+  const NAMES = ["Zeru", "Kai", "Nox", "Vel", "Ori", "Jax", "Rune", "Lux", "Sett", "Yuu"];
+  matches[0].participants = Array.from({ length: 10 }, (_, i) => ({
+    champion: ["Gwen", "Viego", "Ahri", "Jinx", "Thresh", "Sett", "Lee Sin", "Orianna", "Kaisa", "Nautilus"][i],
+    name: NAMES[i],
+    team_id: i < 5 ? 100 : 200,
+    win: i < 5,
+    level: 14 + (i % 4),
+    kills: 3 + ((i * 3) % 9),
+    deaths: 2 + (i % 6),
+    assists: 4 + ((i * 5) % 11),
+    cs: 140 + i * 13,
+    gold: 10500 + i * 640,
+    is_self: i === 0,
+    items: [3153, 3006, 3071, 3742, 0, 0, 3340].slice(0, 7),
+    damage: 14000 + i * 1600,
+    vision_score: 18 + i,
+    wards_placed: 6 + (i % 9),
+  }));
+  matches[0].objectives = [
+    { team_id: 100, win: true, dragons: 3, barons: 1, towers: 8, heralds: 1, inhibitors: 1 },
+    { team_id: 200, win: false, dragons: 1, barons: 0, towers: 3, heralds: 1, inhibitors: 0 },
+  ];
+  matches[0].item_purchases = [3153, 3006, 3071, 3742, 1055, 3340].map((item_id, i) => ({
+    item_id,
+    time: 300 + i * 220,
+  }));
+  matches[0].minute_frames = Array.from({ length: 28 }, (_, m) => ({
+    minute: m,
+    team_gold_diff: Math.round(700 * Math.sin(m / 4)),
+    self_gold_diff: Math.round(500 * Math.sin(m / 5) - 60),
+    self_xp_diff: Math.round(380 * Math.sin(m / 6)),
+    self_jungle_cs_diff: Math.round(6 * Math.sin(m / 3)),
+  }));
+  matches[0].gank_impact_15 = 2;
+  matches[0].jungle_cs_diff_15 = -4;
+  matches[0].lane_result = "Even";
+  window.__MOCK_MATCHES = matches;
+
+  const HANDLERS = {
+    "plugin:app|version": () => "1.2.8",
+    "plugin:event|listen": () => 1,
+    "plugin:event|unlisten": () => null,
+    get_recorded_matches: () => matches,
+    get_recorder_status: () => true,
+    get_disk_usage: () => ({ used_bytes: 159 * 1024 ** 3, total_bytes: 931 * 1024 ** 3 }),
+    get_app_config: () => ({
+      save_directory: "C:/Users/dev/Videos/LeagueRecorder",
+      riot_api_key: "RGAPI-0000",
+      auto_dataset_generator: false,
+      max_storage_gb: 200,
+      auto_prune_days: 30,
+      language: "es",
+    }),
+    get_video_settings: () => ({ fps: 60, quality: "high" }),
+    get_audio_status: () => ({
+      system_audio_device: "CABLE Output (VB-Audio)",
+      all_devices: ["CABLE Output (VB-Audio)", "Altavoces"],
+      ready_for_game_audio: true,
+    }),
+    get_all_clips: () => [],
+    get_all_error_clips: () =>
+      [
+        ["Positioning", "Me adelanto sin visión"],
+        ["Decision Making", "Peleo sin ulti"],
+        ["Mechanics", "Fallo el combo"],
+        ["Positioning", "Ward tardía"],
+      ].map(([category, text], i) => ({
+        id: "e" + i,
+        match_id: "m" + i,
+        time: 600 + i * 240,
+        text,
+        category,
+        note: "",
+        reviewed: i % 2 === 0,
+        clip_path: null,
+        date: iso(now - i * 86400000),
+      })),
+    get_vod_reviews: () => [],
+    get_training_config: () => ({
+      bindings: [
+        { key: "F1", role: "top" },
+        { key: "F2", role: "jungle" },
+        { key: "F3", role: "mid" },
+        { key: "F4", role: "adc" },
+        { key: "F5", role: "support" },
+      ],
+      self_key: "Space",
+      metronome_enabled: true,
+      metronome_interval_secs: 20,
+      metronome_window_secs: 3,
+      flash_ms: 600,
+      snapshot_interval_secs: 45,
+      awareness_quiz_enabled: true,
+    }),
+    get_drill_sessions: () =>
+      Array.from({ length: 5 }, (_, i) => ({
+        id: "d" + i,
+        date: iso(now - i * 86400000),
+        kind: i % 2 ? "recall" : "reflex",
+        rounds: 20,
+        hits: 14 + (i % 5),
+        avg_latency_ms: 480 - i * 12,
+        best_latency_ms: 260 - i * 5,
+        per_role: [],
+        mode: "keys",
+      })),
+    get_champion_pool: () => champs,
+    get_camera_snap_summary: () => null,
+    list_awareness_records: () => [],
+    list_recall_frames: () => [],
+  };
+
+  // El unlisten() que devuelve listen() no pasa por invoke: entra por aquí.
+  window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+    unregisterListener: () => Promise.resolve(),
+  };
+
+  window.__TAURI_INTERNALS__ = {
+    // getCurrentWindow()/getCurrentWebview() lo leen de aquí, no por IPC.
+    metadata: {
+      currentWindow: { label: "main" },
+      currentWebview: { windowLabel: "main", label: "main" },
+    },
+    transformCallback(cb) {
+      const id = Math.floor(Math.random() * 1e9);
+      window["_" + id] = cb;
+      return id;
+    },
+    convertFileSrc: (p) => p,
+    invoke(cmd) {
+      const h = HANDLERS[cmd];
+      if (!h) {
+        console.warn("[arnés] sin doble para", cmd);
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(h());
+    },
+  };
+})();
+</script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    // ?player abre el reproductor con la primera partida ya seleccionada: sin
+    // esto habria que hacer clic, y las capturas se toman sin ventana.
+    import { useAppStore } from "/src/store/useAppStore.ts";
+    import "/src/main.tsx";
+    const qs = new URLSearchParams(location.search);
+    if (qs.has("player")) {
+      useAppStore.getState().setSelectedMatch(window.__MOCK_MATCHES[0]);
+    }
+    // ?tab=2 abre esa pestana del inspector: el estado es local al componente,
+    // asi que se hace con un clic de verdad sobre el boton.
+    const TABS = [
+      ["Revision", "Revisión", "Review"],
+      ["Partida", "Match"],
+      ["Eventos", "Events"],
+      ["Notas", "Notes"],
+    ];
+    const want = TABS[Number(qs.get("tab"))];
+    if (want) {
+      setTimeout(() => {
+        const b = Array.from(document.querySelectorAll("button"))
+          .find((x) => want.includes(x.textContent.trim()));
+        if (b) b.click();
+        else console.warn("[arnes] pestana no encontrada", want);
+      }, 900);
+    }
+  </script>
+</body>
+</html>

@@ -147,7 +147,8 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 9999,
   },
   modal: {
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
+    backdropFilter: "var(--glass-blur)",
     borderRadius: "var(--radius-lg)",
     border: "1px solid var(--border-subtle)",
     width: "100%",

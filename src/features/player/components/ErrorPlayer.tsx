@@ -434,7 +434,7 @@ const styles: Record<string, React.CSSProperties> = {
   videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   // Transporte y tira, una sola superficie. `--bg-panel` no existe como
   // token: se usaba en tres sitios y resolvia a nada, o sea transparente.
-  deck: { background: "var(--panel)", borderTop: "1px solid var(--line-soft)", padding: "var(--space-3) var(--space-4) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
+  deck: { background: "var(--surface-1)", borderTop: "1px solid var(--line-soft)", padding: "var(--space-3) var(--space-4) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
   transport: { display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "0 0 var(--space-3) 0", borderBottom: "1px solid var(--line-soft)" },
   timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--sunken)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", cursor: "pointer" },
   rightColumn: { width: "340px", backgroundColor: "var(--bg-sidebar)", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" },
@@ -450,6 +450,6 @@ const styles: Record<string, React.CSSProperties> = {
   select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
   cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
-  saveBtn: { background: "var(--cool)", color: "var(--ground)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 600 },
+  saveBtn: { background: "var(--action)", color: "var(--on-action)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 600 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

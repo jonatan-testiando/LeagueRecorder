@@ -118,7 +118,10 @@ export const PatternsPanel: React.FC = () => {
 
       <div style={styles.grid}>
         {/* ---------------------------------------------------- reloj */}
-        <div className="card" style={styles.card}>
+        {/* Es la tarjeta que contesta la pregunta con la que entras a esta
+            pantalla, así que lleva la aureola. Una por pantalla: si la llevaran
+            las dos, no destacaría ninguna. */}
+        <div className="card surface-hero" style={styles.card}>
           <div style={styles.cardHead}>
             <span className="u-label">{t("When you die")}</span>
             <span className="u-meta">{t("by minute of game")}</span>
@@ -248,7 +251,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
     boxSizing: "border-box",
     overflowY: "auto",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
   },
   center: { display: "grid", placeItems: "center", height: "100%" },
   header: {
@@ -289,17 +292,22 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
   },
   clockTime: { fontSize: "10px" },
+  // Pista hundida y relleno con filo: es el mismo modelo de luz que el resto,
+  // aplicado a lo que en esta pantalla lleva el dato. La sombra le entra a la
+  // pista por arriba; la barra que la rellena la recibe.
   clockTrack: {
     height: "11px",
     background: "var(--sunken)",
     borderRadius: "2px",
     overflow: "hidden",
+    boxShadow: "var(--inset-sunken)",
   },
   clockFill: {
     display: "block",
     height: "100%",
     borderRadius: "2px",
     background: "var(--loss)",
+    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.22)",
   },
   clockValue: { fontSize: "10.5px", textAlign: "right", color: "var(--muted)" },
   insight: {
@@ -337,7 +345,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "2px",
     overflow: "hidden",
     marginTop: "5px",
+    boxShadow: "var(--inset-sunken)",
   },
-  catFill: { display: "block", height: "100%", borderRadius: "2px" },
+  catFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: "2px",
+    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.22)",
+  },
   catValue: { fontSize: "11px", textAlign: "right", color: "var(--muted)" },
 };

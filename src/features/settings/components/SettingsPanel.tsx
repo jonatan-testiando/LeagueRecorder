@@ -255,7 +255,7 @@ export const SettingsPanel: React.FC = () => {
                   backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none"
                 }} 
               />
-              <button onClick={handlePickDirectory} style={{...styles.button, backgroundColor: "var(--accent-violet)", padding: "8px 12px"}}>
+              <button onClick={handlePickDirectory} className="btn btn--ghost btn--sm" style={{ padding: "8px 12px" }}>
                 Change
               </button>
             </div>
@@ -519,8 +519,8 @@ export const SettingsPanel: React.FC = () => {
                 onClick={() => video && saveVideo(60, video.quality)}
                 style={{
                   ...styles.selectBtn,
-                  backgroundColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.fps === 60 ? "var(--accent-blue)" : "var(--border-strong)",
+                  backgroundColor: video?.fps === 60 ? "var(--surface-2)" : "var(--bg-app)",
+                  borderColor: video?.fps === 60 ? "var(--cool)" : "var(--border-strong)",
                   color: video?.fps === 60 ? "var(--text)" : "var(--text-secondary)"
                 }}
               >
@@ -530,8 +530,8 @@ export const SettingsPanel: React.FC = () => {
                 onClick={() => video && saveVideo(30, video.quality)}
                 style={{
                   ...styles.selectBtn,
-                  backgroundColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--bg-app)",
-                  borderColor: video?.fps === 30 ? "var(--accent-blue)" : "var(--border-strong)",
+                  backgroundColor: video?.fps === 30 ? "var(--surface-2)" : "var(--bg-app)",
+                  borderColor: video?.fps === 30 ? "var(--cool)" : "var(--border-strong)",
                   color: video?.fps === 30 ? "var(--text)" : "var(--text-secondary)"
                 }}
               >
@@ -555,8 +555,8 @@ export const SettingsPanel: React.FC = () => {
                     onClick={() => video && saveVideo(video.fps, q.key)}
                     style={{
                       ...styles.qualityBtn,
-                      backgroundColor: sel ? "var(--accent-blue)" : "var(--bg-app)",
-                      borderColor: sel ? "var(--accent-blue)" : "var(--border-strong)",
+                      backgroundColor: sel ? "var(--surface-2)" : "var(--bg-app)",
+                      borderColor: sel ? "var(--cool)" : "var(--border-strong)",
                       color: sel ? "var(--text)" : "var(--text-secondary)",
                     }}
                   >
@@ -617,7 +617,7 @@ export const SettingsPanel: React.FC = () => {
               <button
                 onClick={handleStartManual}
                 disabled={isProcessing}
-                style={{ ...styles.btn, backgroundColor: "var(--accent-blue)" }}
+                style={{ ...styles.btn, backgroundColor: "var(--action)", color: "var(--on-action)" }}
               >
                 Record Full Screen
               </button>
@@ -691,7 +691,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "var(--space-6)",
     overflowY: "auto",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
     boxSizing: "border-box",
   },
   settingsGrid: {
@@ -808,7 +808,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "flex-start",
     gap: "var(--space-3)",
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-4)",
     borderLeft: "4px solid var(--accent-gold)",
@@ -823,7 +823,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text-secondary)",
   },
   details: {
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-3) var(--space-4)",
     border: "1px solid var(--border-subtle)",
@@ -841,7 +841,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: "1.7",
   },
   card: {
-    backgroundColor: "var(--panel)",
+    background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-lg)",
     padding: "var(--space-6)",
@@ -866,7 +866,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-4)",
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-4)",
     borderLeft: "4px solid var(--text-muted)",
@@ -875,7 +875,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-4)",
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
     borderRadius: "var(--radius-md)",
     padding: "var(--space-4)",
     borderLeft: "4px solid var(--color-defeat)",

@@ -193,7 +193,7 @@ const styles: Record<string, React.CSSProperties> = {
   content: { flex: 1, minHeight: 0 },
   drillsGrid: { display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: 820 },
   progressCard: {
-    background: "var(--bg-card)",
+    background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-xl)",
     padding: "var(--space-5)",
@@ -213,7 +213,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 9,
     letterSpacing: "0.08em",
     color: "var(--faint)",
-    background: "var(--bg-card)",
+    background: "var(--surface-1)",
     paddingRight: 6,
     pointerEvents: "none",
   },

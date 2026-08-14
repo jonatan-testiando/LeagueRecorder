@@ -108,11 +108,11 @@ export const HomePanel: React.FC<HomePanelProps> = ({
           <section>
             <div className="u-label" style={{ marginBottom: 10 }}>{t("What to work on")}</div>
 
-            <div style={styles.focus}>
-              {/* Marca de agua. Es la única superficie de la app con imagen; de
-                  momento es luz, no arte: el splash del campeón iría aquí. */}
-              <div style={styles.focusArt} aria-hidden="true" />
-
+            {/* La aureola (oro arriba a la derecha, turquesa detrás) ya no se
+                pinta aquí: es `.surface-hero` del sistema, y por eso la usan
+                igual Patrones, Análisis y Entrenamiento. Antes era un div
+                decorativo suelto de esta pantalla. */}
+            <div className="surface-hero">
               <div style={styles.focusIn}>
                 <span style={styles.focusTag}>
                   {focus.bucket.total} {t("deaths")} · {focus.games} {t("games")}
@@ -249,7 +249,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     height: "100%",
     boxSizing: "border-box",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
     overflow: "hidden",
   },
   capture: {
@@ -257,8 +257,9 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-5)",
     padding: "var(--space-2) var(--space-8)",
-    background: "var(--panel)",
-    borderBottom: "1px solid var(--line-soft)",
+    background: "var(--surface-1)",
+    backdropFilter: "var(--glass-blur)",
+    borderBottom: "1px solid var(--glass-line-soft)",
   },
   capItem: {
     display: "flex",
@@ -276,21 +277,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "var(--space-6)",
-  },
-  focus: {
-    position: "relative",
-    border: "1px solid var(--line)",
-    borderRadius: "var(--radius-lg)",
-    background: "var(--panel)",
-    overflow: "hidden",
-  },
-  focusArt: {
-    position: "absolute",
-    inset: 0,
-    background:
-      "radial-gradient(60% 120% at 80% 25%, color-mix(in srgb, var(--brand) 14%, transparent) 0%, transparent 60%)," +
-      "radial-gradient(80% 140% at 96% 75%, color-mix(in srgb, var(--cool) 10%, transparent) 0%, transparent 55%)",
-    pointerEvents: "none",
   },
   focusIn: {
     position: "relative",
@@ -345,7 +331,8 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-lg)",
     padding: "var(--space-5) var(--space-6)",
-    background: "var(--panel)",
+    background: "var(--surface-1)",
+    boxShadow: "var(--shadow-1)",
   },
   reviewGrid: {
     display: "grid",

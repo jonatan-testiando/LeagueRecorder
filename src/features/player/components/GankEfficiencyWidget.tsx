@@ -86,7 +86,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
   return (
     <div
       style={{
-        backgroundColor: "var(--bg-card)",
+        background: "var(--surface-1)",
         border: "1px solid var(--border-subtle)",
         borderTop: "3px solid var(--color-victory)",
         borderRadius: "var(--radius-lg)",

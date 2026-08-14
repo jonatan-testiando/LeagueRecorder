@@ -535,7 +535,7 @@ const TrackingTask: React.FC<{ onScore: (pct: number) => void }> = ({ onScore })
 
 const styles: Record<string, React.CSSProperties> = {
   panel: {
-    background: "var(--bg-card)",
+    background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-xl)",
     padding: "var(--space-6)",

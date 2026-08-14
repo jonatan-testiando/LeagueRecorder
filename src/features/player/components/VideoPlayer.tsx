@@ -4,9 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
 import {
-  Eye, Sparkles, Trophy, Maximize, Play, Pause,
+  Eye, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
-  XCircle, ChevronLeft, ChevronRight, MousePointer2,
+  XCircle, ChevronLeft, ChevronRight,
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
@@ -43,6 +43,31 @@ interface VideoPlayerProps {
   match: MatchMetadata;
 }
 
+/**
+ * Fila del inspector: etiqueta a la izquierda, cifra a la derecha, en mono
+ * tabular. Todas las cifras de la columna caen en la misma vertical, que es lo
+ * que permite recorrerlas de un vistazo en vez de buscarlas dentro de azulejos.
+ */
+const InspRow: React.FC<{
+  label: string;
+  value: React.ReactNode;
+  /** Color solo cuando el signo significa algo (una diferencia). */
+  tone?: string;
+  /** Matiz corto a la derecha del valor. */
+  note?: string;
+}> = ({ label, value, tone, note }) => (
+  <div className="insp__row">
+    <span>{label}</span>
+    <b className="u-metric" style={tone ? { color: tone } : undefined}>
+      {value}
+      {note && <em className="insp__rowNote">{note}</em>}
+    </b>
+  </div>
+);
+
+const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
+const diffTone = (n: number): string => (n >= 0 ? "var(--win)" : "var(--loss)");
+
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,7 +102,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
   const t = useT();
-  const [tab, setTab] = useState<"review" | "stats" | "analytics" | "events" | "comments">("review");
+  // Cuatro pestanas, no cinco. "Estadisticas" y "Analitica" eran dos nombres
+  // para lo mismo (cifras de esta partida) y entre las dos no cabian en la
+  // columna: la quinta salia cortada.
+  const [tab, setTab] = useState<"review" | "match" | "events" | "comments">("review");
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
@@ -1002,7 +1030,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 left: hoverClientX,
                 bottom: "160px",
                 transform: "translateX(-50%)",
-                backgroundColor: "var(--bg-card)",
+                background: "var(--surface-1)",
                 padding: "8px 12px",
                 borderRadius: "8px",
                 border: "1px solid var(--border-subtle)",
@@ -1065,10 +1093,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
         <div style={styles.tabBar}>
           <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>{t("Review")}</button>
-          <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>{t("Stats")}</button>
-          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>{t("Analytics")}</button>
+          <button onClick={() => setTab("match")} style={{ ...styles.tab, ...(tab === "match" ? styles.tabActive : {}) }}>{t("Match")}</button>
           <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{t(match.is_vod ? "Analysis" : "Events")}</button>
-          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>{t("Comments")}</button>
+          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>{t("Notes")}</button>
         </div>
 
         {tab === "review" && (
@@ -1081,300 +1108,277 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           />
         )}
 
-        {tab === "stats" && (
-          <div style={styles.tabScroll}>
-            {match.is_vod ? (
-              <div style={{ ...styles.reviewScoreCard, borderLeft: "2px solid var(--cool)" }}>
-                <MousePointer2 size={18} color="var(--cool)" />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ ...styles.scoreText, color: "var(--cool)" }}>{t("Imported VOD")}</div>
-                  <p style={styles.scoreSub}>{t("Cursor and APM analysis.")}</p>
-                </div>
-              </div>
-            ) : (
-              <div style={{ ...styles.reviewScoreCard, borderLeft: `2px solid ${isWin ? "var(--win)" : "var(--loss)"}` }}>
-                {isWin ? <Trophy size={18} color="var(--win)" /> : <XCircle size={18} color="var(--loss)" />}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ ...styles.scoreText, color: isWin ? "var(--win)" : "var(--loss)" }}>
-                    {t(isWin ? "Victory" : "Defeat")}
-                  </div>
-                  <p style={styles.scoreSub}>{match.champion} · {formatTime(duration)}</p>
-                </div>
-              </div>
-            )}
-
-            <div style={styles.statGrid}>
-              {match.kda && <div style={styles.statTile}><span style={styles.statLabel}>KDA</span><span style={styles.statValue}>{match.kda}</span></div>}
-              {!!match.apm && <div style={styles.statTile}><span style={styles.statLabel}>APM</span><span style={styles.statValue}>{Math.round(match.apm)}</span></div>}
-              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>{t("Gold")}</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
-              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>{t("Damage")}</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
-              <div style={styles.statTile}><span style={styles.statLabel}>{t("Duration")}</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
-              <div style={styles.statTile}><span style={styles.statLabel}>{t("Events")}</span><span style={styles.statValue}>{timedEvents.length}</span></div>
+        {tab === "match" && (
+          <div className="insp">
+            {/* El resultado es una linea, no una tarjeta: ya lo sabes al entrar,
+                solo hace falta que te lo confirme. */}
+            <div className="insp__lead">
+              <span
+                className="insp__verdict"
+                style={{ color: match.is_vod ? "var(--cool)" : isWin ? "var(--win)" : "var(--loss)" }}
+              >
+                {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
+              </span>
+              <span className="u-meta">{match.champion} · {formatTime(duration)}</span>
             </div>
 
-            {/* Scoreboard de los 10 jugadores (API Match-V5 de Riot), estilo Ascent */}
-            {participants.length > 0 ? (
-              [100, 200].map((teamId) => {
-                const team = participants.filter((p) => p.team_id === teamId);
-                if (team.length === 0) return null;
-                const won = team[0].win;
-                return (
-                  <div key={teamId} style={styles.team}>
-                    <div style={styles.teamHeader}>
-                      <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                        {t(teamId === 100 ? "Blue Team" : "Red Team")}
-                      </span>
-                      <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)", fontSize: "11px", fontWeight: 700 }}>
-                        {t(won ? "Victory" : "Defeat")}
-                      </span>
-                    </div>
-                    {team.map((p, i) => {
-                      const ratio = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths;
-                      return (
-                        <div key={i} style={{ ...styles.playerRow, ...(p.is_self ? styles.playerRowSelf : {}) }}>
-                          <div style={styles.champWrap}>
-                            <img src={champIcon(p.champion)} alt={p.champion} style={styles.champIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
-                            <span style={styles.champLevel}>{p.level}</span>
-                          </div>
-                          <div style={styles.playerMid}>
-                            <span style={styles.playerName}>{p.is_self ? "Tú" : (p.name || p.champion)}</span>
-                            <div style={styles.itemRow}>
-                              {Array.from({ length: 6 }).map((_, k) => {
-                                const it = (p.items ?? [])[k] ?? 0;
-                                return it > 0 ? (
-                                  <img key={k} src={itemIcon(ddragonVer, it)} style={styles.itemIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
-                                ) : (
-                                  <span key={k} style={styles.itemEmpty} />
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <div style={styles.playerKdaCol}>
-                            <span style={styles.playerKda}>{p.kills}/{p.deaths}/{p.assists}</span>
-                            <span style={styles.playerRatio}>{ratio.toFixed(2)} KDA</span>
-                          </div>
-                          <div style={styles.playerNums}>
-                            <span style={styles.playerCs}>{p.cs} CS</span>
-                            <span style={styles.playerGold}>{(p.gold / 1000).toFixed(1)}k</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })
-            ) : (
-              !match.is_vod && (
-                <div style={styles.syncBox}>
-                  <p style={styles.syncText}>Marcador de los 10 jugadores aún no cargado.</p>
-                  <button style={styles.syncBtn} onClick={handleSync} disabled={syncing}>
-                    <RefreshCw size={14} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-                    {syncing ? "Sincronizando…" : "Sincronizar con Riot"}
-                  </button>
-                  <p style={styles.syncHint}>Requiere tu Riot API key configurada en Ajustes.</p>
-                </div>
-              )
-            )}
-
-            {/* Your Performance (estilo Ascent) */}
-            {selfP && (
-              <div style={styles.perfBox}>
-                <div style={styles.perfHeader}>
-                  <img src={champIcon(selfP.champion)} alt={selfP.champion} style={styles.perfChamp} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
-                  <div>
-                    <div style={styles.perfTitle}>{t("Your performance")}</div>
-                    <div style={styles.perfSub}>{selfP.champion} · {t("Level")} {selfP.level}</div>
-                  </div>
-                </div>
-                <div style={styles.perfList}>
-                  <div style={styles.perfRow}><span>Kill Participation</span><b>{teamKills > 0 ? Math.round(((selfP.kills + selfP.assists) / teamKills) * 100) + "%" : "—"}</b></div>
-                  <div style={styles.perfRow}><span>CS / min</span><b>{durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"}</b></div>
-                  <div style={styles.perfRow}><span>{t("Damage to champions")}</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
-                  <div style={styles.perfRow}><span>Damage Share</span><b>{teamDamage > 0 ? (100 * (selfP.damage ?? 0) / teamDamage).toFixed(1) + "%" : "—"}</b></div>
-                  <div style={styles.perfRow}><span>{t("Damage / min")}</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
-                  <div style={styles.perfRow}><span>Vision Score</span><b>{selfP.vision_score ?? 0}</b></div>
-                  <div style={styles.perfRow}><span>{t("Wards placed")}</span><b>{selfP.wards_placed ?? 0}</b></div>
-                </div>
-                <div style={styles.perfItems}>
+            {/* ------------------------------------------------ tu partida */}
+            <section>
+              <div className="insp__head">
+                <span className="u-label">{t("Your game")}</span>
+                <i className="insp__rule" />
+              </div>
+              {match.kda && <InspRow label="KDA" value={match.kda} />}
+              {!!match.apm && <InspRow label="APM" value={Math.round(match.apm)} />}
+              {!!match.gold_earned && (
+                <InspRow label={t("Gold")} value={`${(match.gold_earned / 1000).toFixed(1)}k`} />
+              )}
+              {selfP && (
+                <>
+                  <InspRow
+                    label={t("Kill participation")}
+                    value={teamKills > 0 ? `${Math.round(((selfP.kills + selfP.assists) / teamKills) * 100)}%` : "—"}
+                  />
+                  <InspRow label="CS / min" value={durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"} />
+                  <InspRow
+                    label={t("Damage to champions")}
+                    value={`${((selfP.damage ?? 0) / 1000).toFixed(1)}k`}
+                    note={teamDamage > 0 ? `${Math.round((100 * (selfP.damage ?? 0)) / teamDamage)}% ${t("of team")}` : undefined}
+                  />
+                  <InspRow label={t("Vision score")} value={selfP.vision_score ?? 0} />
+                </>
+              )}
+              {selfP && (selfP.items ?? []).some((it) => it > 0) && (
+                <div className="insp__items">
                   {Array.from({ length: 7 }).map((_, k) => {
                     const it = (selfP.items ?? [])[k] ?? 0;
                     return it > 0 ? (
-                      <img key={k} src={itemIcon(ddragonVer, it)} style={styles.perfItem} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
+                      <img
+                        key={k}
+                        src={itemIcon(ddragonVer, it)}
+                        alt=""
+                        style={styles.perfItem}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                      />
                     ) : (
                       <span key={k} style={styles.perfItemEmpty} />
                     );
                   })}
                 </div>
-              </div>
-            )}
+              )}
+            </section>
 
-            {/* Objectives (estilo Ascent) */}
-            {objectives.length > 0 && (
-              <div style={{ flexShrink: 0 }}>
-                <div style={styles.sectionTitle}>Objectives</div>
-                <div style={styles.objGrid}>
-                  {[100, 200].map((tid) => {
-                    const o = objectives.find((x) => x.team_id === tid);
-                    if (!o) return null;
-                    return (
-                      <div key={tid} style={styles.objCol}>
-                        <div style={{ ...styles.objTeam, color: o.win ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                          {t(tid === 100 ? "Blue Team" : "Red Team")}
-                        </div>
-                        <div style={styles.objRow}><span>Dragones</span><b>{o.dragons}</b></div>
-                        <div style={styles.objRow}><span>Barones</span><b>{o.barons}</b></div>
-                        <div style={styles.objRow}><span>Heraldos</span><b>{o.heralds}</b></div>
-                        <div style={styles.objRow}><span>Torres</span><b>{o.towers}</b></div>
-                        <div style={styles.objRow}><span>Inhibidores</span><b>{o.inhibitors}</b></div>
-                      </div>
-                    );
-                  })}
+            {/* -------------------------------------------- fase temprana */}
+            {(match.gold_diff_15 != null || match.xp_diff_15 != null ||
+              match.jungle_cs_diff_15 != null || match.gank_impact_15 != null) && (
+              <section>
+                <div className="insp__head">
+                  <span className="u-label">{t("Early game")} · {t("minute 15")}</span>
+                  <i className="insp__rule" />
                 </div>
-              </div>
+                {match.gold_diff_15 != null && (
+                  <InspRow
+                    label={t("Gold difference")}
+                    value={signed(match.gold_diff_15)}
+                    tone={diffTone(match.gold_diff_15)}
+                  />
+                )}
+                {match.xp_diff_15 != null && (
+                  <InspRow label={t("XP difference")} value={signed(match.xp_diff_15)} tone={diffTone(match.xp_diff_15)} />
+                )}
+                {match.jungle_cs_diff_15 != null && (
+                  <InspRow
+                    label={t("Jungle CS difference")}
+                    value={signed(match.jungle_cs_diff_15)}
+                    tone={diffTone(match.jungle_cs_diff_15)}
+                  />
+                )}
+                {match.gank_impact_15 != null && (
+                  <InspRow label={t("Gank pressure")} value={`${match.gank_impact_15}%`} />
+                )}
+                {/* El resultado de linea era una pildora de color; es una frase. */}
+                {match.lane_result && (
+                  <p className="insp__note">
+                    {t(
+                      match.lane_result === "Win" ? "You came out of lane ahead."
+                        : match.lane_result === "Loss" ? "You came out of lane behind."
+                        : "You came out of lane even."
+                    )}
+                  </p>
+                )}
+              </section>
             )}
 
-            {/* Compras de items con su minuto (timeline de Riot) */}
+            {/* ------------------------------------------------- la curva */}
+            {match.minute_frames && match.minute_frames.length > 1 && (
+              <section>
+                <div className="insp__head">
+                  <span className="u-label">{t("Lead over time")}</span>
+                  <i className="insp__rule" />
+                </div>
+                <GoldXpChart
+                  frames={match.minute_frames}
+                  videoOffset={match.video_offset ?? 0}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+              </section>
+            )}
+
+            {/* --------------------------------------------- el marcador */}
+            {participants.length > 0 ? (
+              <section>
+                <div className="insp__head">
+                  <span className="u-label">{t("Scoreboard")}</span>
+                  <i className="insp__rule" />
+                </div>
+                {/* La leyenda va arriba: es la cabecera de las columnas, no un
+                    pie de tabla. */}
+                <div className="insp__legend u-label">
+                  <span>{t("player")}</span><span>K/D/A</span><span>CS</span><span>{t("gold")}</span>
+                </div>
+                {[100, 200].map((teamId) => {
+                  const team = participants.filter((p) => p.team_id === teamId);
+                  if (team.length === 0) return null;
+                  const won = team[0].win;
+                  const tone = won ? "var(--win)" : "var(--loss)";
+                  return (
+                    <div key={teamId} className="insp__team">
+                      <div className="insp__teamHead">
+                        <span style={{ color: tone }}>{t(teamId === 100 ? "Blue Team" : "Red Team")}</span>
+                        <span className="u-meta" style={{ color: tone }}>{t(won ? "Victory" : "Defeat")}</span>
+                      </div>
+                      {team.map((p, i) => (
+                        <div key={i} className={`insp__player${p.is_self ? " insp__player--self" : ""}`}>
+                          <img
+                            src={champIcon(p.champion)}
+                            alt={p.champion}
+                            style={styles.champIcon}
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                          />
+                          <span className="insp__playerName">{p.is_self ? t("You") : (p.name || p.champion)}</span>
+                          <span className="u-metric insp__playerKda">{p.kills}/{p.deaths}/{p.assists}</span>
+                          <span className="u-metric insp__playerNum">{p.cs}</span>
+                          <span className="u-metric insp__playerNum">{(p.gold / 1000).toFixed(1)}k</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </section>
+            ) : (
+              !match.is_vod && (
+                <section>
+                  <p className="insp__note">{t("The 10-player scoreboard is not loaded yet.")}</p>
+                  <button className="btn btn--primary btn--sm" onClick={handleSync} disabled={syncing}>
+                    <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
+                    {syncing ? t("Syncing…") : t("Sync with Riot")}
+                  </button>
+                  <p className="insp__note">{t("Needs your Riot API key set in Settings.")}</p>
+                </section>
+              )
+            )}
+
+            {/* ------------------------------------------------ objetivos */}
+            {objectives.length > 0 && (
+              <section>
+                <div className="insp__head">
+                  <span className="u-label">{t("Objectives")}</span>
+                  <i className="insp__rule" />
+                </div>
+                {/* "Equipo Azul" no cabe en una columna de 40px: se parte en
+                    dos lineas encima de las cifras. Aqui basta el color. */}
+                <div className="insp__row insp__row--3 insp__objLegend u-label">
+                  <span />
+                  <span>{t("Blue")}</span>
+                  <span>{t("Red")}</span>
+                </div>
+                {([
+                  ["Dragons", "dragons"],
+                  ["Barons", "barons"],
+                  ["Heralds", "heralds"],
+                  ["Towers", "towers"],
+                  ["Inhibitors", "inhibitors"],
+                ] as const).map(([label, key]) => {
+                  const blue = objectives.find((o) => o.team_id === 100);
+                  const red = objectives.find((o) => o.team_id === 200);
+                  return (
+                    <div key={key} className="insp__row insp__row--3">
+                      <span>{t(label)}</span>
+                      <b style={{ color: (blue?.[key] ?? 0) >= (red?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
+                        {blue?.[key] ?? 0}
+                      </b>
+                      <b style={{ color: (red?.[key] ?? 0) > (blue?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
+                        {red?.[key] ?? 0}
+                      </b>
+                    </div>
+                  );
+                })}
+              </section>
+            )}
+
+            {/* -------------------------------------------------- compras */}
             {itemPurchases.length > 0 && (
-              <div style={{ flexShrink: 0 }}>
-                <div style={styles.sectionTitle}>Compras de items</div>
-                <div style={styles.buyGrid}>
+              <section>
+                <div className="insp__head">
+                  <span className="u-label">{t("Item purchases")}</span>
+                  <i className="insp__rule" />
+                </div>
+                <div className="insp__buys">
                   {itemPurchases.map((ip, i) => (
-                    <button key={i} style={styles.buyItem} onClick={() => seekTo(ip.time, false)} title={`Comprado en ${formatTime(ip.time)} · ir a ese momento`}>
-                      <img src={itemIcon(ddragonVer, ip.item_id)} alt="" style={styles.buyIcon} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
-                      <span style={styles.buyTime}>{formatTime(ip.time)}</span>
+                    <button
+                      key={i}
+                      className="insp__buy"
+                      onClick={() => seekTo(ip.time, false)}
+                      title={`${formatTime(ip.time)} · ${t("Jump to this moment")}`}
+                    >
+                      <img
+                        src={itemIcon(ddragonVer, ip.item_id)}
+                        alt=""
+                        style={styles.buyIcon}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                      />
+                      <span className="u-meta">{formatTime(ip.time)}</span>
                     </button>
                   ))}
                 </div>
-              </div>
+              </section>
             )}
 
-            {/* Re-sincronizar con Riot */}
+            {/* Los siete widgets de analitica vivian aqui abiertos, uno debajo
+                de otro, cada uno con su tarjeta, su borde de color y su
+                insignia. Siguen estando, pero cerrados: son una segunda
+                lectura, no lo primero que tienes que ver al abrir un video. */}
+            <details className="insp__more">
+              <summary>{t("More analysis")}</summary>
+              <div className="insp__moreBody">
+                <PerformanceTrendsWidget currentMatch={match} />
+                {match.timeline_markers && match.timeline_markers.length > 0 && (
+                  <TacticalMap markers={match.timeline_markers} onSeek={(secs) => seekTo(secs, false)} />
+                )}
+                <MapAwarenessWidget
+                  cameraSnaps={cameraSnaps}
+                  markers={match.timeline_markers}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+                <PowerSpikeWidget
+                  itemPurchases={match.item_purchases}
+                  markers={match.timeline_markers}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+                <GankEfficiencyWidget
+                  markers={match.timeline_markers}
+                  gankImpact15={match.gank_impact_15}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+              </div>
+            </details>
+
             {!match.is_vod && participants.length > 0 && (
-              <button style={styles.resyncBtn} onClick={handleSync} disabled={syncing}>
+              <button className="btn btn--ghost btn--sm insp__resync" onClick={handleSync} disabled={syncing}>
                 <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-                {syncing ? "Actualizando…" : "Actualizar datos de Riot"}
+                {syncing ? t("Updating…") : t("Refresh Riot data")}
               </button>
             )}
-          </div>
-        )}
-
-        {tab === "analytics" && (
-          <div style={styles.tabScroll}>
-            {/* Comparativa de Rendimiento y Tendencias con el Campeón */}
-            <PerformanceTrendsWidget currentMatch={match} />
-
-            {/* Early Game @ 15m (Riot Timeline v5) Card */}
-            {(match.gold_diff_15 !== undefined || match.jungle_cs_diff_15 !== undefined || match.gank_impact_15 !== undefined) && (
-              <div style={{
-                backgroundColor: "var(--bg-card)",
-                border: "1px solid var(--border-subtle)",
-                borderTop: "3px solid var(--accent-violet)",
-                borderRadius: "var(--radius-lg)",
-                padding: "16px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "12px",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.25)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-                    <Sparkles size={16} color="var(--accent-violet)" />
-                    <span>Fase Temprana (@15 min)</span>
-                  </div>
-                  {match.lane_result && (
-                    <span style={{
-                      fontSize: "11px",
-                      fontWeight: 800,
-                      padding: "2px 8px",
-                      borderRadius: "12px",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                      background: match.lane_result === "Win" ? "color-mix(in srgb, var(--color-victory) 15%, transparent)" : match.lane_result === "Loss" ? "color-mix(in srgb, var(--color-defeat) 15%, transparent)" : "rgba(255, 255, 255, 0.1)",
-                      color: match.lane_result === "Win" ? "var(--color-victory)" : match.lane_result === "Loss" ? "var(--color-defeat)" : "var(--text-secondary)",
-                      border: `1px solid ${match.lane_result === "Win" ? "color-mix(in srgb, var(--color-victory) 30%, transparent)" : match.lane_result === "Loss" ? "color-mix(in srgb, var(--color-defeat) 30%, transparent)" : "rgba(255, 255, 255, 0.15)"}`,
-                    }}>
-                      {match.lane_result === "Win" ? "Victoria de Línea" : match.lane_result === "Loss" ? "Derrota de Línea" : "Línea Igualada"}
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                  {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
-                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>{t("Gold difference")}</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                        {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g` : `${match.gold_diff_15}g`}
-                      </div>
-                    </div>
-                  )}
-
-                  {match.xp_diff_15 !== undefined && match.xp_diff_15 !== null && (
-                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de XP</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.xp_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                        {match.xp_diff_15 >= 0 ? `+${match.xp_diff_15} XP` : `${match.xp_diff_15} XP`}
-                      </div>
-                    </div>
-                  )}
-
-                  {match.jungle_cs_diff_15 !== undefined && match.jungle_cs_diff_15 !== null && (
-                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia de Jungla</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "var(--flag)" }}>
-                        {match.jungle_cs_diff_15 >= 0 ? `+${match.jungle_cs_diff_15} CS` : `${match.jungle_cs_diff_15} CS`}
-                      </div>
-                    </div>
-                  )}
-
-                  {match.gank_impact_15 !== undefined && match.gank_impact_15 !== null && (
-                    <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Presión de Ganks</span>
-                      <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: "var(--color-objective)" }}>
-                        {match.gank_impact_15}%
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Gráfica de Ventaja de Oro y XP minuto a minuto */}
-            {match.minute_frames && match.minute_frames.length > 1 && (
-              <GoldXpChart
-                frames={match.minute_frames}
-                videoOffset={match.video_offset ?? 0}
-                onSeek={(secs) => seekTo(secs, false)}
-              />
-            )}
-
-            {/* Minimapa Táctico 2D con Mapa de Calor */}
-            {match.timeline_markers && match.timeline_markers.length > 0 && (
-              <TacticalMap
-                markers={match.timeline_markers}
-                onSeek={(secs) => seekTo(secs, false)}
-              />
-            )}
-
-            {/* Diagnóstico de Conciencia de Mapa y Muertes a Ciegas */}
-            <MapAwarenessWidget
-              cameraSnaps={cameraSnaps}
-              markers={match.timeline_markers}
-              onSeek={(secs) => seekTo(secs, false)}
-            />
-
-            {/* Asistente de Power Spikes y Compras */}
-            <PowerSpikeWidget
-              itemPurchases={match.item_purchases}
-              markers={match.timeline_markers}
-              onSeek={(secs) => seekTo(secs, false)}
-            />
-
-            {/* Análisis de Ganks e Impacto en Líneas */}
-            <GankEfficiencyWidget
-              markers={match.timeline_markers}
-              gankImpact15={match.gank_impact_15}
-              onSeek={(secs) => seekTo(secs, false)}
-            />
           </div>
         )}
 
@@ -1396,19 +1400,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <>
               {featured && (() => {
                 const meta = eventMeta(featured);
-                const t = toneLabelAndIcon(meta.tone);
+                const tl = toneLabelAndIcon(meta.tone);
                 return (
-                  <div style={{ ...styles.featuredCard, borderLeft: `4px solid ${meta.color}` }}>
-                    <div style={styles.featuredTop}>
-                      <span style={{ color: t.color, display: "flex", alignItems: "center", gap: 6, fontWeight: 800, fontSize: 14 }}>
-                        {t.icon} {t.text}
-                      </span>
-                      <button style={styles.featuredTime} onClick={() => jumpToClip(featured.time)}>{formatTime(featured.time)}</button>
+                  <div className="evfeat">
+                    <div className="evfeat__top">
+                      <span className="u-label" style={{ color: tl.color }}>{t(tl.text)}</span>
+                      <button className="u-metric evfeat__time" onClick={() => jumpToClip(featured.time)}>
+                        {formatTime(featured.time)}
+                      </button>
                     </div>
-                    <div style={styles.featuredName}>
+                    <div className="evfeat__name">
                       <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {meta.label}
                     </div>
-                    <p style={styles.featuredDesc}>{describeEvent(featured)}</p>
+                    <p className="evfeat__desc">{describeEvent(featured)}</p>
                   </div>
                 );
               })()}
@@ -1429,70 +1433,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div style={styles.eventListV2}>
                   {shown.map((ev, i) => {
                     const meta = eventMeta(ev);
-                    const t = toneLabelAndIcon(meta.tone);
+                    const tl = toneLabelAndIcon(meta.tone);
                     const isActive = activeEventTime === ev.time;
                     return (
                       <div
                         key={i}
+                        className="evrow"
+                        data-on={isActive || undefined}
                         onClick={() => jumpToClip(ev.time)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "10px",
-                          padding: "10px 14px",
-                          marginBottom: "6px",
-                          borderRadius: "8px",
-                          cursor: "pointer",
-                          background: isActive
-                            ? "color-mix(in srgb, var(--accent-blue) 15%, transparent)"
-                            : "color-mix(in srgb, var(--panel) 60%, transparent)",
-                          border: isActive
-                            ? "1px solid color-mix(in srgb, var(--accent-blue) 40%, transparent)"
-                            : "1px solid rgba(255, 255, 255, 0.08)",
-                          borderLeft: `4px solid ${meta.color}`,
-                          boxShadow: isActive
-                            ? `0 0 16px ${mix(meta.color, 19)}`
-                            : "0 2px 8px rgba(0, 0, 0, 0.25)",
-                          transition: "all 0.15s ease",
-                        }}
                       >
-                        <span style={{
-                          color: "var(--text-secondary)",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          background: "rgba(255, 255, 255, 0.06)",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                        }}>
-                          {formatTime(ev.time)}
-                        </span>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {meta.icon}
-                        </div>
-                        <span style={{ color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-                          {meta.label}
-                        </span>
+                        <span className="evrow__sev" style={{ background: meta.color }} />
+                        <span className="u-metric evrow__time">{formatTime(ev.time)}</span>
+                        <span className="evrow__icon" style={{ color: meta.color }}>{meta.icon}</span>
+                        <span className="evrow__label">{meta.label}</span>
                         {describeEvent(ev) && (
-                          <span style={{ color: "var(--text-muted)", fontSize: "11px", marginLeft: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90px" }}>
-                            {describeEvent(ev)}
-                          </span>
+                          <span className="evrow__desc">{describeEvent(ev)}</span>
                         )}
-                        <span style={{
-                          color: t.color,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                          fontSize: 11,
-                          fontWeight: 800,
-                          marginLeft: "auto",
-                          padding: "2px 8px",
-                          borderRadius: "12px",
-                          background: mix(t.color, 8),
-                          border: `1px solid ${mix(t.color, 19)}`,
-                        }}>
-                          {t.icon} {t.text}
-                        </span>
+                        <span className="evrow__tone" style={{ color: tl.color }}>{t(tl.text)}</span>
                       </div>
                     );
                   })}
@@ -1505,9 +1462,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </div>
 
               <div style={styles.reviewFooter}>
-                <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title="Evento anterior (P)"><ChevronLeft size={16} /> Previous</button>
-                <span style={styles.pageInfo}>{activeIndex || "-"} of {timedEvents.length}</span>
-                <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title="Evento siguiente (N)">Next <ChevronRight size={16} /></button>
+                <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title={`${t("Previous moment")} (P)`}><ChevronLeft size={16} /> {t("Previous")}</button>
+                <span style={styles.pageInfo}>{activeIndex || "-"} {t("of")} {timedEvents.length}</span>
+                <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title={`${t("Next moment")} (N)`}>{t("Next")} <ChevronRight size={16} /></button>
               </div>
             </>
           );
@@ -1549,7 +1506,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       {isClippingMode && (
         <div style={{
           position: "absolute", bottom: "80px", left: "50%", transform: "translateX(-50%)",
-          background: "var(--bg-card)", padding: "12px 24px", borderRadius: "8px", border: "1px solid var(--border-subtle)",
+          background: "var(--surface-1)", padding: "12px 24px", borderRadius: "8px", border: "1px solid var(--border-subtle)",
           display: "flex", alignItems: "center", gap: "20px", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
@@ -1581,7 +1538,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   padding: "var(--space-2) var(--space-3)",
                   borderRadius: "var(--radius-md)",
                   border: "1px solid var(--border-strong)",
-                  backgroundColor: "var(--panel)",
+                  background: "var(--surface-1)",
                   color: "var(--text-primary)",
                   fontSize: "var(--font-sm)",
                   outline: "none"
@@ -1611,8 +1568,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               disabled={isExporting}
               style={{
                 ...styles.ghostBtn, 
-                backgroundColor: exportType === "clip" ? "var(--accent-violet)" : "var(--color-defeat)", 
-                color: "var(--text)", 
+                backgroundColor: exportType === "clip" ? "var(--action)" : "var(--color-defeat)", 
+                color: exportType === "clip" ? "var(--on-action)" : "var(--text)", 
                 border: "none",
                 marginLeft: exportType === "clip" ? "auto" : 0,
                 padding: "6px 16px",

@@ -200,7 +200,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
   },
   header: {
     marginBottom: "var(--space-6)",
@@ -227,8 +227,10 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-2)",
     padding: "var(--space-3) var(--space-6)",
-    backgroundColor: "var(--accent-violet)",
-    color: "var(--text)",
+    // Se le escapó al cambio de relleno de acción: seguía en turquesa a pleno
+    // con el hueso encima, que sobre cian no contrasta.
+    backgroundColor: "var(--action)",
+    color: "var(--on-action)",
     border: "none",
     borderRadius: "var(--radius-md)",
     fontWeight: 600,
@@ -256,7 +258,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
   },
   card: {
-    backgroundColor: "var(--bg-card)",
+    background: "var(--surface-1)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-lg)",
     padding: "var(--space-4)",

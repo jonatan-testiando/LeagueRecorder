@@ -253,7 +253,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebar: {
     width: "240px",
-    backgroundColor: "var(--bg-sidebar)",
+    // El rail no tapa el fondo: lo filtra. Su degradado va perdiendo opacidad
+    // hacia abajo, así que el lavado de color de la ventana se le ve por debajo
+    // y el rail no parte la pantalla en dos bloques planos.
+    background: "var(--rail)",
+    backdropFilter: "var(--glass-blur)",
+    borderRight: "1px solid var(--glass-line-soft)",
     display: "flex",
     flexDirection: "column",
     padding: "var(--space-6) var(--space-4)",
@@ -282,7 +287,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
     overflow: "hidden",
     boxSizing: "border-box",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
     display: "flex",
     flexDirection: "column",
   },
@@ -297,7 +302,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-4)",
     padding: "var(--space-4) var(--space-6)",
-    backgroundColor: "var(--bg-app)",
+    background: "transparent",
   },
   backBtn: {
     background: "transparent",

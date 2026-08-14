@@ -2,13 +2,19 @@
   /* =========================================================================
      Sistema de diseño — piel "Rift"
 
-     Los valores son los tokens del propio cliente de League: #F0E6D2 y #A09B8C
-     son los grises cálidos de Riot, #C8AA6E su oro hextech y #0AC8B9 su
-     turquesa. De ahí sale el reconocimiento, no de poner degradados por encima.
+     Los valores vienen del propio cliente de League: #F0E6D2 y #A09B8C son los
+     grises cálidos de Riot, #C8AA6E su oro hextech, y el fondo marino es el
+     suyo. De ahí sale el reconocimiento, no de poner degradados por encima.
+
+     La excepción es el cuarto tinte: el turquesa de Riot se cambió por jade
+     (2026-08-14). El reconocimiento ya lo llevan el fondo, el oro y el hueso;
+     el cuarto tinte trabaja más como semáforo que como marca, y ahí verde
+     contra rojo se lee sin aprenderlo.
 
      Trece roles y cuatro tintes. Cada tinte tiene un trabajo y solo uno:
-       oro      -> estructura y objetivos. Nunca relleno.
-       turquesa -> interacción y datos. Victoria y kills.
+       oro      -> estructura y objetivos. Solo rellena la acción principal de
+                   una pantalla, y solo una (ver --action).
+       jade     -> interacción y datos. Victoria y kills.
        rojo     -> grabación, derrota, muerte.
        violeta  -> lo que ha encontrado el analizador.
      ========================================================================= */
@@ -21,35 +27,56 @@
      saturado de todo el cromo eran las aristas, más que el texto. En una
      interfaz densa eso son cientos de bordes teñidos, y se lee como ruido.
 
-     Ahora el croma es plano y bajo (2–3,4) en toda la escala, con el mismo
-     tono, y la separación entre fondo y panel sube de 4,5 a 5,7 de L*: la
-     estructura la marca el valor, no el color.
+     Ahora el croma es plano y bajo en toda la escala, con el mismo tono, y la
+     separación entre fondo y panel sube de 4,5 a 5,7 de L*: la estructura la
+     marca el valor, no el color.
 
-     La identidad Rift no vive aquí. Vive en --text (el hueso cálido de Riot),
-     el oro y el turquesa, que no se tocan.
+     2026-08-14: la escala pasa de grafito neutro al marino del cliente de Riot.
+     El grafito era correcto y no decía nada: el oro hextech (tono ~40°) pide un
+     fondo alrededor de 260° para encenderse, que es exactamente lo que hace el
+     cliente. Los tonos siguen siendo los cuatro de siempre; lo único que cambia
+     es DÓNDE vive parte de la identidad: ahora también en el fondo, no solo en
+     --text, el oro y el turquesa.
+
+     Lo que NO cambia es la regla que costó encontrar. Al pasar a marino, la
+     tentación es teñir toda la escala por igual, y entonces el croma vuelve a
+     crecer hacia arriba: medido, la versión directa daba 2,8 en el fondo y 6,3
+     en los bordes, o sea las aristas otra vez como lo más saturado de la
+     pantalla. Estos valores mantienen el croma entre 2,5 y 4,4, con el máximo
+     en el panel (que es superficie) y no en las líneas (que son estructura).
      ========================================================================= */
-  --ground: #0E1215;     /* fondo de ventana */
-  --panel: #1A1E21;      /* rail, barras, tarjetas, inspector */
-  --raised: #2A2F32;     /* elemento activo, hover, botón */
-  --sunken: #050A0E;     /* campos y pistas hundidas */
+  --ground: #070F1F;     /* fondo de ventana */
+  --panel: #0D1A2E;      /* rail, barras, tarjetas, inspector */
+  --raised: #1B2839;     /* elemento activo, hover, botón */
+  --sunken: #020811;     /* campos y pistas hundidas */
 
-  --line: #3B4144;       /* bordes y divisiones */
-  --line-soft: #222629;  /* separadores tenues */
+  --line: #2C3A4E;       /* bordes y divisiones */
+  --line-soft: #16202E;  /* separadores tenues */
   --hairline: rgba(200, 170, 110, 0.32); /* filete dorado, gesto del marco de Riot */
 
   /* Texto */
   --text: #F0E6D2;       /* Riot Grey 1, hueso cálido */
   --muted: #A09B8C;      /* Riot Grey 2 */
-  --faint: #5F7A80;      /* etiquetas y metadatos */
+  /* Sobre grafito este gris era un verde-azulado apagado; sobre marino se
+     hundía en el fondo y los metadatos dejaban de leerse. Sube de luminosidad y
+     se alinea con el tono de la escala. */
+  --faint: #63809F;      /* etiquetas y metadatos */
 
   /* Tintes */
   --brand: #C8AA6E;      /* oro hextech: marca, nav activa, filete */
   --signal: #E84057;     /* rojo Riot: grabando y acción destructiva */
   --flag: #9B6DFF;       /* hallazgo del analizador */
-  --cool: #0AC8B9;       /* turquesa hextech: interacción, datos, foco */
+  /* Era el turquesa hextech #0AC8B9. Se cambia por jade a petición del usuario
+     —el turquesa no le convencía en ningún uso— y de paso el sistema gana algo
+     que no tenía: rojo y verde son la pareja que el ojo lee sin aprenderla, y
+     esta es una app cuyo tema son los errores. El jade va un punto por debajo
+     de saturación (croma 12,0 frente a 13,1) para no competir con el oro, que
+     está en 8,6. El rojo sigue siendo el más saturado de los cuatro: es la
+     alarma. */
+  --cool: #3BA97D;       /* jade: interacción, datos, foco, victoria */
 
   /* Semánticos (se apoyan en los mismos cuatro tintes) */
-  --win: #0AC8B9;
+  --win: #3BA97D;
   --loss: #E84057;
   --gold: #C8AA6E;
 
@@ -57,6 +84,100 @@
      marcas de eventos. Se derivan del gris secundario. */
   --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
   --apm-line: color-mix(in srgb, var(--muted) 34%, transparent);
+
+  /* =========================================================================
+     Capa de vidrio.
+
+     La escala de superficies de arriba dice a qué ALTURA está cada cosa. Esto
+     dice de qué están hechas: no son rectángulos opacos de color plano, son
+     láminas semitransparentes sobre un fondo que sí tiene color.
+
+     Van juntas y en este orden, o no funciona ninguna:
+       --canvas  el fondo deja de ser negro y pasa a tener tres lavados de color
+                 muy abiertos (oro, turquesa, violeta) puestos donde están los
+                 tintes de la app. Es lo que las láminas de encima filtran.
+       --surface-*  la lámina: un degradado DE OPACIDAD, no de color. Arriba
+                 tapa casi del todo, abajo deja pasar el fondo. Por eso dos
+                 tarjetas iguales en sitios distintos del lavado no se ven
+                 idénticas, que es justo lo que las hace parecer material.
+       --glass-line  el canto. Cálido y translúcido, nunca un gris opaco.
+       --glass-blur  solo para las superficies estructurales (rail, barras,
+                 emergentes). En una lista virtualizada de cientos de filas el
+                 desenfoque de fondo se paga por fila y no se ve.
+
+     Los porcentajes son altos (88 → 62) a propósito: la transparencia se tiene
+     que leer como profundidad, no como una ventana. Si el texto de debajo se
+     adivina, se ha ido de la mano.
+     ========================================================================= */
+  --canvas: radial-gradient(
+      75% 52% at 6% -10%,
+      color-mix(in srgb, var(--brand) 17%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      62% 55% at 97% 0%,
+      color-mix(in srgb, var(--cool) 14%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      95% 62% at 66% 115%,
+      color-mix(in srgb, var(--flag) 11%, transparent) 0%,
+      transparent 60%
+    ),
+    var(--ground);
+
+  /* La lámina parte de un panel LEVANTADO, no del panel a secas: un gris oscuro
+     translúcido sobre un fondo oscuro no se ve translúcido, se ve más oscuro.
+     Para que la transparencia se lea, la lámina tiene que aclarar. */
+  --glass-base: color-mix(in srgb, var(--text) 6%, var(--panel));
+  --glass-base-2: color-mix(in srgb, var(--text) 11%, var(--panel));
+
+  --surface-1: linear-gradient(
+    157deg,
+    color-mix(in srgb, var(--glass-base) 84%, transparent) 0%,
+    color-mix(in srgb, var(--glass-base) 52%, transparent) 100%
+  );
+  --surface-2: linear-gradient(
+    157deg,
+    color-mix(in srgb, var(--glass-base-2) 88%, transparent) 0%,
+    color-mix(in srgb, var(--glass-base-2) 58%, transparent) 100%
+  );
+
+  /* El rail es alto y va pegado al borde: su degradado es vertical y termina
+     dejando ver el fondo, para que no corte la ventana en dos bloques. */
+  --rail: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--glass-base) 86%, transparent) 0%,
+    color-mix(in srgb, var(--panel) 72%, transparent) 55%,
+    color-mix(in srgb, var(--ground) 62%, transparent) 100%
+  );
+
+  --glass-line: color-mix(in srgb, var(--text) 13%, transparent);
+  --glass-line-soft: color-mix(in srgb, var(--text) 8%, transparent);
+  --glass-blur: blur(18px) saturate(130%);
+
+  /* Aureola de superficie principal: es lo que ya hacía a mano la tarjeta de
+     "Hoy". Oro arriba a la derecha, turquesa detrás y más abajo, para que el
+     color tenga una dirección y no sea una mancha centrada. */
+  --halo: radial-gradient(
+      60% 120% at 80% 25%,
+      color-mix(in srgb, var(--brand) 13%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      80% 140% at 96% 75%,
+      color-mix(in srgb, var(--cool) 9%, transparent) 0%,
+      transparent 55%
+    );
+
+  /* Sombras. Difusas y largas: separan la lámina del fondo sin dibujarle un
+     contorno negro debajo. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.22), 0 6px 16px -12px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.26), 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --shadow-3: 0 28px 64px -24px rgba(0, 0, 0, 0.8);
+
+  /* Lo hundido (pistas de barra, campos) no es una lámina: es un hueco. */
+  --inset-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.45);
 
   /* =========================================================================
      Alias heredados. Los componentes todavía usan estos nombres; apuntan a los
@@ -78,7 +199,7 @@
   --text-muted: var(--faint);
 
   --accent-violet: var(--cool);          /* acento general de interacción */
-  --accent-violet-hover: #3FE0D2;
+  --accent-violet-hover: #4FC08F;
   --accent-violet-soft: color-mix(in srgb, var(--cool) 16%, transparent);
   --accent-gold: var(--gold);
   --accent-blue: var(--cool);
@@ -92,7 +213,7 @@
   --color-assist: var(--win);
   --color-objective: var(--gold);
 
-  --gradient-violet: linear-gradient(135deg, #0AC8B9, #0596AA);
+  --gradient-violet: linear-gradient(135deg, var(--cool), color-mix(in srgb, #000 22%, var(--cool)));
 
   /* =========================================================================
      Tipografía. La identidad la lleva la mono: en esta app el 80% del texto son
@@ -169,13 +290,18 @@
   box-sizing: border-box;
 }
 
+/* El lavado de color vive aquí y en ningún sitio más: es la única capa opaca
+   de la ventana, y todo lo que va encima (barra de título, rail, paneles) lo
+   filtra en vez de taparlo. Si cada panel repitiera el degradado, se verían las
+   costuras al cambiar de sección. */
 body {
   margin: 0;
   padding: 0;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background: var(--bg-app);
+  background: var(--canvas);
+  background-attachment: fixed;
 }
 
 #root {
@@ -311,8 +437,12 @@ a:focus:not(:focus-visible) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border-subtle);
+  /* Va sobre el lavado de color del fondo, así que es lámina como todo lo
+     demás: se le ve el tinte de debajo en vez de tapar la ventana con una
+     franja gris. */
+  background: var(--surface-1);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-line-soft);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -352,7 +482,7 @@ a:focus:not(:focus-visible) {
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .titlebar__btn:hover {
-  background: var(--bg-hover);
+  background: var(--surface-2);
   color: var(--text-primary);
 }
 .titlebar__btn--close:hover {
@@ -388,15 +518,16 @@ a:focus:not(:focus-visible) {
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .nav-btn:hover {
-  background: var(--bg-hover);
+  background: var(--surface-2);
   color: var(--text-primary);
 }
 /* La sección activa es el único sitio de la navegación donde entra el oro, y
    entra como estructura (una barra de 2px), nunca como relleno. */
 .nav-btn--active {
-  background: var(--raised);
+  background: var(--surface-2);
   color: var(--text);
   font-weight: 700;
+  box-shadow: var(--shadow-1);
 }
 .nav-btn--active::before {
   content: "";
@@ -413,10 +544,24 @@ a:focus:not(:focus-visible) {
    Tarjetas y filas interactivas
    ========================================================================= */
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+  border: 1px solid var(--glass-line-soft);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   animation: card-in var(--t-base) var(--e-out) both;
+}
+
+/* Superficie principal de una pantalla: la que contesta a la pregunta con la
+   que has entrado. Lleva la aureola además del brillo, y solo puede haber una
+   por pantalla — si dos superficies piden la mirada, no la pide ninguna. */
+.surface-hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--halo), var(--surface-1);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
 }
 /* El hover no desplaza el elemento: cambia el fondo y el borde, y punto. Mover
    la fila bajo el cursor en una lista densa produce temblor, y a 350ms con
@@ -426,8 +571,8 @@ a:focus:not(:focus-visible) {
     background-color var(--t-instant) var(--e-move);
 }
 .card-interactive:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
+  border-color: var(--glass-line);
+  background: var(--surface-2);
 }
 /* Sin `animation: card-in`: esta fila la pinta una lista virtualizada
    (@tanstack/react-virtual en MatchGallery), así que se monta y se desmonta al
@@ -438,9 +583,13 @@ a:focus:not(:focus-visible) {
   transition: background-color var(--t-instant) var(--e-move),
     border-color var(--t-instant) var(--e-move);
 }
+/* La fila no lleva brillo en reposo y sí al pasar por encima. Con brillo fijo,
+   veinte filas seguidas son veinte degradados apilados y la lista se lee como
+   una persiana; al iluminarse solo la de debajo del cursor, el brillo pasa a
+   ser información. */
 .game-row:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
+  background: var(--surface-2);
+  border-color: var(--glass-line);
 }
 
 /* Entrada suave de tarjetas/paneles. El desplazamiento escala con el tamaño del
@@ -464,11 +613,16 @@ a:focus:not(:focus-visible) {
 /* =========================================================================
    Botones reutilizables
    ========================================================================= */
-/* Turquesa con texto oscuro: sobre #0AC8B9 el blanco tiene mal contraste y el
-   texto sobre el fondo lo tiene de sobra. */
+/* Relleno con texto oscuro: sobre un tinte claro el blanco contrasta mal y el
+   fondo de la ventana contrasta de sobra. */
 .btn-primary {
-  background: var(--cool);
-  color: var(--ground);
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, #fff 8%, var(--action)) 0%,
+    var(--action) 55%,
+    color-mix(in srgb, var(--ground) 30%, var(--action)) 100%
+  );
+  color: var(--on-action);
   border: none;
   border-radius: var(--radius-md);
   font-weight: 600;
@@ -476,18 +630,23 @@ a:focus:not(:focus-visible) {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  box-shadow: none;
+  box-shadow: var(--shadow-1);
   transition: background-color var(--t-instant) var(--e-move),
     box-shadow var(--t-instant) var(--e-move),
     transform var(--t-instant) var(--e-move);
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-violet-hover);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--cool) 30%, transparent);
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
+    var(--action-hover) 60%,
+    var(--action) 100%
+  );
+  box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
 }
 .btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border-strong);
+  background: var(--surface-1);
+  border: 1px solid var(--glass-line);
   color: var(--text-primary);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -500,7 +659,7 @@ a:focus:not(:focus-visible) {
     color var(--t-instant) var(--e-move);
 }
 .btn-ghost:hover {
-  background: var(--bg-hover);
+  background: var(--surface-2);
   border-color: var(--border-focus);
 }
 
@@ -519,7 +678,7 @@ a:focus:not(:focus-visible) {
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .icon-btn:hover {
-  background: var(--bg-hover);
+  background: var(--surface-2);
   color: var(--text-primary);
 }
 .icon-btn--danger:hover {
@@ -547,8 +706,9 @@ a:focus:not(:focus-visible) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+  border: 1px solid var(--glass-line-soft);
+  box-shadow: var(--shadow-1);
 }
 .empty-state__title {
   font-size: var(--font-md);
@@ -590,6 +750,26 @@ a:focus:not(:focus-visible) {
 :root {
   --cool-fill: color-mix(in srgb, var(--cool) 55%, var(--panel));
   --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+
+  /* =========================================================================
+     Relleno de acción.
+
+     Primero fue turquesa a pleno: un rotulador fluorescente sobre el marino, y
+     el punto más brillante de la pantalla para decir "guardar". Luego turquesa
+     rebajado, que dejó de chillar pero seguía sin encajar. El que encaja es el
+     oro, porque es el que usa el propio cliente: el botón JUGAR es un degradado
+     dorado con el texto oscuro encima.
+
+     Esto **dobla la regla del oro** que hay al principio del fichero. La regla
+     se mantiene con una excepción escrita: el oro rellena UNA acción por
+     pantalla, la principal, y nada más. En cuanto haya dos botones dorados a la
+     vez el oro deja de señalar y vuelve el problema que teníamos con el
+     turquesa. Los interruptores, los seleccionados y los estados NO son
+     acciones: esos van con la superficie levantada y el turquesa de siempre.
+     ========================================================================= */
+  --action: #C8AA6E;
+  --action-hover: #D9BE85;
+  --on-action: #0A1420;
 }
 
 /* =========================================================================
@@ -614,12 +794,38 @@ a:focus:not(:focus-visible) {
 .btn--md { padding: var(--space-2) var(--space-4); }
 .btn--sm { padding: 5px var(--space-3); font-size: 11px; }
 
-.btn--primary { background: var(--cool); color: var(--ground); font-weight: 600; }
-.btn--primary:hover:not(:disabled) { background: var(--accent-violet-hover); }
+/* El botón es la superficie más pequeña de la app y por eso es donde más se
+   nota que hay volumen: filo iluminado arriba, cuerpo, y base un punto más
+   oscura. Al pulsarlo se apaga el filo y la sombra se le mete dentro — es lo
+   mismo que hace el desplazamiento de 1px, dicho con luz. */
+.btn--primary {
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, #fff 8%, var(--action)) 0%,
+    var(--action) 55%,
+    color-mix(in srgb, var(--ground) 30%, var(--action)) 100%
+  );
+  color: var(--on-action);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+.btn--primary:hover:not(:disabled) {
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
+    var(--action-hover) 60%,
+    var(--action) 100%
+  );
+  box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
+}
 
-.btn--ghost { background: transparent; border-color: var(--line); color: var(--muted); }
-.btn--ghost:hover:not(:disabled) { border-color: var(--faint); color: var(--text); }
-.btn--ghost[aria-pressed="true"] { background: var(--raised); color: var(--text); border-color: var(--line); }
+.btn--ghost {
+  background: var(--surface-1);
+  border-color: var(--glass-line);
+  color: var(--muted);
+}
+.btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
+.btn--ghost[aria-pressed="true"] { background: var(--surface-2); color: var(--text); border-color: var(--glass-line); }
 
 .btn--danger { background: transparent; border-color: transparent; color: var(--faint); }
 .btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
@@ -630,7 +836,7 @@ a:focus:not(:focus-visible) {
   color: var(--faint);
   padding: var(--space-2);
 }
-.btn--icon:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
 .badge {
   display: inline-flex;
@@ -664,7 +870,7 @@ a:focus:not(:focus-visible) {
   transition: background-color var(--t-instant) var(--e-move),
     border-color var(--t-instant) var(--e-move);
 }
-.card--interactive:hover { background: var(--raised); border-color: var(--line); }
+.card--interactive:hover { background: var(--surface-2); border-color: var(--glass-line); }
 .card--in { animation: card-in var(--t-base) var(--e-out) both; }
 
 /* =========================================================================
@@ -757,8 +963,8 @@ a:focus:not(:focus-visible) {
   cursor: pointer;
   transition: background-color var(--t-instant) var(--e-move);
 }
-.rq-item:hover { background: var(--raised); }
-.rq-item[data-sel] { background: var(--raised); }
+.rq-item:hover { background: var(--surface-2); }
+.rq-item[data-sel] { background: var(--surface-2); }
 .rq-item:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
 
 .rq-sev { align-self: stretch; border-radius: 1px; }
@@ -848,7 +1054,7 @@ a:focus:not(:focus-visible) {
   transition: color var(--t-instant) var(--e-move),
     background-color var(--t-instant) var(--e-move);
 }
-.tp-b:hover { color: var(--text); background: var(--raised); }
+.tp-b:hover { color: var(--text); background: var(--surface-2); }
 .tp-b:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
 .tp-b--primary {
   width: 31px;
@@ -897,7 +1103,7 @@ a:focus:not(:focus-visible) {
 }
 .tp-seg button + button { border-left: 1px solid var(--line); }
 .tp-seg button:hover { color: var(--text); }
-.tp-seg button[data-on] { background: var(--raised); color: var(--text); }
+.tp-seg button[data-on] { background: var(--surface-2); color: var(--text); }
 
 /* El volumen se despliega al pasar por encima: se ajusta una vez y no merece
    ocupar sitio permanente en horizontal. */
@@ -930,18 +1136,19 @@ a:focus:not(:focus-visible) {
     background-color var(--t-instant) var(--e-move);
 }
 .tp-more summary::-webkit-details-marker { display: none; }
-.tp-more summary:hover { color: var(--text); background: var(--raised); }
-.tp-more[open] summary { color: var(--text); background: var(--raised); }
+.tp-more summary:hover { color: var(--text); background: var(--surface-2); }
+.tp-more[open] summary { color: var(--text); background: var(--surface-2); }
 
 .tp-pop {
   position: absolute;
   right: 0;
   bottom: calc(100% + 8px);
   width: 250px;
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--surface-1);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-line);
   border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-3);
   padding: var(--space-2);
   z-index: 40;
   animation: pop-in var(--t-quick) var(--e-out) both;
@@ -961,7 +1168,7 @@ a:focus:not(:focus-visible) {
   color: var(--text);
   cursor: pointer;
 }
-.tp-pop__row:hover { background: var(--raised); }
+.tp-pop__row:hover { background: var(--surface-2); }
 .tp-pop__row--stack { flex-direction: column; align-items: stretch; cursor: default; }
 .tp-pop__row--stack:hover { background: transparent; }
 .tp-pop__row em {
@@ -1025,3 +1232,237 @@ a:focus:not(:focus-visible) {
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* =========================================================================
+   Inspector del reproductor.
+
+   Lo que había: dos pestañas de cifras ("Estadísticas" y "Analítica") con
+   siete widgets apilados, y cada widget era una tarjeta con su borde superior
+   de color, su insignia de estado y una rejilla de azulejos dentro. Tres
+   niveles de caja para enseñar un número, cinco acentos distintos compitiendo
+   en una columna de 350px, y la mitad de los datos repetidos entre bloques (el
+   oro@15 salía dos veces, la presión de ganks tres).
+
+   Lo que hay: una sola columna de filas etiqueta -> valor. La jerarquía la dan
+   el espacio y una etiqueta mono con su regla, no una caja. Las cifras caen
+   todas en la misma vertical, en mono tabular, y el color aparece solo cuando
+   el signo significa algo.
+   ========================================================================= */
+.insp {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.insp__lead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.insp__verdict {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.insp__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.insp__rule { flex: 1; height: 1px; background: var(--line-soft); }
+
+.insp__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.insp__row span { font-size: 12.5px; color: var(--muted); }
+.insp__row b { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.insp__rowNote {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--faint);
+  margin-left: 6px;
+}
+/* Objetivos: misma fila, dos equipos. */
+.insp__row--3 { display: grid; grid-template-columns: 1fr 40px 40px; text-align: right; }
+.insp__row--3 span:first-child { text-align: left; }
+
+.insp__note {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.insp__items { display: flex; gap: 3px; margin-top: var(--space-3); }
+
+/* --- marcador ----------------------------------------------------------
+   Se cayeron los seis iconos de objeto por jugador: sesenta imágenes de 15px
+   en una columna estrecha no se leen, solo hacen ruido. Los objetos siguen,
+   pero solo los tuyos y a tamaño usable. */
+.insp__team { margin-bottom: var(--space-3); }
+.insp__teamHead {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: var(--space-2) 0 var(--space-1);
+}
+.insp__player {
+  display: grid;
+  grid-template-columns: 20px 1fr auto 34px 42px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 4px;
+  border-radius: var(--radius-sm);
+}
+.insp__player--self { background: var(--surface-2); }
+.insp__playerName {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insp__player--self .insp__playerName { color: var(--text); font-weight: 600; }
+.insp__playerKda { font-size: 11.5px; color: var(--text); }
+.insp__playerNum { font-size: 11px; color: var(--faint); text-align: right; }
+/* Mismas columnas que la fila de jugador, mas la del icono, o la cabecera no
+   cae encima de sus cifras. */
+.insp__legend {
+  display: grid;
+  grid-template-columns: 20px 1fr auto 34px 42px;
+  gap: var(--space-2);
+  text-align: right;
+  padding-bottom: var(--space-1);
+}
+.insp__legend span:first-child { grid-column: 1 / 3; text-align: left; }
+
+/* --- compras ----------------------------------------------------------- */
+.insp__buys { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.insp__buy {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px 3px 3px;
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.insp__buy:hover { background: var(--surface-2); border-color: var(--glass-line); }
+
+/* --- segunda lectura ---------------------------------------------------- */
+.insp__more { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
+.insp__more summary {
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.insp__more summary::-webkit-details-marker { display: none; }
+.insp__more summary::after { content: "+"; margin-left: auto; font-size: 13px; }
+.insp__more[open] summary::after { content: "−"; }
+.insp__more summary:hover { color: var(--text); }
+.insp__moreBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.insp__resync { align-self: flex-start; }
+
+/* --- lista de eventos ---------------------------------------------------
+   Mismo idioma que la cola de revisión (.rq-item): barra de 2px para el tono,
+   tiempo en mono a la izquierda, y la fila seleccionada se marca con fondo, no
+   con un halo de color. */
+.evrow {
+  display: grid;
+  grid-template-columns: 2px 44px 16px auto 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.evrow:hover { background: var(--surface-2); }
+.evrow[data-on] { background: var(--surface-2); }
+.evrow__sev { align-self: stretch; border-radius: 1px; }
+.evrow__time { font-size: 11px; color: var(--faint); }
+.evrow[data-on] .evrow__time { color: var(--cool); }
+.evrow__icon { display: flex; align-items: center; justify-content: center; }
+.evrow__label { font-size: 12.5px; color: var(--text); white-space: nowrap; }
+.evrow__desc {
+  font-size: 11px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.evrow__tone {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* El evento seleccionado, en grande. Antes su insignia pesaba más que el
+   título de la pantalla; ahora es una etiqueta como las demás. */
+.evfeat {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.evfeat__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.evfeat__time {
+  background: transparent;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.evfeat__time:hover { border-color: var(--glass-line); color: var(--text); }
+.evfeat__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.evfeat__desc {
+  margin: var(--space-2) 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Cabecera de las dos columnas de objetivos: arriba, como el marcador. */
+.insp__objLegend { border-bottom-color: transparent; padding-bottom: 0; }
+.insp__objLegend span { font-size: 10px; }

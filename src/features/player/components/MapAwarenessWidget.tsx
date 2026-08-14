@@ -40,7 +40,7 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
   return (
     <div
       style={{
-        backgroundColor: "var(--bg-card)",
+        background: "var(--surface-1)",
         border: "1px solid var(--border-subtle)",
         borderTop: "3px solid var(--color-defeat)",
         borderRadius: "var(--radius-lg)",

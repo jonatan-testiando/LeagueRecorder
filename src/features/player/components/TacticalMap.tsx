@@ -50,7 +50,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
 
   return (
     <div style={{
-      backgroundColor: "var(--bg-card)",
+      background: "var(--surface-1)",
       border: "1px solid var(--border-subtle)",
       borderRadius: "var(--radius-lg)",
       padding: "16px",

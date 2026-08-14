@@ -36,7 +36,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
 
   if (loading) {
     return (
-      <div style={{ backgroundColor: "var(--bg-card)", borderRadius: "var(--radius-lg)", padding: "16px", color: "var(--text-muted)", fontSize: "12px" }}>
+      <div style={{ background: "var(--surface-1)", borderRadius: "var(--radius-lg)", padding: "16px", color: "var(--text-muted)", fontSize: "12px" }}>
         Cargando historial de tendencias...
       </div>
     );
@@ -70,7 +70,7 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
   return (
     <div
       style={{
-        backgroundColor: "var(--bg-card)",
+        background: "var(--surface-1)",
         border: "1px solid var(--border-subtle)",
         borderTop: "3px solid var(--accent-violet)",
         borderRadius: "var(--radius-lg)",

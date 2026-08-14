@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { MinuteFrameDto } from "../../../types";
-import { TrendingUp } from "lucide-react";
 
 interface GoldXpChartProps {
   frames: MinuteFrameDto[];
@@ -70,65 +69,17 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
   const hoverP = hoverIndex !== null ? points[hoverIndex] : null;
 
   return (
-    <div style={{
-      backgroundColor: "var(--bg-card)",
-      border: "1px solid var(--border-subtle)",
-      borderRadius: "var(--radius-lg)",
-      padding: "16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "12px",
-      boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-          <TrendingUp size={16} color="var(--accent-violet)" />
-          <span>Curva de Ventaja de Partida</span>
-        </div>
-        <div style={{ display: "flex", gap: "4px", background: "var(--bg-app)", padding: "2px", borderRadius: "6px" }}>
-          <button
-            onClick={() => setMode("team_gold")}
-            style={{
-              background: mode === "team_gold" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "team_gold" ? "var(--text)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
+    // Sin tarjeta ni titulo: los pone la seccion del inspector que la contiene.
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <div className="tp-seg">
+          <button onClick={() => setMode("team_gold")} {...(mode === "team_gold" ? { "data-on": true } : {})}>
             Oro Equipo
           </button>
-          <button
-            onClick={() => setMode("self_gold")}
-            style={{
-              background: mode === "self_gold" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "self_gold" ? "var(--text)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => setMode("self_gold")} {...(mode === "self_gold" ? { "data-on": true } : {})}>
             Oro Individual
           </button>
-          <button
-            onClick={() => setMode("self_xp")}
-            style={{
-              background: mode === "self_xp" ? "var(--accent-violet-soft)" : "transparent",
-              color: mode === "self_xp" ? "var(--text)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
+          <button onClick={() => setMode("self_xp")} {...(mode === "self_xp" ? { "data-on": true } : {})}>
             XP Individual
           </button>
         </div>
@@ -157,7 +108,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
           <path d={areaPosD} fill="url(#goldPosGrad)" />
 
           {/* Línea principal */}
-          <path d={lineD} fill="none" stroke="var(--accent-violet)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={lineD} fill="none" stroke="var(--cool)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
 
           {/* Indicador de hover */}
           {hoverP && (
@@ -195,9 +146,7 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
         )}
       </div>
 
-      <span style={{ fontSize: "10px", color: "var(--text-muted)", textAlign: "center" }}>
-        Haz clic en cualquier punto de la gráfica para saltar el vídeo a ese minuto de la partida.
-      </span>
+
     </div>
   );
 };

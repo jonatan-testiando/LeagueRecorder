@@ -18,7 +18,21 @@ export interface MatchEvent {
   // kill/death/assist para ChampionKill; ally/enemy para objetivos; win/lose para GameEnd; R para Ultimate
   subtype?: 'kill' | 'death' | 'assist' | 'ally' | 'enemy' | 'win' | 'lose' | 'R' | string;
   time: number; // Marca de tiempo en segundos
+  /**
+   * Frase ya montada por el backend. Legado: las partidas grabadas antes de que
+   * existieran los campos de abajo solo llevan esto, y en español. Se usa como
+   * último recurso en `describeEvent`.
+   */
   description: string;
+
+  // Datos estructurados. Solo en partidas grabadas a partir de la versión que
+  // los introdujo; `describeEvent` compone la frase a partir de ellos.
+  actor?: string;   // quién lo hizo
+  target?: string;  // sobre quién o qué
+  detail?: string;  // matiz: tipo de dragón, racha, "stolen" (separado por comas)
+
+  /** Marcado como visto en la cola de revisión. */
+  reviewed?: boolean;
 }
 
 export interface MouseEventData {

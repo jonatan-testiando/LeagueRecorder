@@ -20,6 +20,8 @@ import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
+import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
+import { describeEvent } from "../../../core/eventText";
 import { styles } from "./videoPlayerStyles";
 import { mix } from "../../../core/color";
 import {
@@ -70,7 +72,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [exportType, setExportType] = useState<"clip" | "error">("clip");
   const [errorNote, setErrorNote] = useState<string>("");
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
-  const [tab, setTab] = useState<"stats" | "analytics" | "events" | "comments">("stats");
+  // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
+  // una partida lo que quieres saber es que mirar, no como te fue.
+  const [tab, setTab] = useState<"review" | "stats" | "analytics" | "events" | "comments">("review");
+
+  // Los momentos que merecen una mirada. Se recalculan solo si cambia la partida.
+  const [moments, setMoments] = useState<Moment[]>(() => buildQueue(match));
+  useEffect(() => { setMoments(buildQueue(match)); }, [match.id]);
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);
@@ -817,7 +825,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     boxShadow: "none",
                     zIndex: isActive ? 10 : 5,
                   }}
-                  title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label}${e.description ? " – " + e.description : ""}`).join("\n")}
+                  title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label} – ${describeEvent(e)}`).join("\n")}
                 >
                   <span style={{ color: isActive ? "var(--text)" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.icon}
@@ -905,7 +913,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   return (
                     <div key={ev.time} style={{ fontSize: "11px", color: meta.color, display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}>
                       <span style={{ transform: "scale(0.8)" }}>{meta.icon}</span>
-                      {meta.label} {ev.description ? `- ${ev.description}` : ""}
+                      {meta.label} {`- ${describeEvent(ev)}`}
                     </div>
                   );
                 })}
@@ -944,11 +952,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       <div style={{ ...styles.rightColumn, width: sidebarWidth }}>
         <div style={styles.resizeHandle} onPointerDown={startResize} title="Drag to resize" />
         <div style={styles.tabBar}>
+          <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>Review</button>
           <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>Stats</button>
           <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>Analytics</button>
           <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Analysis" : "Events"}</button>
           <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comments</button>
         </div>
+
+        {tab === "review" && (
+          <ReviewQueue
+            matchId={match.id}
+            moments={moments}
+            currentTime={currentTime}
+            onSeek={(secs) => jumpToClip(secs)}
+            onChange={setMoments}
+          />
+        )}
 
         {tab === "stats" && (
           <div style={styles.tabScroll}>
@@ -1277,7 +1296,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     <div style={styles.featuredName}>
                       <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {meta.label}
                     </div>
-                    {featured.description && <p style={styles.featuredDesc}>{featured.description}</p>}
+                    <p style={styles.featuredDesc}>{describeEvent(featured)}</p>
                   </div>
                 );
               })()}
@@ -1342,9 +1361,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         <span style={{ color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
                           {meta.label}
                         </span>
-                        {ev.description && (
+                        {describeEvent(ev) && (
                           <span style={{ color: "var(--text-muted)", fontSize: "11px", marginLeft: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "90px" }}>
-                            {ev.description}
+                            {describeEvent(ev)}
                           </span>
                         )}
                         <span style={{

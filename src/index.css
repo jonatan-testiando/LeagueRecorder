@@ -729,3 +729,81 @@ a:focus:not(:focus-visible) {
   border-radius: 1px;
   margin-right: 6px;
 }
+
+/* =========================================================================
+   Cola de revision (barra lateral del reproductor)
+   ========================================================================= */
+.rq-item {
+  display: grid;
+  grid-template-columns: 2px 42px 1fr auto;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.rq-item:hover { background: var(--raised); }
+.rq-item[data-sel] { background: var(--raised); }
+.rq-item:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
+
+.rq-sev { align-self: stretch; border-radius: 1px; }
+
+.rq-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  padding-top: 1px;
+}
+.rq-item[data-sel] .rq-time { color: var(--cool); }
+
+.rq-title {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rq-item:hover .rq-title,
+.rq-item[data-sel] .rq-title { color: var(--text); }
+
+.rq-note {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+  margin-top: 3px;
+}
+
+.rq-done {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move),
+    border-color var(--t-instant) var(--e-move);
+}
+.rq-done:hover { border-color: var(--faint); }
+.rq-done:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+
+.rq-item[data-done] .rq-done { background: var(--cool); border-color: var(--cool); }
+.rq-item[data-done] .rq-done::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 1.5px solid var(--ground);
+  border-bottom: 1.5px solid var(--ground);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.rq-item[data-done] .rq-title {
+  color: var(--faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--line);
+}

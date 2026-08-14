@@ -122,3 +122,14 @@ export const saveMatchComments = async (matchId: string, comments: Comment[]): P
 export const syncMatchNow = async (matchId: string): Promise<MatchMetadata> => {
   return await invoke<MatchMetadata>("sync_match_now", { matchId });
 };
+
+// Marca o desmarca un suceso como revisado. El estado vive en el JSON de la
+// partida, junto a los comentarios: revisar es una tarea con estado y tiene que
+// sobrevivir a cerrar la app.
+export const setEventReviewed = async (
+  matchId: string,
+  time: number,
+  reviewed: boolean
+): Promise<void> => {
+  return await invoke<void>("set_event_reviewed", { matchId, time, reviewed });
+};

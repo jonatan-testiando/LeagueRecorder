@@ -1494,13 +1494,12 @@ a:focus:not(:focus-visible) {
 }
 /* Ancho de lectura: una fila de ajuste de 1400px separa tanto la etiqueta de su
    control que dejan de leerse como pareja. El limite va en los hijos y no en el
-   contenedor para que la barra de scroll siga en el borde de la ventana, y
-   centrado porque a pantalla completa la columna pegada a la izquierda deja un
-   vacio que parece un fallo de maquetacion. */
+   contenedor, para que la barra de scroll siga en el borde de la ventana.
+   Alineado a la izquierda, como el resto de la app: el padding del contenedor
+   es toda la separacion que necesita contra el rail. */
 .setpage > * {
   width: 100%;
   max-width: 860px;
-  margin-inline: auto;
 }
 
 /* --- tira de estado ----------------------------------------------------- */

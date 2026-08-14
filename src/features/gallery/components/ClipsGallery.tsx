@@ -7,6 +7,7 @@ import { ClipMetadata } from "../../../types";
 import { toggleClipFavorite } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { EmptyState } from "../../../components/ui/EmptyState";
 
 // El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
 // en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
@@ -193,10 +194,9 @@ export const ClipsGallery: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={styles.container}>
+      <div style={styles.container} className="panel-enter">
         <div style={styles.emptyState}>
           <div className="spinner" />
-          <p style={{ color: "var(--text-muted)", marginTop: 16 }}>Loading clips…</p>
         </div>
       </div>
     );
@@ -204,23 +204,26 @@ export const ClipsGallery: React.FC = () => {
 
   if (clips.length === 0) {
     return (
-      <div style={styles.container}>
-        <div style={styles.emptyState}>
-          <Film size={48} color="var(--text-muted)" style={{ opacity: 0.5, marginBottom: 16 }} />
-          <h3 style={{ color: "var(--text)", margin: 0 }}>No clips yet</h3>
-          <p style={{ color: "var(--text-muted)", marginTop: 8, textAlign: "center", maxWidth: 360 }}>
-            Use the clipping tool in the player to create clips of your best moments.
-          </p>
+      <div style={styles.container} className="panel-enter">
+        <div style={styles.header}>
+          <h1 style={styles.title}>Clips</h1>
         </div>
+        <EmptyState
+          icon={<Film size={30} color="var(--faint)" />}
+          title="No clips yet"
+          text="Use the clipping tool in the player to save your best moments."
+        />
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
-        <h2 style={styles.title}>My Clips</h2>
-        <span style={styles.count}>{clips.length} {clips.length === 1 ? "clip" : "clips"}</span>
+        <h1 style={styles.title}>Clips</h1>
+        <div className="u-meta" style={{ marginTop: 4 }}>
+          {clips.length} {clips.length === 1 ? "clip" : "clips"}
+        </div>
       </div>
       {/* El scroll vive aquí y no en el contenedor: el virtualizador posiciona los
           items relativos a este div, así que si el elemento con scroll fuera el de

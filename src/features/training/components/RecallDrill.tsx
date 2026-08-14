@@ -215,7 +215,7 @@ export const RecallDrill: React.FC<{
           {[10, 15, 25].map((n) => (
             <button
               key={n}
-              className={n === rounds ? "btn-primary" : "btn-ghost"}
+              className="btn btn--ghost btn--sm" aria-pressed={n === rounds}
               style={styles.chip}
               onClick={() => setRounds(n)}
             >

@@ -269,7 +269,7 @@ export const ReflexDrill: React.FC<{
           {[20, 30, 50].map((n) => (
             <button
               key={n}
-              className={n === rounds ? "btn-primary" : "btn-ghost"}
+              className="btn btn--ghost btn--sm" aria-pressed={n === rounds}
               style={styles.chip}
               onClick={() => setRounds(n)}
             >
@@ -281,14 +281,14 @@ export const ReflexDrill: React.FC<{
         <div style={styles.optionRow}>
           <span style={styles.optionLabel}>Prompt</span>
           <button
-            className={mode === "role" ? "btn-primary" : "btn-ghost"}
+            className="btn btn--ghost btn--sm" aria-pressed={mode === "role"}
             style={styles.chip}
             onClick={() => setMode("role")}
           >
             Role
           </button>
           <button
-            className={mode === "champion" ? "btn-primary" : "btn-ghost"}
+            className="btn btn--ghost btn--sm" aria-pressed={mode === "champion"}
             style={{ ...styles.chip, opacity: champModeAvailable ? 1 : 0.4 }}
             onClick={() => champModeAvailable && setMode("champion")}
             disabled={!champModeAvailable}
@@ -305,7 +305,7 @@ export const ReflexDrill: React.FC<{
         <div style={styles.optionRow}>
           <span style={styles.optionLabel}>Load</span>
           <button
-            className={withLoad ? "btn-primary" : "btn-ghost"}
+            className="btn btn--ghost btn--sm" aria-pressed={withLoad}
             style={styles.chip}
             onClick={() => setWithLoad((v) => !v)}
             title="Adds a mouse-tracking task on top — this is where most people break"

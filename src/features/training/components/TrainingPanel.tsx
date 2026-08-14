@@ -39,9 +39,22 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
   return (
     <div style={styles.progressCard}>
       <div style={styles.progressHead}>
-        <TrendingUp size={16} color="var(--accent-violet)" />
+        <TrendingUp size={15} color="var(--faint)" />
         <span style={styles.progressTitle}>Avg latency, last {data.length} sessions</span>
       </div>
+      {/* La etiqueta de la referencia va en HTML y no dentro del SVG: el gráfico
+          usa preserveAspectRatio="none" para estirarse a lo ancho, y eso deforma
+          también el texto. 400 ms es el umbral en que la lectura deja de ser
+          consciente, y es la única razón por la que esa línea está ahí. */}
+      <div style={styles.sparkWrap}>
+        <span
+          style={{
+            ...styles.sparkRef,
+            bottom: `${(400 / max) * 100}%`,
+          }}
+        >
+          400 ms
+        </span>
       <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={styles.spark}>
         {/* Línea de referencia de los 400 ms: el umbral en que deja de ser consciente. */}
         <line
@@ -49,29 +62,31 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
           x2={w}
           y1={h - (400 / max) * h}
           y2={h - (400 / max) * h}
-          stroke="var(--border-strong)"
+          stroke="var(--line)"
           strokeWidth="0.4"
           strokeDasharray="2 2"
           vectorEffect="non-scaling-stroke"
         />
+
         <polyline
           points={pts}
           fill="none"
-          stroke="var(--accent-violet)"
+          stroke="var(--cool)"
           strokeWidth="1.5"
           vectorEffect="non-scaling-stroke"
         />
       </svg>
+      </div>
       <div style={styles.progressFoot}>
         <span style={{ fontFamily: "var(--font-mono)" }}>{last.toFixed(0)} ms</span>
         <span
           style={{
             fontFamily: "var(--font-mono)",
-            color: delta <= 0 ? "var(--color-victory)" : "var(--accent-gold)",
+            color: delta <= 0 ? "var(--win)" : "var(--loss)",
           }}
         >
           {delta <= 0 ? "" : "+"}
-          {delta.toFixed(0)} ms vs first
+          {delta.toFixed(0)} ms {delta <= 0 ? "faster" : "slower"} than your first
         </span>
       </div>
     </div>
@@ -114,7 +129,8 @@ export const TrainingPanel: React.FC = () => {
         {SECTIONS.map((s) => (
           <button
             key={s.key}
-            className={section === s.key ? "btn-primary" : "btn-ghost"}
+            className="btn btn--ghost"
+            aria-pressed={section === s.key}
             style={styles.tab}
             onClick={() => setSection(s.key)}
           >
@@ -188,6 +204,19 @@ const styles: Record<string, React.CSSProperties> = {
   progressHead: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
   progressTitle: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-secondary)" },
   spark: { width: "100%", height: 60, display: "block" },
+  sparkWrap: { position: "relative" },
+  sparkRef: {
+    position: "absolute",
+    left: 0,
+    transform: "translateY(50%)",
+    fontFamily: "var(--font-mono)",
+    fontSize: 9,
+    letterSpacing: "0.08em",
+    color: "var(--faint)",
+    background: "var(--bg-card)",
+    paddingRight: 6,
+    pointerEvents: "none",
+  },
   progressFoot: {
     display: "flex",
     justifyContent: "space-between",

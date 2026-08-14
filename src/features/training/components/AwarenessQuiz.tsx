@@ -188,7 +188,7 @@ export const AwarenessQuiz: React.FC = () => {
               {q.options.map((opt) => (
                 <button
                   key={opt}
-                  className={answers[q.id] === opt ? "btn-primary" : "btn-ghost"}
+                  className="btn btn--ghost" aria-pressed={answers[q.id] === opt}
                   style={styles.option}
                   onClick={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
                 >

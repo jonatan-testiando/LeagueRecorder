@@ -4,6 +4,7 @@ import { HashRouter } from "react-router-dom";
 import { App } from "./App";
 import { MetronomeOverlay } from "./features/training/components/MetronomeOverlay";
 import { DialogProvider } from "./components/ui/DialogProvider";
+import { LanguageProvider } from "./core/LanguageProvider";
 import "./fonts.css";
 import "./index.css";
 
@@ -17,11 +18,13 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     {isOverlay ? (
       <MetronomeOverlay />
     ) : (
-      <DialogProvider>
-        <HashRouter>
-          <App />
-        </HashRouter>
-      </DialogProvider>
+      <LanguageProvider>
+        <DialogProvider>
+          <HashRouter>
+            <App />
+          </HashRouter>
+        </DialogProvider>
+      </LanguageProvider>
     )}
   </React.StrictMode>,
 );

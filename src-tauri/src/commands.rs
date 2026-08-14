@@ -1521,7 +1521,7 @@ pub fn get_app_config() -> crate::storage::AppConfig {
 }
 
 #[tauri::command]
-pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool, max_storage_gb: u64, auto_prune_days: u32) -> Result<(), String> {
+pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool, max_storage_gb: u64, auto_prune_days: u32, language: String) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     config.save_directory = save_directory;
     config.riot_api_key = riot_api_key;
@@ -1530,6 +1530,9 @@ pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset
     // acotan aquí y no solo en la UI: una cuota de 0 GB vaciaría la biblioteca.
     config.max_storage_gb = max_storage_gb.clamp(crate::storage::MIN_STORAGE_GB, 100_000);
     config.auto_prune_days = auto_prune_days.min(3650);
+    // Cualquier valor desconocido cae a ingles: mejor eso que una UI a medio
+    // traducir si algun dia llega un idioma que no existe.
+    config.language = if language == "es" { "es".to_string() } else { "en".to_string() };
     crate::storage::save_config(&config);
     Ok(())
 }

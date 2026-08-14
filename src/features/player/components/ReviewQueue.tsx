@@ -3,6 +3,7 @@ import { MatchMetadata } from "../../../types";
 import { describeEvent } from "../../../core/eventText";
 import { eventMeta, type Tone } from "./eventMeta";
 import { setEventReviewed, setErrorClipReviewed, type ErrorClipMetadata } from "../../../core/tauri-ipc";
+import { useT } from "../../../core/LanguageProvider";
 
 /**
  * La barra lateral como cola de trabajo, no como marcador.
@@ -133,6 +134,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
   onChange,
 }) => {
   const [showAll, setShowAll] = useState(false);
+  const t = useT();
 
   const done = moments.filter((m) => m.reviewed).length;
   const total = moments.length;
@@ -174,10 +176,10 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
     return (
       <div style={styles.empty}>
         <p className="empty-state__title" style={{ fontSize: "var(--font-sm)" }}>
-          Nothing flagged
+          {t("Nothing flagged")}
         </p>
         <p className="empty-state__text" style={{ fontSize: "var(--font-xs)" }}>
-          No deaths or detected mistakes in this game.
+          {t("No deaths or detected mistakes in this game.")}
         </p>
       </div>
     );
@@ -187,7 +189,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
     <div style={styles.wrap}>
       <div style={styles.progress}>
         <div style={styles.progressTop}>
-          <span className="u-label">Review</span>
+          <span className="u-label">{t("Review")}</span>
           <span className="u-metric" style={{ fontSize: 12 }}>
             {done} / {total}
           </span>
@@ -213,7 +215,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
           aria-pressed={!showAll}
           onClick={() => setShowAll(false)}
         >
-          To review
+          {t("To review")}
         </button>
         <button
           type="button"
@@ -221,7 +223,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
           aria-pressed={showAll}
           onClick={() => setShowAll(true)}
         >
-          All ({total})
+          {t("All")} ({total})
         </button>
       </div>
 
@@ -229,10 +231,10 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
         {ordered.length === 0 ? (
           <div style={styles.empty}>
             <p className="empty-state__title" style={{ fontSize: "var(--font-sm)" }}>
-              All reviewed
+              {t("All reviewed")}
             </p>
             <p className="empty-state__text" style={{ fontSize: "var(--font-xs)" }}>
-              You went through every flagged moment in this game.
+              {t("You went through every flagged moment in this game.")}
             </p>
           </div>
         ) : (
@@ -261,7 +263,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
                   className="rq-done"
                   role="checkbox"
                   aria-checked={m.reviewed}
-                  aria-label={m.reviewed ? "Mark as not reviewed" : "Mark as reviewed"}
+                  aria-label={t(m.reviewed ? "Mark as not reviewed" : "Mark as reviewed")}
                   tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); toggle(m); }}
                   onKeyDown={(e) => {

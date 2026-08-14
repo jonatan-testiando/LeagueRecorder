@@ -23,6 +23,7 @@ import { useDialog } from "../../../components/ui/DialogProvider";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
 import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
+import { useT } from "../../../core/LanguageProvider";
 import { styles } from "./videoPlayerStyles";
 import { mix } from "../../../core/color";
 import {
@@ -75,6 +76,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
+  const t = useT();
   const [tab, setTab] = useState<"review" | "stats" | "analytics" | "events" | "comments">("review");
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
@@ -683,24 +685,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <button
             className="tp-b"
             onClick={() => goToAdjacentEvent(-1)}
-            title="Previous moment"
-            aria-label="Previous moment"
+            title={t("Previous moment")}
+            aria-label={t("Previous moment")}
           >
             <SkipBack size={14} fill="currentColor" />
           </button>
           <button
             className="tp-b tp-b--primary"
             onClick={handlePlayPause}
-            title={isPlaying ? "Pause" : "Play"}
-            aria-label={isPlaying ? "Pause" : "Play"}
+            title={t(isPlaying ? "Pause" : "Play")}
+            aria-label={t(isPlaying ? "Pause" : "Play")}
           >
             {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
           </button>
           <button
             className="tp-b"
             onClick={() => goToAdjacentEvent(1)}
-            title="Next moment"
-            aria-label="Next moment"
+            title={t("Next moment")}
+            aria-label={t("Next moment")}
           >
             <SkipForward size={14} fill="currentColor" />
           </button>
@@ -716,7 +718,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
           {/* Segmentado y no desplegable: durante una revision la velocidad se
               cambia constantemente y un desplegable son dos clics cada vez. */}
-          <span className="tp-seg" role="group" aria-label="Playback speed">
+          <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
             {[0.25, 0.5, 1, 2].map((r) => (
               <button
                 key={r}
@@ -732,40 +734,40 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <span style={{ flex: 1, minWidth: 12 }} />
 
           <div className="tp-vol">
-            <button className="tp-b" onClick={toggleMute} title={muted ? "Unmute" : "Mute"} aria-label={muted ? "Unmute" : "Mute"}>
+            <button className="tp-b" onClick={toggleMute} title={t(muted ? "Unmute" : "Mute")} aria-label={t(muted ? "Unmute" : "Mute")}>
               {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
             </button>
             <input
               type="range" min="0" max="1" step="0.05"
               value={muted ? 0 : volume}
               onChange={handleVolumeChange}
-              aria-label="Volume"
+              aria-label={t("Volume")}
               style={styles.volumeSlider}
             />
           </div>
 
           <details className="tp-more">
-            <summary title="Playback settings" aria-label="Playback settings">
+            <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
               <MoreHorizontal size={15} />
             </summary>
             <div className="tp-pop">
               <label className="tp-pop__row">
-                <span>Broadcast overlay</span>
+                <span>{t("Broadcast overlay")}</span>
                 <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
               </label>
               <label className="tp-pop__row">
-                <span>Mouse trail</span>
+                <span>{t("Mouse trail")}</span>
                 <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
               </label>
               <div className="tp-pop__row tp-pop__row--stack">
                 <span>
                   Mouse trail sync
-                  <em>Shifts the trail against the video, in seconds.</em>
+                  <em>{t("Shifts the trail against the video, in seconds.")}</em>
                 </span>
                 <div className="tp-pop__sync">
                   <input
                     type="range" min="-3" max="3" step="0.1" value={mouseSync}
-                    aria-label="Mouse trail sync"
+                    aria-label={t("Mouse trail sync")}
                     onChange={(e) => {
                       const val = parseFloat(e.target.value);
                       setMouseSync(val);
@@ -778,7 +780,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             </div>
           </details>
 
-          <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
+          <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
             <Maximize size={15} />
           </button>
         </div>
@@ -851,7 +853,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 title="Scan the video for camera repositions (ally camera keys and minimap clicks)"
               >
                 <Eye size={14} />
-                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : "Camera moves"}
+                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : t("Camera moves")}
               </button>
             )}
             <div style={styles.timelineHeaderRight}>
@@ -866,7 +868,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 }} 
                 style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
               >
-                <Scissors size={14} /> Clip
+                <Scissors size={14} /> {t("Clip")}
               </button>
               <button 
                 onClick={() => {
@@ -879,7 +881,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 }} 
                 style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
               >
-                <AlertTriangle size={14} /> Error
+                <AlertTriangle size={14} /> {t("Error")}
               </button>
             </div>
           </div>
@@ -1060,13 +1062,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       {/* Right Column: Game Review */}
       {!isFullscreen && (
       <div style={{ ...styles.rightColumn, width: sidebarWidth }}>
-        <div style={styles.resizeHandle} onPointerDown={startResize} title="Drag to resize" />
+        <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
         <div style={styles.tabBar}>
-          <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>Review</button>
-          <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>Stats</button>
-          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>Analytics</button>
-          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{match.is_vod ? "Analysis" : "Events"}</button>
-          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>Comments</button>
+          <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>{t("Review")}</button>
+          <button onClick={() => setTab("stats")} style={{ ...styles.tab, ...(tab === "stats" ? styles.tabActive : {}) }}>{t("Stats")}</button>
+          <button onClick={() => setTab("analytics")} style={{ ...styles.tab, ...(tab === "analytics" ? styles.tabActive : {}) }}>{t("Analytics")}</button>
+          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{t(match.is_vod ? "Analysis" : "Events")}</button>
+          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>{t("Comments")}</button>
         </div>
 
         {tab === "review" && (
@@ -1085,8 +1087,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               <div style={{ ...styles.reviewScoreCard, borderLeft: "2px solid var(--cool)" }}>
                 <MousePointer2 size={18} color="var(--cool)" />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ ...styles.scoreText, color: "var(--cool)" }}>Imported VOD</div>
-                  <p style={styles.scoreSub}>Cursor and APM analysis.</p>
+                  <div style={{ ...styles.scoreText, color: "var(--cool)" }}>{t("Imported VOD")}</div>
+                  <p style={styles.scoreSub}>{t("Cursor and APM analysis.")}</p>
                 </div>
               </div>
             ) : (
@@ -1094,7 +1096,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 {isWin ? <Trophy size={18} color="var(--win)" /> : <XCircle size={18} color="var(--loss)" />}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ ...styles.scoreText, color: isWin ? "var(--win)" : "var(--loss)" }}>
-                    {isWin ? "Victory" : "Defeat"}
+                    {t(isWin ? "Victory" : "Defeat")}
                   </div>
                   <p style={styles.scoreSub}>{match.champion} · {formatTime(duration)}</p>
                 </div>
@@ -1104,10 +1106,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <div style={styles.statGrid}>
               {match.kda && <div style={styles.statTile}><span style={styles.statLabel}>KDA</span><span style={styles.statValue}>{match.kda}</span></div>}
               {!!match.apm && <div style={styles.statTile}><span style={styles.statLabel}>APM</span><span style={styles.statValue}>{Math.round(match.apm)}</span></div>}
-              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>Gold</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
-              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>Damage</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
-              <div style={styles.statTile}><span style={styles.statLabel}>Duration</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
-              <div style={styles.statTile}><span style={styles.statLabel}>Events</span><span style={styles.statValue}>{timedEvents.length}</span></div>
+              {!!match.gold_earned && <div style={styles.statTile}><span style={styles.statLabel}>{t("Gold")}</span><span style={{ ...styles.statValue, color: "var(--accent-gold)" }}>{(match.gold_earned / 1000).toFixed(1)}k</span></div>}
+              {!!match.damage_dealt && <div style={styles.statTile}><span style={styles.statLabel}>{t("Damage")}</span><span style={styles.statValue}>{(match.damage_dealt / 1000).toFixed(1)}k</span></div>}
+              <div style={styles.statTile}><span style={styles.statLabel}>{t("Duration")}</span><span style={styles.statValue}>{formatTime(duration)}</span></div>
+              <div style={styles.statTile}><span style={styles.statLabel}>{t("Events")}</span><span style={styles.statValue}>{timedEvents.length}</span></div>
             </div>
 
             {/* Scoreboard de los 10 jugadores (API Match-V5 de Riot), estilo Ascent */}
@@ -1120,10 +1122,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <div key={teamId} style={styles.team}>
                     <div style={styles.teamHeader}>
                       <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                        {teamId === 100 ? "Blue Team" : "Red Team"}
+                        {t(teamId === 100 ? "Blue Team" : "Red Team")}
                       </span>
                       <span style={{ color: won ? "var(--color-victory)" : "var(--color-defeat)", fontSize: "11px", fontWeight: 700 }}>
-                        {won ? "Victory" : "Defeat"}
+                        {t(won ? "Victory" : "Defeat")}
                       </span>
                     </div>
                     {team.map((p, i) => {
@@ -1180,18 +1182,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div style={styles.perfHeader}>
                   <img src={champIcon(selfP.champion)} alt={selfP.champion} style={styles.perfChamp} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
                   <div>
-                    <div style={styles.perfTitle}>Your performance</div>
-                    <div style={styles.perfSub}>{selfP.champion} · Level {selfP.level}</div>
+                    <div style={styles.perfTitle}>{t("Your performance")}</div>
+                    <div style={styles.perfSub}>{selfP.champion} · {t("Level")} {selfP.level}</div>
                   </div>
                 </div>
                 <div style={styles.perfList}>
                   <div style={styles.perfRow}><span>Kill Participation</span><b>{teamKills > 0 ? Math.round(((selfP.kills + selfP.assists) / teamKills) * 100) + "%" : "—"}</b></div>
                   <div style={styles.perfRow}><span>CS / min</span><b>{durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"}</b></div>
-                  <div style={styles.perfRow}><span>Damage to champions</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
+                  <div style={styles.perfRow}><span>{t("Damage to champions")}</span><b>{(selfP.damage ?? 0).toLocaleString("es")}</b></div>
                   <div style={styles.perfRow}><span>Damage Share</span><b>{teamDamage > 0 ? (100 * (selfP.damage ?? 0) / teamDamage).toFixed(1) + "%" : "—"}</b></div>
-                  <div style={styles.perfRow}><span>Damage / min</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
+                  <div style={styles.perfRow}><span>{t("Damage / min")}</span><b>{durMin > 0 ? Math.round((selfP.damage ?? 0) / durMin) : "—"}</b></div>
                   <div style={styles.perfRow}><span>Vision Score</span><b>{selfP.vision_score ?? 0}</b></div>
-                  <div style={styles.perfRow}><span>Wards placed</span><b>{selfP.wards_placed ?? 0}</b></div>
+                  <div style={styles.perfRow}><span>{t("Wards placed")}</span><b>{selfP.wards_placed ?? 0}</b></div>
                 </div>
                 <div style={styles.perfItems}>
                   {Array.from({ length: 7 }).map((_, k) => {
@@ -1217,7 +1219,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     return (
                       <div key={tid} style={styles.objCol}>
                         <div style={{ ...styles.objTeam, color: o.win ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                          {tid === 100 ? "Blue Team" : "Red Team"}
+                          {t(tid === 100 ? "Blue Team" : "Red Team")}
                         </div>
                         <div style={styles.objRow}><span>Dragones</span><b>{o.dragons}</b></div>
                         <div style={styles.objRow}><span>Barones</span><b>{o.barons}</b></div>
@@ -1299,7 +1301,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   {match.gold_diff_15 !== undefined && match.gold_diff_15 !== null && (
                     <div style={{ background: "var(--bg-app)", borderRadius: "var(--radius-md)", padding: "10px", border: "1px solid var(--border-subtle)" }}>
-                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Gold difference</span>
+                      <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>{t("Gold difference")}</span>
                       <div style={{ fontSize: "16px", fontWeight: 800, marginTop: "2px", color: match.gold_diff_15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
                         {match.gold_diff_15 >= 0 ? `+${match.gold_diff_15}g` : `${match.gold_diff_15}g`}
                       </div>
@@ -1496,7 +1498,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   })}
                   {shown.length === 0 && (
                     <div style={styles.emptyEvents}>
-                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : "No events match this filter."}
+                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : t("No events match this filter.")}
                     </div>
                   )}
                 </div>
@@ -1519,7 +1521,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               )}
               {comments.map((c, i) => (
                 <div key={i} style={styles.commentCard}>
-                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title="Jump to this moment">
+                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
                     {formatTime(c.time)}
                   </button>
                   <span style={styles.commentText}>{c.text}</span>
@@ -1528,7 +1530,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               ))}
             </div>
             <div style={styles.commentInputRow}>
-              <span style={styles.commentAtTime} title="Will be anchored to this moment">{formatTime(currentTime)}</span>
+              <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{formatTime(currentTime)}</span>
               <input
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
@@ -1536,7 +1538,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 placeholder="Comenta este momento…"
                 style={styles.commentInput}
               />
-              <button style={styles.commentSend} onClick={addComment} title="Add at current time"><Send size={16} /></button>
+              <button style={styles.commentSend} onClick={addComment} title={t("Add at current time")}><Send size={16} /></button>
             </div>
           </div>
         )}

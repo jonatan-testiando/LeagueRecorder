@@ -9,6 +9,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { HardDrive, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { useT } from "../../../core/LanguageProvider";
 
 interface DiskSpaceInfo {
   used_bytes: number;
@@ -66,6 +67,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const t = useT();
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -143,9 +145,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
         <div>
-          <h1 style={styles.pageTitle}>Library</h1>
+          <h1 style={styles.pageTitle}>{t("Library")}</h1>
           <div className="u-meta" style={{ marginTop: 4 }}>
-            {matches.length} games · {reviewed} reviewed · {matches.length - reviewed} to review
+            {matches.length} {t("games")} · {reviewed} {t("reviewed")} · {matches.length - reviewed} {t("to review")}
           </div>
         </div>
 
@@ -154,8 +156,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             <Search size={14} color="var(--faint)" />
             <input
               type="text"
-              placeholder="champion, queue, date…"
-              aria-label="Filter games"
+              placeholder={t("champion, queue, date…")}
+              aria-label={t("Filter games")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={styles.searchInput}
@@ -169,7 +171,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               aria-pressed={filter === key}
               onClick={() => setFilter(key)}
             >
-              {label}
+              {t(label)}
             </Button>
           ))}
         </div>
@@ -201,11 +203,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       </div>
 
       <div style={styles.tableHeader}>
-        <span className="u-label" style={{ flex: 1 }}>Game</span>
-        <span className="u-label" style={styles.thNum}>KDA</span>
-        <span className="u-label" style={styles.thNum}>Gold @15</span>
-        <span className="u-label" style={styles.thNum}>Duration</span>
-        <span className="u-label" style={styles.thNum}>APM</span>
+        <span className="u-label" style={{ flex: 1 }}>{t("Game")}</span>
+        <span className="u-label" style={styles.thNum}>{t("KDA")}</span>
+        <span className="u-label" style={styles.thNum}>{t("Gold @15")}</span>
+        <span className="u-label" style={styles.thNum}>{t("Duration")}</span>
+        <span className="u-label" style={styles.thNum}>{t("APM")}</span>
         <span style={{ width: 36 }} />
       </div>
 
@@ -213,17 +215,17 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         {matches.length === 0 ? (
           <EmptyState
             icon={<Gamepad2 size={30} color="var(--faint)" />}
-            title="No games recorded yet"
-            text="Play a match and it will show up here automatically."
+            title={t("No games recorded yet")}
+            text={t("Play a match and it will show up here automatically.")}
           />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={<SearchX size={30} color="var(--faint)" />}
-            title="No games match this filter"
-            text="Try a different search term, or switch back to All."
+            title={t("No games match this filter")}
+            text={t("Try a different search term, or switch back to All.")}
             action={
               <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setFilter("all"); }}>
-                Clear filters
+                {t("Clear filters")}
               </Button>
             }
           />
@@ -247,10 +249,10 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                     }}
                   >
                     <div className="day-sep">
-                      <span className="day-sep__label">{row.label}</span>
+                      <span className="day-sep__label">{t(row.label)}</span>
                       <span className="day-sep__rule" />
                       <span className="day-sep__count">
-                        {row.count} {row.count === 1 ? "game" : "games"}
+                        {row.count} {t(row.count === 1 ? "game" : "games")}
                       </span>
                     </div>
                   </div>
@@ -302,11 +304,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                               el buscador. */}
                           <div style={styles.meta}>
                             <span style={{ ...styles.result, color: accent }}>
-                              {res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT"}
+                              {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
                             </span>
-                            <span className="u-meta">{relativeDay(match.date)}</span>
+                            <span className="u-meta">{t(relativeDay(match.date))}</span>
                             {unreviewed && (
-                              <span className="u-meta" style={{ color: "var(--flag)" }}>· to review</span>
+                              <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
                             )}
                           </div>
                         </div>
@@ -331,7 +333,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             ? "—"
                             : `${match.gold_diff_15 >= 0 ? "+" : "−"}${Math.abs(match.gold_diff_15)}`
                         }
-                        label="Gold @15"
+                        label={t("Gold @15")}
                         emphasis="lead"
                         tone={
                           match.gold_diff_15 === undefined || match.gold_diff_15 === null
@@ -340,14 +342,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         }
                         title={match.lane_result ? `Lane: ${match.lane_result}` : undefined}
                       />
-                      <Metric value={formatDuration(match.game_duration)} label="Dur." />
-                      <Metric value={Math.round(match.apm || 0)} label="APM" tone="muted" />
+                      <Metric value={formatDuration(match.game_duration)} label={t("Dur.")} />
+                      <Metric value={Math.round(match.apm || 0)} label={t("APM")} tone="muted" />
 
                       <div style={{ width: 36, display: "flex", justifyContent: "flex-end" }}>
                         <Button
                           variant="danger"
                           size="sm"
-                          title="Delete game"
+                          title={t("Delete game")}
                           aria-label={`Delete ${match.champion} game`}
                           onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
                           icon={<Trash2 size={15} />}
@@ -370,10 +372,10 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       </div>
 
       <div className="mtl-legend" style={styles.legend}>
-        <span><i style={{ background: "var(--loss)" }} />Death</span>
-        <span><i style={{ background: "var(--win)" }} />Kill</span>
-        <span><i style={{ background: "var(--gold)" }} />Objective</span>
-        <span><i style={{ background: "var(--cool-fill)" }} />Structure</span>
+        <span><i style={{ background: "var(--loss)" }} />{t("Death")}</span>
+        <span><i style={{ background: "var(--win)" }} />{t("Kill")}</span>
+        <span><i style={{ background: "var(--gold)" }} />{t("Objective")}</span>
+        <span><i style={{ background: "var(--cool-fill)" }} />{t("Structure")}</span>
         <span><i style={{ background: "var(--apm-line)" }} />APM</span>
       </div>
     </div>

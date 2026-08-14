@@ -8,6 +8,7 @@ import {
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { motion, AnimatePresence } from "framer-motion";
 import { mix } from "../../../core/color";
+import { useT } from "../../../core/LanguageProvider";
 
 const streamUrl = (path: string): string => `http://stream.localhost/${encodeURIComponent(path)}`;
 
@@ -38,6 +39,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
   const [noteCategory, setNoteCategory] = useState<string>("Positioning");
 
   const { showError, showSuccess } = useDialog();
+  const t = useT();
 
   useEffect(() => {
     const onFs = () => setIsFullscreen(!!document.fullscreenElement);
@@ -176,7 +178,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
         <div style={styles.videoWrapper}>
           <div style={styles.topBar}>
             <button style={styles.backBtn} onClick={onClose}>
-              <ChevronLeft size={20} /> Back to Gallery
+              <ChevronLeft size={20} /> {t("Back")}
             </button>
             {/* El título era el nombre del .mp4 en crudo. Un nombre de fichero
                 no es información: lo que identifica a este clip es qué error es
@@ -217,16 +219,16 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               className="tp-b"
               onClick={() => stepNote(-1)}
               disabled={events.length === 0}
-              title="Previous note"
-              aria-label="Previous note"
+              title={t("Previous note")}
+              aria-label={t("Previous note")}
             >
               <SkipBack size={14} fill="currentColor" />
             </button>
             <button
               className="tp-b tp-b--primary"
               onClick={handlePlayPause}
-              title={isPlaying ? "Pause" : "Play"}
-              aria-label={isPlaying ? "Pause" : "Play"}
+              title={t(isPlaying ? "Pause" : "Play")}
+              aria-label={t(isPlaying ? "Pause" : "Play")}
             >
               {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
             </button>
@@ -234,8 +236,8 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               className="tp-b"
               onClick={() => stepNote(1)}
               disabled={events.length === 0}
-              title="Next note"
-              aria-label="Next note"
+              title={t("Next note")}
+              aria-label={t("Next note")}
             >
               <SkipForward size={14} fill="currentColor" />
             </button>
@@ -250,22 +252,22 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             <button
               className="btn btn--ghost btn--sm"
               onClick={() => { videoRef.current?.pause(); setIsAddingMode(true); setEditEventId(null); setNoteText(""); }}
-              title="Write a note at the current time"
+              title={t("Write a note at the current time")}
             >
-              <Plus size={13} /> Add note
+              <Plus size={13} /> {t("Add note")}
             </button>
 
             <div className="tp-vol">
               <button
                 className="tp-b"
                 onClick={() => setMuted(!muted)}
-                title={muted ? "Unmute" : "Mute"}
-                aria-label={muted ? "Unmute" : "Mute"}
+                title={t(muted ? "Unmute" : "Mute")}
+                aria-label={t(muted ? "Unmute" : "Mute")}
               >
                 {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
               </button>
             </div>
-            <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
+            <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
               <Maximize size={15} />
             </button>
           </div>
@@ -319,13 +321,13 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
       {!isFullscreen && (
       <div style={styles.rightColumn}>
         <div style={styles.reviewHeader}>
-          <span style={styles.reviewTitle}>Error Notebook</span>
+          <span style={styles.reviewTitle}>{t("Error Notebook")}</span>
         </div>
 
         <div style={styles.reviewList}>
           {events.length === 0 && !isAddingMode && (
              <div style={{ textAlign: "center", color: "var(--text-muted)", marginTop: "40px", fontSize: "14px" }}>
-               No notes on this clip yet. Pause the video and click "Add Note".
+               {t("No notes on this clip yet. Pause the video and add one.")}
              </div>
           )}
 
@@ -338,7 +340,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 style={styles.addForm}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  Note at {formatTime(currentTime)}
+                  {t("Note at")} {formatTime(currentTime)}
                 </div>
                 <select
                   value={noteCategory}
@@ -352,15 +354,15 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 </select>
                 <textarea
                   autoFocus
-                  placeholder="What went wrong here? What could you have done better?"
+                  placeholder={t("What went wrong here? What could you have done better?")}
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
                   style={styles.textarea}
                   rows={4}
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
-                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} className="btn-ghost" style={styles.cancelBtn}>Cancel</button>
-                  <button onClick={handleSaveNote} style={styles.saveBtn}>Save</button>
+                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} className="btn-ghost" style={styles.cancelBtn}>{t("Cancel")}</button>
+                  <button onClick={handleSaveNote} style={styles.saveBtn}>{t("Save")}</button>
                 </div>
               </motion.div>
             )}

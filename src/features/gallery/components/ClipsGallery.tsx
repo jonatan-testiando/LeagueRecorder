@@ -8,6 +8,7 @@ import { toggleClipFavorite } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { useT } from "../../../core/LanguageProvider";
 
 // El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
 // en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
@@ -84,6 +85,7 @@ const formatRemaining = (ms: number): string => {
 export const ClipsGallery: React.FC = () => {
   const [clips, setClips] = useState<ClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const t = useT();
   const [uploading, setUploading] = useState<string | null>(null);
   const [links, setLinks] = useState<Record<string, StoredLink>>(() => loadStoredLinks());
   const { showSuccess, showError } = useDialog();
@@ -210,7 +212,7 @@ export const ClipsGallery: React.FC = () => {
         </div>
         <EmptyState
           icon={<Film size={30} color="var(--faint)" />}
-          title="No clips yet"
+          title={t("No clips yet")}
           text="Use the clipping tool in the player to save your best moments."
         />
       </div>

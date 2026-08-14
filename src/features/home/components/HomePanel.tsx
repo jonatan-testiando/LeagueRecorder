@@ -4,6 +4,7 @@ import { currentFocus, deathClock, confidenceOf } from "../../../core/patterns";
 import { outcome, formatDuration } from "../../../core/matchStats";
 import { invoke } from "@tauri-apps/api/core";
 import { HardDrive, Target, Radio } from "lucide-react";
+import { useT } from "../../../core/LanguageProvider";
 
 /**
  * Hoy: en qué estás trabajando.
@@ -47,6 +48,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
   onGoTraining,
 }) => {
   const [disk, setDisk] = useState<DiskSpaceInfo | null>(null);
+  const t = useT();
 
   useEffect(() => {
     invoke<DiskSpaceInfo>("get_disk_usage").then(setDisk).catch(() => {});
@@ -88,11 +90,11 @@ export const HomePanel: React.FC<HomePanelProps> = ({
       <div style={styles.capture}>
         {isRecording ? (
           <span style={{ ...styles.capItem, color: "var(--signal)" }}>
-            <span className="rec-dot" /> Recording
+            <span className="rec-dot" /> {t("Recording")}
           </span>
         ) : (
           <span style={styles.capItem}>
-            <Radio size={13} color="var(--faint)" /> Idle — records itself when a game starts
+            <Radio size={13} color="var(--faint)" /> {t("Idle — records itself when a game starts")}
           </span>
         )}
         <span style={styles.capItem}>
@@ -104,7 +106,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
       <div style={styles.body}>
         {focus ? (
           <section>
-            <div className="u-label" style={{ marginBottom: 10 }}>What to work on</div>
+            <div className="u-label" style={{ marginBottom: 10 }}>{t("What to work on")}</div>
 
             <div style={styles.focus}>
               {/* Marca de agua. Es la única superficie de la app con imagen; de
@@ -113,11 +115,11 @@ export const HomePanel: React.FC<HomePanelProps> = ({
 
               <div style={styles.focusIn}>
                 <span style={styles.focusTag}>
-                  {focus.bucket.total} deaths · {focus.games} games
+                  {focus.bucket.total} {t("deaths")} · {focus.games} {t("games")}
                 </span>
 
                 <h1 style={styles.focusTitle}>
-                  You die between minute {focus.bucket.from} and {focus.bucket.to}
+                  {t("You die between minute {a} and {b}", { a: focus.bucket.from, b: focus.bucket.to })}
                 </h1>
 
                 <p style={styles.focusText}>
@@ -134,7 +136,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                 {affected.length > 0 && (
                   <div style={styles.affected}>
                     <div className="u-label" style={{ marginBottom: 8 }}>
-                      Where it happened
+                      {t("Where it happened")}
                       {focus.games > affected.length && ` · latest ${affected.length} of ${focus.games}`}
                     </div>
                     {affected.map((m) => {
@@ -156,7 +158,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                           <span style={styles.miniName}>
                             {m.champion}
                             <span className="u-meta" style={{ display: "block", marginTop: 2 }}>
-                              {res === "victory" ? "victory" : res === "defeat" ? "defeat" : "no result"} · {relativeDay(m.date)}
+                              {t(res === "victory" ? "victory" : res === "defeat" ? "defeat" : "no result")} · {t(relativeDay(m.date))}
                             </span>
                           </span>
                           <span className="u-metric" style={styles.miniDur}>
@@ -174,17 +176,16 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                   style={{ marginTop: "var(--space-4)" }}
                   onClick={onGoTraining}
                 >
-                  <Target size={14} /> Train camera control
+                  <Target size={14} /> {t("Train camera control")}
                 </button>
               </div>
             </div>
           </section>
         ) : (
           <section style={styles.emptyFocus}>
-            <div className="u-label" style={{ marginBottom: 8 }}>What to work on</div>
+            <div className="u-label" style={{ marginBottom: 8 }}>{t("What to work on")}</div>
             <p style={styles.focusText}>
-              Nothing to point at yet. Record a few games and this turns into the one thing
-              worth working on.
+              {t("Nothing to point at yet. Record a few games and this turns into the one thing worth working on.")}
             </p>
           </section>
         )}
@@ -192,7 +193,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
         {toReview.length > 0 && (
           <section>
             <div className="u-label" style={{ marginBottom: 10 }}>
-              To review · {own.filter((m) => (m.comments?.length ?? 0) === 0).length} games
+              {t("To review")} · {own.filter((m) => (m.comments?.length ?? 0) === 0).length} {t("games")}
             </div>
             <div style={styles.reviewGrid}>
               {toReview.map((m) => {
@@ -213,7 +214,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                     }}
                   >
                     <div style={styles.reviewName}>{m.champion}</div>
-                    <div className="u-meta" style={{ marginTop: 3 }}>{relativeDay(m.date)}</div>
+                    <div className="u-meta" style={{ marginTop: 3 }}>{t(relativeDay(m.date))}</div>
                     <div
                       className="u-metric"
                       style={{
@@ -230,7 +231,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                         ? "—"
                         : `${gold >= 0 ? "+" : "−"}${Math.abs(gold)}`}
                     </div>
-                    <div className="u-label" style={{ marginTop: 3 }}>gold @15</div>
+                    <div className="u-label" style={{ marginTop: 3 }}>{t("gold @15")}</div>
                   </div>
                 );
               })}

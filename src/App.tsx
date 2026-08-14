@@ -15,6 +15,7 @@ import { Titlebar } from "./components/Titlebar";
 import { Video, Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAppStore } from "./store/useAppStore";
+import { useT } from "./core/LanguageProvider";
 
 type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
 
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState<string>("");
+  const t = useT();
 
   const selectedError = useAppStore(state => state.selectedError);
   const setSelectedError = useAppStore(state => state.setSelectedError);
@@ -143,7 +145,7 @@ export const App: React.FC = () => {
               className={`nav-btn${activeTabKey === item.key ? " nav-btn--active" : ""}`}
             >
               {item.icon}
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
           <button
@@ -152,7 +154,7 @@ export const App: React.FC = () => {
             style={{ marginTop: "auto" }}
           >
             <Settings2 {...NAV_ICON} />
-            Settings
+            {t("Settings")}
           </button>
           {appVersion && (
             <div className="u-meta" style={{ textAlign: "center", marginTop: "var(--space-2)" }}>

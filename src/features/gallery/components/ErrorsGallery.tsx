@@ -4,6 +4,7 @@ import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from "../../.
 import { MatchMetadata } from "../../../types";
 import { Badge } from "../../../components/ui/Badge";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { useT } from "../../../core/LanguageProvider";
 
 /**
  * Los errores marcados.
@@ -45,6 +46,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   const [errors, setErrors] = useState<ErrorClipMetadata[]>([]);
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const t = useT();
 
   // Antes había dos `useEffect` idénticos, así que la lista se pedía dos veces
   // en cada montaje.
@@ -85,10 +87,10 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   return (
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
-        <h1 style={styles.title}>Errors</h1>
+        <h1 style={styles.title}>{t("Errors")}</h1>
         {errors.length > 0 && (
           <div className="u-meta" style={{ marginTop: 4 }}>
-            {errors.length} flagged · across {gameCount} {gameCount === 1 ? "game" : "games"}
+            {errors.length} {t("flagged")} · {t("across")} {gameCount} {t(gameCount === 1 ? "game" : "games")}
           </div>
         )}
       </div>
@@ -96,8 +98,8 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       {errors.length === 0 ? (
         <EmptyState
           icon={<AlertTriangle size={30} color="var(--faint)" />}
-          title="No errors flagged yet"
-          text="Use the Error tool in the player to save a mistake and the lesson you took from it."
+          title={t("No errors flagged yet")}
+          text={t("Use the Error tool in the player to save a mistake and the lesson you took from it.")}
         />
       ) : (
         <div style={styles.grid}>
@@ -135,7 +137,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                   {lesson ? (
                     <p style={styles.lesson}>{lesson}</p>
                   ) : (
-                    <p style={styles.lessonEmpty}>No note yet — open it to write what you learned.</p>
+                    <p style={styles.lessonEmpty}>{t("No note yet — open it to write what you learned.")}</p>
                   )}
 
                   <div style={styles.meta}>
@@ -145,7 +147,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                     )}
                     {when && <span className="u-meta">{when}</span>}
                     {err.events && err.events.length > 1 && (
-                      <span className="u-meta">+{err.events.length - 1} more</span>
+                      <span className="u-meta">+{err.events.length - 1} {t("more")}</span>
                     )}
                   </div>
                 </div>

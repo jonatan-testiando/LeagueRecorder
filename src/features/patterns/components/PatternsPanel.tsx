@@ -9,6 +9,7 @@ import {
 import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from "../../../core/tauri-ipc";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { BarChart3 } from "lucide-react";
+import { useT } from "../../../core/LanguageProvider";
 
 /**
  * Patrones: la única pantalla que mira más de una partida a la vez.
@@ -50,6 +51,7 @@ export const PatternsPanel: React.FC = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
+  const t = useT();
 
   useEffect(() => {
     let alive = true;
@@ -87,12 +89,12 @@ export const PatternsPanel: React.FC = () => {
     return (
       <div style={styles.container} className="panel-enter">
         <div style={styles.header}>
-          <h1 style={styles.title}>Patterns</h1>
+          <h1 style={styles.title}>{t("Patterns")}</h1>
         </div>
         <EmptyState
           icon={<BarChart3 size={30} color="var(--faint)" />}
-          title="Not enough games yet"
-          text="Once a few games are recorded, this screen starts showing what they have in common."
+          title={t("Not enough games yet")}
+          text={t("Once a few games are recorded, this screen starts showing what they have in common.")}
         />
       </div>
     );
@@ -104,13 +106,13 @@ export const PatternsPanel: React.FC = () => {
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
         <div>
-          <h1 style={styles.title}>Patterns</h1>
+          <h1 style={styles.title}>{t("Patterns")}</h1>
           <div className="u-meta" style={{ marginTop: 4 }}>
-            {own.length} games · {clock.total} deaths · {clock.wins}W {clock.losses}L
+            {own.length} {t("games")} · {clock.total} {t("deaths")} · {clock.wins}W {clock.losses}L
           </div>
         </div>
         <span style={{ ...styles.confidence, color: c.color, borderColor: c.color }}>
-          {c.label}
+          {t(c.label)}
         </span>
       </div>
 
@@ -118,8 +120,8 @@ export const PatternsPanel: React.FC = () => {
         {/* ---------------------------------------------------- reloj */}
         <div className="card" style={styles.card}>
           <div style={styles.cardHead}>
-            <span className="u-label">When you die</span>
-            <span className="u-meta">by minute of game</span>
+            <span className="u-label">{t("When you die")}</span>
+            <span className="u-meta">{t("by minute of game")}</span>
           </div>
 
           <div style={styles.clock}>
@@ -165,7 +167,7 @@ export const PatternsPanel: React.FC = () => {
                 {" "}({Math.round((clock.peak.total / clock.total) * 100)}%).
               </p>
               <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 6 }}>
-                {c.note}
+                {t(c.note)}
               </p>
             </div>
           )}
@@ -176,13 +178,13 @@ export const PatternsPanel: React.FC = () => {
                 <div className="u-metric" style={{ fontSize: 16, color: "var(--win)" }}>
                   {clock.deathsPerWin.toFixed(1)}
                 </div>
-                <div className="u-label" style={{ marginTop: 3 }}>deaths per win</div>
+                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per win")}</div>
               </div>
               <div>
                 <div className="u-metric" style={{ fontSize: 16, color: "var(--loss)" }}>
                   {clock.deathsPerLoss.toFixed(1)}
                 </div>
-                <div className="u-label" style={{ marginTop: 3 }}>deaths per loss</div>
+                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per loss")}</div>
               </div>
             </div>
           )}
@@ -191,14 +193,13 @@ export const PatternsPanel: React.FC = () => {
         {/* ---------------------------------------------- tus etiquetas */}
         <div className="card" style={styles.card}>
           <div style={styles.cardHead}>
-            <span className="u-label">What you flag yourself</span>
-            <span className="u-meta">{cats.reduce((a, x) => a + x.count, 0)} notes</span>
+            <span className="u-label">{t("What you flag yourself")}</span>
+            <span className="u-meta">{cats.reduce((a, x) => a + x.count, 0)} {t("notes")}</span>
           </div>
 
           {cats.length === 0 ? (
             <p style={styles.insightText}>
-              You haven't categorised any errors yet. The chart on the left comes from the
-              recorded data; this one would come from your own reading of it.
+              {t("You haven't categorised any errors yet. The chart on the left comes from the recorded data; this one would come from your own reading of it.")}
             </p>
           ) : (
             <div style={styles.cats}>

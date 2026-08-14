@@ -91,14 +91,16 @@ export interface AppConfig {
   auto_dataset_generator: boolean;
   max_storage_gb: number;
   auto_prune_days: number;
+  /** Idioma de la interfaz: "en" o "es". Se guarda en disco. */
+  language: string;
 }
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays });
+export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number, language: string = "en"): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays, language });
 };
 
 export interface ProcessVodResponse {

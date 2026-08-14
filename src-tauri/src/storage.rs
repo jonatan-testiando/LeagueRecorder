@@ -371,6 +371,16 @@ pub struct AppConfig {
     pub max_storage_gb: u64,
     #[serde(default = "default_auto_prune")]
     pub auto_prune_days: u32,
+    /// Idioma de la interfaz: "en" o "es".
+    ///
+    /// Vive en la config de disco y no en localStorage porque tiene que
+    /// sobrevivir a cerrar la app del todo, no solo a recargar la ventana.
+    #[serde(default = "default_language")]
+    pub language: String,
+}
+
+fn default_language() -> String {
+    "en".to_string()
 }
 
 impl Default for AppConfig {
@@ -388,6 +398,7 @@ impl Default for AppConfig {
             max_storage_gb: 100,
             // Opt-in, también en instalaciones nuevas: ver `default_auto_prune`.
             auto_prune_days: 0,
+            language: "en".to_string(),
         }
     }
 }
@@ -913,6 +924,34 @@ mod layout_migration_tests {
 
 #[cfg(test)]
 mod realineado_tests {
+
+    /// Un config guardado antes de que existiera `language` tiene que cargar sin
+    /// romperse y quedarse en ingles. Es el caso real de cualquiera que ya tenga
+    /// la app instalada: su config.json no lleva el campo.
+    #[test]
+    fn config_viejo_sin_idioma_carga_en_ingles() {
+        let viejo = r#"{
+            "save_directory": "/videos",
+            "riot_api_key": "RGAPI-x",
+            "auto_dataset_generator": false,
+            "max_storage_gb": 100,
+            "auto_prune_days": 0
+        }"#;
+        let cfg: AppConfig = serde_json::from_str(viejo).expect("deberia deserializar");
+        assert_eq!(cfg.language, "en");
+        assert_eq!(cfg.max_storage_gb, 100);
+    }
+
+    /// Y uno guardado con idioma lo conserva al ida y vuelta.
+    #[test]
+    fn el_idioma_sobrevive_al_guardado() {
+        let mut cfg = AppConfig::default();
+        cfg.language = "es".to_string();
+        let json = serde_json::to_string(&cfg).unwrap();
+        let leido: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(leido.language, "es");
+    }
+
     use super::*;
 
     /// Partida real (match_20260811_225013): 2595 s de vídeo con 1:47 de pantalla de

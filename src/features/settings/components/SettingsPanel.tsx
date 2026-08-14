@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
 import { AudioStatus, VideoSettings } from "../../../types";
-import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen, KeyRound, ArrowUpCircle } from "lucide-react";
+import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen, KeyRound, ArrowUpCircle, Languages } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { check } from "@tauri-apps/plugin-updater";
 import { exit } from "@tauri-apps/plugin-process";
 import { motion, Variants } from "framer-motion";
+import { useLang } from "../../../core/LanguageProvider";
+import { LANGUAGES, type Language } from "../../../core/i18n";
 
 // Mismos límites que aplica el backend (`storage::MIN_STORAGE_GB` y el clamp de
 // `set_app_config`). Los dos campos gobiernan borrados de ficheros, así que un 0
@@ -35,7 +37,7 @@ export const SettingsPanel: React.FC = () => {
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "High" });
-  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false, max_storage_gb: 100, auto_prune_days: 0 });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false, max_storage_gb: 100, auto_prune_days: 0, language: "en" });
   // Los dos campos numéricos se editan como texto: si se guardara el `Number()` de
   // cada pulsación, vaciar el campo enviaría un 0 al backend. Se acotan al salir.
   const [storageDraft, setStorageDraft] = useState<string>("100");
@@ -45,6 +47,7 @@ export const SettingsPanel: React.FC = () => {
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const { showError, showSuccess } = useDialog();
+  const { lang, setLang, t } = useLang();
 
   const checkStatus = async () => {
     try {
@@ -220,8 +223,8 @@ export const SettingsPanel: React.FC = () => {
   return (
     <div style={styles.container}>
       <div>
-        <h2 style={styles.title}>Control Panel</h2>
-        <p style={styles.subtitle}>Recorder status, audio capture and automatic match detection.</p>
+        <h2 style={styles.title}>{t("Control Panel")}</h2>
+        <p style={styles.subtitle}>{t("Recorder status, audio capture and automatic match detection.")}</p>
       </div>
 
       <motion.div 
@@ -234,13 +237,13 @@ export const SettingsPanel: React.FC = () => {
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <FolderOpen size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
-          <h3 style={styles.cardTitle}>Storage</h3>
+          <h3 style={styles.cardTitle}>{t("Storage")}</h3>
         </div>
         <div style={styles.cardBody}>
           <div style={styles.settingRow}>
             <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>Save location</span>
-              <span style={styles.settingDesc}>Directory where videos and clips are saved</span>
+              <span style={styles.settingLabel}>{t("Save location")}</span>
+              <span style={styles.settingDesc}>{t("Directory where videos and clips are saved")}</span>
             </div>
             <div style={{ display: "flex", gap: "8px", flex: 1, marginLeft: "16px" }}>
               <input 
@@ -260,7 +263,7 @@ export const SettingsPanel: React.FC = () => {
 
           <div style={{...styles.settingRow, marginTop: "16px"}}>
             <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>Max Storage Quota (GB)</span>
+              <span style={styles.settingLabel}>{t("Max Storage Quota (GB)")}</span>
               <span style={styles.settingDesc}>Oldest matches are deleted first if size exceeds this limit (minimum {MIN_STORAGE_GB} GB)</span>
             </div>
             <div style={{ flex: 1, marginLeft: "16px", maxWidth: "80px" }}>
@@ -284,7 +287,7 @@ export const SettingsPanel: React.FC = () => {
 
           <div style={{...styles.settingRow, marginTop: "16px"}}>
             <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>Auto-prune Age (Days)</span>
+              <span style={styles.settingLabel}>{t("Auto-prune Age (Days)")}</span>
               <span style={styles.settingDesc}>
                 Permanently deletes local matches older than X days, together with their clips.
                 0 disables it (default). Imported VODs and matches with favorited clips are never touched.
@@ -311,18 +314,51 @@ export const SettingsPanel: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* Riot API */}
+      {/* Idioma */}
       <motion.div variants={itemVariants} style={styles.card}>
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <KeyRound size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
-            <h3 style={styles.cardTitle}>Riot Developer API</h3>
+            <Languages size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
+            <h3 style={styles.cardTitle}>{t("Language")}</h3>
           </div>
         </div>
         <div style={styles.cardBody}>
           <div style={styles.settingRow}>
             <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>API Key (Development)</span>
+              <span style={styles.settingLabel}>{t("Language")}</span>
+              <span style={styles.settingDesc}>
+                {t("Interface language. Saved with your settings.")}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              {LANGUAGES.map((l) => (
+                <button
+                  key={l.code}
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  aria-pressed={lang === l.code}
+                  onClick={() => setLang(l.code as Language)}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Riot API */}
+      <motion.div variants={itemVariants} style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <KeyRound size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
+            <h3 style={styles.cardTitle}>{t("Riot Developer API")}</h3>
+          </div>
+        </div>
+        <div style={styles.cardBody}>
+          <div style={styles.settingRow}>
+            <div style={styles.settingInfo}>
+              <span style={styles.settingLabel}>{t("API Key (Development)")}</span>
               <span style={styles.settingDesc}>Required to fetch your stats (KDA, gold, damage). Expires every 24 hours!</span>
             </div>
             <div style={{ flex: 1, marginLeft: "16px" }}>
@@ -347,7 +383,7 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardHeader}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <ArrowUpCircle size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
-            <h3 style={styles.cardTitle}>Updates</h3>
+            <h3 style={styles.cardTitle}>{t("Updates")}</h3>
           </div>
         </div>
         <div style={styles.cardBody}>
@@ -398,7 +434,7 @@ export const SettingsPanel: React.FC = () => {
                     transition: "opacity var(--t-quick) var(--e-out)",
                   }}
                 >
-                  {isUpdating ? updateMsg || "Checking…" : "Check for Updates"}
+                  {isUpdating ? updateMsg || t("Checking…") : t("Check for Updates")}
                 </button>
               </div>
               {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
@@ -412,11 +448,11 @@ export const SettingsPanel: React.FC = () => {
         <div style={styles.cardTitleRow}>
           <h3 style={styles.cardTitle}>
             <Volume2 size={20} color="var(--accent-gold)" style={{ marginRight: "8px" }} />
-            Game Sound Capture
+            {t("Game Sound Capture")}
           </h3>
           <button onClick={refreshAudio} disabled={audioLoading} style={styles.ghostBtn}>
             <RefreshCw size={14} style={{ marginRight: "6px" }} />
-            {audioLoading ? "Checking…" : "Re-detect"}
+            {audioLoading ? t("Checking…") : t("Re-detect")}
           </button>
         </div>
 
@@ -427,7 +463,7 @@ export const SettingsPanel: React.FC = () => {
           <div>
             {audioReady ? (
               <>
-                <span style={styles.statusTitle}>Ready to record game sound</span>
+                <span style={styles.statusTitle}>{t("Ready to record game sound")}</span>
                 <p style={styles.statusText}>
                   System device detected: <strong style={{ color: "var(--accent-teal)" }}>{audio?.system_audio_device}</strong>
                 </p>
@@ -544,7 +580,7 @@ export const SettingsPanel: React.FC = () => {
       </motion.div>
 
       <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Manual Test Recording</h3>
+        <h3 style={styles.cardTitle}>{t("Manual Test Recording")}</h3>
         <p style={styles.cardText}>
           Use this tool to verify that FFmpeg and hardware (GPU) video acceleration work correctly before jumping into a real match.
         </p>

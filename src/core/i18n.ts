@@ -131,6 +131,70 @@ const ES: Record<string, string> = {
   // "Stats" y "Analytics" eran dos pestañas para lo mismo: ahora son "Match".
   "Match": "Partida",
 
+  // ---------------------------------------------------------------- ajustes
+  "What the recorder does, where it saves, and how it talks to Riot.":
+    "Qué graba, dónde lo guarda y cómo habla con Riot.",
+  "Recorder": "Grabador",
+  "Video": "Vídeo",
+  "Idle": "En espera",
+  "Game sound": "Sonido del juego",
+  "No capture device": "Sin dispositivo de captura",
+  "Re-detect": "Volver a detectar",
+  "Disk": "Disco",
+  "How to enable game sound capture": "Cómo activar la captura del sonido del juego",
+  "Install Screen Capturer Recorder (already in your Downloads folder): run the setup as administrator. It adds the virtual-audio-capturer device, which captures exactly what you hear. Then hit Re-detect. Meanwhile it records with the microphone if there is one.":
+    "Instala Screen Capturer Recorder (ya está en tu carpeta de Descargas): ejecuta el instalador como administrador. Añade el dispositivo virtual-audio-capturer, que captura exactamente lo que oyes. Luego pulsa «Volver a detectar». Mientras tanto graba con el micrófono, si hay.",
+  "Quality": "Calidad",
+  "Constant quality: a lower CQ is sharper and heavier.":
+    "Calidad constante: un CQ más bajo es más nítido y más pesado.",
+  "High": "Alta",
+  "Medium": "Media",
+  "Low": "Baja",
+  "Frame rate": "Fotogramas",
+  "Captured at 1080p on the GPU (NVENC); higher resolutions are scaled down.":
+    "Se captura a 1080p en la GPU (NVENC); las resoluciones mayores se reescalan.",
+  "Change": "Cambiar",
+  "Save location": "Carpeta de guardado",
+  "Directory where videos and clips are saved": "Carpeta donde se guardan los vídeos y los clips",
+  "Max Storage Quota (GB)": "Cuota máxima de disco (GB)",
+  "Oldest matches are deleted first when the folder goes over this. Minimum {n} GB.":
+    "Se borran primero las partidas más antiguas cuando la carpeta pasa de aquí. Mínimo {n} GB.",
+  "Auto-prune Age (Days)": "Borrado automático (días)",
+  "Deletes matches older than this, with their clips. 0 disables it. Imported VODs and matches with favourited clips are never touched.":
+    "Borra las partidas más viejas que esto, con sus clips. 0 lo desactiva. Los VODs importados y las partidas con clips favoritos no se tocan nunca.",
+  "Interface and account": "Interfaz y cuenta",
+  "Riot API key": "Clave de la API de Riot",
+  "Needed for the scoreboard and your stats. A development key expires every 24 hours.":
+    "Hace falta para el marcador y tus cifras. La clave de desarrollo caduca cada 24 horas.",
+  "Advanced": "Avanzado",
+  "AI dataset generator": "Generador de dataset para la IA",
+  "Extracts frames at the moment of each click to train the detector. Off unless you are working on the model.":
+    "Extrae fotogramas en el momento de cada clic para entrenar el detector. Apagado salvo que estés trabajando en el modelo.",
+  "Updates": "Actualizaciones",
+  "Version {v} installed.": "Versión {v} instalada.",
+  "Check for Updates": "Buscar actualizaciones",
+  "Checking…": "Comprobando…",
+  "Tools": "Herramientas",
+  "Manual test recording": "Grabación manual de prueba",
+  "Checks that FFmpeg and GPU encoding work before trusting a real match.":
+    "Comprueba que FFmpeg y la codificación por GPU funcionan antes de fiarte en una partida de verdad.",
+  "Stop and save": "Parar y guardar",
+  "Record screen": "Grabar pantalla",
+  "name": "nombre",
+  "How automatic recording works": "Cómo funciona la grabación automática",
+  "The background service connects to the in-game API on port 2999 when a match starts.":
+    "El servicio en segundo plano se conecta a la API del juego en el puerto 2999 al empezar una partida.",
+  "It records locally at 1080p with hardware encoding, so your FPS is untouched.":
+    "Graba en local a 1080p con codificación por hardware, así que no te toca los FPS.",
+  "It logs kills, deaths, assists and objectives with their timestamps.":
+    "Apunta kills, muertes, asistencias y objetivos con su marca de tiempo.",
+  "It saves everything when the match ends, with no action from you.":
+    "Lo guarda todo al terminar la partida, sin que hagas nada.",
+  "It needs ffmpeg on your Windows PATH; without it the recorder cannot start.":
+    "Necesita ffmpeg en el PATH de Windows; sin él el grabador no puede arrancar.",
+  "Detected audio devices": "Dispositivos de audio detectados",
+  "used for the game": "usado para el juego",
+
   // ------------------------------------------------- inspector de la partida
   "Your game": "Tu partida",
   "Kill participation": "Participación en kills",
@@ -261,23 +325,13 @@ const ES: Record<string, string> = {
   "Recorder status, audio capture and automatic match detection.":
     "Estado del grabador, captura de audio y detección automática de partidas.",
   "Storage": "Almacenamiento",
-  "Save location": "Carpeta de guardado",
-  "Directory where videos and clips are saved":
-    "Carpeta donde se guardan los vídeos y los clips",
-  "Change": "Cambiar",
-  "Max Storage Quota (GB)": "Cuota máxima de disco (GB)",
-  "Auto-prune Age (Days)": "Borrado automático (días)",
   "Riot Developer API": "API de desarrollador de Riot",
   "API Key (Development)": "Clave de API (desarrollo)",
-  "Updates": "Actualizaciones",
-  "Check for Updates": "Buscar actualizaciones",
   "Game Sound Capture": "Captura de sonido del juego",
-  "Re-detect": "Volver a detectar",
   "Ready to record game sound": "Listo para grabar el sonido del juego",
   "Video Recording Quality": "Calidad de grabación",
   "Manual Test Recording": "Grabación de prueba manual",
   "Language": "Idioma",
-  "Checking…": "Comprobando…",
   "Interface language. Saved with your settings.":
     "Idioma de la interfaz. Se guarda con tus ajustes.",
 };

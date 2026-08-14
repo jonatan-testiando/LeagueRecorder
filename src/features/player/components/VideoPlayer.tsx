@@ -56,11 +56,11 @@ const InspRow: React.FC<{
   /** Matiz corto a la derecha del valor. */
   note?: string;
 }> = ({ label, value, tone, note }) => (
-  <div className="insp__row">
+  <div className="drow">
     <span>{label}</span>
     <b className="u-metric" style={tone ? { color: tone } : undefined}>
       {value}
-      {note && <em className="insp__rowNote">{note}</em>}
+      {note && <em className="drow__note">{note}</em>}
     </b>
   </div>
 );
@@ -1124,9 +1124,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
             {/* ------------------------------------------------ tu partida */}
             <section>
-              <div className="insp__head">
+              <div className="sect__head">
                 <span className="u-label">{t("Your game")}</span>
-                <i className="insp__rule" />
+                <i className="sect__rule" />
               </div>
               {match.kda && <InspRow label="KDA" value={match.kda} />}
               {!!match.apm && <InspRow label="APM" value={Math.round(match.apm)} />}
@@ -1172,9 +1172,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {(match.gold_diff_15 != null || match.xp_diff_15 != null ||
               match.jungle_cs_diff_15 != null || match.gank_impact_15 != null) && (
               <section>
-                <div className="insp__head">
+                <div className="sect__head">
                   <span className="u-label">{t("Early game")} · {t("minute 15")}</span>
-                  <i className="insp__rule" />
+                  <i className="sect__rule" />
                 </div>
                 {match.gold_diff_15 != null && (
                   <InspRow
@@ -1198,7 +1198,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 )}
                 {/* El resultado de linea era una pildora de color; es una frase. */}
                 {match.lane_result && (
-                  <p className="insp__note">
+                  <p className="note">
                     {t(
                       match.lane_result === "Win" ? "You came out of lane ahead."
                         : match.lane_result === "Loss" ? "You came out of lane behind."
@@ -1212,9 +1212,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* ------------------------------------------------- la curva */}
             {match.minute_frames && match.minute_frames.length > 1 && (
               <section>
-                <div className="insp__head">
+                <div className="sect__head">
                   <span className="u-label">{t("Lead over time")}</span>
-                  <i className="insp__rule" />
+                  <i className="sect__rule" />
                 </div>
                 <GoldXpChart
                   frames={match.minute_frames}
@@ -1227,9 +1227,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* --------------------------------------------- el marcador */}
             {participants.length > 0 ? (
               <section>
-                <div className="insp__head">
+                <div className="sect__head">
                   <span className="u-label">{t("Scoreboard")}</span>
-                  <i className="insp__rule" />
+                  <i className="sect__rule" />
                 </div>
                 {/* La leyenda va arriba: es la cabecera de las columnas, no un
                     pie de tabla. */}
@@ -1268,12 +1268,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             ) : (
               !match.is_vod && (
                 <section>
-                  <p className="insp__note">{t("The 10-player scoreboard is not loaded yet.")}</p>
+                  <p className="note">{t("The 10-player scoreboard is not loaded yet.")}</p>
                   <button className="btn btn--primary btn--sm" onClick={handleSync} disabled={syncing}>
                     <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
                     {syncing ? t("Syncing…") : t("Sync with Riot")}
                   </button>
-                  <p className="insp__note">{t("Needs your Riot API key set in Settings.")}</p>
+                  <p className="note">{t("Needs your Riot API key set in Settings.")}</p>
                 </section>
               )
             )}
@@ -1281,13 +1281,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* ------------------------------------------------ objetivos */}
             {objectives.length > 0 && (
               <section>
-                <div className="insp__head">
+                <div className="sect__head">
                   <span className="u-label">{t("Objectives")}</span>
-                  <i className="insp__rule" />
+                  <i className="sect__rule" />
                 </div>
                 {/* "Equipo Azul" no cabe en una columna de 40px: se parte en
                     dos lineas encima de las cifras. Aqui basta el color. */}
-                <div className="insp__row insp__row--3 insp__objLegend u-label">
+                <div className="drow drow--3 insp__objLegend u-label">
                   <span />
                   <span>{t("Blue")}</span>
                   <span>{t("Red")}</span>
@@ -1302,7 +1302,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   const blue = objectives.find((o) => o.team_id === 100);
                   const red = objectives.find((o) => o.team_id === 200);
                   return (
-                    <div key={key} className="insp__row insp__row--3">
+                    <div key={key} className="drow drow--3">
                       <span>{t(label)}</span>
                       <b style={{ color: (blue?.[key] ?? 0) >= (red?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
                         {blue?.[key] ?? 0}
@@ -1319,9 +1319,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* -------------------------------------------------- compras */}
             {itemPurchases.length > 0 && (
               <section>
-                <div className="insp__head">
+                <div className="sect__head">
                   <span className="u-label">{t("Item purchases")}</span>
-                  <i className="insp__rule" />
+                  <i className="sect__rule" />
                 </div>
                 <div className="insp__buys">
                   {itemPurchases.map((ip, i) => (

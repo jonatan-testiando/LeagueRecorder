@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
 import { AudioStatus, VideoSettings } from "../../../types";
-import { Volume2, CheckCircle2, AlertTriangle, RefreshCw, Monitor, FolderOpen, KeyRound, ArrowUpCircle, Languages } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { invoke } from "@tauri-apps/api/core";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { check } from "@tauri-apps/plugin-updater";
 import { exit } from "@tauri-apps/plugin-process";
-import { motion, Variants } from "framer-motion";
 import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 
@@ -42,6 +42,9 @@ export const SettingsPanel: React.FC = () => {
   // cada pulsación, vaciar el campo enviaría un 0 al backend. Se acotan al salir.
   const [storageDraft, setStorageDraft] = useState<string>("100");
   const [pruneDraft, setPruneDraft] = useState<string>("0");
+  // El disco es lo primero que se mira al entrar aqui y no se estaba pidiendo:
+  // la cuota se ajustaba a ciegas, sin saber cuanto se lleva usado.
+  const [disk, setDisk] = useState<{ used_bytes: number; total_bytes: number } | null>(null);
   const [updateMsg, setUpdateMsg] = useState<string>("");
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
@@ -81,6 +84,7 @@ export const SettingsPanel: React.FC = () => {
     checkStatus();
     refreshAudio();
     getVideoSettings().then(setVideo).catch(console.error);
+    invoke<{ used_bytes: number; total_bytes: number }>("get_disk_usage").then(setDisk).catch(() => {});
     getAppConfig()
       .then(c => {
         setConfig(c);
@@ -206,802 +210,269 @@ export const SettingsPanel: React.FC = () => {
   };
 
   const audioReady = audio?.ready_for_game_audio ?? false;
+  const usedGb = disk ? (disk.used_bytes / 1024 ** 3).toFixed(1) : null;
+  const diskPct = disk && disk.total_bytes > 0 ? Math.round((disk.used_bytes / disk.total_bytes) * 100) : null;
 
-  const containerVariants: Variants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
-    }
-  };
-
-  const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
-  };
+  /** Fila de ajuste: etiqueta y descripcion a la izquierda, control a la derecha. */
+  const Row: React.FC<{ label: string; desc?: string; children: React.ReactNode }> = ({ label, desc, children }) => (
+    <div className="drow drow--set">
+      <div>
+        <span className="drow__label">{label}</span>
+        {desc && <span className="drow__desc">{desc}</span>}
+      </div>
+      <div className="drow__control">{children}</div>
+    </div>
+  );
 
   return (
-    <div style={styles.container}>
-      <div>
-        <h2 style={styles.title}>{t("Control Panel")}</h2>
-        <p style={styles.subtitle}>{t("Recorder status, audio capture and automatic match detection.")}</p>
-      </div>
+    <div className="setpage panel-enter">
+      <header>
+        <h1 style={{ margin: 0, fontSize: "var(--font-xl)" }}>{t("Settings")}</h1>
+        <p className="note">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
+      </header>
 
-      <motion.div 
-        style={styles.settingsGrid}
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-      >
-      {/* Almacenamiento */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardHeader}>
-          <FolderOpen size={20} color="var(--accent-violet)" style={{ marginRight: "8px" }} />
-          <h3 style={styles.cardTitle}>{t("Storage")}</h3>
+      {/* ------------------------------------------------------------ estado
+          Antes esto estaba repartido en tres tarjetas ("Listo para grabar
+          sonido", "Requisitos del sistema", "Deteccion de partidas") mezcladas
+          con los ajustes de verdad. Pero el estado no se ajusta: se comprueba.
+          Va arriba, en una tira, y contesta "esta todo listo" de un vistazo. */}
+      <section className="status">
+        <div className="status__item">
+          <span className={isRecording ? "rec-dot" : "status__dot"} data-tone="idle" />
+          <span className="status__label">{t("Recorder")}</span>
+          <span className="status__value">{isRecording ? t("Recording") : t("Idle")}</span>
         </div>
-        <div style={styles.cardBody}>
-          <div style={styles.settingRow}>
-            <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>{t("Save location")}</span>
-              <span style={styles.settingDesc}>{t("Directory where videos and clips are saved")}</span>
-            </div>
-            <div style={{ display: "flex", gap: "8px", flex: 1, marginLeft: "16px" }}>
-              <input 
-                type="text" 
-                value={config.save_directory} 
-                readOnly
-                style={{
-                  flex: 1, padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
-                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none"
-                }} 
-              />
-              <button onClick={handlePickDirectory} className="btn btn--ghost btn--sm" style={{ padding: "8px 12px" }}>
-                Change
-              </button>
-            </div>
-          </div>
 
-          <div style={{...styles.settingRow, marginTop: "16px"}}>
-            <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>{t("Max Storage Quota (GB)")}</span>
-              <span style={styles.settingDesc}>Oldest matches are deleted first if size exceeds this limit (minimum {MIN_STORAGE_GB} GB)</span>
-            </div>
-            <div style={{ flex: 1, marginLeft: "16px", maxWidth: "80px" }}>
-              <input
-                type="number"
-                min={MIN_STORAGE_GB}
-                value={storageDraft}
-                onChange={(e) => setStorageDraft(e.target.value)}
-                onBlur={() => {
-                  const gb = clampStorageGb(storageDraft);
-                  setStorageDraft(String(gb));
-                  handleSaveConfig({ ...config, max_storage_gb: gb });
-                }}
-                style={{
-                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
-                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none", textAlign: "center"
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{...styles.settingRow, marginTop: "16px"}}>
-            <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>{t("Auto-prune Age (Days)")}</span>
-              <span style={styles.settingDesc}>
-                Permanently deletes local matches older than X days, together with their clips.
-                0 disables it (default). Imported VODs and matches with favorited clips are never touched.
-              </span>
-            </div>
-            <div style={{ flex: 1, marginLeft: "16px", maxWidth: "80px" }}>
-              <input
-                type="number"
-                min="0"
-                value={pruneDraft}
-                onChange={(e) => setPruneDraft(e.target.value)}
-                onBlur={() => {
-                  const days = clampPruneDays(pruneDraft);
-                  setPruneDraft(String(days));
-                  handleSaveConfig({ ...config, auto_prune_days: days });
-                }}
-                style={{
-                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
-                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none", textAlign: "center"
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Idioma */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardHeader}>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <Languages size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
-            <h3 style={styles.cardTitle}>{t("Language")}</h3>
-          </div>
-        </div>
-        <div style={styles.cardBody}>
-          <div style={styles.settingRow}>
-            <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>{t("Language")}</span>
-              <span style={styles.settingDesc}>
-                {t("Interface language. Saved with your settings.")}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: "var(--space-2)" }}>
-              {LANGUAGES.map((l) => (
-                <button
-                  key={l.code}
-                  type="button"
-                  className="btn btn--ghost btn--sm"
-                  aria-pressed={lang === l.code}
-                  onClick={() => setLang(l.code as Language)}
-                >
-                  {l.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Riot API */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardHeader}>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <KeyRound size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
-            <h3 style={styles.cardTitle}>{t("Riot Developer API")}</h3>
-          </div>
-        </div>
-        <div style={styles.cardBody}>
-          <div style={styles.settingRow}>
-            <div style={styles.settingInfo}>
-              <span style={styles.settingLabel}>{t("API Key (Development)")}</span>
-              <span style={styles.settingDesc}>Required to fetch your stats (KDA, gold, damage). Expires every 24 hours!</span>
-            </div>
-            <div style={{ flex: 1, marginLeft: "16px" }}>
-              <input 
-                type="password" 
-                placeholder="RGAPI-..."
-                value={config.riot_api_key} 
-                onChange={handleApiKeyChange}
-                onBlur={handleApiKeyBlur}
-                style={{
-                  width: "100%", padding: "8px", borderRadius: "6px", border: "1px solid var(--border-subtle)",
-                  backgroundColor: "var(--bg-app)", color: "var(--text-primary)", fontSize: "12px", outline: "none"
-                }} 
-              />
-            </div>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Sistema de Actualizaciones */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardHeader}>
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <ArrowUpCircle size={17} strokeWidth={1.6} color="var(--brand)" style={{ marginRight: 8 }} />
-            <h3 style={styles.cardTitle}>{t("Updates")}</h3>
-          </div>
-        </div>
-        <div style={styles.cardBody}>
-          <p style={styles.cardText}>
-            Automatically check for and install the latest LeagueRecorder improvements.
-          </p>
-          
-          {isDownloading ? (
-            <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--accent-violet)" }}>
-                  {updateMsg}
-                </span>
-                <span style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-primary)" }}>
-                  {downloadProgress}%
-                </span>
-              </div>
-              <div style={{ width: "100%", height: "10px", backgroundColor: "var(--bg-app)", borderRadius: "5px", overflow: "hidden", border: "1px solid var(--border-subtle)" }}>
-                <div style={{ 
-                  width: `${downloadProgress}%`, 
-                  height: "100%", 
-                  background: "var(--gradient-violet)",
-                  boxShadow: "0 0 10px color-mix(in srgb, var(--flag) 50%, transparent)",
-                  transition: "width 0.2s ease-out",
-                  borderRadius: "5px"
-                }} />
-              </div>
-            </div>
-          ) : (
-            <>
-              <div style={{ ...styles.form, marginTop: "16px" }}>
-                <button 
-                  onClick={checkForUpdates} 
-                  disabled={isUpdating}
-                  // Buscar actualizaciones no es la acción principal de esta
-                  // pantalla: un relleno turquesa a ancho completo la convertía
-                  // en lo más brillante de la vista.
-                  style={{
-                    ...styles.btn,
-                    background: "transparent",
-                    border: "1px solid var(--line)",
-                    color: "var(--text)",
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "12px",
-                    fontWeight: 500,
-                    flex: 1,
-                    opacity: isUpdating ? 0.7 : 1,
-                    transition: "opacity var(--t-quick) var(--e-out)",
-                  }}
-                >
-                  {isUpdating ? updateMsg || t("Checking…") : t("Check for Updates")}
-                </button>
-              </div>
-              {updateMsg && !isUpdating && <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "8px" }}>{updateMsg}</p>}
-            </>
-          )}
-        </div>
-      </motion.div>
-
-      {/* Estado del audio del juego */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardTitleRow}>
-          <h3 style={styles.cardTitle}>
-            <Volume2 size={20} color="var(--accent-gold)" style={{ marginRight: "8px" }} />
-            {t("Game Sound Capture")}
-          </h3>
-          <button onClick={refreshAudio} disabled={audioLoading} style={styles.ghostBtn}>
-            <RefreshCw size={14} style={{ marginRight: "6px" }} />
+        <div className="status__item">
+          <span className="status__dot" data-tone={audioReady ? "ok" : "warn"} />
+          <span className="status__label">{t("Game sound")}</span>
+          <span className="status__value" title={audio?.system_audio_device ?? undefined}>
+            {audioReady ? audio?.system_audio_device : t("No capture device")}
+          </span>
+          <button className="btn btn--ghost btn--sm" onClick={refreshAudio} disabled={audioLoading}>
+            <RefreshCw size={12} style={audioLoading ? { animation: "spin 1s linear infinite" } : undefined} />
             {audioLoading ? t("Checking…") : t("Re-detect")}
           </button>
         </div>
 
-        <div style={{ ...styles.audioBanner, borderLeftColor: audioReady ? "var(--color-victory)" : "var(--accent-gold)" }}>
-          <div style={{ flexShrink: 0, marginTop: "2px" }}>
-            {audioReady ? <CheckCircle2 size={24} color="var(--color-victory)" /> : <AlertTriangle size={24} color="var(--accent-gold)" />}
-          </div>
-          <div>
-            {audioReady ? (
-              <>
-                <span style={styles.statusTitle}>{t("Ready to record game sound")}</span>
-                <p style={styles.statusText}>
-                  System device detected: <strong style={{ color: "var(--accent-teal)" }}>{audio?.system_audio_device}</strong>
-                </p>
-              </>
-            ) : (
-              <>
-                <span style={styles.statusTitle}>Missing a system capture device</span>
-                <p style={styles.statusText}>
-                  To record game sound with no latency, install <strong>Screen Capturer Recorder</strong> (already downloaded in
-                  <code style={styles.inlineCode}> Downloads\ScreenCaptureRecorder</code>): run
-                  <code style={styles.inlineCode}>Setup.Screen.Capturer.Recorder…exe</code> as administrator (Next → Next). It adds the
-                  <strong> virtual-audio-capturer</strong> device, which captures exactly what you hear through your headphones. Then click “Re-detect”.
-                  Meanwhile it will record with the microphone if available.
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-
-        {audio && audio.all_devices.length > 0 && (
-          <details style={styles.details}>
-            <summary style={styles.summary}>Detected audio devices ({audio.all_devices.length})</summary>
-            <ul style={styles.deviceList}>
-              {audio.all_devices.map((d) => (
-                <li key={d} style={{ color: d === audio.system_audio_device ? "var(--accent-teal)" : "var(--text-secondary)" }}>
-                  {d}{d === audio.system_audio_device ? "  ← used for the game" : ""}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </motion.div>
-
-      {/* Configuración de Video */}
-      <motion.div variants={itemVariants} style={styles.card}>
-        <div style={styles.cardTitleRow}>
-          <h3 style={styles.cardTitle}>
-            <Monitor size={20} color="var(--accent-blue)" style={{ marginRight: "8px" }} />
-            Video Recording Quality
-          </h3>
-        </div>
-        <p style={styles.cardText}>
-          Video is recorded at 1080p via NVENC (GPU), with no FPS loss. If you play at a higher
-          resolution the image is scaled down to 1080p, keeping the full frame. Choose the FPS and
-          quality: quality trades sharpness against file size.
-        </p>
-        
-        <div style={styles.videoSettingsGrid}>
-          <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Frame Rate (FPS)</span>
-            <div style={styles.buttonGroup}>
-              <button 
-                onClick={() => video && saveVideo(60, video.quality)}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.fps === 60 ? "var(--surface-2)" : "var(--bg-app)",
-                  borderColor: video?.fps === 60 ? "var(--cool)" : "var(--border-strong)",
-                  color: video?.fps === 60 ? "var(--text)" : "var(--text-secondary)"
-                }}
-              >
-                60 FPS
-              </button>
-              <button 
-                onClick={() => video && saveVideo(30, video.quality)}
-                style={{
-                  ...styles.selectBtn,
-                  backgroundColor: video?.fps === 30 ? "var(--surface-2)" : "var(--bg-app)",
-                  borderColor: video?.fps === 30 ? "var(--cool)" : "var(--border-strong)",
-                  color: video?.fps === 30 ? "var(--text)" : "var(--text-secondary)"
-                }}
-              >
-                30 FPS
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.videoSetCol}>
-            <span style={styles.videoSetLabel}>Quality</span>
-            <div style={styles.buttonGroup}>
-              {([
-                { key: "High", label: "High", hint: "CQ 20 · sharpest" },
-                { key: "Medium", label: "Medium", hint: "CQ 23 · balanced" },
-                { key: "Low", label: "Low", hint: "CQ 26 · smallest" },
-              ] as const).map((q) => {
-                const sel = video?.quality === q.key;
-                return (
-                  <button
-                    key={q.key}
-                    onClick={() => video && saveVideo(video.fps, q.key)}
-                    style={{
-                      ...styles.qualityBtn,
-                      backgroundColor: sel ? "var(--surface-2)" : "var(--bg-app)",
-                      borderColor: sel ? "var(--cool)" : "var(--border-strong)",
-                      color: sel ? "var(--text)" : "var(--text-secondary)",
-                    }}
-                  >
-                    <span>{q.label}</span>
-                    <span style={styles.btnHint}>{q.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div style={styles.infoNote}>
-          <Monitor size={14} color="var(--accent-blue)" style={{ flexShrink: 0, marginTop: "2px" }} />
-          <span>
-            Recording uses constant quality, so the encoder only spends bits where there is motion
-            and quiet stretches take up almost nothing. File size therefore varies with the match:
-            a lower CQ number means a sharper, heavier video.
+        <div className="status__item">
+          <span className="status__dot" data-tone={diskPct !== null && diskPct > 90 ? "warn" : "ok"} />
+          <span className="status__label">{t("Disk")}</span>
+          <span className="status__value">
+            {usedGb ? `${usedGb} GB · ${diskPct}%` : "—"}
           </span>
         </div>
-      </motion.div>
+      </section>
 
-      <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>{t("Manual Test Recording")}</h3>
-        <p style={styles.cardText}>
-          Use this tool to verify that FFmpeg and hardware (GPU) video acceleration work correctly before jumping into a real match.
-        </p>
+      {/* La receta para arreglar el audio solo aparece cuando hace falta. */}
+      {!audioReady && (
+        <details className="fold fold--warn">
+          <summary>{t("How to enable game sound capture")}</summary>
+          <p className="note">
+            {t("Install Screen Capturer Recorder (already in your Downloads folder): run the setup as administrator. It adds the virtual-audio-capturer device, which captures exactly what you hear. Then hit Re-detect. Meanwhile it records with the microphone if there is one.")}
+          </p>
+        </details>
+      )}
 
-        {isRecording ? (
-          <div style={styles.statusBoxActive}>
-            <div style={styles.indicatorActive} />
-            <div>
-              <span style={styles.statusTitle}>Recording Screen</span>
-              <p style={styles.statusText}>{statusMsg || "Capturing video and audio…"}</p>
-            </div>
+      {/* -------------------------------------------------------- grabacion */}
+      <section>
+        {/* No puede llamarse "Grabacion": la tira de estado de arriba ya usa
+            "Grabando" para el estado del grabador y se leian como lo mismo. */}
+        <div className="sect__head"><span className="u-label">{t("Video")}</span><i className="sect__rule" /></div>
+
+        <Row label={t("Quality")} desc={t("Constant quality: a lower CQ is sharper and heavier.")}>
+          <div className="tp-seg">
+            {([
+              { key: "High", label: t("High"), hint: "CQ 20" },
+              { key: "Medium", label: t("Medium"), hint: "CQ 23" },
+              { key: "Low", label: t("Low"), hint: "CQ 26" },
+            ] as const).map((q) => (
+              <button
+                key={q.key}
+                onClick={() => video && saveVideo(video.fps, q.key)}
+                {...(video?.quality === q.key ? { "data-on": true } : {})}
+                title={q.hint}
+              >
+                {q.label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <div style={styles.statusBoxInactive}>
-            <div style={styles.indicatorInactive} />
-            <div>
-              <span style={styles.statusTitle}>Recorder Idle</span>
-              <p style={styles.statusText}>{statusMsg || "Waiting for automatic or manual start."}</p>
-            </div>
-          </div>
-        )}
+        </Row>
 
-        <div style={styles.form}>
-          {!isRecording ? (
+        <Row label={t("Frame rate")} desc={t("Captured at 1080p on the GPU (NVENC); higher resolutions are scaled down.")}>
+          <div className="tp-seg">
+            {[60, 30].map((f) => (
+              <button
+                key={f}
+                onClick={() => video && saveVideo(f, video.quality)}
+                {...(video?.fps === f ? { "data-on": true } : {})}
+              >
+                {f} FPS
+              </button>
+            ))}
+          </div>
+        </Row>
+      </section>
+
+      {/* --------------------------------------------------- almacenamiento */}
+      <section>
+        <div className="sect__head"><span className="u-label">{t("Storage")}</span><i className="sect__rule" /></div>
+
+        <Row label={t("Save location")} desc={t("Directory where videos and clips are saved")}>
+          <input type="text" className="field field--path" value={config.save_directory} readOnly title={config.save_directory} />
+          <button onClick={handlePickDirectory} className="btn btn--ghost btn--sm">{t("Change")}</button>
+        </Row>
+
+        <Row
+          label={t("Max Storage Quota (GB)")}
+          desc={t("Oldest matches are deleted first when the folder goes over this. Minimum {n} GB.").replace("{n}", String(MIN_STORAGE_GB))}
+        >
+          <input
+            type="number"
+            min={MIN_STORAGE_GB}
+            className="field field--num"
+            value={storageDraft}
+            onChange={(e) => setStorageDraft(e.target.value)}
+            onBlur={() => {
+              const gb = clampStorageGb(storageDraft);
+              setStorageDraft(String(gb));
+              handleSaveConfig({ ...config, max_storage_gb: gb });
+            }}
+          />
+        </Row>
+
+        <Row
+          label={t("Auto-prune Age (Days)")}
+          desc={t("Deletes matches older than this, with their clips. 0 disables it. Imported VODs and matches with favourited clips are never touched.")}
+        >
+          <input
+            type="number"
+            min="0"
+            className="field field--num"
+            value={pruneDraft}
+            onChange={(e) => setPruneDraft(e.target.value)}
+            onBlur={() => {
+              const days = clampPruneDays(pruneDraft);
+              setPruneDraft(String(days));
+              handleSaveConfig({ ...config, auto_prune_days: days });
+            }}
+          />
+        </Row>
+      </section>
+
+      {/* ---------------------------------------------------------- cuenta */}
+      <section>
+        <div className="sect__head"><span className="u-label">{t("Interface and account")}</span><i className="sect__rule" /></div>
+
+        <Row label={t("Language")} desc={t("Interface language. Saved with your settings.")}>
+          <div className="tp-seg">
+            {LANGUAGES.map((l) => (
+              <button
+                key={l.code}
+                onClick={() => setLang(l.code as Language)}
+                {...(lang === l.code ? { "data-on": true } : {})}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
+        </Row>
+
+        <Row label={t("Riot API key")} desc={t("Needed for the scoreboard and your stats. A development key expires every 24 hours.")}>
+          <input
+            type="password"
+            className="field"
+            placeholder="RGAPI-…"
+            value={config.riot_api_key}
+            onChange={handleApiKeyChange}
+            onBlur={handleApiKeyBlur}
+          />
+        </Row>
+      </section>
+
+      {/* -------------------------------------------------------- avanzado */}
+      <section>
+        <div className="sect__head"><span className="u-label">{t("Advanced")}</span><i className="sect__rule" /></div>
+
+        <Row label={t("AI dataset generator")} desc={t("Extracts frames at the moment of each click to train the detector. Off unless you are working on the model.")}>
+          <input
+            type="checkbox"
+            className="check"
+            checked={config.auto_dataset_generator}
+            onChange={(e) => handleSaveConfig({ ...config, auto_dataset_generator: e.target.checked })}
+          />
+        </Row>
+
+        <Row label={t("Updates")} desc={isDownloading ? updateMsg : (updateMsg || t("Version {v} installed.").replace("{v}", "1.2.8"))}>
+          {isDownloading ? (
+            <div className="upd">
+              <span className="upd__track"><span className="upd__fill" style={{ width: `${downloadProgress}%` }} /></span>
+              <span className="u-metric" style={{ fontSize: 11 }}>{downloadProgress}%</span>
+            </div>
+          ) : (
+            <button onClick={checkForUpdates} disabled={isUpdating} className="btn btn--ghost btn--sm">
+              {isUpdating ? t("Checking…") : t("Check for Updates")}
+            </button>
+          )}
+        </Row>
+      </section>
+
+      {/* ----------------------------------------------------- herramientas
+          Grabar a mano no es un ajuste: es algo que se ejecuta. Por eso baja
+          al final y se presenta como herramienta, no como preferencia. */}
+      <section>
+        <div className="sect__head"><span className="u-label">{t("Tools")}</span><i className="sect__rule" /></div>
+
+        <Row label={t("Manual test recording")} desc={t("Checks that FFmpeg and GPU encoding work before trusting a real match.")}>
+          {isRecording ? (
+            <button onClick={handleStopManual} disabled={isProcessing} className="btn btn--primary btn--sm">
+              {t("Stop and save")}
+            </button>
+          ) : (
             <>
               <input
                 type="text"
-                placeholder="Test name (e.g. screen_test)"
+                className="field field--num"
+                style={{ width: 120 }}
+                placeholder={t("name")}
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
-                style={styles.input}
                 disabled={isProcessing}
               />
-              <button
-                onClick={handleStartManual}
-                disabled={isProcessing}
-                style={{ ...styles.btn, backgroundColor: "var(--action)", color: "var(--on-action)" }}
-              >
-                Record Full Screen
+              <button onClick={handleStartManual} disabled={isProcessing} className="btn btn--primary btn--sm">
+                {t("Record screen")}
               </button>
             </>
-          ) : (
-            <button
-              onClick={handleStopManual}
-              disabled={isProcessing}
-              style={{ ...styles.btn, backgroundColor: "var(--color-defeat)" }}
-            >
-              Stop and Save Clip
-            </button>
           )}
-        </div>
-      </motion.div>
+        </Row>
+        {statusMsg && <p className="note">{statusMsg}</p>}
+      </section>
 
-      <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Match Detection</h3>
-        <p style={styles.cardText}>
-          The background service runs constantly. When you open League of Legends and enter a match:
-        </p>
-        <ul style={styles.list}>
-          <li>It connects automatically to the in-game API on port 2999.</li>
-          <li>It starts local recording at 1080p with zero performance impact.</li>
-          <li>It logs timestamps for kills, deaths, assists and objectives.</li>
-          <li>It saves everything when the match ends, 100% automatically.</li>
+      {/* La documentacion que estaba suelta en dos tarjetas: sigue disponible,
+          pero plegada. No es algo que se ajuste. */}
+      <details className="fold">
+        <summary>{t("How automatic recording works")}</summary>
+        <ul className="fold__list">
+          <li>{t("The background service connects to the in-game API on port 2999 when a match starts.")}</li>
+          <li>{t("It records locally at 1080p with hardware encoding, so your FPS is untouched.")}</li>
+          <li>{t("It logs kills, deaths, assists and objectives with their timestamps.")}</li>
+          <li>{t("It saves everything when the match ends, with no action from you.")}</li>
+          <li>{t("It needs ffmpeg on your Windows PATH; without it the recorder cannot start.")}</li>
         </ul>
-      </motion.div>
+      </details>
 
-      <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>Automatic AI Dataset Generator</h3>
-        <p style={styles.cardText}>
-          Extracts frames at the exact moments of your physical clicks to automatically train a YOLOv8 model.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
-          <label style={{ display: "flex", alignItems: "center", cursor: "pointer", gap: "var(--space-3)" }}>
-            <input 
-              type="checkbox"
-              checked={config.auto_dataset_generator}
-              onChange={(e) => handleSaveConfig({ ...config, auto_dataset_generator: e.target.checked })}
-              style={{ width: "18px", height: "18px", accentColor: "var(--accent-violet)" }}
-            />
-            <span style={{ fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-primary)" }}>
-              Enable auto-generation when a match ends
-            </span>
-          </label>
-        </div>
-      </motion.div>
-
-      <motion.div variants={itemVariants} style={styles.card}>
-        <h3 style={styles.cardTitle}>System Requirements</h3>
-        <ul style={styles.list}>
-          <li>
-            <strong>FFmpeg on PATH:</strong> Make sure `ffmpeg` is on your Windows PATH. Otherwise the recorder won't be able to start.
-          </li>
-          <li>
-            <strong>Game Resolution:</strong> Capture is automatically scaled to 1080p 60fps using hardware encoding on the GPU so your FPS isn't affected.
-          </li>
-        </ul>
-      </motion.div>
-      </motion.div>
+      {audio && audio.all_devices.length > 0 && (
+        <details className="fold">
+          <summary>{t("Detected audio devices")} ({audio.all_devices.length})</summary>
+          <ul className="fold__list">
+            {audio.all_devices.map((d) => (
+              <li key={d} style={{ color: d === audio.system_audio_device ? "var(--cool)" : undefined }}>
+                {d}{d === audio.system_audio_device ? ` ← ${t("used for the game")}` : ""}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    flex: 1,
-    padding: "var(--space-6)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-6)",
-    overflowY: "auto",
-    background: "transparent",
-    boxSizing: "border-box",
-  },
-  settingsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
-    gap: "var(--space-6)",
-  },
-  title: {
-    margin: 0,
-    fontSize: "var(--font-2xl)",
-    fontWeight: 800,
-    letterSpacing: "-0.03em",
-  },
-  subtitle: {
-    margin: "var(--space-2) 0 0 0",
-    fontSize: "var(--font-sm)",
-    color: "var(--text-muted)",
-  },
-  cardTitleRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "var(--space-3)",
-  },
-  // Estas siete faltaban: el código las usaba (`styles.settingInfo`, etc.) pero
-  // nunca se definieron, así que llegaban a React como `undefined` y esos
-  // elementos se pintaban sin estilo. De ahí que la etiqueta y su descripción
-  // salieran pegadas ("Save locationDirectory where videos…").
-  cardHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    marginBottom: "var(--space-4)",
-  },
-  cardBody: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-  },
-  settingRow: {
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: "var(--space-4)",
-  },
-  settingInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "3px",
-    minWidth: 0,
-    flex: 1,
-  },
-  settingLabel: {
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    color: "var(--text)",
-  },
-  settingDesc: {
-    fontSize: "var(--font-xs)",
-    lineHeight: 1.5,
-    color: "var(--muted)",
-    maxWidth: "48ch",
-  },
-  button: {
-    fontFamily: "var(--font-mono)",
-    fontSize: "12px",
-    padding: "var(--space-2) var(--space-4)",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid var(--line)",
-    background: "var(--raised)",
-    color: "var(--text)",
-    cursor: "pointer",
-  },
-  ghostBtn: {
-    background: "transparent",
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-md)",
-    color: "var(--text-secondary)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 600,
-    padding: "var(--space-2) var(--space-3)",
-    cursor: "pointer",
-  },
-  toggle: {
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-full)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 800,
-    padding: "var(--space-2) var(--space-4)",
-    cursor: "pointer",
-  },
-  ultRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    flexWrap: "wrap",
-  },
-  ultLabel: { fontSize: "var(--font-sm)", color: "var(--text-secondary)", fontWeight: 600 },
-  keyInput: {
-    width: "44px",
-    height: "44px",
-    textAlign: "center",
-    fontSize: "var(--font-lg)",
-    fontWeight: 800,
-    backgroundColor: "var(--bg-app)",
-    border: "1px solid var(--border-strong)",
-    borderRadius: "var(--radius-md)",
-    color: "var(--accent-teal)",
-    outline: "none",
-    textTransform: "uppercase",
-  },
-  ultHint: { fontSize: "var(--font-xs)", color: "var(--text-muted)", flex: 1, minWidth: "180px" },
-  audioBanner: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "var(--space-3)",
-    background: "var(--surface-1)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-4)",
-    borderLeft: "4px solid var(--accent-gold)",
-  },
-  inlineCode: {
-    fontFamily: "var(--font-mono)",
-    fontSize: "12px",
-    backgroundColor: "var(--bg-app)",
-    padding: "1px 6px",
-    borderRadius: "var(--radius-sm)",
-    border: "1px solid var(--border-subtle)",
-    color: "var(--text-secondary)",
-  },
-  details: {
-    background: "var(--surface-1)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-3) var(--space-4)",
-    border: "1px solid var(--border-subtle)",
-  },
-  summary: {
-    cursor: "pointer",
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    color: "var(--text-secondary)",
-  },
-  deviceList: {
-    margin: "var(--space-3) 0 0 0",
-    paddingLeft: "var(--space-6)",
-    fontSize: "var(--font-sm)",
-    lineHeight: "1.7",
-  },
-  card: {
-    background: "var(--surface-1)",
-    border: "1px solid var(--border-subtle)",
-    borderRadius: "var(--radius-lg)",
-    padding: "var(--space-6)",
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-3)",
-  },
-  cardTitle: {
-    margin: 0,
-    fontSize: "var(--font-lg)",
-    fontWeight: 700,
-    color: "var(--text-primary)",
-  },
-  cardText: {
-    margin: 0,
-    fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
-    lineHeight: "1.5",
-  },
-  statusBoxInactive: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    background: "var(--surface-1)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-4)",
-    borderLeft: "4px solid var(--text-muted)",
-  },
-  statusBoxActive: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    background: "var(--surface-1)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-4)",
-    borderLeft: "4px solid var(--color-defeat)",
-  },
-  indicatorInactive: {
-    width: "12px",
-    height: "12px",
-    borderRadius: "var(--radius-full)",
-    backgroundColor: "var(--text-muted)",
-  },
-  indicatorActive: {
-    width: "12px",
-    height: "12px",
-    borderRadius: "var(--radius-full)",
-    backgroundColor: "var(--color-defeat)",
-    boxShadow: "0 0 8px var(--color-defeat)",
-    animation: "pulse 1.5s infinite",
-  },
-  statusTitle: {
-    fontWeight: 700,
-    fontSize: "var(--font-sm)",
-  },
-  statusText: {
-    margin: "2px 0 0 0",
-    fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
-  },
-  form: {
-    display: "flex",
-    gap: "var(--space-3)",
-    marginTop: "var(--space-2)",
-  },
-  input: {
-    flex: 1,
-    backgroundColor: "var(--bg-app)",
-    border: "1px solid var(--border-subtle)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-2) var(--space-4)",
-    color: "var(--text-primary)",
-    fontSize: "var(--font-sm)",
-    outline: "none",
-  },
-  btn: {
-    border: "none",
-    borderRadius: "var(--radius-md)",
-    color: "var(--text)",
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-    padding: "var(--space-3) var(--space-6)",
-    cursor: "pointer",
-  },
-  list: {
-    margin: 0,
-    paddingLeft: "var(--space-6)",
-    fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
-    lineHeight: "1.6",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-1)",
-  },
-  videoSettingsGrid: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: "var(--space-6)",
-    marginTop: "var(--space-2)",
-  },
-  videoSetCol: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-    flex: 1,
-    minWidth: "200px",
-  },
-  videoSetLabel: {
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-    color: "var(--text-primary)",
-  },
-  buttonGroup: {
-    display: "flex",
-    gap: "var(--space-2)",
-    backgroundColor: "var(--bg-app)",
-    padding: "var(--space-1)",
-    borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--border-subtle)",
-  },
-  selectBtn: {
-    flex: 1,
-    padding: "var(--space-2) var(--space-4)",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid transparent",
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-  },
-  qualityBtn: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "2px",
-    padding: "var(--space-2) var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid transparent",
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-    cursor: "pointer",
-    transition: "all 0.2s ease",
-  },
-  btnHint: {
-    fontSize: "11px",
-    fontWeight: 500,
-    opacity: 0.75,
-  },
-  infoNote: {
-    display: "flex",
-    gap: "var(--space-2)",
-    marginTop: "var(--space-4)",
-    padding: "var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    backgroundColor: "var(--bg-app)",
-    border: "1px solid var(--border-subtle)",
-    fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
-    lineHeight: 1.4,
-  },
 };

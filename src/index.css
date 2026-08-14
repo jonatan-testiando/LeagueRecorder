@@ -1272,15 +1272,15 @@ a:focus:not(:focus-visible) {
   text-transform: uppercase;
 }
 
-.insp__head {
+.sect__head {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-2);
 }
-.insp__rule { flex: 1; height: 1px; background: var(--line-soft); }
+.sect__rule { flex: 1; height: 1px; background: var(--line-soft); }
 
-.insp__row {
+.drow {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -1288,19 +1288,19 @@ a:focus:not(:focus-visible) {
   padding: 5px 0;
   border-bottom: 1px solid var(--line-soft);
 }
-.insp__row span { font-size: 12.5px; color: var(--muted); }
-.insp__row b { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; }
-.insp__rowNote {
+.drow span { font-size: 12.5px; color: var(--muted); }
+.drow b { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.drow__note {
   font-style: normal;
   font-size: 10.5px;
   color: var(--faint);
   margin-left: 6px;
 }
 /* Objetivos: misma fila, dos equipos. */
-.insp__row--3 { display: grid; grid-template-columns: 1fr 40px 40px; text-align: right; }
-.insp__row--3 span:first-child { text-align: left; }
+.drow--3 { display: grid; grid-template-columns: 1fr 40px 40px; text-align: right; }
+.drow--3 span:first-child { text-align: left; }
 
-.insp__note {
+.note {
   margin: var(--space-2) 0 0;
   font-size: 12px;
   line-height: 1.5;
@@ -1466,3 +1466,169 @@ a:focus:not(:focus-visible) {
 /* Cabecera de las dos columnas de objetivos: arriba, como el marcador. */
 .insp__objLegend { border-bottom-color: transparent; padding-bottom: 0; }
 .insp__objLegend span { font-size: 10px; }
+
+/* =========================================================================
+   Ajustes.
+
+   Lo que habia: diez tarjetas del mismo peso en una rejilla de dos columnas,
+   con alturas dispares y huecos entre medias. Y dentro, tres cosas distintas
+   presentadas igual: ajustes que cambian algo, ESTADO que solo se comprueba
+   (¿hay dispositivo de audio?, ¿está ffmpeg?) y DOCUMENTACIÓN (cuatro viñetas
+   explicando cómo funciona la detección de partidas). Con todo al mismo nivel,
+   la clave de la API — que se toca una vez en la vida — pesaba lo mismo que la
+   calidad de vídeo.
+
+   Ahora: el estado arriba en una tira, los ajustes en una columna de filas
+   ordenadas por frecuencia de uso, y la documentación plegada al final. Las
+   filas son las mismas `.drow` del inspector del reproductor: una pantalla que
+   se lee en vertical y con todos los controles en la misma vertical.
+   ========================================================================= */
+.setpage {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+/* Ancho de lectura: una fila de ajuste de 1400px separa tanto la etiqueta de su
+   control que dejan de leerse como pareja. El limite va en los hijos y no en el
+   contenedor para que la barra de scroll siga en el borde de la ventana, y
+   centrado porque a pantalla completa la columna pegada a la izquierda deja un
+   vacio que parece un fallo de maquetacion. */
+.setpage > * {
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+}
+
+/* --- tira de estado ----------------------------------------------------- */
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-1);
+  border: 1px solid var(--glass-line-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+.status__item { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.status__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+.status__dot[data-tone="ok"] { background: var(--win); }
+.status__dot[data-tone="warn"] { background: var(--gold); }
+.status__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.status__value {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- fila de ajuste ----------------------------------------------------- */
+/* La variante de ajustes da aire y sitio al control; la del inspector es solo
+   etiqueta y cifra. */
+.drow--set {
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-3) 0;
+}
+.drow--set > div:first-child { min-width: 0; }
+.drow__label { display: block; font-size: 13px; color: var(--text); }
+.drow__desc {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+  margin-top: 2px;
+  max-width: 58ch;
+}
+.drow__control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 240px;
+}
+
+/* --- campos ------------------------------------------------------------- */
+/* Estaban repetidos ocho veces con el mismo bloque de estilos inline. */
+.field {
+  background: var(--sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  box-shadow: var(--inset-sunken);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 6px var(--space-3);
+  outline: none;
+  min-width: 0;
+  flex: 1;
+}
+.field:focus-visible { border-color: var(--cool); }
+.field--num { flex: 0 0 76px; text-align: center; }
+.field--path { flex: 1; }
+
+.check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cool);
+  cursor: pointer;
+}
+
+/* --- barra de descarga de la actualizacion ------------------------------ */
+.upd { display: flex; align-items: center; gap: var(--space-2); width: 100%; }
+.upd__track {
+  flex: 1;
+  height: 4px;
+  background: var(--sunken);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  box-shadow: var(--inset-sunken);
+}
+.upd__fill {
+  display: block;
+  height: 100%;
+  background: var(--cool);
+  border-radius: var(--radius-full);
+  transition: width var(--t-base) var(--e-move);
+}
+
+/* --- plegables ---------------------------------------------------------- */
+.fold { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
+.fold summary {
+  list-style: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.fold summary::-webkit-details-marker { display: none; }
+.fold summary::after { content: "+"; margin-left: auto; font-size: 13px; }
+.fold[open] summary::after { content: "−"; }
+.fold summary:hover { color: var(--text); }
+.fold--warn summary { color: var(--gold); }
+.fold__list {
+  margin: var(--space-3) 0 0;
+  padding-left: var(--space-4);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.fold__list li { margin-bottom: 4px; }

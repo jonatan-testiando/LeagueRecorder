@@ -805,7 +805,7 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: "1.7",
   },
   card: {
-    backgroundColor: "var(--bg-panel)",
+    backgroundColor: "var(--panel)",
     border: "1px solid var(--border-subtle)",
     borderRadius: "var(--radius-lg)",
     padding: "var(--space-6)",

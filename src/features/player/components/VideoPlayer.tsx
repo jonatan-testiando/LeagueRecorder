@@ -1579,7 +1579,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   padding: "var(--space-2) var(--space-3)",
                   borderRadius: "var(--radius-md)",
                   border: "1px solid var(--border-strong)",
-                  backgroundColor: "var(--bg-panel)",
+                  backgroundColor: "var(--panel)",
                   color: "var(--text-primary)",
                   fontSize: "var(--font-sm)",
                   outline: "none"

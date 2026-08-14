@@ -2,7 +2,8 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ErrorClipMetadata, addErrorEvent, deleteErrorEvent, editErrorEvent } from "../../../core/tauri-ipc";
 import { 
   Play, Pause, VolumeX, Volume1, Volume2, Maximize, 
-  ChevronLeft, Plus, Target, Focus, BrainCircuit, Flag, Edit2, Trash2
+  ChevronLeft, Plus, Target, Focus, BrainCircuit, Flag, Edit2, Trash2,
+  SkipBack, SkipForward
 } from "lucide-react";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { motion, AnimatePresence } from "framer-motion";
@@ -77,6 +78,25 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
     setActiveEventId(eventId);
     seekTo(Math.max(0, eventTime - 5), true); // Saltamos 5s antes
   }, [seekTo]);
+
+  /**
+   * Salta a la nota anterior o siguiente.
+   *
+   * En un clip de error las notas SON los puntos de interés, así que el
+   * transporte se mueve entre ellas y no de diez en diez segundos.
+   */
+  const stepNote = useCallback((dir: 1 | -1) => {
+    const times = (clip.events ?? []).map((e) => e.time).sort((a, b) => a - b);
+    if (times.length === 0) return;
+    const cur = videoRef.current?.currentTime ?? 0;
+    // Margen de medio segundo para no quedarse clavado en la nota actual.
+    const next = dir === 1
+      ? times.find((t) => t > cur + 0.5)
+      : [...times].reverse().find((t) => t < cur - 0.5);
+    if (next === undefined) return;
+    const ev = (clip.events ?? []).find((e) => e.time === next);
+    if (ev) jumpToEvent(ev.time, ev.id);
+  }, [clip.events, jumpToEvent]);
 
   const toggleFullscreen = () => {
     const el = containerRef.current;
@@ -158,7 +178,19 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             <button style={styles.backBtn} onClick={onClose}>
               <ChevronLeft size={20} /> Back to Gallery
             </button>
-            <div style={{ color: "var(--text)", fontWeight: "bold" }}>{clip.name}</div>
+            {/* El título era el nombre del .mp4 en crudo. Un nombre de fichero
+                no es información: lo que identifica a este clip es qué error es
+                y en qué minuto de la partida ocurre. */}
+            <div style={styles.titleBlock}>
+              <span style={styles.title}>
+                {clip.events?.[0]?.category ?? "Flagged error"}
+              </span>
+              {clip.start_time !== undefined && clip.start_time !== null && (
+                <span className="u-meta" style={{ marginTop: 2 }}>
+                  at {formatTime(clip.start_time)} in the game
+                </span>
+              )}
+            </div>
             <div style={{ width: "120px" }}></div>
           </div>
 
@@ -173,28 +205,71 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             onPause={() => setIsPlaying(false)}
             preload="auto"
           />
-          <div style={styles.videoProgressWrapper}>
-            <button onClick={handlePlayPause} style={styles.videoPlayBtn}>
-              {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
-            </button>
-            <div style={styles.volumeContainer}>
-              <button onClick={() => setMuted(!muted)} style={styles.videoPlayBtn}>
-                {muted || volume === 0 ? <VolumeX size={20} /> : volume < 0.5 ? <Volume1 size={20} /> : <Volume2 size={20} />}
-              </button>
-            </div>
-            <span style={styles.videoTime}>{formatTime(currentTime)} / {formatTime(duration)}</span>
-            
-            <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
-              <button onClick={() => { videoRef.current?.pause(); setIsAddingMode(true); setEditEventId(null); setNoteText(""); }} style={styles.addBtn}>
-                <Plus size={14} /> Add Note
-              </button>
-              <button onClick={toggleFullscreen} style={styles.videoPlayBtn}><Maximize size={16} /></button>
-            </div>
-          </div>
         </div>
 
+        {/* Transporte y tira, una sola pieza: igual que en el reproductor
+            principal, eran una barra flotando sobre el vídeo y una tira separada
+            más abajo, o sea la misma herramienta partida en dos. */}
         {!isFullscreen && (
-        <div style={styles.timelineArea}>
+        <div style={styles.deck}>
+          <div className="tp" style={styles.transport}>
+            <button
+              className="tp-b"
+              onClick={() => stepNote(-1)}
+              disabled={events.length === 0}
+              title="Previous note"
+              aria-label="Previous note"
+            >
+              <SkipBack size={14} fill="currentColor" />
+            </button>
+            <button
+              className="tp-b tp-b--primary"
+              onClick={handlePlayPause}
+              title={isPlaying ? "Pause" : "Play"}
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
+            </button>
+            <button
+              className="tp-b"
+              onClick={() => stepNote(1)}
+              disabled={events.length === 0}
+              title="Next note"
+              aria-label="Next note"
+            >
+              <SkipForward size={14} fill="currentColor" />
+            </button>
+
+            <span className="tp-tc">
+              <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+              <span className="tp-tc__total"> / {formatTime(duration)}</span>
+            </span>
+
+            <span style={{ flex: 1, minWidth: 12 }} />
+
+            <button
+              className="btn btn--ghost btn--sm"
+              onClick={() => { videoRef.current?.pause(); setIsAddingMode(true); setEditEventId(null); setNoteText(""); }}
+              title="Write a note at the current time"
+            >
+              <Plus size={13} /> Add note
+            </button>
+
+            <div className="tp-vol">
+              <button
+                className="tp-b"
+                onClick={() => setMuted(!muted)}
+                title={muted ? "Unmute" : "Mute"}
+                aria-label={muted ? "Unmute" : "Mute"}
+              >
+                {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
+              </button>
+            </div>
+            <button className="tp-b" onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen">
+              <Maximize size={15} />
+            </button>
+          </div>
+
           <div 
             style={styles.timelineGraph} 
             ref={progressBarRef} 
@@ -233,9 +308,8 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               );
             })}
             <div style={{ 
-              position: "absolute", top: 0, bottom: 0, width: "2px", 
-              backgroundColor: "var(--text)", left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, 
-              boxShadow: "0 0 8px rgba(255,255,255,0.8)", zIndex: 5, pointerEvents: "none" 
+              position: "absolute", top: -3, bottom: -3, width: "1.5px", 
+              backgroundColor: "var(--signal)", left: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`, zIndex: 5, pointerEvents: "none" 
             }} />
           </div>
         </div>
@@ -305,7 +379,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                   style={{
                     ...styles.reviewCard,
                     borderColor: isActive ? conf.color : "var(--border-subtle)",
-                    backgroundColor: isActive ? "hsla(0,0%,100%,0.08)" : "hsla(0,0%,100%,0.03)",
+                    backgroundColor: isActive ? "var(--raised)" : "transparent",
                   }}
                   onClick={() => jumpToEvent(ev.time, ev.id)}
                 >
@@ -343,7 +417,9 @@ const styles: Record<string, React.CSSProperties> = {
   container: { display: "flex", width: "100%", height: "100%", backgroundColor: "var(--sunken)", overflow: "hidden" },
   leftColumn: { flex: 1, display: "flex", flexDirection: "column", position: "relative" },
   videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--sunken)", display: "flex", flexDirection: "column" },
-  topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "16px", background: "linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10 },
+  topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "var(--space-3) var(--space-4)", background: "linear-gradient(180deg, rgba(0,0,0,0.75) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", zIndex: 10 },
+  titleBlock: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 },
+  title: { fontFamily: "var(--font-mono)", fontSize: "12px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text)" },
   backBtn: { background: "transparent", color: "var(--text-secondary)", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: "bold" },
   video: { width: "100%", height: "100%", objectFit: "contain", flex: 1 },
   videoProgressWrapper: {
@@ -354,22 +430,24 @@ const styles: Record<string, React.CSSProperties> = {
   videoPlayBtn: { background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", display: "flex" },
   volumeContainer: { display: "flex", alignItems: "center", gap: "8px" },
   videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 600, fontVariantNumeric: "tabular-nums" },
-  timelineArea: { height: "60px", backgroundColor: "var(--bg-panel)", borderTop: "1px solid var(--border-subtle)", padding: "26px 32px" },
-  timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--bg-card)", borderRadius: "4px", cursor: "pointer" },
+  // Transporte y tira, una sola superficie. `--bg-panel` no existe como
+  // token: se usaba en tres sitios y resolvia a nada, o sea transparente.
+  deck: { background: "var(--panel)", borderTop: "1px solid var(--line-soft)", padding: "var(--space-3) var(--space-4) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
+  transport: { display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "0 0 var(--space-3) 0", borderBottom: "1px solid var(--line-soft)" },
+  timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--sunken)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", cursor: "pointer" },
   rightColumn: { width: "340px", backgroundColor: "var(--bg-sidebar)", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" },
   reviewHeader: { padding: "20px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex" },
-  reviewTitle: { fontSize: "18px", fontWeight: 800, color: "var(--text)" },
+  reviewTitle: { fontSize: "var(--font-md)", fontWeight: 600, color: "var(--text)" },
   reviewList: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
   reviewCard: { padding: "12px", borderRadius: "8px", border: "1px solid var(--border-subtle)", cursor: "pointer", transition: "all 0.2s" },
   reviewCardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
   toneBadge: { padding: "2px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" },
   reviewCardBody: { fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 },
   reviewCardTitle: { wordBreak: "break-word" },
-  addBtn: { background: "var(--accent-violet)", color: "var(--text)", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" },
-  addForm: { backgroundColor: "var(--bg-card)", padding: "16px", borderRadius: "8px", border: "1px solid var(--accent-violet)" },
+  addForm: { backgroundColor: "var(--raised)", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid var(--line)" },
   select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
   cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
-  saveBtn: { background: "var(--accent-violet)", color: "var(--text)", border: "none", padding: "6px 16px", borderRadius: "6px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
+  saveBtn: { background: "var(--cool)", color: "var(--ground)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 600 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

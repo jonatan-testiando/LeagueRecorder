@@ -3,7 +3,6 @@ import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { MatchTimeline } from "./MatchTimeline";
-import { Badge } from "../../../components/ui/Badge";
 import { Metric } from "../../../components/ui/Metric";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -31,6 +30,22 @@ const queueLabel = (q?: number): string => {
     case 0: return "Custom";
     default: return "Synced";
   }
+};
+
+/**
+ * Fecha relativa. Con 19 partidas repartidas en cinco dias, "2026-08-12"
+ * repetido no distingue nada; "hace 2 dias" si.
+ */
+const relativeDay = (iso: string): string => {
+  const d = new Date(iso.replace(" ", "T"));
+  if (Number.isNaN(d.getTime())) return iso.split(" ")[0];
+  const today = new Date();
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((start(today) - start(d)) / 86400000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return iso.split(" ")[0];
 };
 
 type Filter = "all" | "unreviewed" | "defeats";
@@ -72,12 +87,40 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     });
   }, [matches, query, filter]);
 
+  /**
+   * La lista que se pinta: cabeceras de dia intercaladas entre las partidas.
+   *
+   * Van en la misma lista plana y no en un contenedor aparte porque la lista
+   * esta virtualizada: el virtualizador solo entiende un indice lineal.
+   *
+   * El agrupado es por tramos consecutivos, asi que si algun dia llegara
+   * desordenado se veria como dos tramos en vez de mentir juntandolos.
+   */
+  const rows = useMemo(() => {
+    type Row =
+      | { kind: "day"; label: string; count: number; key: string }
+      | { kind: "match"; match: MatchMetadata; key: string };
+    const out: Row[] = [];
+    let i = 0;
+    while (i < visible.length) {
+      const label = relativeDay(visible[i].date);
+      let j = i;
+      while (j < visible.length && relativeDay(visible[j].date) === label) j++;
+      out.push({ kind: "day", label, count: j - i, key: `day-${label}-${i}` });
+      for (let k = i; k < j; k++) {
+        out.push({ kind: "match", match: visible[k], key: visible[k].id });
+      }
+      i = j;
+    }
+    return out;
+  }, [visible]);
+
   const rowVirtualizer = useVirtualizer({
-    count: visible.length,
+    count: rows.length,
     getScrollElement: () => parentRef.current,
     // Estimación inicial; la altura real se mide con `measureElement` porque la
     // línea de tiempo hace que la fila sea más alta de lo que parece.
-    estimateSize: () => 116,
+    estimateSize: () => 92,
     overscan: 5,
   });
 
@@ -160,9 +203,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       <div style={styles.tableHeader}>
         <span className="u-label" style={{ flex: 1 }}>Game</span>
         <span className="u-label" style={styles.thNum}>KDA</span>
-        <span className="u-label" style={styles.thNum}>APM</span>
         <span className="u-label" style={styles.thNum}>Gold @15</span>
         <span className="u-label" style={styles.thNum}>Duration</span>
+        <span className="u-label" style={styles.thNum}>APM</span>
         <span style={{ width: 36 }} />
       </div>
 
@@ -187,7 +230,34 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         ) : (
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const match = visible[virtualRow.index];
+              const row = rows[virtualRow.index];
+
+              if (row.kind === "day") {
+                return (
+                  <div
+                    key={row.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                  >
+                    <div className="day-sep">
+                      <span className="day-sep__label">{row.label}</span>
+                      <span className="day-sep__rule" />
+                      <span className="day-sep__count">
+                        {row.count} {row.count === 1 ? "game" : "games"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              const match = row.match;
               const kda = computeKDA(match.events);
               const res = outcome(match.result);
               const accent =
@@ -196,7 +266,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
               return (
                 <div
-                  key={virtualRow.key}
+                  key={row.key}
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   style={{
@@ -222,17 +292,19 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   >
                     <div style={styles.rowTop}>
                       <div style={styles.who}>
-                        <ChampionAvatar champion={match.champion} size={34} />
+                        <ChampionAvatar champion={match.champion} size={30} />
                         <div style={{ minWidth: 0 }}>
                           <div style={styles.champ}>{match.champion}</div>
+                          {/* La cola sale de la fila: es "Ranked Solo/Duo" en las
+                              15 partidas sincronizadas, o sea 0% de dispersion.
+                              Un dato identico en todas las filas no es
+                              informacion, es ruido con ancho. Sigue estando en
+                              el buscador. */}
                           <div style={styles.meta}>
-                            <Badge tone={res === "victory" ? "win" : res === "defeat" ? "loss" : "neutral"}>
+                            <span style={{ ...styles.result, color: accent }}>
                               {res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT"}
-                            </Badge>
-                            <span className="u-meta">
-                              {match.riot_match_id ? queueLabel(match.queue) : "Custom"}
                             </span>
-                            <span className="u-meta">{match.date.split(" ")[0]}</span>
+                            <span className="u-meta">{relativeDay(match.date)}</span>
                             {unreviewed && (
                               <span className="u-meta" style={{ color: "var(--flag)" }}>· to review</span>
                             )}
@@ -240,6 +312,10 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         </div>
                       </div>
 
+                      {/* El peso va por dispersion. En estas 19 partidas el oro@15
+                          va de -2587 a +2710 y el APM de 219 a 307: uno separa una
+                          partida de otra y el otro es casi el mismo numero
+                          siempre. Antes se pintaban igual. */}
                       <Metric
                         value={
                           match.kda
@@ -249,7 +325,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         label="K D A"
                         title={`${kdaRatio(kda)} KDA`}
                       />
-                      <Metric value={Math.round(match.apm || 0)} label="APM" />
                       <Metric
                         value={
                           match.gold_diff_15 === undefined || match.gold_diff_15 === null
@@ -257,6 +332,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             : `${match.gold_diff_15 >= 0 ? "+" : "−"}${Math.abs(match.gold_diff_15)}`
                         }
                         label="Gold @15"
+                        emphasis="lead"
                         tone={
                           match.gold_diff_15 === undefined || match.gold_diff_15 === null
                             ? "muted"
@@ -265,6 +341,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         title={match.lane_result ? `Lane: ${match.lane_result}` : undefined}
                       />
                       <Metric value={formatDuration(match.game_duration)} label="Dur." />
+                      <Metric value={Math.round(match.apm || 0)} label="APM" tone="muted" />
 
                       <div style={{ width: 36, display: "flex", justifyContent: "flex-end" }}>
                         <Button
@@ -403,8 +480,13 @@ const styles: Record<string, React.CSSProperties> = {
     paddingTop: "var(--space-2)",
   },
   row: {
-    padding: "var(--space-3) var(--space-4)",
+    padding: "var(--space-2) var(--space-4) var(--space-3)",
     borderRadius: "var(--radius-md)",
+  },
+  result: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "10px",
+    letterSpacing: "0.12em",
   },
   rowTop: {
     display: "flex",

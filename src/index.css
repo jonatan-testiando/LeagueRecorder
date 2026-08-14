@@ -982,3 +982,46 @@ a:focus:not(:focus-visible) {
   width: 38px;
   text-align: right;
 }
+
+/* La cifra que separa una fila de otra. En la biblioteca es el oro@15: en las
+   partidas del usuario va de -2587 a +2710, mientras el APM se mueve entre 219
+   y 307. Pintarlas al mismo tamano era darles la misma importancia cuando una
+   orienta y la otra no. */
+.metric__value--lead {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* =========================================================================
+   Separador de dia en la biblioteca.
+
+   Diecinueve filas seguidas del mismo campeon y la misma cola se leen como un
+   muro. Agrupar por dia da puntos de referencia: dejas de recorrer una lista
+   plana y pasas a recorrer bloques.
+   ========================================================================= */
+.day-sep {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+.day-sep__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.day-sep__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+.day-sep__count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}

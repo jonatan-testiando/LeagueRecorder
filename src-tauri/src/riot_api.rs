@@ -361,6 +361,25 @@ fn resolve_video_offset(metadata: &mut crate::storage::MatchMetadata, riot_game_
     offset
 }
 
+/// Marcador corriente de la línea de tiempo. Los campos de gank (`lane`,
+/// `outcome`, `confidence`…) sólo los rellenan los marcadores `gank_attempt`.
+fn marker(
+    time: f64,
+    event_type: &str,
+    description: &str,
+    position_x: Option<i32>,
+    position_y: Option<i32>,
+) -> crate::storage::TimelineMarker {
+    crate::storage::TimelineMarker {
+        time,
+        event_type: event_type.to_string(),
+        description: description.to_string(),
+        position_x,
+        position_y,
+        ..Default::default()
+    }
+}
+
 /// Procesa la timeline completa de Riot (v5) para extraer compras de items,
 /// marcadores de eventos (Kills, Dragones, Torres) y métricas de línea/jungla a min 15.
 ///
@@ -447,29 +466,11 @@ fn process_timeline_full(
                     let pos_x = ev.position.as_ref().map(|p| p.x);
                     let pos_y = ev.position.as_ref().map(|p| p.y);
                     if ev.killerId == self_participant_id {
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: "kill".to_string(),
-                            description: "Asesinato".to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(sec, "kill", "Asesinato", pos_x, pos_y));
                     } else if ev.victimId == self_participant_id {
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: "death".to_string(),
-                            description: "Muerte".to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(sec, "death", "Muerte", pos_x, pos_y));
                     } else if ev.assistingParticipantIds.contains(&self_participant_id) {
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: "kill".to_string(),
-                            description: "Asistencia".to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(sec, "kill", "Asistencia", pos_x, pos_y));
                     }
                 }
                 "ELITE_MONSTER_KILL" => {
@@ -485,13 +486,7 @@ fn process_timeline_full(
                             "BARON_NASHOR" => ("herald", "Barón Nashor"),
                             _ => ("dragon", "Objetivo épico"),
                         };
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: etype.to_string(),
-                            description: desc.to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(sec, etype, desc, pos_x, pos_y));
                     }
                 }
                 "BUILDING_KILL" => {
@@ -506,26 +501,20 @@ fn process_timeline_full(
                         } else {
                             ("plate", "Estructura abatida")
                         };
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: etype.to_string(),
-                            description: desc.to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(sec, etype, desc, pos_x, pos_y));
                     }
                 }
                 "TURRET_PLATE_DESTROYED" => {
                     if ev.killerId == self_participant_id {
                         let pos_x = ev.position.as_ref().map(|p| p.x);
                         let pos_y = ev.position.as_ref().map(|p| p.y);
-                        timeline_markers.push(crate::storage::TimelineMarker {
-                            time: sec,
-                            event_type: "plate".to_string(),
-                            description: "Placa de torre obtenida".to_string(),
-                            position_x: pos_x,
-                            position_y: pos_y,
-                        });
+                        timeline_markers.push(marker(
+                            sec,
+                            "plate",
+                            "Placa de torre obtenida",
+                            pos_x,
+                            pos_y,
+                        ));
                     }
                 }
                 _ => {}
@@ -533,47 +522,28 @@ fn process_timeline_full(
         }
     }
 
-    // Detección de Intentos de Gank (exitosos, sin resultado y fallidos) minuto a minuto en la fase temprana (<= 15 min)
-    let self_pid_str = self_participant_id.to_string();
-    for (minute, frame) in tl.info.frames.iter().enumerate() {
-        let sec = (frame.timestamp / 1000) as f64;
-        if sec > 900.0 || minute == 0 { continue; }
-        
-        if let Some(pf) = frame.participantFrames.get(&self_pid_str) {
-            if let Some(pos) = &pf.position {
-                let x = pos.x;
-                let y = pos.y;
-                let is_top = x < 4500 || y > 10500;
-                let is_bot = x > 10500 || y < 4500;
-                let is_mid = x >= 4500 && x <= 10500 && y >= 4500 && y <= 10500;
-                
-                if is_top || is_mid || is_bot {
-                    let lane_name = if is_top { "Top" } else if is_mid { "Mid" } else { "Bot" };
-                    
-                    let had_kill = timeline_markers.iter().any(|m| {
-                        (m.event_type == "kill") && (m.time - sec).abs() <= 60.0
-                    });
-                    let had_death = timeline_markers.iter().any(|m| {
-                        (m.event_type == "death") && (m.time - sec).abs() <= 60.0
-                    });
-                    
-                    if !had_kill && !had_death {
-                        let already_added = timeline_markers.iter().any(|m| {
-                            m.event_type == "gank_attempt" && (m.time - sec).abs() < 90.0
-                        });
-                        if !already_added {
-                            timeline_markers.push(crate::storage::TimelineMarker {
-                                time: sec,
-                                event_type: "gank_attempt".to_string(),
-                                description: format!("Presencia/Gank sin resultado en {}", lane_name),
-                                position_x: Some(x),
-                                position_y: Some(y),
-                            });
-                        }
-                    }
-                }
+    // Detección de ganks: carril por geometría real, rival de esa línea exigido
+    // y el instante interpolado en vez de redondeado al minuto. Ver `crate::gank`.
+    for g in crate::gank::detect(tl, self_participant_id, participants) {
+        let description = match g.outcome {
+            crate::gank::Outcome::Success => format!("Gank efectivo en {}", g.lane.label()),
+            crate::gank::Outcome::Failed => format!("Gank fallido en {} (muerte)", g.lane.label()),
+            crate::gank::Outcome::Neutral => {
+                format!("Presencia sin resultado en {}", g.lane.label())
             }
-        }
+        };
+        timeline_markers.push(crate::storage::TimelineMarker {
+            time: g.time,
+            event_type: "gank_attempt".to_string(),
+            description,
+            position_x: Some(g.x),
+            position_y: Some(g.y),
+            lane: Some(g.lane.key().to_string()),
+            outcome: Some(g.outcome.key().to_string()),
+            confidence: Some((g.confidence * 100.0).round() / 100.0),
+            time_precision: Some(g.precision),
+            approach: g.approach.map(|a| a.key().to_string()),
+        });
     }
 
     // Construcción de la serie minuto a minuto para la gráfica de oro/XP

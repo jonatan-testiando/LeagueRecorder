@@ -106,15 +106,33 @@ pub struct ItemPurchase {
 }
 
 /// Marcador de evento en la línea de tiempo del vídeo (de la Timeline v5 de Riot).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TimelineMarker {
     pub time: f64, // segundos en el vídeo
-    pub event_type: String, // "kill", "death", "dragon", "herald", "tower", "plate"
+    pub event_type: String, // "kill", "death", "dragon", "herald", "tower", "plate", "gank_attempt"
     pub description: String,
     #[serde(default)]
     pub position_x: Option<i32>,
     #[serde(default)]
     pub position_y: Option<i32>,
+    // Sólo para "gank_attempt": el backend ya resuelve carril, resultado y
+    // ángulo de entrada (ver `crate::gank`) para que la UI no vuelva a
+    // deducirlos de las coordenadas —que es donde estaba el error—.
+    /// "top" | "mid" | "bot"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lane: Option<String>,
+    /// "success" | "neutral" | "failed"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    /// 0..1. Cuánto se fía el detector de este gank.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    /// Incertidumbre del instante, en segundos. 0 = anclado a un evento exacto.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_precision: Option<f64>,
+    /// "flank" (le cortas la retirada) | "front" (entrada directa)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approach: Option<String>,
 }
 
 /// Fotograma minuto a minuto de la partida (Timeline v5) para la gráfica de oro/XP

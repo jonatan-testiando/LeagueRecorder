@@ -11,6 +11,11 @@ interface GankEfficiencyWidgetProps {
 type LaneFilter = "all" | "top" | "mid" | "bot";
 type OutcomeFilter = "all" | "success" | "neutral" | "failed";
 
+/** Segundos que se retrocede al saltar: interesa la entrada, no el desenlace. */
+const LEAD_IN = 5;
+
+const LANE_LABEL: Record<string, string> = { top: "Top", mid: "Mid", bot: "Bot" };
+
 export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
   markers = [],
   gankImpact15,
@@ -19,54 +24,34 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
   const [selectedLane, setSelectedLane] = useState<LaneFilter>("all");
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeFilter>("all");
 
-  // Obtener todos los eventos de ganks e impresiones de presencia temprana (<= 15 min = 900s)
+  // El backend ya manda carril, resultado, confianza y ángulo resueltos, y sólo
+  // emite ganks de la fase temprana. Aquí no se deduce nada de coordenadas: esa
+  // era justo la fuente de los falsos positivos (las cajas de carril cubrían el
+  // mapa entero, bases y junglas incluidas).
   const gankEvents = markers
-    .filter((m) => m.time <= 900)
-    .map((m) => {
-      let lane: "top" | "mid" | "bot" | "other" = "other";
-      let isFlank = false; // Indica si le cortó el paso por detrás
+    .filter((m) => m.event_type === "gank_attempt" && !!m.lane)
+    .map((m) => ({
+      marker: m,
+      lane: m.lane as "top" | "mid" | "bot",
+      outcome: m.outcome ?? "neutral",
+      isFlank: m.approach === "flank",
+      confidence: m.confidence ?? 0,
+      precision: m.time_precision ?? 0,
+    }))
+    .sort((a, b) => a.marker.time - b.marker.time);
 
-      if (m.position_x !== undefined && m.position_y !== undefined) {
-        const x = m.position_x;
-        const y = m.position_y;
+  // Partidas analizadas con el detector viejo: sus marcadores no traen carril
+  // ni resultado, así que no se pintan. Mejor decirlo que enseñar una lista
+  // vacía como si no hubieras ganqueado nunca.
+  const needsResync =
+    gankEvents.length === 0 && markers.some((m) => m.event_type === "gank_attempt" && !m.lane);
 
-        if (x < 4500 || y > 10500) {
-          lane = "top";
-          // En Top, si y > 11500 o x < 2500, estás cortando el paso profundo por detrás
-          if (y > 11500 || x < 2500) isFlank = true;
-        } else if (x > 10500 || y < 4500) {
-          lane = "bot";
-          // En Bot, si x > 11500 o y < 2500, estás cortando el paso por detrás
-          if (x > 11500 || y < 2500) isFlank = true;
-        } else if (x >= 4500 && x <= 10500 && y >= 4500 && y <= 10500) {
-          lane = "mid";
-          // En Mid, posiciones diagonales profundas detrás de torre
-          if (y > 8000 && x < 6000) isFlank = true;
-        }
-      }
+  if (gankEvents.length === 0 && !needsResync && gankImpact15 === undefined) return null;
 
-      let outcome: "success" | "neutral" | "failed" = "neutral";
-      if (m.event_type === "kill" || m.event_type === "assist") outcome = "success";
-      else if (m.event_type === "death") outcome = "failed";
-      else if (m.event_type === "gank_attempt") outcome = "neutral";
-
-      return {
-        marker: m,
-        lane,
-        outcome,
-        isFlank,
-      };
-    })
-    .filter((g) => g.lane !== "other" || g.marker.event_type === "gank_attempt");
-
-  if (gankEvents.length === 0 && gankImpact15 === undefined) return null;
-
-  // Conteo por carriles
   const topGanks = gankEvents.filter((g) => g.lane === "top");
   const midGanks = gankEvents.filter((g) => g.lane === "mid");
   const botGanks = gankEvents.filter((g) => g.lane === "bot");
 
-  // Filtrar según la selección actual
   const filteredGanks = gankEvents.filter((g) => {
     const laneMatch = selectedLane === "all" || g.lane === selectedLane;
     const outcomeMatch = selectedOutcome === "all" || g.outcome === selectedOutcome;
@@ -115,7 +100,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
               border: "1px solid color-mix(in srgb, var(--color-victory) 30%, transparent)",
             }}
           >
-            {gankImpact15}% Presión de Gank
+            {gankImpact15}% Participación en kills
           </span>
         )}
       </div>
@@ -257,7 +242,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
             return (
               <div
                 key={idx}
-                onClick={() => onSeek(item.marker.time)}
+                onClick={() => onSeek(Math.max(0, item.marker.time - LEAD_IN))}
                 style={{
                   display: "flex",
                   flexDirection: "column",
@@ -282,14 +267,24 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                         padding: "2px 6px",
                         borderRadius: "4px",
                       }}
+                      title={
+                        item.precision > 0
+                          ? `Instante estimado interpolando entre fotogramas de minuto: ±${Math.round(item.precision)} s`
+                          : "Instante exacto: anclado al evento de la partida"
+                      }
                     >
                       {formatTime(item.marker.time)}
+                      {item.precision > 0 && (
+                        <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>
+                          {" "}±{Math.round(item.precision)}s
+                        </span>
+                      )}
                     </span>
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--text)" }}>
                       {item.marker.description}
                     </span>
                     <span style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800 }}>
-                      • {item.lane.toUpperCase()}
+                      • {LANE_LABEL[item.lane] ?? item.lane}
                     </span>
                   </div>
 
@@ -315,12 +310,28 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                   </div>
                 </div>
 
-                {/* Análisis Táctico de Entrada (Flanqueo vs Entrada Directa) */}
+                {/* Ángulo de Entrada y confianza del detector */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(255, 255, 255, 0.03)", padding: "4px 8px", borderRadius: "4px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text-secondary)" }}>
                     <Compass size={12} color={item.isFlank ? "var(--accent-blue)" : "var(--text-muted)"} />
-                    <span>Ángulo de Entrada: <b>{item.isFlank ? "Cortar Paso / Flanqueo por detrás" : "Entrada Frontal / Directa en línea"}</b></span>
+                    <span>
+                      Ángulo de Entrada:{" "}
+                      <b>{item.isFlank ? "Cortar Paso / Flanqueo por detrás" : "Entrada Frontal / Directa en línea"}</b>
+                    </span>
                   </div>
+                  {item.confidence > 0 && (
+                    <span
+                      title="Cuánto se fía el detector: sube con el rival encima, el aliado presente y el tiempo que aguantaste en la línea."
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        color: item.confidence >= 0.75 ? "var(--text-secondary)" : "var(--text-muted)",
+                      }}
+                    >
+                      confianza {Math.round(item.confidence * 100)}%
+                    </span>
+                  )}
                 </div>
 
                 {/* Consejo de Coaching Práctico */}
@@ -340,6 +351,12 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
               </div>
             );
           })}
+        </div>
+      ) : needsResync ? (
+        <div style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)", fontSize: "12px", lineHeight: 1.5 }}>
+          Esta partida se analizó con el detector antiguo. Pulsa{" "}
+          <b style={{ color: "var(--text-secondary)" }}>Actualizar datos de Riot</b> para recalcular
+          los ganks con carril, resultado e instante precisos.
         </div>
       ) : (
         <div style={{ padding: "12px", textAlign: "center", color: "var(--text-muted)", fontSize: "12px" }}>

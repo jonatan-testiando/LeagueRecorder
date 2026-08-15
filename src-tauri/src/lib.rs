@@ -4,6 +4,7 @@ mod camera_snaps;
 mod commands;
 mod cv_analyzer;
 mod dataset_generator;
+mod gank;
 mod obs_client;
 mod overlay;
 mod proc;

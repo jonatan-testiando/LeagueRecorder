@@ -85,6 +85,40 @@
     self_xp_diff: Math.round(380 * Math.sin(m / 6)),
     self_jungle_cs_diff: Math.round(6 * Math.sin(m / 3)),
   }));
+  // Marcadores tal y como los emite ahora el detector de ganks (src-tauri/src/gank.rs):
+  // carril, resultado, confianza y ángulo vienen resueltos del backend.
+  matches[0].timeline_markers = [
+    { time: 214, event_type: "kill", description: "Asesinato", position_x: 9800, position_y: 9100 },
+    { time: 402, event_type: "death", description: "Muerte", position_x: 4100, position_y: 8300 },
+    { time: 640, event_type: "dragon", description: "Dragón abatido", position_x: 9866, position_y: 4414 },
+    {
+      time: 214, event_type: "gank_attempt", description: "Gank efectivo en Mid",
+      position_x: 9800, position_y: 9100,
+      lane: "mid", outcome: "success", confidence: 0.92, time_precision: 0, approach: "flank",
+    },
+    {
+      time: 371, event_type: "gank_attempt", description: "Presencia sin resultado en Bot",
+      position_x: 12800, position_y: 3900,
+      lane: "bot", outcome: "neutral", confidence: 0.65, time_precision: 14, approach: "front",
+    },
+    {
+      time: 402, event_type: "gank_attempt", description: "Gank fallido en Top (muerte)",
+      position_x: 4100, position_y: 8300,
+      lane: "top", outcome: "failed", confidence: 0.92, time_precision: 0, approach: "front",
+    },
+    {
+      time: 688, event_type: "gank_attempt", description: "Presencia sin resultado en Mid",
+      position_x: 8900, position_y: 8600,
+      lane: "mid", outcome: "neutral", confidence: 0.85, time_precision: 9, approach: "flank",
+    },
+  ];
+  // Partida analizada con el detector viejo: marcadores sin carril ni resultado,
+  // para ver el aviso de «vuelve a sincronizar».
+  matches[1].timeline_markers = [
+    { time: 300, event_type: "gank_attempt", description: "Presencia/Gank sin resultado en Mid", position_x: 7025, position_y: 4963 },
+    { time: 480, event_type: "gank_attempt", description: "Presencia/Gank sin resultado en Top", position_x: 2750, position_y: 6007 },
+  ];
+  matches[1].gank_impact_15 = 18.2;
   matches[0].gank_impact_15 = 2;
   matches[0].jungle_cs_diff_15 = -4;
   matches[0].lane_result = "Even";

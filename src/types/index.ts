@@ -81,10 +81,20 @@ export interface ItemPurchase {
 
 export interface TimelineMarker {
   time: number; // segundos en el vídeo
-  event_type: 'kill' | 'death' | 'dragon' | 'herald' | 'tower' | 'plate' | string;
+  event_type: 'kill' | 'death' | 'dragon' | 'herald' | 'tower' | 'plate' | 'gank_attempt' | string;
   description: string;
   position_x?: number;
   position_y?: number;
+  // Sólo en 'gank_attempt'. El backend (src-tauri/src/gank.rs) ya resuelve
+  // carril, resultado y ángulo de entrada: la UI no deduce nada de las
+  // coordenadas, que es de donde salían los falsos positivos.
+  lane?: 'top' | 'mid' | 'bot';
+  outcome?: 'success' | 'neutral' | 'failed';
+  confidence?: number; // 0..1
+  /** Incertidumbre del instante, en segundos. 0 = anclado a un evento exacto. */
+  time_precision?: number;
+  /** 'flank' = le cortas la retirada; 'front' = entrada directa. */
+  approach?: 'flank' | 'front';
 }
 
 export interface MinuteFrameDto {

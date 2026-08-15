@@ -1604,6 +1604,64 @@ a:focus:not(:focus-visible) {
   transition: width var(--t-base) var(--e-move);
 }
 
+/* Aviso de actualizacion lista, en el hueco de la version de la barra lateral.
+   Sustituye al "v1.2.11" en vez de anadir un modal encima: se ve, pero no corta
+   lo que estabas haciendo. */
+.updpill {
+  margin-top: var(--space-2);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cool);
+  background: color-mix(in srgb, var(--cool) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cool) 28%, transparent);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--t-quick) var(--e-move);
+}
+.updpill:hover { background: color-mix(in srgb, var(--cool) 20%, transparent); }
+.updpill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--cool);
+  flex: none;
+}
+
+/* Velo de instalacion. El instalador va en silencio y la app tiene que cerrarse
+   para poder reemplazar su propio .exe, asi que hay unos segundos con todo
+   apagado. Sin avisar, eso se lee como que el programa se ha caido. */
+.updv {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg-app) 82%, transparent);
+  backdrop-filter: var(--glass-blur);
+  animation: updv-in var(--t-base) var(--e-out) both;
+}
+@keyframes updv-in { from { opacity: 0; } to { opacity: 1; } }
+.updv__card {
+  width: min(420px, 82vw);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: center;
+  background: var(--surface-1);
+  border: 1px solid var(--glass-line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+}
+.updv__title { font-weight: 700; color: var(--text); }
+.updv__note { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
 /* --- plegables ---------------------------------------------------------- */
 .fold { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
 .fold summary {

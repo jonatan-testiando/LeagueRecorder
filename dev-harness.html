@@ -125,7 +125,7 @@
   window.__MOCK_MATCHES = matches;
 
   const HANDLERS = {
-    "plugin:app|version": () => "1.2.8",
+    "plugin:app|version": () => "1.2.11",
     "plugin:event|listen": () => 1,
     "plugin:event|unlisten": () => null,
     get_recorded_matches: () => matches,
@@ -164,6 +164,15 @@
         date: iso(now - i * 86400000),
       })),
     get_vod_reviews: () => [],
+    // Actualización: por defecto no hay nada pendiente. Con `?update=ready` en la
+    // URL se finge una descargada, para ver el aviso de la barra lateral y el
+    // botón de instalar sin tener que publicar una release.
+    get_pending_update: () =>
+      new URLSearchParams(location.search).has("update")
+        ? { version: "1.3.0", notes: "Detección de ganks reescrita." }
+        : null,
+    check_for_update_now: () => ({ version: "1.3.0", notes: "Detección de ganks reescrita." }),
+    install_pending_update: () => null,
     get_training_config: () => ({
       bindings: [
         { key: "F1", role: "top" },

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "LeagueRecorder",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "identifier": "com.alejandro.tauri-app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -32,7 +32,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "createUpdaterArtifacts": true,
     "resources": {
       "bin/ffmpeg.exe": "bin/ffmpeg.exe",
@@ -55,7 +55,10 @@
       "endpoints": [
         "https://github.com/jonatan-testiando/LeagueRecorder/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzNjc0NDhGMDE3QzcyNEQKUldSTmNud0JqMFJuOHhuNHRMQ3poY0ZMek5IanpJdi83T2h1SldGaDB4U2VFUjFqZFB1bDhOSE4K"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzNjc0NDhGMDE3QzcyNEQKUldSTmNud0JqMFJuOHhuNHRMQ3poY0ZMek5IanpJdi83T2h1SldGaDB4U2VFUjFqZFB1bDhOSE4K",
+      "windows": {
+        "installMode": "quiet"
+      }
     }
   }
 }

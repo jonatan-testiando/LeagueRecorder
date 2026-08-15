@@ -174,6 +174,20 @@ const ES: Record<string, string> = {
   "Version {v} installed.": "Versión {v} instalada.",
   "Check for Updates": "Buscar actualizaciones",
   "Checking…": "Comprobando…",
+  "Starting download…": "Empezando la descarga…",
+  "Downloading…": "Descargando…",
+  "Update ready": "Actualización lista",
+  "Downloaded and ready. Installing takes a few seconds.":
+    "Descargada y lista. Instalarla son unos segundos.",
+  "Restart and install": "Reiniciar e instalar",
+  "Version {v} downloaded and ready. Installing takes a few seconds and the app reopens by itself.":
+    "Versión {v} descargada y lista. Instalarla son unos segundos y la app se vuelve a abrir sola.",
+  "Installing update…": "Instalando la actualización…",
+  "The app will close and reopen by itself when it finishes. Do not close it.":
+    "La app se cerrará y volverá a abrirse sola al terminar. No la cierres tú.",
+  "Your app is already on the latest version.": "Ya tienes la última versión.",
+  "Your app is already up to date.": "Ya estás al día.",
+  "Failed to check for updates.": "No se han podido buscar actualizaciones.",
   "Tools": "Herramientas",
   "Manual test recording": "Grabación manual de prueba",
   "Checks that FFmpeg and GPU encoding work before trusting a real match.":

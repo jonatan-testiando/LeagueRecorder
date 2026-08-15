@@ -3,6 +3,7 @@ mod awareness;
 mod camera_snaps;
 mod commands;
 mod cv_analyzer;
+mod app_update;
 mod dataset_generator;
 mod gank;
 mod obs_client;
@@ -59,7 +60,28 @@ pub fn run() {
     );
 
     tauri::Builder::default()
+        // El primero de todos, a propósito: si ya hay una instancia viva, esta se
+        // muere aquí mismo y no llega a montar nada.
+        //
+        // Al cerrar la ventana la app no sale, se esconde en la bandeja (ver
+        // `CloseRequested` más abajo). Sin esto, pulsar el acceso directo levantaba
+        // un segundo proceso: dos ventanas, y —lo grave— dos monitores automáticos
+        // peleándose por la misma partida y dos servidores de grabación.
+        //
+        // OJO en desarrollo: el candado es por identificador de la app, y la
+        // compilación de dev usa el mismo que la instalada. Si tienes la app
+        // empaquetada viva en la bandeja, `npm run tauri dev` se cerrará solo y te
+        // pondrá al frente la ventana de la instalada. Sal de ella desde la bandeja
+        // antes de arrancar dev.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .manage(cv_analyzer::AnalyzerState::default())
+        .manage(app_update::UpdateState::default())
         .setup(move |app| {
             // Antes de que nada lea la biblioteca: recoloca las partidas de versiones antiguas
             // que guardaban los ficheros sueltos en la raíz. Corre una sola vez por directorio.
@@ -114,6 +136,10 @@ pub fn run() {
             // Detección automática de partidas (y, con ella, el entrenamiento en vivo).
             let (rec, active, ult, video, training) = monitor_deps;
             spawn_background_monitor(rec, active, ult, video, training, app.handle().clone());
+
+            // La actualización se descarga sola por detrás mientras usas la app, para
+            // que pulsar "instalar" no sea esperar a que bajen 100 MB.
+            app_update::spawn_background_check(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -124,6 +150,18 @@ pub fn run() {
             _ => {}
         })
         .plugin(tauri_plugin_process::init())
+        // La actualización va en `installMode: "quiet"` (tauri.conf.json), que en
+        // NSIS son los argumentos `/S /R`: instala sin abrir ninguna ventana y
+        // relanza la app al acabar. El valor por defecto del plugin es `passive`
+        // (`/P /R`), que sí enseña la ventana de progreso del instalador — eso era
+        // "el instalador feo". No hace falta UAC porque instalamos por usuario, en
+        // %LOCALAPPDATA%.
+        //
+        // Y el bundle sale solo como `nsis`: con `targets: "all"` se publicaba
+        // además un MSI de 148 MB que caía en la clave genérica `windows-x86_64`
+        // del latest.json. Hoy no se usa porque el plugin busca antes
+        // `windows-x86_64-nsis` (el binario lleva grabado con qué se instaló), pero
+        // si esa detección fallara el usuario se comería msiexec con UAC.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -178,7 +216,10 @@ pub fn run() {
             camera_snaps::analyze_camera_snaps,
             camera_snaps::list_recall_frames,
             camera_snaps::get_camera_snap_summary,
-            overlay::preview_metronome_overlay
+            overlay::preview_metronome_overlay,
+            app_update::get_pending_update,
+            app_update::install_pending_update,
+            app_update::check_for_update_now
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

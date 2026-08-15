@@ -5,8 +5,8 @@ import { RefreshCw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { useDialog } from "../../../components/ui/DialogProvider";
-import { check } from "@tauri-apps/plugin-updater";
-import { exit } from "@tauri-apps/plugin-process";
+import { getVersion } from "@tauri-apps/api/app";
+import { checkForUpdateNow, getPendingUpdate, installPendingUpdate, onUpdateProgress, onUpdateReady, type PendingUpdate } from "../../../core/updates";
 import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 
@@ -49,6 +49,13 @@ export const SettingsPanel: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
   const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  // El instalador corre en silencio y la app se cierra sola para poder
+  // reemplazar su .exe: sin este velo son unos segundos en negro que parecen
+  // un cuelgue.
+  const [isInstalling, setIsInstalling] = useState<boolean>(false);
+  const [appVersion, setAppVersion] = useState<string>("");
+  // Lo que el backend ya ha bajado por su cuenta y espera a que digas cuándo.
+  const [pending, setPending] = useState<PendingUpdate | null>(null);
   const { showError, showSuccess } = useDialog();
   const { lang, setLang, t } = useLang();
 
@@ -85,6 +92,8 @@ export const SettingsPanel: React.FC = () => {
     refreshAudio();
     getVideoSettings().then(setVideo).catch(console.error);
     invoke<{ used_bytes: number; total_bytes: number }>("get_disk_usage").then(setDisk).catch(() => {});
+    getVersion().then(setAppVersion).catch(console.error);
+    getPendingUpdate().then(setPending).catch(() => {});
     getAppConfig()
       .then(c => {
         setConfig(c);
@@ -92,8 +101,24 @@ export const SettingsPanel: React.FC = () => {
         setPruneDraft(String(c.auto_prune_days));
       })
       .catch(console.error);
+    // La descarga la arranca el backend por su cuenta: si ocurre mientras estás
+    // mirando esta pantalla, la barra se mueve sin que hayas pulsado nada.
+    const stopProgress = onUpdateProgress(({ percent }) => {
+      setIsDownloading(percent < 100);
+      setDownloadProgress(percent);
+      setUpdateMsg(`${t("Downloading…")} ${percent}%`);
+    });
+    const stopReady = onUpdateReady((u) => {
+      setIsDownloading(false);
+      setUpdateMsg("");
+      setPending(u);
+    });
     const interval = setInterval(checkStatus, 2000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      stopProgress.then((f) => f()).catch(() => {});
+      stopReady.then((f) => f()).catch(() => {});
+    };
   }, []);
 
   const handleSaveConfig = async (c: AppConfig) => {
@@ -159,53 +184,44 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
+  /** Comprobar a mano. El backend deja el paquete descargado, no lo instala. */
   const checkForUpdates = async () => {
     setIsUpdating(true);
-    setUpdateMsg("Checking for updates…");
+    setUpdateMsg(t("Checking for updates…"));
     try {
-      const update = await check();
-      if (update) {
-        setUpdateMsg(`New version ${update.version} available`);
-        setIsDownloading(true);
-        setDownloadProgress(0);
-        
-        let downloaded = 0;
-        let contentLength = 0;
-        
-        await update.downloadAndInstall((event) => {
-          switch (event.event) {
-            case 'Started':
-              contentLength = event.data.contentLength || 0;
-              setUpdateMsg("Starting download…");
-              break;
-            case 'Progress':
-              downloaded += event.data.chunkLength;
-              if (contentLength > 0) {
-                const percent = Math.round((downloaded / contentLength) * 100);
-                setDownloadProgress(percent);
-                setUpdateMsg(`Downloading… ${percent}%`);
-              }
-              break;
-            case 'Finished':
-              setUpdateMsg("Installing update…");
-              setDownloadProgress(100);
-              break;
-          }
-        });
-
-        setUpdateMsg("Launching installer…");
-        await exit(0);
+      const found = await checkForUpdateNow();
+      if (found) {
+        setPending(found);
+        setUpdateMsg("");
       } else {
-        setUpdateMsg("Your app is already on the latest version.");
-        showSuccess("Your app is already up to date.");
+        setUpdateMsg(t("Your app is already on the latest version."));
+        showSuccess(t("Your app is already up to date."));
       }
     } catch (err) {
       console.error(err);
-      setUpdateMsg("Failed to check for updates.");
+      setUpdateMsg(t("Failed to check for updates."));
       showError("Update error: " + err);
     } finally {
       setIsUpdating(false);
       setIsDownloading(false);
+    }
+  };
+
+  /** Instalar lo ya descargado: son segundos, y la app vuelve sola. */
+  const installUpdate = async () => {
+    setIsInstalling(true);
+    setUpdateMsg(t("Installing update…"));
+    try {
+      // En Windows esto no vuelve: el instalador toma el relevo y mata el proceso.
+      await installPendingUpdate();
+    } catch (err) {
+      console.error(err);
+      // Si falla, el proceso sigue vivo: hay que quitar el velo o la ventana se
+      // queda tapada para siempre.
+      setIsInstalling(false);
+      setPending(null);
+      setUpdateMsg(t("Failed to check for updates."));
+      showError("Update error: " + err);
     }
   };
 
@@ -226,6 +242,18 @@ export const SettingsPanel: React.FC = () => {
 
   return (
     <div className="setpage panel-enter">
+      {isInstalling && (
+        <div className="updv" role="status" aria-live="polite">
+          <div className="updv__card">
+            <RefreshCw size={22} color="var(--cool)" style={{ margin: "0 auto", animation: "spin 1s linear infinite" }} />
+            <span className="updv__title">{t("Installing update…")}</span>
+            <span className="updv__note">
+              {t("The app will close and reopen by itself when it finishes. Do not close it.")}
+            </span>
+          </div>
+        </div>
+      )}
+
       <header>
         <h1 style={{ margin: 0, fontSize: "var(--font-xl)" }}>{t("Settings")}</h1>
         <p className="note">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
@@ -403,12 +431,30 @@ export const SettingsPanel: React.FC = () => {
           />
         </Row>
 
-        <Row label={t("Updates")} desc={isDownloading ? updateMsg : (updateMsg || t("Version {v} installed.").replace("{v}", "1.2.8"))}>
+        {/* La versión se pedía al backend, no se escribía a mano: estaba clavada
+            en "1.2.8" mientras la app iba por la 1.2.11. */}
+        {/* Tres estados: bajando (barra), lista (botón de instalar) y al día
+            (botón de comprobar). La descarga ya no la dispara este botón: viene
+            hecha de fondo, así que instalar son segundos. */}
+        <Row
+          label={t("Updates")}
+          desc={
+            isDownloading
+              ? updateMsg
+              : pending
+                ? t("Version {v} downloaded and ready. Installing takes a few seconds and the app reopens by itself.").replace("{v}", pending.version)
+                : (updateMsg || (appVersion ? t("Version {v} installed.").replace("{v}", appVersion) : ""))
+          }
+        >
           {isDownloading ? (
             <div className="upd">
               <span className="upd__track"><span className="upd__fill" style={{ width: `${downloadProgress}%` }} /></span>
               <span className="u-metric" style={{ fontSize: 11 }}>{downloadProgress}%</span>
             </div>
+          ) : pending ? (
+            <button onClick={installUpdate} className="btn btn--sm">
+              {t("Restart and install")}
+            </button>
           ) : (
             <button onClick={checkForUpdates} disabled={isUpdating} className="btn btn--ghost btn--sm">
               {isUpdating ? t("Checking…") : t("Check for Updates")}

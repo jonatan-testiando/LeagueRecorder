@@ -15,6 +15,7 @@ import { Titlebar } from "./components/Titlebar";
 import { Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { BrandMark } from "./components/BrandMark";
 import { getVersion } from "@tauri-apps/api/app";
+import { getPendingUpdate, onUpdateReady, type PendingUpdate } from "./core/updates";
 import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 
@@ -45,6 +46,9 @@ export const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [appVersion, setAppVersion] = useState<string>("");
+  // Actualización ya descargada por detrás. El aviso vive aquí, junto a la
+  // versión, y no en un modal: no interrumpe, solo deja de decir "v1.2.11".
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
   const t = useT();
 
   const selectedError = useAppStore(state => state.selectedError);
@@ -54,6 +58,11 @@ export const App: React.FC = () => {
 
   React.useEffect(() => {
     getVersion().then(setAppVersion).catch(console.error);
+    // Puede haberse descargado antes de montar este componente (o en otra
+    // sesión de la ventana), así que se pregunta además de escuchar.
+    getPendingUpdate().then(setPendingUpdate).catch(() => {});
+    const stop = onUpdateReady(setPendingUpdate);
+    return () => { stop.then((f) => f()).catch(() => {}); };
   }, []);
 
   const currentPath = location.pathname;
@@ -160,11 +169,20 @@ export const App: React.FC = () => {
             <Settings2 {...NAV_ICON} />
             {t("Settings")}
           </button>
-          {appVersion && (
+          {pendingUpdate ? (
+            <button
+              className="updpill"
+              onClick={() => goTo("/settings")}
+              title={t("Downloaded and ready. Installing takes a few seconds.")}
+            >
+              <span className="updpill__dot" />
+              {t("Update ready")} · v{pendingUpdate.version}
+            </button>
+          ) : appVersion ? (
             <div className="u-meta" style={{ textAlign: "center", marginTop: "var(--space-2)" }}>
               v{appVersion}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

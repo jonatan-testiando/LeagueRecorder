@@ -1,6 +1,6 @@
 [package]
 name = "tauri-app"
-version = "1.2.11"
+version = "1.2.12"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -36,5 +36,6 @@ rand = "0.8"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
 
 

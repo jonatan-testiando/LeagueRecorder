@@ -204,6 +204,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
       <div style={styles.tableHeader}>
         <span className="u-label" style={{ flex: 1 }}>{t("Game")}</span>
+        <span className="u-label" style={styles.thNum}>{t("Impact")}</span>
         <span className="u-label" style={styles.thNum}>{t("KDA")}</span>
         <span className="u-label" style={styles.thNum}>{t("Gold @15")}</span>
         <span className="u-label" style={styles.thNum}>{t("Duration")}</span>
@@ -318,6 +319,26 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           va de -2587 a +2710 y el APM de 219 a 307: uno separa una
                           partida de otra y el otro es casi el mismo numero
                           siempre. Antes se pintaban igual. */}
+                      {/* El puesto entre los diez. Es lo primero que se quiere
+                          saber de una partida y hasta ahora no estaba en ningun
+                          sitio: "fui el mejor" o "fui el peor" dice mas que un
+                          KDA. Sale "—" hasta que se abre la pestana Impacto de
+                          esa partida, que es cuando se calcula y se guarda. */}
+                      <Metric
+                        value={
+                          match.impact_rank
+                            ? <span style={{ color: match.impact_rank === 1 ? "var(--win)" : match.impact_rank >= 8 ? "var(--loss)" : undefined }}>
+                                {match.impact_rank === 1 ? "MVP" : `${match.impact_rank}º`}
+                              </span>
+                            : "—"
+                        }
+                        label={t("of 10")}
+                        title={
+                          match.impact_percentile != null
+                            ? `${t("vs role")}: ${Math.round(match.impact_percentile)}`
+                            : t("Open the game to compute it")
+                        }
+                      />
                       <Metric
                         value={
                           match.kda

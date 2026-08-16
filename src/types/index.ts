@@ -133,6 +133,11 @@ export interface MatchMetadata {
   jungle_cs_diff_15?: number;
   gank_impact_15?: number;
   lane_result?: 'Win' | 'Loss' | 'Even' | string;
+  /** Puesto de 1 a 10 por impacto en la partida. 1 = el mejor de los diez.
+   *  Se rellena al abrir la pestaña Impacto de esa partida. */
+  impact_rank?: number | null;
+  /** Percentil de tu WPA dentro de tu rol (0-100). */
+  impact_percentile?: number | null;
   timeline_markers?: TimelineMarker[];
   minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo

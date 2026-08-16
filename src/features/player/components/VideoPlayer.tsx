@@ -10,7 +10,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { exportErrorClip, getAllErrorClips, getMatchDetails, saveMatchComments, syncMatchNow } from "../../../core/tauri-ipc";
+import { exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, saveMatchComments, syncMatchNow, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
 import { GoldXpChart } from "./GoldXpChart";
 import { TacticalMap } from "./TacticalMap";
@@ -105,7 +105,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // Cuatro pestanas, no cinco. "Estadisticas" y "Analitica" eran dos nombres
   // para lo mismo (cifras de esta partida) y entre las dos no cabian en la
   // columna: la quinta salia cortada.
-  const [tab, setTab] = useState<"review" | "match" | "events" | "comments">("review");
+  const [tab, setTab] = useState<"review" | "match" | "impact" | "events">("review");
+
+  // Reparto de credito por dano real. Se pide al abrir la pestana de la partida
+  // y no antes: la primera vez puede costar dos llamadas a la API, luego sale de
+  // cache en disco.
+  const [credits, setCredits] = useState<PlayerCredit[] | null>(null);
+  const [creditsErr, setCreditsErr] = useState<string | null>(null);
+  // Tramos de presion absorbida. Se piden junto al credito, en la misma pestana.
+  const [pressure, setPressure] = useState<PressureWindow[] | null>(null);
+  const [pressureErr, setPressureErr] = useState<string | null>(null);
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
@@ -429,6 +438,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setSyncing(false);
     }
   };
+
+  // El reparto de credito se pide al abrir la pestana de la partida, una sola
+  // vez por partida. Si falla no se reintenta en bucle: se guarda el motivo y se
+  // enseña, que es mas util que un panel vacio.
+  // OJO con las dependencias: `credits` NO puede estar aqui. Al estarlo, en
+  // cuanto la atribucion respondia y hacia setCredits, el efecto se re-ejecutaba
+  // y su limpieza ponia vivo=false, descartando la respuesta de presion que
+  // seguia en vuelo. Funcionaba mientras las dos iban a la API (la presion
+  // ganaba la carrera) y se rompio al cachear, cuando la atribucion paso a
+  // responder primero. El "ya pedido" se lleva en un ref, que no dispara
+  // re-ejecuciones.
+  const pedidoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (tab !== "impact" || match.is_vod) return;
+    if (pedidoRef.current === match.id) return;
+    pedidoRef.current = match.id;
+    let vivo = true;
+    getMatchAttribution(match.id)
+      .then((rows) => { if (vivo) setCredits(rows); })
+      .catch((e) => { if (vivo) setCreditsErr(String(e)); });
+    // El error se ENSENA, no se traga: tragarselo hacia que un fallo del comando
+    // y "esta partida no tuvo tramos" fueran indistinguibles.
+    getMatchPressure(match.id)
+      .then((ws) => { if (vivo) setPressure(ws); })
+      .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
+    return () => { vivo = false; };
+  }, [tab, match.id, match.is_vod]);
 
   // --- Redimensionar el panel lateral arrastrando su borde izquierdo ---
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1094,18 +1130,55 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.tabBar}>
           <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>{t("Review")}</button>
           <button onClick={() => setTab("match")} style={{ ...styles.tab, ...(tab === "match" ? styles.tabActive : {}) }}>{t("Match")}</button>
+          <button onClick={() => setTab("impact")} style={{ ...styles.tab, ...(tab === "impact" ? styles.tabActive : {}) }}>{t("Impact")}</button>
           <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{t(match.is_vod ? "Analysis" : "Events")}</button>
-          <button onClick={() => setTab("comments")} style={{ ...styles.tab, ...(tab === "comments" ? styles.tabActive : {}) }}>{t("Notes")}</button>
         </div>
 
+        {/* Revision reune la cola de momentos y tus notas: las dos son cosas
+            tuyas ancladas a un minuto del video, y sirven para lo mismo —
+            errores puntuales y cosas que mejorar—. Separarlas obligaba a saltar
+            de pestana para anotar lo que acababas de ver. */}
         {tab === "review" && (
-          <ReviewQueue
-            matchId={match.id}
-            moments={moments}
-            currentTime={currentTime}
-            onSeek={(secs) => jumpToClip(secs)}
-            onChange={setMoments}
-          />
+          <>
+            <ReviewQueue
+              matchId={match.id}
+              moments={moments}
+              currentTime={currentTime}
+              onSeek={(secs) => jumpToClip(secs)}
+              onChange={setMoments}
+            />
+            <div className="sect__head" style={{ marginTop: "var(--space-4)" }}>
+              <span className="u-label">{t("Notes")}</span>
+              <i className="sect__rule" />
+            </div>
+            <div style={styles.commentsWrap}>
+              <div style={styles.commentsList}>
+                {comments.length === 0 && (
+                  <div style={styles.emptyEvents}>Aún no hay comentarios. Escribe uno abajo y se anclará al minuto actual del vídeo.</div>
+                )}
+                {comments.map((c, i) => (
+                  <div key={i} style={styles.commentCard}>
+                    <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
+                      {formatTime(c.time)}
+                    </button>
+                    <span style={styles.commentText}>{c.text}</span>
+                    <button style={styles.commentDelete} onClick={() => deleteComment(i)} title="Eliminar comentario"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+              <div style={styles.commentInputRow}>
+                <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{formatTime(currentTime)}</span>
+                <input
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
+                  placeholder="Comenta este momento…"
+                  style={styles.commentInput}
+                />
+                <button style={styles.commentSend} onClick={addComment} title={t("Add at current time")}><Send size={16} /></button>
+              </div>
+            </div>
+          </>
         )}
 
         {tab === "match" && (
@@ -1382,6 +1455,172 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           </div>
         )}
 
+        {/* Impacto responde "que significo", frente a Partida que responde
+            "que paso". Estaban mezcladas en la misma columna y lo mas
+            diferencial quedaba al final de un scroll largo. */}
+        {tab === "impact" && (
+          <div className="insp">
+            {/* --------------------------------------- credito real
+                El marcador reparte el oro de un asesinato entero al que remata.
+                Aqui se reparte por el dano que puso cada uno, que es quien hizo
+                el trabajo. El desfase entre ambos es la columna que importa. */}
+            {!match.is_vod && (credits !== null || creditsErr !== null) && (
+              <section>
+                <div className="sect__head">
+                  <span className="u-label">{t("Real credit")}</span>
+                  <i className="sect__rule" />
+                </div>
+                {creditsErr !== null ? (
+                  <p className="note">{creditsErr}</p>
+                ) : (
+                  <>
+                    <p className="note">
+                      {t("Kill gold as the scoreboard hands it out (last hit) versus how it splits by damage actually dealt.")}
+                    </p>
+                    <div className="insp__legend u-label">
+                      <span>{t("player")}</span><span>{t("gap")}</span><span>{t("gold")}</span><span>{t("vs role")}</span>
+                    </div>
+                    {/* Separado por bandos: la lista de los 10 mezclados ordena
+                        bien pero no se puede leer como rendimiento si no sabes
+                        quien jugaba contigo. Dentro de cada bando, por desfase. */}
+                    {(() => {
+                      const selfTeam = participants.find((p) => p.is_self)?.team_id;
+                      const grupos: Array<[string, PlayerCredit[]]> =
+                        selfTeam === undefined
+                          ? [["", [...credits!]]]
+                          : [
+                              [t("Your team"), credits!.filter((c) => c.team_id === selfTeam)],
+                              [t("Enemy team"), credits!.filter((c) => c.team_id !== selfTeam)],
+                            ];
+                      return grupos.map(([titulo, filas]) =>
+                        filas.length === 0 ? null : (
+                          <div key={titulo} className="insp__team">
+                            {titulo !== "" && (
+                              <div className="insp__teamHead"><span>{titulo}</span></div>
+                            )}
+                            {[...filas]
+                              .sort((a, b) => b.role_percentile - a.role_percentile)
+                              .map((c) => {
+                                // Por indice, no por nombre de campeon: en Blind
+                                // Pick los dos equipos pueden llevar el mismo y
+                                // saldrian dos "Tu". `participant_id` es 1..10 en
+                                // el mismo orden que Riot.
+                                const self = participants[c.participant_id - 1]?.is_self ?? false;
+                                const tone = c.credit_gap >= 0 ? "var(--win)" : "var(--loss)";
+                                return (
+                                  <div key={c.participant_id} className={`insp__player${self ? " insp__player--self" : ""}`}>
+                                    <img
+                                      src={champIcon(c.champion)}
+                                      alt={c.champion}
+                                      style={styles.champIcon}
+                                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                                    />
+                                    <span className="insp__playerName">
+                                      {self ? `${t("You")} · ${c.champion}` : c.champion}
+                                    </span>
+                                    <span className="u-metric insp__playerNum" style={{ color: tone }}
+                                      title={`${t("scoreboard")}: ${Math.round(c.killing_blow_gold)} · ${t("real")}: ${Math.round(c.damage_credit_gold)}`}>
+                                      {c.credit_gap >= 0 ? "+" : ""}{Math.round(c.credit_gap)}
+                                    </span>
+                                    <span className="u-metric insp__playerNum"
+                                      title={`${t("objectives")}: ${Math.round(c.objective_gold)}`}>
+                                      {Math.round(c.total_value)}
+                                    </span>
+                                    <span className="u-metric insp__playerNum"
+                                      style={{ color: c.role_percentile >= 50 ? "var(--win)" : "var(--loss)" }}
+                                      title={`${t("win %")}: ${c.wpa >= 0 ? "+" : ""}${(c.wpa * 100).toFixed(1)} · ${c.role}`}>
+                                      {Math.round(c.role_percentile)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        ),
+                      );
+                    })()}
+                    {/* El coste real de morir: no es "-1 muerte", es el rato que
+                        estuviste fuera de la partida, que crece con el reloj. */}
+                    {(() => {
+                      const peor = credits!
+                        .flatMap((c) => c.deaths_detail.map((d) => ({ c, d })))
+                        .sort((a, b) => b.d.seconds_dead - a.d.seconds_dead)[0];
+                      if (!peor) return null;
+                      return (
+                        <p className="note">
+                          {t("Most expensive death")}: {peor.c.champion} · {t("minute")} {Math.round(peor.d.minute)} · {Math.round(peor.d.seconds_dead)}s
+                        </p>
+                      );
+                    })()}
+                  </>
+                )}
+              </section>
+            )}
+
+            {/* --------------------------------------- presión absorbida
+                Los tramos en los que tuviste más rivales encima que aliados, y
+                lo que tu equipo sacó al otro lado del mapa mientras tanto. En un
+                marcador esto no existe: si acabas muerto, es "+1 muerte".
+
+                Sólo se muestran los tuyos. Se detectan para los 10, pero los de
+                los demás no ayudan a revisar tu partida. */}
+            {!match.is_vod && (pressure !== null || pressureErr !== null) && (() => {
+              const yo = participants.findIndex((p) => p.is_self) + 1;
+              // Relevancia = cuánta gente y cuánto rato. Es una aproximación
+              // mía, no una medida: ordenar esto bien es lo que dará el modelo
+              // de probabilidad de victoria.
+              const mios = (pressure ?? [])
+                .filter((w) => w.participant_id === yo)
+                .sort((a, b) => (b.max_enemies * (b.end - b.start)) - (a.max_enemies * (a.end - a.start)))
+                .slice(0, 6);
+              return (
+                <section>
+                  <div className="sect__head">
+                    <span className="u-label">{t("Pressure you absorbed")}</span>
+                    <i className="sect__rule" />
+                  </div>
+                  <p className="note">
+                    {t("Stretches where more enemies were on you than allies. What your team took elsewhere is what your presence bought.")}
+                  </p>
+                  {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
+                  {pressureErr !== null && <p className="note">{pressureErr}</p>}
+                  {pressureErr === null && mios.length === 0 && (
+                    <p className="note">{t("No stretches detected in this game.")}</p>
+                  )}
+                  {mios.map((w, i) => {
+                    const botin = [
+                      w.towers_elsewhere && `${w.towers_elsewhere} ${t(w.towers_elsewhere === 1 ? "tower" : "towers")}`,
+                      w.inhibs_elsewhere && `${w.inhibs_elsewhere} ${t(w.inhibs_elsewhere === 1 ? "inhibitor" : "inhibitors")}`,
+                      w.plates_elsewhere && `${w.plates_elsewhere} ${t(w.plates_elsewhere === 1 ? "plate" : "plates")}`,
+                      w.epics_elsewhere && `${w.epics_elsewhere} ${t(w.epics_elsewhere === 1 ? "epic" : "epics")}`,
+                      w.gold_elsewhere > 0 && `${Math.round(w.gold_elsewhere)} ${t("gold")}`,
+                    ].filter(Boolean).join(" · ");
+                    return (
+                      <button
+                        key={i}
+                        className="insp__press"
+                        onClick={() => seekTo(Math.max(0, w.start - 5), true)}
+                        title={t("Jump to this moment")}
+                      >
+                        <span className="u-metric">{formatTime(w.start)}</span>
+                        <span className="insp__pressWhat">
+                          {w.max_enemies.toFixed(1)} {t("enemies on you")} · {Math.round(w.end - w.start)}s
+                          {w.died && ` · ${t("you die")}`}
+                        </span>
+                        <span className="insp__pressGain">
+                          {w.wpa_elsewhere > 0 && (
+                            <b style={{ color: "var(--win)" }}>+{(w.wpa_elsewhere * 100).toFixed(1)}% </b>
+                          )}
+                          {botin}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </section>
+              );
+            })()}
+          </div>
+        )}
+
         {tab === "events" && (() => {
           const bucket = (tone: Tone): "good" | "neutral" | "bad" =>
             tone === "excellent" || tone === "good" ? "good"
@@ -1470,35 +1709,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           );
         })()}
 
-        {tab === "comments" && (
-          <div style={styles.commentsWrap}>
-            <div style={styles.commentsList}>
-              {comments.length === 0 && (
-                <div style={styles.emptyEvents}>Aún no hay comentarios. Escribe uno abajo y se anclará al minuto actual del vídeo.</div>
-              )}
-              {comments.map((c, i) => (
-                <div key={i} style={styles.commentCard}>
-                  <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
-                    {formatTime(c.time)}
-                  </button>
-                  <span style={styles.commentText}>{c.text}</span>
-                  <button style={styles.commentDelete} onClick={() => deleteComment(i)} title="Eliminar comentario"><Trash2 size={14} /></button>
-                </div>
-              ))}
-            </div>
-            <div style={styles.commentInputRow}>
-              <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{formatTime(currentTime)}</span>
-              <input
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
-                placeholder="Comenta este momento…"
-                style={styles.commentInput}
-              />
-              <button style={styles.commentSend} onClick={addComment} title={t("Add at current time")}><Send size={16} /></button>
-            </div>
-          </div>
-        )}
       </div>
       )}
 

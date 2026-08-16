@@ -207,6 +207,16 @@ pub struct MatchMetadata {
     pub gank_impact_15: Option<f64>,
     #[serde(default)]
     pub lane_result: Option<String>,
+    /// En qué puesto quedaste de los 10 por impacto (1 = el mejor de la partida).
+    ///
+    /// Se guarda porque la lista de partidas no puede recalcularlo al vuelo:
+    /// necesita la timeline completa. Se rellena al abrir la pestaña Impacto de
+    /// esa partida, así que las antiguas aparecen sin él hasta que las visites.
+    #[serde(default)]
+    pub impact_rank: Option<i32>,
+    /// Percentil de tu WPA dentro de tu rol, de 0 a 100. Ver `crate::baselines`.
+    #[serde(default)]
+    pub impact_percentile: Option<f64>,
     /// Marcadores de eventos para la barra del reproductor de vídeo
     #[serde(default)]
     pub timeline_markers: Vec<TimelineMarker>,
@@ -473,6 +483,38 @@ pub fn get_match_dir(id: &str) -> PathBuf {
         let _ = fs::create_dir_all(&dir);
     }
     dir
+}
+
+/// Timeline crudo de Riot, tal cual llegó. Se guarda aparte del metadata porque
+/// es grande (1-3 MB) y porque el análisis va a cambiar muchas veces: sin esto,
+/// cada iteración cuesta una llamada a la API y queda atada al límite de cuota.
+/// Es la fuente para re-analizar partidas viejas con métricas nuevas.
+pub fn get_timeline_path(id: &str) -> PathBuf {
+    get_match_dir(id).join("riot_timeline.json")
+}
+
+pub fn save_raw_timeline(id: &str, raw: &str) -> Result<(), String> {
+    fs::write(get_timeline_path(id), raw)
+        .map_err(|e| format!("Error guardando timeline: {}", e))
+}
+
+pub fn load_raw_timeline(id: &str) -> Option<String> {
+    fs::read_to_string(get_timeline_path(id)).ok()
+}
+
+/// Detalle crudo de la partida. Se cachea por lo mismo que el timeline: el
+/// análisis de atribución necesita el `ParticipantDto` completo (155 campos,
+/// incluido `challenges`), no la versión recortada que va en el metadata.
+pub fn get_raw_match_path(id: &str) -> PathBuf {
+    get_match_dir(id).join("riot_match.json")
+}
+
+pub fn save_raw_match(id: &str, raw: &str) -> Result<(), String> {
+    fs::write(get_raw_match_path(id), raw).map_err(|e| format!("Error guardando partida: {}", e))
+}
+
+pub fn load_raw_match(id: &str) -> Option<String> {
+    fs::read_to_string(get_raw_match_path(id)).ok()
 }
 
 pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {

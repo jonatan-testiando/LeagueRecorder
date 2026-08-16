@@ -133,6 +133,82 @@ export const syncMatchNow = async (matchId: string): Promise<MatchMetadata> => {
   return await invoke<MatchMetadata>("sync_match_now", { matchId });
 };
 
+// Comprueba la clave de Riot ya guardada. Resuelve si sirve, y rechaza con el
+// motivo si no.
+export const checkRiotKey = async (): Promise<void> => {
+  return await invoke<void>("check_riot_key");
+};
+
+// Una muerte concreta y lo que costó en tiempo fuera de la partida.
+export interface DeathCost {
+  minute: number;
+  seconds_dead: number;
+}
+
+// Reparto de crédito de un jugador. `killing_blow_gold` es lo que ve un KDA (oro
+// de kills por rematar); `damage_credit_gold` es ese mismo oro repartido por el
+// daño que puso cada uno, y `credit_gap` la diferencia entre ambos.
+export interface PlayerCredit {
+  participant_id: number;
+  champion: string;
+  team_id: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  killing_blow_gold: number;
+  damage_credit_gold: number;
+  credit_gap: number;
+  /** Oro de objetivos y estructuras que le corresponde. */
+  objective_gold: number;
+  /** Asesinatos + objetivos: el primer numero unico por jugador. */
+  total_value: number;
+  /** Probabilidad de victoria aportada. La moneda comun: sabe que una torre en
+   *  el minuto 30 vale mas que la misma torre en el 10. */
+  wpa: number;
+  /** Puesto: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY. */
+  role: string;
+  /** Percentil de su WPA dentro de su rol (0-100). El unico numero comparable
+   *  entre puestos: el techo de un support es mas bajo que el de un carry. */
+  role_percentile: number;
+  death_gold_given: number;
+  time_dead: number;
+  deaths_detail: DeathCost[];
+  damage_participation: number;
+  mean_damage_share: number;
+}
+
+// Reparto de crédito de los 10 jugadores. Tira de caché en disco: tras la primera
+// vez no gasta cuota de la API.
+export const getMatchAttribution = async (matchId: string): Promise<PlayerCredit[]> => {
+  return await invoke<PlayerCredit[]>("get_match_attribution", { matchId });
+};
+
+// Un tramo con más rivales encima que aliados, y lo que el equipo sacó lejos de
+// allí mientras tanto. `start`/`end` van en segundos del VÍDEO, no de la partida.
+export interface PressureWindow {
+  participant_id: number;
+  champion: string;
+  start: number;
+  end: number;
+  /** Suma de confianzas, así que puede ser 3.4: la posición no es certeza. */
+  max_enemies: number;
+  x: number;
+  y: number;
+  died: boolean;
+  gold_elsewhere: number;
+  /** Probabilidad de victoria que tu equipo gano lejos de ti. Se ENSENA aparte,
+   *  no se suma al wpa del jugador: los que ejecutaron ya la tienen. */
+  wpa_elsewhere: number;
+  towers_elsewhere: number;
+  inhibs_elsewhere: number;
+  plates_elsewhere: number;
+  epics_elsewhere: number;
+}
+
+export const getMatchPressure = async (matchId: string): Promise<PressureWindow[]> => {
+  return await invoke<PressureWindow[]>("get_match_pressure", { matchId });
+};
+
 // Marca o desmarca un suceso como revisado. El estado vive en el JSON de la
 // partida, junto a los comentarios: revisar es una tarea con estado y tiene que
 // sobrevivir a cerrar la app.

@@ -1689,3 +1689,24 @@ a:focus:not(:focus-visible) {
   color: var(--muted);
 }
 .fold__list li { margin-bottom: 4px; }
+
+/* Tramos de presión absorbida. Rejilla propia: la del scoreboard
+   (.insp__player) tiene cinco columnas fijas y aquí sólo hay tres, así que la
+   hora y el texto se solapaban. */
+.insp__press {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.insp__press:hover { background: var(--surface-2); }
+.insp__press + .insp__press { border-top: 1px solid var(--line); }
+.insp__pressWhat { font-size: 12px; color: var(--text); }
+.insp__pressGain { font-size: 11px; color: var(--muted); text-align: right; }

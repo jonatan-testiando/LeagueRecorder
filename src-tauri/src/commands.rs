@@ -129,6 +129,40 @@ pub async fn sync_match_now(match_id: String) -> Result<crate::storage::MatchMet
     crate::riot_api::backfill_participants(&match_id).await
 }
 
+/// Comprueba la clave de Riot que está guardada ahora mismo. La UI lo llama al
+/// guardarla: sin esto, una clave mala no se nota hasta que algo falla mucho
+/// después y con un error que no la señala.
+#[tauri::command]
+pub async fn check_riot_key() -> Result<(), String> {
+    let config = crate::storage::load_config();
+    if config.riot_api_key.trim().is_empty() {
+        return Err("No hay clave configurada".to_string());
+    }
+    crate::riot_api::RiotApiClient::new(config.riot_api_key)
+        .check_key()
+        .await
+}
+
+/// Reparto de crédito de los 10 jugadores: cuánto oro de asesinatos les adjudica
+/// el marcador por rematar, cuánto les corresponde por el daño que pusieron de
+/// verdad, y lo que costó cada muerte. Ver `crate::attribution`.
+#[tauri::command]
+pub async fn get_match_attribution(
+    match_id: String,
+) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
+    crate::riot_api::attribution_for(&match_id).await
+}
+
+/// Tramos en los que un jugador tuvo más rivales encima que aliados, con lo que
+/// su equipo consiguió lejos de allí mientras tanto. Ver `crate::pressure`.
+/// Tiempos en el eje del vídeo.
+#[tauri::command]
+pub async fn get_match_pressure(
+    match_id: String,
+) -> Result<Vec<crate::pressure::PressureWindow>, String> {
+    crate::riot_api::pressure_for(&match_id).await
+}
+
 #[derive(serde::Serialize)]
 pub struct AudioStatus {
     /// Dispositivo de captura de audio del sistema detectado (sonido del juego), si existe.
@@ -248,6 +282,8 @@ pub async fn stop_manual_recording(
             jungle_cs_diff_15: None,
             gank_impact_15: None,
             lane_result: None,
+            impact_rank: None,
+            impact_percentile: None,
             timeline_markers: Vec::new(),
             minute_frames: Vec::new(),
             comments: Vec::new(),
@@ -765,6 +801,8 @@ async fn finalize_match(
         jungle_cs_diff_15: None,
         gank_impact_15: None,
         lane_result: None,
+        impact_rank: None,
+        impact_percentile: None,
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),
@@ -1524,7 +1562,10 @@ pub fn get_app_config() -> crate::storage::AppConfig {
 pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool, max_storage_gb: u64, auto_prune_days: u32, language: String) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     config.save_directory = save_directory;
-    config.riot_api_key = riot_api_key;
+    // Se recorta: pegar la clave desde una web o una captura arrastra espacios y
+    // tabuladores invisibles. HTTP los tolera en la cabecera por accidente, así
+    // que el fallo no sale por ningún lado hasta que algo se comporta raro.
+    config.riot_api_key = riot_api_key.trim().to_string();
     config.auto_dataset_generator = auto_dataset_generator;
     // Ambos valores mandan sobre un borrado automático de ficheros, así que se
     // acotan aquí y no solo en la UI: una cuota de 0 GB vaciaría la biblioteca.

@@ -98,6 +98,8 @@ pub struct ParticipantFrameDto {
     #[serde(default)]
     pub totalGold: i32,
     #[serde(default)]
+    pub currentGold: i32,
+    #[serde(default)]
     pub xp: i32,
     #[serde(default)]
     pub level: i32,
@@ -106,7 +108,58 @@ pub struct ParticipantFrameDto {
     #[serde(default)]
     pub jungleMinionsKilled: i32,
     #[serde(default)]
+    pub timeEnemySpentControlled: i32,
+    #[serde(default)]
     pub position: Option<PositionDto>,
+    /// Estado del campeón en ese minuto. `movementSpeed` es la pieza clave para
+    /// acotar hasta dónde pudo desplazarse entre dos frames (ver el estimador de
+    /// ocupación del mapa); el resto sirve para valorar peleas.
+    #[serde(default)]
+    pub championStats: ChampionStatsDto,
+    /// Daño acumulado hasta ese minuto, desglosado. Restando frames consecutivos
+    /// se obtiene el daño *de ese minuto*, que es lo que interesa.
+    #[serde(default)]
+    pub damageStats: DamageStatsDto,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[allow(non_snake_case)]
+pub struct ChampionStatsDto {
+    #[serde(default)]
+    pub movementSpeed: i32,
+    #[serde(default)]
+    pub health: i32,
+    #[serde(default)]
+    pub healthMax: i32,
+    #[serde(default)]
+    pub armor: i32,
+    #[serde(default)]
+    pub magicResist: i32,
+    #[serde(default)]
+    pub attackDamage: i32,
+    #[serde(default)]
+    pub abilityPower: i32,
+    #[serde(default)]
+    pub attackSpeed: i32,
+    #[serde(default)]
+    pub abilityHaste: i32,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[allow(non_snake_case)]
+pub struct DamageStatsDto {
+    #[serde(default)]
+    pub totalDamageDone: i32,
+    #[serde(default)]
+    pub totalDamageDoneToChampions: i32,
+    #[serde(default)]
+    pub totalDamageTaken: i32,
+    #[serde(default)]
+    pub physicalDamageDoneToChampions: i32,
+    #[serde(default)]
+    pub magicDamageDoneToChampions: i32,
+    #[serde(default)]
+    pub trueDamageDoneToChampions: i32,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -143,7 +196,113 @@ pub struct TimelineEvent {
     #[serde(default)]
     pub towerType: Option<String>,
     #[serde(default)]
+    pub laneType: Option<String>,
+    #[serde(default)]
+    pub wardType: Option<String>,
+    #[serde(default)]
+    pub creatorId: i32,
+    #[serde(default)]
+    pub killerTeamId: i32,
+    #[serde(default)]
+    pub teamId: i32,
+    /// Oro base del asesinato. Deja de contar kills a pelo y permite pesarlos por
+    /// lo que valieron de verdad.
+    #[serde(default)]
+    pub bounty: i32,
+    #[serde(default)]
+    pub shutdownBounty: i32,
+    #[serde(default)]
+    pub goldGain: i32,
+    #[serde(default)]
+    pub killStreakLength: i32,
+    #[serde(default)]
+    pub multiKillLength: i32,
+    #[serde(default)]
+    pub level: i32,
+    #[serde(default)]
+    pub skillSlot: i32,
+    /// Todo el daño que la víctima repartió antes de morir, por fuente.
+    #[serde(default)]
+    pub victimDamageDealt: Vec<VictimDamageDto>,
+    /// Todo el daño que la víctima recibió, atribuido a cada `participantId` y
+    /// hechizo. Es la pieza que permite saber quién hizo el trabajo en un kill
+    /// en vez de quién se llevó el último golpe.
+    #[serde(default)]
+    pub victimDamageReceived: Vec<VictimDamageDto>,
+    /// Lo mismo que los dos anteriores pero con la ventana de la pelea entera,
+    /// no sólo la secuencia que remató. Riot los envía siempre; en peleas cortas
+    /// coinciden con `victimDamage*`, en peleas largas recogen más contexto.
+    #[serde(default)]
+    pub victimTeamfightDamageDealt: Vec<VictimDamageDto>,
+    #[serde(default)]
+    pub victimTeamfightDamageReceived: Vec<VictimDamageDto>,
+    #[serde(default)]
     pub position: Option<PositionDto>,
+}
+
+/// Una instancia de daño dentro de un `CHAMPION_KILL`.
+///
+/// Dos trampas comprobadas contra respuestas reales de la API:
+///
+/// - **`participantId == 0` significa "no fue un jugador"** (esbirro, torre). Es
+///   el único filtro fiable para quedarse con el daño de campeones; `source_type`
+///   NO sirve: todo el daño de campeón llega como `"OTHER"`, y sólo el de
+///   esbirros y torres trae `"MINION"` / `"TOWER"`.
+/// - **`name` es la *unidad* que pegó, no siempre el campeón dueño.** El daño de
+///   mascotas y invocaciones sale con el nombre de la unidad (la Pix de Lulu
+///   pegada a un aliado aparece con el nombre del aliado), mientras que
+///   `participantId` sí apunta al jugador al que hay que darle el crédito.
+///   Medido: ~16% de las instancias no coinciden.
+///
+/// Para repartir crédito: agrupar por `participantId`, descartando el 0.
+#[derive(Deserialize, Debug, Clone, Default)]
+#[allow(non_snake_case)]
+pub struct VictimDamageDto {
+    /// El jugador al que atribuir el daño. 0 = no fue un jugador.
+    #[serde(default)]
+    pub participantId: i32,
+    /// Unidad de origen. Ver la nota del struct: puede ser una mascota.
+    #[serde(default)]
+    pub name: String,
+    #[serde(rename = "type", default)]
+    pub source_type: String,
+    #[serde(default)]
+    pub spellName: String,
+    #[serde(default)]
+    pub spellSlot: i32,
+    #[serde(default)]
+    pub basic: bool,
+    #[serde(default)]
+    pub physicalDamage: i32,
+    #[serde(default)]
+    pub magicDamage: i32,
+    #[serde(default)]
+    pub trueDamage: i32,
+}
+
+impl VictimDamageDto {
+    pub fn total(&self) -> i32 {
+        self.physicalDamage + self.magicDamage + self.trueDamage
+    }
+
+    /// Si esta instancia de daño es atribuible a un jugador.
+    pub fn from_player(&self) -> bool {
+        self.participantId > 0
+    }
+}
+
+/// Reparte el daño de un kill entre los jugadores que lo causaron, en unidades
+/// de daño. Ignora esbirros y torres.
+///
+/// Es la respuesta a "¿quién hizo el trabajo?": el `killerId` sólo dice quién dio
+/// el último golpe, y `assistingParticipantIds` no distingue entre quien hizo el
+/// 80% del daño y quien pasó por ahí.
+pub fn damage_shares(damage: &[VictimDamageDto]) -> std::collections::HashMap<i32, i32> {
+    let mut by_player = std::collections::HashMap::new();
+    for d in damage.iter().filter(|d| d.from_player()) {
+        *by_player.entry(d.participantId).or_insert(0) += d.total();
+    }
+    by_player
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -192,6 +351,89 @@ pub struct ParticipantDto {
     pub visionScore: i32,
     #[serde(default)]
     pub wardsPlaced: i32,
+    // --- Aguante, utilidad y objetivos: lo que un KDA no ve ---
+    #[serde(default)]
+    pub totalDamageTaken: i32,
+    #[serde(default)]
+    pub damageSelfMitigated: i32,
+    #[serde(default)]
+    pub totalHeal: i32,
+    #[serde(default)]
+    pub totalHealsOnTeammates: i32,
+    #[serde(default)]
+    pub totalDamageShieldedOnTeammates: i32,
+    #[serde(default)]
+    pub timeCCingOthers: i32,
+    /// Segundos que pasaste muerto. El coste real de morir, no el contador de muertes.
+    #[serde(default)]
+    pub totalTimeSpentDead: i32,
+    #[serde(default)]
+    pub longestTimeSpentLiving: i32,
+    #[serde(default)]
+    pub damageDealtToObjectives: i32,
+    #[serde(default)]
+    pub damageDealtToTurrets: i32,
+    #[serde(default)]
+    pub turretTakedowns: i32,
+    #[serde(default)]
+    pub objectivesStolen: i32,
+    #[serde(default)]
+    pub firstBloodKill: bool,
+    #[serde(default)]
+    pub firstTowerKill: bool,
+    #[serde(default)]
+    pub gameEndedInSurrender: bool,
+    #[serde(default)]
+    pub teamEarlySurrendered: bool,
+    // --- Contrajungla: quién comió en la jungla de quién ---
+    #[serde(default)]
+    pub totalAllyJungleMinionsKilled: i32,
+    #[serde(default)]
+    pub totalEnemyJungleMinionsKilled: i32,
+    // --- Pings. Es lo más cerca que da la API de medir comunicación de macro:
+    // un "MIA" o un "voy en camino" antes de una rotación son shotcalling. ---
+    #[serde(default)]
+    pub enemyMissingPings: i32,
+    #[serde(default)]
+    pub onMyWayPings: i32,
+    #[serde(default)]
+    pub dangerPings: i32,
+    #[serde(default)]
+    pub getBackPings: i32,
+    #[serde(default)]
+    pub pushPings: i32,
+    #[serde(default)]
+    pub holdPings: i32,
+    #[serde(default)]
+    pub allInPings: i32,
+    #[serde(default)]
+    pub assistMePings: i32,
+    #[serde(default)]
+    pub needVisionPings: i32,
+    #[serde(default)]
+    pub enemyVisionPings: i32,
+    #[serde(default)]
+    pub visionClearedPings: i32,
+    #[serde(default)]
+    pub baitPings: i32,
+    #[serde(default)]
+    pub commandPings: i32,
+    #[serde(default)]
+    pub basicPings: i32,
+    /// El bloque `challenges` de Riot: ~150 métricas ya calculadas
+    /// (`teamDamagePercentage`, `killParticipation`, `effectiveHealAndShielding`,
+    /// `soloKills`, `hadAfkTeammate`…). Se guarda tal cual en vez de tipar campo a
+    /// campo: Riot añade y quita métricas por parche, y así llegan solas.
+    #[serde(default)]
+    pub challenges: Option<serde_json::Value>,
+}
+
+impl ParticipantDto {
+    /// Lee un número del bloque `challenges`. Devuelve `None` si el parche actual
+    /// no trae esa métrica.
+    pub fn challenge(&self, key: &str) -> Option<f64> {
+        self.challenges.as_ref()?.get(key)?.as_f64()
+    }
 }
 
 impl RiotApiClient {
@@ -204,6 +446,30 @@ impl RiotApiClient {
             client,
             api_key,
             region: "americas".to_string(), // Para LAN (LA1) se usa "americas" en Account y Match V5
+        }
+    }
+
+    /// Comprueba si la clave sirve, sin necesitar saber quién es el jugador.
+    ///
+    /// Pregunta a propósito por una cuenta que no existe: con clave válida Riot
+    /// responde 404 (no la encuentro) y con clave inválida 401/403 (ni te
+    /// contesto). Así vale para cualquier región sin pedirle nada al usuario.
+    pub async fn check_key(&self) -> Result<(), String> {
+        let url = format!(
+            "https://{}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{}/{}",
+            self.region, "leaguerecorder-key-check", "0000"
+        );
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Riot-Token", &self.api_key)
+            .send()
+            .await
+            .map_err(|e| format!("No se pudo contactar con Riot: {}", e))?;
+        match resp.status().as_u16() {
+            401 | 403 => Err("La clave no es válida o ha caducado".to_string()),
+            429 => Err("Riot está limitando las peticiones; inténtalo en un minuto".to_string()),
+            _ => Ok(()),
         }
     }
 
@@ -263,8 +529,9 @@ impl RiotApiClient {
         Ok(match_ids)
     }
 
-    /// Obtiene los detalles de un Match ID
-    pub async fn get_match_details(&self, match_id: &str) -> Result<MatchDto, String> {
+    /// Obtiene los detalles de un Match ID. Devuelve el JSON crudo para poder
+    /// cachearlo (ver `details_for`).
+    pub async fn get_match_details_raw(&self, match_id: &str) -> Result<String, String> {
         let url = format!(
             "https://{}.api.riotgames.com/lol/match/v5/matches/{}",
             self.region, match_id
@@ -282,12 +549,17 @@ impl RiotApiClient {
             return Err(format!("Riot API Error (MatchDetails): {}", resp.status()));
         }
 
-        let match_dto: MatchDto = resp.json().await.map_err(|e| e.to_string())?;
-        Ok(match_dto)
+        resp.text().await.map_err(|e| e.to_string())
+    }
+
+    pub async fn get_match_details(&self, match_id: &str) -> Result<MatchDto, String> {
+        let raw = self.get_match_details_raw(match_id).await?;
+        serde_json::from_str(&raw).map_err(|e| e.to_string())
     }
 
     /// Obtiene la timeline de una partida (eventos minuto a minuto, incl. compras de items).
-    pub async fn get_match_timeline(&self, match_id: &str) -> Result<TimelineDto, String> {
+    /// Devuelve también el JSON crudo para poder cachearlo (ver `timeline_for`).
+    pub async fn get_match_timeline_raw(&self, match_id: &str) -> Result<String, String> {
         let url = format!(
             "https://{}.api.riotgames.com/lol/match/v5/matches/{}/timeline",
             self.region, match_id
@@ -302,9 +574,125 @@ impl RiotApiClient {
         if !resp.status().is_success() {
             return Err(format!("Riot API Error (Timeline): {}", resp.status()));
         }
-        let dto: TimelineDto = resp.json().await.map_err(|e| e.to_string())?;
-        Ok(dto)
+        resp.text().await.map_err(|e| e.to_string())
     }
+
+    pub async fn get_match_timeline(&self, match_id: &str) -> Result<TimelineDto, String> {
+        let raw = self.get_match_timeline_raw(match_id).await?;
+        serde_json::from_str(&raw).map_err(|e| e.to_string())
+    }
+}
+
+/// Timeline de una partida, del disco si ya está cacheada y de la API si no.
+/// `local_id` es el id de la grabación (la carpeta donde vive el caché);
+/// `riot_match_id` el de Riot.
+async fn timeline_for(
+    api: &RiotApiClient,
+    local_id: &str,
+    riot_match_id: &str,
+) -> Result<TimelineDto, String> {
+    if let Some(raw) = crate::storage::load_raw_timeline(local_id) {
+        if let Ok(dto) = serde_json::from_str::<TimelineDto>(&raw) {
+            return Ok(dto);
+        }
+        // Caché corrupto o truncado: se vuelve a pedir y se sobrescribe.
+    }
+    let raw = api.get_match_timeline_raw(riot_match_id).await?;
+    let dto: TimelineDto = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let _ = crate::storage::save_raw_timeline(local_id, &raw);
+    Ok(dto)
+}
+
+/// Igual que `timeline_for` pero con el detalle de la partida.
+async fn details_for(
+    api: &RiotApiClient,
+    local_id: &str,
+    riot_match_id: &str,
+) -> Result<MatchDto, String> {
+    if let Some(raw) = crate::storage::load_raw_match(local_id) {
+        if let Ok(dto) = serde_json::from_str::<MatchDto>(&raw) {
+            return Ok(dto);
+        }
+    }
+    let raw = api.get_match_details_raw(riot_match_id).await?;
+    let dto: MatchDto = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let _ = crate::storage::save_raw_match(local_id, &raw);
+    Ok(dto)
+}
+
+/// Reparto de crédito de una partida ya sincronizada, para los 10 jugadores.
+///
+/// Tira del caché en disco, así que después de la primera vez no gasta cuota:
+/// se puede recalcular tantas veces como cambie el análisis.
+pub async fn attribution_for(
+    match_id: &str,
+) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
+    let mut metadata = crate::storage::get_match_metadata(match_id)
+        .map_err(|e| format!("Error cargando metadata: {}", e))?;
+    let rid = metadata
+        .riot_match_id
+        .clone()
+        .ok_or_else(|| "Esta partida aún no está sincronizada con Riot".to_string())?;
+
+    let config = crate::storage::load_config();
+    if config.riot_api_key.is_empty() {
+        return Err("Configura tu Riot API Key en Ajustes".to_string());
+    }
+    let api = RiotApiClient::new(config.riot_api_key);
+
+    let details = details_for(&api, match_id, &rid).await?;
+    let tl = timeline_for(&api, match_id, &rid).await?;
+    let filas = crate::attribution::analyze(&tl, &details.info.participants);
+
+    // Se persiste el puesto para que la lista de partidas pueda enseñarlo sin
+    // recalcular: eso exigiría la timeline de cada partida, que es justo lo que
+    // no se puede hacer al pintar una lista.
+    if let Some(idx) = metadata.participants.iter().position(|p| p.is_self) {
+        let yo = (idx + 1) as i32;
+        let mut orden: Vec<&crate::attribution::PlayerCredit> = filas.iter().collect();
+        orden.sort_by(|a, b| b.role_percentile.total_cmp(&a.role_percentile));
+        if let Some(pos) = orden.iter().position(|c| c.participant_id == yo) {
+            let nuevo_rank = Some(pos as i32 + 1);
+            let nuevo_pct = orden.get(pos).map(|c| (c.role_percentile * 10.0).round() / 10.0);
+            if metadata.impact_rank != nuevo_rank || metadata.impact_percentile != nuevo_pct {
+                metadata.impact_rank = nuevo_rank;
+                metadata.impact_percentile = nuevo_pct;
+                let _ = crate::storage::save_match_metadata(&metadata);
+            }
+        }
+    }
+    Ok(filas)
+}
+
+/// Tramos de presión absorbida de una partida ya sincronizada.
+///
+/// Los tiempos salen **en el eje del vídeo**, no en tiempo de partida, para que
+/// la UI pueda saltar directamente al momento (igual que `timeline_markers`).
+pub async fn pressure_for(
+    match_id: &str,
+) -> Result<Vec<crate::pressure::PressureWindow>, String> {
+    let mut metadata = crate::storage::get_match_metadata(match_id)
+        .map_err(|e| format!("Error cargando metadata: {}", e))?;
+    let rid = metadata
+        .riot_match_id
+        .clone()
+        .ok_or_else(|| "Esta partida aún no está sincronizada con Riot".to_string())?;
+
+    let config = crate::storage::load_config();
+    if config.riot_api_key.is_empty() {
+        return Err("Configura tu Riot API Key en Ajustes".to_string());
+    }
+    let api = RiotApiClient::new(config.riot_api_key);
+    let details = details_for(&api, match_id, &rid).await?;
+    let tl = timeline_for(&api, match_id, &rid).await?;
+
+    let offset = resolve_video_offset(&mut metadata, details.info.gameDuration);
+    let mut windows = crate::pressure::detect(&tl, &details.info.participants);
+    for w in windows.iter_mut() {
+        w.start = (w.start + offset).max(0.0);
+        w.end = (w.end + offset).max(0.0);
+    }
+    Ok(windows)
 }
 
 /// Extrae del `MatchInfo` los objetivos por equipo (para el panel Objectives).
@@ -692,7 +1080,7 @@ pub async fn backfill_participants(
         "Esta partida aún no está sincronizada con Riot (graba una nueva o espera la sincronización automática de ~60s tras la partida)".to_string()
     })?;
     let api = RiotApiClient::new(config.riot_api_key);
-    let details = api.get_match_details(&rid).await?;
+    let details = details_for(&api, match_id, &rid).await?;
     let self_idx = details
         .info
         .participants
@@ -708,7 +1096,7 @@ pub async fn backfill_participants(
     metadata.objectives = objectives_from(&details.info);
     metadata.queue = Some(details.info.queueId);
     if let Some(idx) = self_idx {
-        if let Ok(tl) = api.get_match_timeline(&rid).await {
+        if let Ok(tl) = timeline_for(&api, match_id, &rid).await {
             let video_offset = resolve_video_offset(&mut metadata, details.info.gameDuration);
             let analysis = process_timeline_full(&tl, (idx as i32) + 1, &details.info.participants, video_offset);
             metadata.item_purchases = analysis.item_purchases;
@@ -757,18 +1145,26 @@ pub async fn sync_riot_data(
 
     let mut found_match = None;
     for r_match_id in recent_matches {
-        if let Ok(details) = api.get_match_details(&r_match_id).await {
-            let duration_diff = (details.info.gameDuration as f64 - metadata.game_duration).abs();
-            if duration_diff <= 180.0 {
-                if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
-                    found_match = Some((r_match_id, participant.clone(), details.info.clone()));
-                    break;
-                }
+        // Se pide en crudo para poder cachear la que resulte ser la nuestra: el
+        // análisis de atribución necesita el DTO completo, no el recorte que va
+        // al metadata.
+        let Ok(raw) = api.get_match_details_raw(&r_match_id).await else {
+            continue;
+        };
+        let Ok(details) = serde_json::from_str::<MatchDto>(&raw) else {
+            continue;
+        };
+        let duration_diff = (details.info.gameDuration as f64 - metadata.game_duration).abs();
+        if duration_diff <= 180.0 {
+            if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
+                found_match = Some((r_match_id, participant.clone(), details.info.clone(), raw));
+                break;
             }
         }
     }
 
-    if let Some((riot_id, participant, info)) = found_match {
+    if let Some((riot_id, participant, info, raw)) = found_match {
+        let _ = crate::storage::save_raw_match(match_id, &raw);
         metadata.riot_match_id = Some(riot_id.clone());
         metadata.kda = Some(format!(
             "{}/{}/{}",
@@ -784,7 +1180,7 @@ pub async fn sync_riot_data(
         metadata.objectives = objectives_from(&info);
         metadata.queue = Some(info.queueId);
         if let Some(idx) = info.participants.iter().position(|p| p.puuid == puuid) {
-            if let Ok(tl) = api.get_match_timeline(&riot_id).await {
+            if let Ok(tl) = timeline_for(&api, match_id, &riot_id).await {
                 let video_offset = resolve_video_offset(&mut metadata, info.gameDuration);
                 let analysis = process_timeline_full(&tl, (idx as i32) + 1, &info.participants, video_offset);
                 metadata.item_purchases = analysis.item_purchases;

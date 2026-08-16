@@ -1,5 +1,7 @@
 mod riot_live_api;
+mod attribution;
 mod awareness;
+mod baselines;
 mod camera_snaps;
 mod commands;
 mod cv_analyzer;
@@ -7,7 +9,9 @@ mod app_update;
 mod dataset_generator;
 mod gank;
 mod obs_client;
+mod occupancy;
 mod overlay;
+mod pressure;
 mod proc;
 mod recorder;
 pub mod riot_api;
@@ -15,6 +19,7 @@ mod storage;
 mod streamer;
 mod training;
 mod ultimate;
+mod winprob;
 
 use commands::{
     add_error_event, delete_error_event, delete_match, edit_error_event, export_clip,
@@ -22,6 +27,9 @@ use commands::{
     get_recorded_matches, get_recorder_status, get_video_settings,
     save_match_comments, save_replay_clip, set_app_config, set_error_clip_reviewed, set_event_reviewed, set_video_settings,
     sync_match_now,
+    get_match_attribution,
+    check_riot_key,
+    get_match_pressure,
     spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
     update_error_note,
     upload_clip, get_disk_usage, ActiveMatchState,
@@ -183,6 +191,9 @@ pub fn run() {
             set_event_reviewed,
             set_error_clip_reviewed,
             sync_match_now,
+            get_match_attribution,
+            check_riot_key,
+            get_match_pressure,
             get_audio_status,
             start_manual_recording,
             stop_manual_recording,

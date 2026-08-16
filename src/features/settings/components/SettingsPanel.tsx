@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, AppConfig } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, AppConfig } from "../../../core/tauri-ipc";
 import { AudioStatus, VideoSettings } from "../../../types";
 import { RefreshCw } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -121,9 +121,31 @@ export const SettingsPanel: React.FC = () => {
     };
   }, []);
 
+  // Estado de la clave de Riot: null = sin comprobar. Existe porque una clave
+  // que no se guarda o que no sirve era invisible hasta que fallaba algo mucho
+  // despues, con un error que no la señalaba.
+  const [keyState, setKeyState] = useState<"saving" | "ok" | "bad" | null>(null);
+  const [keyMsg, setKeyMsg] = useState<string>("");
+
   const handleSaveConfig = async (c: AppConfig) => {
     setConfig(c);
-    await setAppConfig(c.save_directory, c.riot_api_key, c.auto_dataset_generator, c.max_storage_gb, c.auto_prune_days).catch(console.error);
+    // `c.language` iba sin pasar y caia al valor por defecto "en": guardar la
+    // clave te reseteaba el idioma a ingles sin decir nada.
+    try {
+      await setAppConfig(
+        c.save_directory,
+        c.riot_api_key,
+        c.auto_dataset_generator,
+        c.max_storage_gb,
+        c.auto_prune_days,
+        c.language,
+      );
+    } catch (e) {
+      // Antes esto era un console.error: el fallo no salia de la consola.
+      setKeyState("bad");
+      setKeyMsg(String(e));
+      throw e;
+    }
   };
 
   const handlePickDirectory = async () => {
@@ -143,8 +165,31 @@ export const SettingsPanel: React.FC = () => {
     setConfig({ ...config, riot_api_key: e.target.value });
   };
 
-  const handleApiKeyBlur = () => {
-    handleSaveConfig(config);
+  // Guarda y, acto seguido, le pregunta a Riot si la clave sirve. Guardar sin
+  // comprobar es lo que dejaba al usuario creyendo que estaba lista.
+  const handleApiKeyBlur = async () => {
+    if (!config.riot_api_key.trim()) {
+      setKeyState(null);
+      return;
+    }
+    setKeyState("saving");
+    setKeyMsg("");
+    try {
+      await handleSaveConfig(config);
+      await checkRiotKey();
+      setKeyState("ok");
+    } catch (e) {
+      setKeyState("bad");
+      setKeyMsg(String(e).replace(/^Error:\s*/, ""));
+    }
+  };
+
+  // Sin esto la clave sólo se guardaba al perder el foco: quien la pegaba y salía
+  // del panel directo se quedaba sin guardarla, y sin ningún aviso.
+  const handleApiKeyKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.currentTarget.blur();
+    }
   };
 
   const handleStartManual = async () => {
@@ -406,7 +451,7 @@ export const SettingsPanel: React.FC = () => {
           </div>
         </Row>
 
-        <Row label={t("Riot API key")} desc={t("Needed for the scoreboard and your stats. A development key expires every 24 hours.")}>
+        <Row label={t("Riot API key")} desc={t("Needed for the scoreboard and your stats. Saved when you leave the field. A development key expires every 24 hours; a personal one does not.")}>
           <input
             type="password"
             className="field"
@@ -414,7 +459,21 @@ export const SettingsPanel: React.FC = () => {
             value={config.riot_api_key}
             onChange={handleApiKeyChange}
             onBlur={handleApiKeyBlur}
+            onKeyDown={handleApiKeyKeyDown}
           />
+          {keyState !== null && (
+            <span
+              className="u-meta"
+              style={{
+                color:
+                  keyState === "ok" ? "var(--win)" : keyState === "bad" ? "var(--loss)" : undefined,
+              }}
+            >
+              {keyState === "saving" && t("Checking…")}
+              {keyState === "ok" && t("Key saved and working")}
+              {keyState === "bad" && (keyMsg || t("The key is not valid"))}
+            </span>
+          )}
         </Row>
       </section>
 

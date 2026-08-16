@@ -304,6 +304,8 @@ pub async fn process_vod(
         jungle_cs_diff_15: None,
         gank_impact_15: None,
         lane_result: None,
+        impact_rank: None,
+        impact_percentile: None,
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),

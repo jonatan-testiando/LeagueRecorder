@@ -50,3 +50,6 @@ leaguerec-obs/build/
 !/models/cursor_multi_fp32.onnx
 *.pt
 .venv-train/
+
+tools/corpus/reanudar.bat
+__pycache__/

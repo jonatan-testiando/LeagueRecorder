@@ -26,20 +26,50 @@ pub const ROLES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 /// Se rellenan con datos, no a ojo: la prueba los imprime listos para pegar y
 /// además comprueba que los que hay aquí sigan cuadrando con el corpus.
 const DECILES: [(&str, [f64; 9]); 5] = [
-    ("TOP", [-0.058, -0.029, -0.007, 0.014, 0.036, 0.057, 0.080, 0.112, 0.164]),
-    ("JUNGLE", [-0.039, -0.012, 0.013, 0.036, 0.058, 0.083, 0.105, 0.135, 0.184]),
-    ("MIDDLE", [-0.048, -0.020, 0.004, 0.025, 0.046, 0.067, 0.092, 0.125, 0.170]),
-    ("BOTTOM", [-0.050, -0.023, -0.003, 0.017, 0.038, 0.059, 0.085, 0.119, 0.167]),
-    ("UTILITY", [-0.063, -0.045, -0.031, -0.019, -0.005, 0.009, 0.026, 0.045, 0.072]),
+    ("TOP", [-0.082, -0.039, -0.008, 0.021, 0.051, 0.082, 0.120, 0.174, 0.260]),   // n=18502
+    ("JUNGLE", [-0.057, -0.021, 0.007, 0.033, 0.057, 0.085, 0.117, 0.162, 0.242]),   // n=18516
+    ("MIDDLE", [-0.067, -0.027, 0.002, 0.031, 0.059, 0.089, 0.125, 0.176, 0.260]),   // n=18508
+    ("BOTTOM", [-0.067, -0.029, -0.002, 0.024, 0.050, 0.079, 0.113, 0.159, 0.245]),   // n=18503
+    ("UTILITY", [-0.092, -0.058, -0.035, -0.016, 0.002, 0.022, 0.043, 0.070, 0.115]),   // n=18505
 ];
 
 /// Tramos de rango, de menor a mayor.
 pub const TRAMOS: [&str; 3] = ["bajo", "medio", "alto"];
 
-/// Deciles por (tramo, rol). Vacío hasta que el etiquetado de rangos avance lo
-/// suficiente; mientras tanto `percentil` cae al baremo por rol a secas, que ya
-/// corrige el sesgo grande (el techo del support).
-const DECILES_POR_TRAMO: &[(&str, &str, [f64; 9])] = &[];
+/// Deciles por (tramo, rol), medidos sobre 9.219 partidas con rango conocido.
+///
+/// **El efecto del rango es modesto y depende del rol**, al revés de lo que
+/// cabría esperar. Medianas de WPA por tramo (bajo / medio / alto):
+///
+/// ```text
+///   JUNGLA    0.048  0.060  0.070   sube con el rango
+///   MEDIO     0.047  0.044  0.047   plano
+///   TIRADOR   0.036  0.042  0.037   plano
+///   TOP       0.039  0.040  0.028   BAJA
+///   SUPPORT  -0.000 -0.007 -0.012   BAJA
+/// ```
+///
+/// Sólo la jungla gana peso al subir de nivel; top y support lo pierden. Sea
+/// cual sea la explicación, la consecuencia práctica es que esta corrección es
+/// mucho más pequeña que la del rol (support −0,006 frente a tirador +0,038),
+/// y conviene no venderla como más de lo que es.
+const DECILES_POR_TRAMO: &[(&str, &str, [f64; 9])] = &[
+    ("bajo", "TOP", [-0.082, -0.039, -0.007, 0.022, 0.051, 0.082, 0.122, 0.176, 0.263]),   // n=16277
+    ("bajo", "JUNGLE", [-0.058, -0.022, 0.005, 0.031, 0.055, 0.082, 0.115, 0.160, 0.242]),   // n=16290
+    ("bajo", "MIDDLE", [-0.067, -0.026, 0.003, 0.031, 0.059, 0.089, 0.126, 0.178, 0.262]),   // n=16281
+    ("bajo", "BOTTOM", [-0.068, -0.030, -0.003, 0.023, 0.050, 0.079, 0.113, 0.159, 0.245]),   // n=16277
+    ("bajo", "UTILITY", [-0.091, -0.057, -0.034, -0.015, 0.004, 0.023, 0.045, 0.072, 0.118]),   // n=16279
+    ("medio", "TOP", [-0.071, -0.036, -0.005, 0.022, 0.051, 0.083, 0.116, 0.162, 0.256]),   // n=1295
+    ("medio", "JUNGLE", [-0.051, -0.014, 0.015, 0.043, 0.068, 0.096, 0.132, 0.168, 0.235]),   // n=1296
+    ("medio", "MIDDLE", [-0.072, -0.031, -0.002, 0.027, 0.054, 0.085, 0.120, 0.160, 0.230]),   // n=1297
+    ("medio", "BOTTOM", [-0.060, -0.022, 0.004, 0.029, 0.054, 0.082, 0.118, 0.166, 0.251]),   // n=1296
+    ("medio", "UTILITY", [-0.092, -0.061, -0.039, -0.019, -0.003, 0.014, 0.033, 0.059, 0.096]),   // n=1296
+    ("alto", "TOP", [-0.084, -0.043, -0.015, 0.012, 0.038, 0.071, 0.105, 0.154, 0.215]),   // n=852
+    ("alto", "JUNGLE", [-0.045, -0.007, 0.022, 0.056, 0.082, 0.116, 0.144, 0.190, 0.257]),   // n=852
+    ("alto", "MIDDLE", [-0.063, -0.025, 0.004, 0.030, 0.061, 0.096, 0.130, 0.180, 0.266]),   // n=852
+    ("alto", "BOTTOM", [-0.060, -0.025, 0.003, 0.029, 0.053, 0.080, 0.115, 0.163, 0.232]),   // n=852
+    ("alto", "UTILITY", [-0.098, -0.065, -0.045, -0.029, -0.012, 0.004, 0.027, 0.047, 0.077]),   // n=852
+];
 
 /// Igual que `percentil` pero teniendo en cuenta el rango en que se jugó.
 ///
@@ -93,6 +123,114 @@ mod tests {
     use super::*;
     use crate::riot_api::{ParticipantDto, TimelineDto};
     use std::io::Read;
+
+    /// Igual que el de por rol, pero cruzando con el rango en que se jugó.
+    ///
+    /// El rango sale de `tiers.json`, que genera `tools/corpus/fetch_tiers.py`
+    /// pidiendo el rango de un participante por partida (el emparejamiento junta
+    /// rangos parecidos, así que etiqueta la partida entera).
+    #[test]
+    fn calcular_percentiles_por_tramo() {
+        let Ok(corpus) = std::env::var("CORPUS_DIR") else {
+            return;
+        };
+        let Ok(raw) = std::fs::read_to_string(format!("{corpus}/tiers.json")) else {
+            println!("sin tiers.json: hay que correr fetch_tiers.py primero");
+            return;
+        };
+        let tramos: std::collections::HashMap<String, String> =
+            serde_json::from_str(&raw).unwrap();
+
+        let mut datos: std::collections::HashMap<(String, String), Vec<f64>> = Default::default();
+        let Ok(sub) = std::fs::read_dir(format!("{corpus}/partidas")) else { return };
+        let mut n = 0usize;
+        for dir in sub.flatten() {
+            let Ok(ficheros) = std::fs::read_dir(dir.path()) else { continue };
+            for f in ficheros.flatten() {
+                let id = f
+                    .file_name()
+                    .to_str()
+                    .and_then(|s| s.strip_suffix(".json.gz"))
+                    .map(str::to_string);
+                let Some(id) = id else { continue };
+                let Some(tramo) = tramos.get(&id) else { continue };
+                if tramo == "sin" {
+                    continue;
+                }
+                let Ok(bytes) = std::fs::read(f.path()) else { continue };
+                let mut texto = String::new();
+                if flate2::read::GzDecoder::new(&bytes[..])
+                    .read_to_string(&mut texto)
+                    .is_err()
+                {
+                    continue;
+                }
+                let Ok(d) = serde_json::from_str::<serde_json::Value>(&texto) else { continue };
+                let Ok(ps) = serde_json::from_value::<Vec<ParticipantDto>>(
+                    d["match"]["info"]["participants"].clone(),
+                ) else {
+                    continue;
+                };
+                let Ok(tl) = serde_json::from_value::<TimelineDto>(d["timeline"].clone()) else {
+                    continue;
+                };
+                let wpa = crate::winprob::per_player(&crate::winprob::plays(&tl, &ps));
+                for (i, p) in ps.iter().enumerate() {
+                    let rol = if p.teamPosition.is_empty() {
+                        p.individualPosition.clone()
+                    } else {
+                        p.teamPosition.clone()
+                    };
+                    if !ROLES.contains(&rol.as_str()) {
+                        continue;
+                    }
+                    datos
+                        .entry((tramo.clone(), rol))
+                        .or_default()
+                        .push(wpa.get(&((i + 1) as i32)).copied().unwrap_or(0.0));
+                }
+                n += 1;
+            }
+        }
+
+        println!("
+{n} partidas con rango conocido
+");
+        println!("const DECILES_POR_TRAMO: &[(&str, &str, [f64; 9])] = &[");
+        for tramo in TRAMOS {
+            for rol in ROLES {
+                let Some(v) = datos.get_mut(&(tramo.to_string(), rol.to_string())) else {
+                    continue;
+                };
+                if v.len() < 200 {
+                    println!("    // {tramo}/{rol}: sólo {} muestras, se omite", v.len());
+                    continue;
+                }
+                v.sort_by(f64::total_cmp);
+                let d: Vec<String> = (1..=9)
+                    .map(|q| format!("{:.3}", v[(v.len() as f64 * q as f64 / 10.0) as usize]))
+                    .collect();
+                println!("    (\"{tramo}\", \"{rol}\", [{}]),   // n={}", d.join(", "), v.len());
+            }
+        }
+        println!("];");
+
+        // La mediana debería subir con el rango: en partidas de más nivel el
+        // mismo rol mueve más la probabilidad de victoria. Si no se cumpliera,
+        // separar por tramos no aportaría nada.
+        for rol in ROLES {
+            let m: Vec<String> = TRAMOS
+                .iter()
+                .filter_map(|t| datos.get(&(t.to_string(), rol.to_string())))
+                .map(|v| {
+                    let mut v = v.clone();
+                    v.sort_by(f64::total_cmp);
+                    format!("{:.4}", v[v.len() / 2])
+                })
+                .collect();
+            println!("  mediana {rol:8}: {}", m.join("  "));
+        }
+    }
 
     /// Recorre el corpus comprimido y saca la distribución de WPA por rol.
     ///

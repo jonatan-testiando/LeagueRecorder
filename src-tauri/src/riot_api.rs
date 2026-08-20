@@ -473,6 +473,42 @@ impl RiotApiClient {
         }
     }
 
+    /// Tramo de rango de un jugador en clasificatoria solo/dúo.
+    ///
+    /// Se agrupa en tres y no en diez porque el baremo es (tramo x rol): con
+    /// diez rangos harían falta 50 celdas con muestra suficiente.
+    pub async fn tier_bucket(&self, plataforma: &str, puuid: &str) -> Option<String> {
+        let url = format!(
+            "https://{}.api.riotgames.com/lol/league/v4/entries/by-puuid/{}",
+            plataforma, puuid
+        );
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Riot-Token", &self.api_key)
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let entradas: Vec<serde_json::Value> = resp.json().await.ok()?;
+        let tier = entradas
+            .iter()
+            .find(|e| e["queueType"] == "RANKED_SOLO_5x5")?
+            .get("tier")?
+            .as_str()?
+            .to_string();
+        Some(
+            match tier.as_str() {
+                "IRON" | "BRONZE" | "SILVER" => "bajo",
+                "GOLD" | "PLATINUM" | "EMERALD" => "medio",
+                _ => "alto",
+            }
+            .to_string(),
+        )
+    }
+
     /// Obtiene el PUUID del jugador usando su Riot ID (GameName y TagLine)
     pub async fn get_puuid_by_riot_id(
         &self,
@@ -624,6 +660,17 @@ async fn details_for(
 ///
 /// Tira del caché en disco, así que después de la primera vez no gasta cuota:
 /// se puede recalcular tantas veces como cambie el análisis.
+/// Igual que `attribution_for`, pero además pide que se procese el vídeo si aún
+/// no se hizo. Es el punto natural: para cuando el usuario abre el análisis, ya
+/// existen el vídeo y la timeline.
+pub async fn attribution_for_with_video(
+    app: &tauri::AppHandle,
+    match_id: &str,
+) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
+    crate::minimap::spawn_processing(app, match_id);
+    attribution_for(match_id).await
+}
+
 pub async fn attribution_for(
     match_id: &str,
 ) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
@@ -642,7 +689,16 @@ pub async fn attribution_for(
 
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
-    let filas = crate::attribution::analyze(&tl, &details.info.participants);
+    let mut filas = crate::attribution::analyze(&tl, &details.info.participants);
+
+    // Con el rango conocido, el percentil se compara contra el baremo de ese
+    // nivel en vez del general. Si no se sabe, `percentil_en_tramo` cae solo al
+    // baremo por rol.
+    if let Some(tramo) = metadata.tier_bucket.as_deref() {
+        for c in filas.iter_mut() {
+            c.role_percentile = crate::baselines::percentil_en_tramo(tramo, &c.role, c.wpa);
+        }
+    }
 
     // Se persiste el puesto para que la lista de partidas pueda enseñarlo sin
     // recalcular: eso exigiría la timeline de cada partida, que es justo lo que
@@ -688,6 +744,18 @@ pub async fn pressure_for(
 
     let offset = resolve_video_offset(&mut metadata, details.info.gameDuration);
     let mut windows = crate::pressure::detect(&tl, &details.info.participants);
+
+    // Si el vídeo de esta partida ya se procesó, sus posiciones (dos por
+    // segundo) afinan los límites de los tramos. Sin ellas la duración es una
+    // cota inferior, porque entre fotogramas de minuto la API no dice nada.
+    if let Some(pos) = crate::minimap::Positions::load(match_id) {
+        crate::pressure::refinar_con_video(
+            &mut windows,
+            &pos,
+            &tl,
+            &details.info.participants,
+        );
+    }
     for w in windows.iter_mut() {
         w.start = (w.start + offset).max(0.0);
         w.end = (w.end + offset).max(0.0);
@@ -1165,6 +1233,12 @@ pub async fn sync_riot_data(
 
     if let Some((riot_id, participant, info, raw)) = found_match {
         let _ = crate::storage::save_raw_match(match_id, &raw);
+        // El rango se pide aquí y se guarda: después puede cambiar, y lo que
+        // vale para comparar es el que tenías al jugar esta partida.
+        if metadata.tier_bucket.is_none() {
+            let plataforma = riot_id.split('_').next().unwrap_or("la1").to_lowercase();
+            metadata.tier_bucket = api.tier_bucket(&plataforma, &puuid).await;
+        }
         metadata.riot_match_id = Some(riot_id.clone());
         metadata.kda = Some(format!(
             "{}/{}/{}",

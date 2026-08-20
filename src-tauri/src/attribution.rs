@@ -20,29 +20,31 @@ use std::collections::HashMap;
 
 /// Oro que entrega cada objetivo al equipo que lo toma.
 ///
-/// **Medidos, no tabulados.** Salen de una regresión sobre 81.000
-/// observaciones equipo-minuto del corpus (`tools/corpus`, script
+/// **Medidos, no tabulados.** Salen de una regresión sobre ~590.000
+/// observaciones equipo-minuto del corpus (9.075 partidas) (`tools/corpus`, script
 /// `fit_objective_gold.py`): se explica el incremento de oro del equipo en cada
 /// minuto por su CS, su jungla, el oro de sus asesinatos —que se conoce exacto—
 /// y los objetivos que tomó. Se hace así y no con una tabla porque Riot cambió
 /// estos valores en la temporada 2026 y volverá a cambiarlos; el ajuste se
 /// rehace con un comando.
 ///
-/// Dos validaciones del método: el coeficiente de las placas sale **117** y la
-/// documentación dice **120**, sin habérselo dicho al modelo; y controlar por el
+/// Tres validaciones del método: el coeficiente de las placas sale **116** y la
+/// documentación dice **120**, sin habérselo dicho al modelo; controlar por el
 /// minuto de partida —la renta pasiva crece— convirtió el coeficiente de los
-/// grubs de −11,8 (imposible) a +4,8.
+/// grubs de −11,8 (imposible) a positivo; y los valores **convergen**: entre
+/// 1.250 y 9.075 partidas las placas pasan de 116,9 a 116,4 y el barón de 821,7
+/// a 813,9. Ya no merece la pena más muestra para esto.
 ///
 /// Ojo con lo que significan: es **oro entregado en ese minuto**, así que para
 /// barón y dragón mezclan la recompensa directa con lo que sus mejoras generan
 /// justo después. Para valorar una jugada eso es defendible —el valor de un
 /// barón es lo que convierte— pero no son el precio de catálogo del objetivo.
 /// Cuando exista el modelo de probabilidad de victoria, esto se sustituye.
-pub const PESO_PLACA: f64 = 117.0;
-pub const PESO_DRAGON: f64 = 63.0;
-pub const PESO_BARON: f64 = 822.0;
-pub const PESO_HERALDO: f64 = 15.0;
-pub const PESO_GRUBS: f64 = 5.0;
+pub const PESO_PLACA: f64 = 116.0;
+pub const PESO_DRAGON: f64 = 85.0;
+pub const PESO_BARON: f64 = 814.0;
+pub const PESO_HERALDO: f64 = 30.0;
+pub const PESO_GRUBS: f64 = 9.0;
 
 /// Oro de una estructura según su tipo. Comparte tabla con `peso` para que el
 /// modelo de probabilidad de victoria y el reparto de crédito no se separen.
@@ -58,16 +60,16 @@ pub fn peso_estructura(building: Option<&str>, tower: Option<&str>) -> f64 {
 }
 
 mod peso {
-    pub const PLACA: f64 = 117.0;
-    pub const TORRE_EXTERIOR: f64 = 308.0;
-    pub const TORRE_INTERIOR: f64 = 219.0;
-    pub const TORRE_BASE: f64 = 248.0;
-    pub const TORRE_NEXO: f64 = 235.0;
-    pub const INHIBIDOR: f64 = 85.0;
-    pub const DRAGON: f64 = 63.0;
-    pub const BARON: f64 = 822.0;
-    pub const HERALDO: f64 = 15.0;
-    pub const GRUBS: f64 = 5.0;
+    pub const PLACA: f64 = 116.0;
+    pub const TORRE_EXTERIOR: f64 = 315.0;
+    pub const TORRE_INTERIOR: f64 = 215.0;
+    pub const TORRE_BASE: f64 = 238.0;
+    pub const TORRE_NEXO: f64 = 243.0;
+    pub const INHIBIDOR: f64 = 83.0;
+    pub const DRAGON: f64 = 85.0;
+    pub const BARON: f64 = 814.0;
+    pub const HERALDO: f64 = 30.0;
+    pub const GRUBS: f64 = 9.0;
 }
 
 /// Tiempo base de reaparición por nivel de campeón (1..18), en segundos.
@@ -321,10 +323,45 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
             if quienes.is_empty() {
                 continue; // Estructuras que caen solas, por esbirros.
             }
-            let parte = valor / quienes.len() as f64;
-            for pid in quienes {
-                if let Some(c) = credit.get_mut(&pid) {
-                    c.objective_gold += parte;
+
+            // Reparto entre los presentes, pesado por el daño que cada uno hizo
+            // a estructuras en toda la partida.
+            //
+            // No es tan bueno como el de los asesinatos —la timeline no dice
+            // quién pegó a ESTA torre, sólo el total de la partida— pero corrige
+            // el sesgo grande: a partes iguales, quien deja una torre al 10% y
+            // se va no cobra nada, y quien pasa a rematarla cobra lo mismo que
+            // quien la tiró. Es el mismo problema del último golpe.
+            //
+            // Para monstruos épicos se sigue repartiendo a partes iguales: ahí
+            // `damageDealtToObjectives` mezcla jungla neutral con épicos y no
+            // discrimina nada útil.
+            let estructura = matches!(
+                ev.event_type.as_str(),
+                "BUILDING_KILL" | "TURRET_PLATE_DESTROYED"
+            );
+            let pesos: Vec<f64> = quienes
+                .iter()
+                .map(|pid| {
+                    if !estructura {
+                        return 1.0;
+                    }
+                    participants
+                        .get((*pid - 1) as usize)
+                        .map(|p| p.damageDealtToTurrets as f64)
+                        .unwrap_or(0.0)
+                })
+                .collect();
+            let total: f64 = pesos.iter().sum();
+            for (pid, peso) in quienes.iter().zip(pesos.iter()) {
+                // Si nadie registró daño a torres (o son épicos), a partes iguales.
+                let frac = if total > 0.0 {
+                    peso / total
+                } else {
+                    1.0 / quienes.len() as f64
+                };
+                if let Some(c) = credit.get_mut(pid) {
+                    c.objective_gold += valor * frac;
                 }
             }
         }

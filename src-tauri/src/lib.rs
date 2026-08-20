@@ -8,6 +8,7 @@ mod cv_analyzer;
 mod app_update;
 mod dataset_generator;
 mod gank;
+mod minimap;
 mod obs_client;
 mod occupancy;
 mod overlay;
@@ -30,6 +31,7 @@ use commands::{
     get_match_attribution,
     check_riot_key,
     get_match_pressure,
+    process_match_minimap,
     spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
     update_error_note,
     upload_clip, get_disk_usage, ActiveMatchState,
@@ -194,6 +196,7 @@ pub fn run() {
             get_match_attribution,
             check_riot_key,
             get_match_pressure,
+            process_match_minimap,
             get_audio_status,
             start_manual_recording,
             stop_manual_recording,

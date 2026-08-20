@@ -203,7 +203,17 @@ export interface PressureWindow {
   inhibs_elsewhere: number;
   plates_elsewhere: number;
   epics_elsewhere: number;
+  /** Si los limites se afinaron con el video. Si es false, la duracion es una
+   *  cota inferior: la API solo da una posicion por minuto. */
+  from_video: boolean;
 }
+
+// Pide que se procese el video de la partida para sacar posiciones densas del
+// minimapa (dos por segundo, frente a una por minuto de la API). Vuelve
+// enseguida: el trabajo va por detras y tarda ~2 min.
+export const processMatchMinimap = async (matchId: string): Promise<void> => {
+  return await invoke<void>("process_match_minimap", { matchId });
+};
 
 export const getMatchPressure = async (matchId: string): Promise<PressureWindow[]> => {
   return await invoke<PressureWindow[]>("get_match_pressure", { matchId });

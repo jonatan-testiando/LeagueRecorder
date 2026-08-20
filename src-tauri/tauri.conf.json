@@ -40,6 +40,8 @@
       "obs-runtime": "obs-runtime",
       "../python_scripts/analyzer.py": "python_scripts/analyzer.py",
       "../python_scripts/camera_snaps.py": "python_scripts/camera_snaps.py",
+      "../python_scripts/minimap_positions.py": "python_scripts/minimap_positions.py",
+      "../models/minimap_icons.onnx": "models/minimap_icons.onnx",
       "../assets/cursors": "assets/cursors"
     },
     "icon": [

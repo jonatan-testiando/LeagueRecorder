@@ -10,7 +10,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, saveMatchComments, syncMatchNow, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
+import { exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, processMatchMinimap, saveMatchComments, syncMatchNow, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
 import { GoldXpChart } from "./GoldXpChart";
 import { TacticalMap } from "./TacticalMap";
@@ -460,6 +460,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       .catch((e) => { if (vivo) setCreditsErr(String(e)); });
     // El error se ENSENA, no se traga: tragarselo hacia que un fallo del comando
     // y "esta partida no tuvo tramos" fueran indistinguibles.
+    // Se pide procesar el video en cuanto se abre Impacto. Si ya esta hecho no
+    // hace nada; si no, deja las posiciones listas para la proxima vez. No se
+    // espera: tarda ~2 min y no hay nada que mostrar mientras.
+    processMatchMinimap(match.id).catch(() => {});
     getMatchPressure(match.id)
       .then((ws) => { if (vivo) setPressure(ws); })
       .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
@@ -1478,7 +1482,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       {t("Kill gold as the scoreboard hands it out (last hit) versus how it splits by damage actually dealt.")}
                     </p>
                     <div className="insp__legend u-label">
-                      <span>{t("player")}</span><span>{t("gap")}</span><span>{t("gold")}</span><span>{t("vs role")}</span>
+                      <span>{t("player")}</span><span>{t("gap")}</span><span>{t("win %")}</span><span>{t("vs role")}</span>
                     </div>
                     {/* Separado por bandos: la lista de los 10 mezclados ordena
                         bien pero no se puede leer como rendimiento si no sabes
@@ -1523,8 +1527,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                                       {c.credit_gap >= 0 ? "+" : ""}{Math.round(c.credit_gap)}
                                     </span>
                                     <span className="u-metric insp__playerNum"
-                                      title={`${t("objectives")}: ${Math.round(c.objective_gold)}`}>
-                                      {Math.round(c.total_value)}
+                                      style={{ color: c.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
+                                      title={`${t("gold")}: ${Math.round(c.total_value)} (${t("objectives")}: ${Math.round(c.objective_gold)})`}>
+                                      {c.wpa >= 0 ? "+" : ""}{(c.wpa * 100).toFixed(1)}
                                     </span>
                                     <span className="u-metric insp__playerNum"
                                       style={{ color: c.role_percentile >= 50 ? "var(--win)" : "var(--loss)" }}
@@ -1603,7 +1608,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       >
                         <span className="u-metric">{formatTime(w.start)}</span>
                         <span className="insp__pressWhat">
-                          {w.max_enemies.toFixed(1)} {t("enemies on you")} · {Math.round(w.end - w.start)}s
+                          {w.max_enemies.toFixed(1)} {t("enemies on you")} ·{" "}
+                          {/* El "~" marca que la duracion es una cota inferior:
+                              sin video, entre minutos la API no dice nada. */}
+                          <span title={w.from_video ? t("Confirmed frame by frame in the video") : t("Lower bound: the API only gives one position per minute")}>
+                            {w.from_video ? "" : "~"}{Math.round(w.end - w.start)}s
+                          </span>
                           {w.died && ` · ${t("you die")}`}
                         </span>
                         <span className="insp__pressGain">

@@ -329,10 +329,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           match.impact_rank
                             ? <span style={{ color: match.impact_rank === 1 ? "var(--win)" : match.impact_rank >= 8 ? "var(--loss)" : undefined }}>
                                 {match.impact_rank === 1 ? "MVP" : `${match.impact_rank}º`}
+                                {match.impact_percentile != null && (
+                                  <span className="u-meta"> · {Math.round(match.impact_percentile)}</span>
+                                )}
                               </span>
                             : "—"
                         }
-                        label={t("of 10")}
+                        label={t("rank · score")}
                         title={
                           match.impact_percentile != null
                             ? `${t("vs role")}: ${Math.round(match.impact_percentile)}`

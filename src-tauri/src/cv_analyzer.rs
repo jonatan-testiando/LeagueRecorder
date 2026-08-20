@@ -306,6 +306,7 @@ pub async fn process_vod(
         lane_result: None,
         impact_rank: None,
         impact_percentile: None,
+        tier_bucket: None,
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),

@@ -170,6 +170,8 @@ const ES: Record<string, string> = {
   "Key saved and working": "Clave guardada y funcionando",
   "The key is not valid": "La clave no es válida",
   "Pressure you absorbed": "Presión que absorbiste",
+  "Confirmed frame by frame in the video": "Confirmado cuadro a cuadro en el vídeo",
+  "Lower bound: the API only gives one position per minute": "Cota inferior: la API solo da una posición por minuto",
   "No stretches detected in this game.": "No se detectó ningún tramo en esta partida.",
   "Stretches where more enemies were on you than allies. What your team took elsewhere is what your presence bought.":
     "Tramos con más rivales encima de ti que aliados. Lo que tu equipo se llevó en otra zona es lo que compró tu presencia.",
@@ -187,6 +189,7 @@ const ES: Record<string, string> = {
   "win %": "% victoria",
   "vs role": "vs rol",
   "of 10": "de 10",
+  "rank · score": "puesto · nota",
   "Open the game to compute it": "Abre la partida para calcularlo",
   "total": "total",
   "Your team": "Tu equipo",

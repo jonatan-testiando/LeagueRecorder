@@ -217,6 +217,14 @@ pub struct MatchMetadata {
     /// Percentil de tu WPA dentro de tu rol, de 0 a 100. Ver `crate::baselines`.
     #[serde(default)]
     pub impact_percentile: Option<f64>,
+    /// Tramo de rango en que se jugó: "bajo", "medio" o "alto".
+    ///
+    /// Hace falta para comparar contra el baremo correcto — el percentil de un
+    /// support cambia según el nivel de la partida. Se pide una vez al
+    /// sincronizar y se guarda, porque el rango del jugador puede cambiar
+    /// después y lo que importa es el que tenía al jugarla.
+    #[serde(default)]
+    pub tier_bucket: Option<String>,
     /// Marcadores de eventos para la barra del reproductor de vídeo
     #[serde(default)]
     pub timeline_markers: Vec<TimelineMarker>,
@@ -1087,7 +1095,9 @@ mod realineado_tests {
         sin_game_end.events.retain(|e| e.r#type != "GameEnd");
         sin_game_end.events.push(MatchEvent::plain(
             "GameEnd",
-            None,
+            // El subtype es lo que lo marca como de respaldo; la descripción no,
+            // que cambia de idioma. Es como lo crea `commands.rs`.
+            Some("recording"),
             2595.0,
             "Recording finished".to_string(),
         ));

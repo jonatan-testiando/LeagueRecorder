@@ -150,13 +150,20 @@ def ruta_partida(out, mid):
     return os.path.join(sub, f"{mid}.json.gz")
 
 
-def sembrar(api, db, por_division):
-    """Mete puuids de todos los rangos, para que el corpus no sea de un solo elo."""
+def sembrar(api, db, por_division, solo_tiers=None):
+    """Mete puuids de todos los rangos, para que el corpus no sea de un solo elo.
+
+    Con `solo_tiers` se siembra únicamente en esos rangos. Hace falta porque el
+    rastreo, aunque se siembre por igual, **se desequilibra solo**: la frontera
+    crece siguiendo a los participantes de cada partida, y hay muchísima más
+    gente en rango bajo. Medido sobre el corpus: 16.277 muestras por rol en el
+    tramo bajo frente a 852 en el alto.
+    """
     ya = db.execute("SELECT COUNT(*) FROM jugadores").fetchone()[0]
     if ya > 0:
         log(f"semilla ya puesta ({ya} jugadores)")
         return
-    for tier in TIERS:
+    for tier in (solo_tiers or TIERS):
         # Master y por encima no tienen divisiones reales: todo cae en I.
         divs = ["I"] if tier in ("MASTER", "GRANDMASTER", "CHALLENGER") else DIVISIONES
         for div in divs:
@@ -166,7 +173,7 @@ def sembrar(api, db, por_division):
             db.commit()
             log(f"  semilla {tier} {div}: {len(puuids)} jugadores")
     total = db.execute("SELECT COUNT(*) FROM jugadores").fetchone()[0]
-    log(f"semilla lista: {total} jugadores de {len(TIERS)} rangos")
+    log(f"semilla lista: {total} jugadores de {len(solo_tiers or TIERS)} rangos")
 
 
 def guardar(out, mid, partida, timeline):
@@ -174,7 +181,7 @@ def guardar(out, mid, partida, timeline):
         json.dump({"match": json.loads(partida), "timeline": json.loads(timeline)}, f)
 
 
-def rastrear(api, db, out, objetivo):
+def rastrear(api, db, out, objetivo, cerrado=False):
     guardadas = db.execute("SELECT COUNT(*) FROM partidas WHERE guardada=1").fetchone()[0]
     log(f"arrancando en {guardadas}/{objetivo} partidas")
     t0, base = time.time(), guardadas
@@ -207,8 +214,15 @@ def rastrear(api, db, out, objetivo):
 
             # Los participantes alimentan la frontera: así la muestra se abre
             # sola más allá del rango sembrado.
-            db.executemany("INSERT OR IGNORE INTO jugadores(puuid) VALUES (?)",
-                           [(p["puuid"],) for p in info["participants"]])
+            #
+            # En modo `cerrado` no: la frontera se queda en los sembrados. Es lo
+            # que permite llenar un rango concreto — al abrirla, la muestra cae
+            # hacia donde hay más gente, que siempre es más abajo. En rango alto
+            # las diez personas de una partida son de rango alto, así que no
+            # hace falta comprobarlo con una petición extra por jugador.
+            if not cerrado:
+                db.executemany("INSERT OR IGNORE INTO jugadores(puuid) VALUES (?)",
+                               [(p["puuid"],) for p in info["participants"]])
 
             if guardadas % 25 == 0:
                 db.commit()
@@ -235,6 +249,12 @@ def main():
                     help="sólo partidas de los últimos N días (0 = sin límite)")
     ap.add_argument("--margen", type=float, default=0.2,
                     help="fracción de cuota que se deja libre para la app")
+    ap.add_argument("--solo-tiers", default="",
+                    help="sembrar sólo en estos rangos, separados por comas "
+                         "(p.ej. MASTER,GRANDMASTER,CHALLENGER)")
+    ap.add_argument("--cerrado", action="store_true",
+                    help="no ampliar la frontera con los participantes; sólo los "
+                         "jugadores sembrados. Úsalo con --solo-tiers")
     a = ap.parse_args()
     if not a.key:
         raise SystemExit("Falta --key (o la variable RIOT_KEY)")
@@ -245,8 +265,9 @@ def main():
     api = Api(a.key, a.plataforma, a.region, a.margen, desde)
     db = abrir_estado(a.out)
     try:
-        sembrar(api, db, a.por_division)
-        rastrear(api, db, a.out, a.target)
+        solo = [t.strip().upper() for t in a.solo_tiers.split(",") if t.strip()]
+        sembrar(api, db, a.por_division, solo or None)
+        rastrear(api, db, a.out, a.target, a.cerrado)
     except KeyboardInterrupt:
         log("interrumpido; el estado queda guardado, relánzalo igual para seguir")
     finally:

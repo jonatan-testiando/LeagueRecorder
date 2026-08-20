@@ -153,6 +153,17 @@ pub async fn get_match_attribution(
     crate::riot_api::attribution_for(&match_id).await
 }
 
+/// Procesa el vídeo de una partida para sacar posiciones densas del minimapa.
+///
+/// Devuelve enseguida: el trabajo (unos 2 min) va en un hilo aparte porque no
+/// hay nada que esperar — cuando termine, el fichero estará ahí y el análisis lo
+/// usará la próxima vez que se pida.
+#[tauri::command]
+pub async fn process_match_minimap(app: tauri::AppHandle, match_id: String) -> Result<(), String> {
+    crate::minimap::spawn_processing(&app, &match_id);
+    Ok(())
+}
+
 /// Tramos en los que un jugador tuvo más rivales encima que aliados, con lo que
 /// su equipo consiguió lejos de allí mientras tanto. Ver `crate::pressure`.
 /// Tiempos en el eje del vídeo.
@@ -284,6 +295,7 @@ pub async fn stop_manual_recording(
             lane_result: None,
             impact_rank: None,
             impact_percentile: None,
+            tier_bucket: None,
             timeline_markers: Vec::new(),
             minute_frames: Vec::new(),
             comments: Vec::new(),
@@ -803,6 +815,7 @@ async fn finalize_match(
         lane_result: None,
         impact_rank: None,
         impact_percentile: None,
+        tier_bucket: None,
         timeline_markers: Vec::new(),
         minute_frames: Vec::new(),
         comments: Vec::new(),

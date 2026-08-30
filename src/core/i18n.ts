@@ -43,6 +43,7 @@ const ES: Record<string, string> = {
   "Clear filters": "Quitar filtros",
   "today": "hoy",
   "yesterday": "ayer",
+  "{d}d ago": "hace {d}d",
   "game": "partida",
   "games": "partidas",
   "victory": "victoria",
@@ -192,6 +193,27 @@ const ES: Record<string, string> = {
   "rank · score": "puesto · nota",
   "Open the game to compute it": "Abre la partida para calcularlo",
   "total": "total",
+  "kills": "asesinatos",
+  "structures": "estructuras",
+  "Your impact": "Tu impacto",
+  "Win probability you added, and where it came from. The four parts add up to your total.":
+    "La probabilidad de victoria que aportaste, y de dónde salió. Las cuatro partes suman tu total.",
+
+  // ------------------------------------------------- procesado del vídeo
+  "Video analysis": "Análisis del vídeo",
+  "Positions read from the video: the stretches below are measured, not estimated.":
+    "Posiciones leídas del vídeo: los tramos de abajo están medidos, no estimados.",
+  "Not available for this game: it needs the video, the detector and the Riot data.":
+    "No disponible en esta partida: hacen falta el vídeo, el detector y los datos de Riot.",
+  "Without it each stretch is a lower bound: the API only gives one position per minute. Takes about two minutes and can be stopped; what it has done is kept.":
+    "Sin él cada tramo es una cota inferior: la API solo da una posición por minuto. Tarda unos dos minutos y se puede parar; lo que lleve hecho no se pierde.",
+  "Analyze the video": "Analizar el vídeo",
+  "Resume analysis": "Reanudar el análisis",
+  "reading the minimap, about two minutes": "leyendo el minimapa, unos dos minutos",
+  "The video analysis failed. Check the log for details.":
+    "El análisis del vídeo falló. El motivo está en el registro.",
+  "Stop": "Parar",
+
   "Your team": "Tu equipo",
   "Enemy team": "Equipo rival",
   "Real credit": "Crédito real",
@@ -210,6 +232,8 @@ const ES: Record<string, string> = {
   "Version {v} installed.": "Versión {v} instalada.",
   "Check for Updates": "Buscar actualizaciones",
   "Checking…": "Comprobando…",
+  "Checking for updates…": "Buscando actualizaciones…",
+  "MVP": "MVP",
   "Starting download…": "Empezando la descarga…",
   "Downloading…": "Descargando…",
   "Update ready": "Actualización lista",

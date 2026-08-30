@@ -38,10 +38,35 @@ pub fn ffmpeg(app: &tauri::AppHandle) -> String {
 /// tenía en el PATH. `ffmpeg -i` sin salida termina con código 1; es lo esperado,
 /// solo nos interesa stderr.
 pub fn video_dimensions(ffmpeg_exe: &str, path: &str) -> Option<(f64, f64)> {
+    video_info(ffmpeg_exe, path).map(|(w, h, _)| (w, h))
+}
+
+/// Resolución y duración de una sola pasada.
+///
+/// La cabecera trae las dos cosas, así que preguntarlas por separado costaba
+/// dos lecturas del fichero. La duración es `Option` porque hay contenedores
+/// que no la declaran; la resolución, si falta, es que no hay vídeo que leer.
+pub fn video_info(ffmpeg_exe: &str, path: &str) -> Option<(f64, f64, Option<f64>)> {
     let out = hide_console(std::process::Command::new(ffmpeg_exe).args(["-hide_banner", "-i", path]))
         .output()
         .ok()?;
-    parse_dimensions(&String::from_utf8_lossy(&out.stderr))
+    let texto = String::from_utf8_lossy(&out.stderr);
+    let (w, h) = parse_dimensions(&texto)?;
+    Some((w, h, parse_duration(&texto)))
+}
+
+/// Segundos de la línea `Duration: HH:MM:SS.cc` de la cabecera.
+fn parse_duration(text: &str) -> Option<f64> {
+    let resto = text.split("Duration:").nth(1)?.trim_start();
+    let reloj = resto.split(',').next()?.trim();
+    if reloj.starts_with("N/A") {
+        return None;
+    }
+    let mut partes = reloj.split(':');
+    let h: f64 = partes.next()?.trim().parse().ok()?;
+    let m: f64 = partes.next()?.trim().parse().ok()?;
+    let s: f64 = partes.next()?.trim().parse().ok()?;
+    Some(h * 3600.0 + m * 60.0 + s)
 }
 
 fn parse_dimensions(text: &str) -> Option<(f64, f64)> {
@@ -67,7 +92,7 @@ fn parse_dimensions(text: &str) -> Option<(f64, f64)> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_dimensions;
+    use super::{parse_dimensions, parse_duration};
 
     // Salida real de `ffmpeg -i` sobre una grabación de la app y sobre un VOD
     // importado. Lo delicado es que el tag de códec ("0x31637661") y el índice de
@@ -79,6 +104,14 @@ mod tests {
     fn lee_la_resolucion_ignorando_el_tag_de_codec() {
         assert_eq!(parse_dimensions(REC_1440P), Some((2560.0, 1440.0)));
         assert_eq!(parse_dimensions(VOD_1080P), Some((1920.0, 1080.0)));
+    }
+
+    #[test]
+    fn lee_la_duracion_de_la_cabecera() {
+        assert_eq!(parse_duration(REC_1440P), Some(25.38));
+        // Un VOD sin línea de duración no debe inventarse una.
+        assert_eq!(parse_duration(VOD_1080P), None);
+        assert_eq!(parse_duration("  Duration: N/A, bitrate: N/A"), None);
     }
 
     #[test]

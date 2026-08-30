@@ -61,6 +61,43 @@ pub(crate) fn python_command(app: &tauri::AppHandle) -> String {
     "python".to_string()
 }
 
+/// Raíz donde vive el entorno de entreno (`.venv-train`), configurable por env.
+///
+/// Es una ruta de la máquina de desarrollo: en cualquier instalación normal no
+/// existe, y quien la use tiene que degradar solo. Ver `gpu_python`.
+pub(crate) fn gpu_root() -> String {
+    std::env::var("LEAGUEREC_YOLO_ROOT")
+        .unwrap_or_else(|_| r"C:\Users\Alejandro\Documents\LeagueRecorder".to_string())
+}
+
+/// El Python del entorno de entreno, que trae `onnxruntime-gpu`, si existe.
+///
+/// Lo comparten el analizador de VOD y el detector de minimapa: los dos mueven
+/// modelos ONNX y los dos van varias veces más rápido por GPU, pero **ninguno
+/// puede exigirlo**. `None` significa "usa el runtime empaquetado", que es lo
+/// normal fuera de esta máquina.
+pub(crate) fn gpu_python() -> Option<std::path::PathBuf> {
+    let p = Path::new(&gpu_root())
+        .join(".venv-train")
+        .join("Scripts")
+        .join("python.exe");
+    p.exists().then_some(p)
+}
+
+/// Dónde están las DLL de CUDA (las trae torch dentro del venv de entreno).
+///
+/// Hay que pasárselo a Python en `VOD_CUDA_DLL_DIR` o **el proveedor CUDA no
+/// carga y `onnxruntime` sigue por CPU sin decir nada**: la sesión se crea
+/// igual. Es un fallo caro de ver, porque sólo se nota en el reloj.
+pub(crate) fn torch_lib_dir() -> std::path::PathBuf {
+    Path::new(&gpu_root())
+        .join(".venv-train")
+        .join("Lib")
+        .join("site-packages")
+        .join("torch")
+        .join("lib")
+}
+
 pub struct AnalyzerState {
     pub is_running: AtomicBool,
     /// PID del proceso de Python en curso (0 = ninguno), para poder cancelarlo.
@@ -146,13 +183,11 @@ pub async fn process_vod(
     // Si están el venv de entreno (con onnxruntime-gpu) + el script YOLO + el modelo,
     // usamos el DETECTOR YOLO en GPU (mucho más rápido y más robusto). Si no, caemos
     // al analizador clásico (template matching CPU). Ruta configurable por env.
-    let yolo_root = std::env::var("LEAGUEREC_YOLO_ROOT")
-        .unwrap_or_else(|_| r"C:\Users\Alejandro\Documents\LeagueRecorder".to_string());
-    let yolo_py = Path::new(&yolo_root).join(".venv-train").join("Scripts").join("python.exe");
+    let yolo_root = gpu_root();
+    let yolo_py = gpu_python().unwrap_or_default();
     let yolo_script = Path::new(&yolo_root).join("python_scripts").join("yolo_backend.py");
     let yolo_model = Path::new(&yolo_root).join("models").join("cursor_multi_fp32.onnx");
-    let torch_lib = Path::new(&yolo_root)
-        .join(".venv-train").join("Lib").join("site-packages").join("torch").join("lib");
+    let torch_lib = torch_lib_dir();
     let use_yolo = yolo_py.exists() && yolo_script.exists() && yolo_model.exists();
 
     // Lanzamos el proceso de Python AQUÍ (cuerpo async) en vez de dentro del hilo

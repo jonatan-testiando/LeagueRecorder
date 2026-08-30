@@ -81,7 +81,9 @@ export interface ItemPurchase {
 
 export interface TimelineMarker {
   time: number; // segundos en el vídeo
-  event_type: 'kill' | 'death' | 'dragon' | 'herald' | 'tower' | 'plate' | 'gank_attempt' | string;
+  // 'assist' es posterior: las partidas analizadas antes lo guardan como 'kill'
+  // y solo lo delata la descripción ("Asistencia"). Ver core/matchEvents.ts.
+  event_type: 'kill' | 'assist' | 'death' | 'dragon' | 'herald' | 'tower' | 'plate' | 'gank_attempt' | string;
   description: string;
   position_x?: number;
   position_y?: number;

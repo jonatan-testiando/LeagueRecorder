@@ -165,6 +165,13 @@ export interface PlayerCredit {
   /** Probabilidad de victoria aportada. La moneda comun: sabe que una torre en
    *  el minuto 30 vale mas que la misma torre en el 10. */
   wpa: number;
+  /** De donde salio ese WPA. Las cuatro partes suman `wpa`: un puesto no dice
+   *  nada, pero "aportaste mucho y moriste mucho" si. */
+  wpa_kills: number;
+  wpa_objectives: number;
+  wpa_structures: number;
+  /** Lo que costaron tus muertes. Nunca positivo. */
+  wpa_deaths: number;
   /** Puesto: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY. */
   role: string;
   /** Percentil de su WPA dentro de su rol (0-100). El unico numero comparable
@@ -213,6 +220,24 @@ export interface PressureWindow {
 // enseguida: el trabajo va por detras y tarda ~2 min.
 export const processMatchMinimap = async (matchId: string): Promise<void> => {
   return await invoke<void>("process_match_minimap", { matchId });
+};
+
+/** En que punto esta el procesado del video de una partida. */
+export type MinimapState = "hecha" | "en_curso" | "falta" | "no_disponible";
+
+export interface MinimapStatus {
+  state: MinimapState;
+  /** 0-100 de lo ya calculado en pasadas anteriores, si quedo a medias. */
+  saved_progress: number | null;
+}
+
+export const getMinimapStatus = async (matchId: string): Promise<MinimapStatus> => {
+  return await invoke<MinimapStatus>("get_minimap_status", { matchId });
+};
+
+/** Para el procesado. Lo calculado se conserva y la siguiente pasada lo retoma. */
+export const cancelMatchMinimap = async (matchId: string): Promise<void> => {
+  return await invoke<void>("cancel_match_minimap", { matchId });
 };
 
 export const getMatchPressure = async (matchId: string): Promise<PressureWindow[]> => {

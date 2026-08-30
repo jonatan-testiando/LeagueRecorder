@@ -141,6 +141,13 @@ pub struct PlayerCredit {
     /// Es la moneda común: a diferencia del oro, sabe que una torre en el
     /// minuto 30 vale más que la misma torre en el 10. Ver `crate::winprob`.
     pub wpa: f64,
+    /// De dónde salió ese WPA. Las cuatro partes suman `wpa`. Ver
+    /// `crate::winprob::Breakdown`.
+    pub wpa_kills: f64,
+    pub wpa_objectives: f64,
+    pub wpa_structures: f64,
+    /// Lo que costaron sus muertes, en probabilidad de victoria. Nunca positivo.
+    pub wpa_deaths: f64,
     /// Puesto que jugó (`TOP`, `JUNGLE`, `MIDDLE`, `BOTTOM`, `UTILITY`).
     pub role: String,
     /// Percentil de su WPA **dentro de su rol**, de 0 a 100. Es el único número
@@ -368,10 +375,14 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
     }
 
     // Probabilidad de victoria aportada, con el mismo reparto por daño real.
-    let wpa = crate::winprob::per_player(&crate::winprob::plays(tl, participants));
+    let wpa = crate::winprob::per_player_breakdown(&crate::winprob::plays(tl, participants));
     for (pid, v) in wpa {
         if let Some(c) = credit.get_mut(&pid) {
-            c.wpa = v;
+            c.wpa = v.total();
+            c.wpa_kills = v.kills;
+            c.wpa_objectives = v.objectives;
+            c.wpa_structures = v.structures;
+            c.wpa_deaths = v.deaths;
         }
     }
 

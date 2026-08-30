@@ -461,25 +461,154 @@ fn reparto(
         .collect()
 }
 
-/// WPA acumulado por jugador en toda la partida.
-pub fn per_player(plays: &[Play]) -> std::collections::HashMap<i32, f64> {
-    let mut out = std::collections::HashMap::new();
+/// De dónde salió el WPA de un jugador.
+///
+/// El total solo dice "eres el cuarto". Partido, dice *por qué*: dos jugadores
+/// con el mismo número pueden ser uno que aportó mucho y murió mucho, y otro que
+/// no hizo ni ruido. Es la diferencia entre un puesto y algo que revisar.
+///
+/// Las cuatro partes suman el total exacto, sin residuo.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct Breakdown {
+    /// Su parte de los asesinatos, repartida por el daño que puso.
+    pub kills: f64,
+    /// Dragones, barón, heraldo y grubs.
+    pub objectives: f64,
+    /// Torres, inhibidores y placas.
+    pub structures: f64,
+    /// Lo que costaron sus muertes. Siempre ≤ 0.
+    pub deaths: f64,
+}
+
+impl Breakdown {
+    pub fn total(&self) -> f64 {
+        self.kills + self.objectives + self.structures + self.deaths
+    }
+}
+
+/// WPA por jugador, desglosado por origen.
+pub fn per_player_breakdown(plays: &[Play]) -> std::collections::HashMap<i32, Breakdown> {
+    let mut out: std::collections::HashMap<i32, Breakdown> = std::collections::HashMap::new();
     for p in plays {
         for (pid, frac) in &p.shares {
-            *out.entry(*pid).or_insert(0.0) += p.wpa * frac;
+            let b = out.entry(*pid).or_default();
+            let v = p.wpa * frac;
+            match p.kind.as_str() {
+                "kill" => b.kills += v,
+                "tower" | "inhibitor" | "plate" => b.structures += v,
+                _ => b.objectives += v,
+            }
         }
         // Morir cuesta lo que la muerte le dio al rival. Se carga entera a quien
         // murió: es su evento, igual que el asesinato es de quien lo hizo.
         if let Some(v) = p.victim {
-            *out.entry(v).or_insert(0.0) -= p.wpa;
+            out.entry(v).or_default().deaths -= p.wpa;
         }
     }
     out
 }
 
+/// WPA acumulado por jugador en toda la partida.
+///
+/// Es la suma del desglose, y se calcula así a propósito: si se sumaran por
+/// separado, cualquier retoque en uno dejaría el otro contando otra cosa.
+///
+/// Sólo la usan los baremos y los tests: la app pide el desglose, que trae esto
+/// dentro. De ahí el `cfg(test)`.
+#[cfg(test)]
+pub fn per_player(plays: &[Play]) -> std::collections::HashMap<i32, f64> {
+    per_player_breakdown(plays)
+        .into_iter()
+        .map(|(pid, b)| (pid, b.total()))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn jugada(kind: &str, wpa: f64, shares: &[(i32, f64)], victim: Option<i32>) -> Play {
+        Play {
+            time: 600.0,
+            kind: kind.to_string(),
+            team_id: 100,
+            before: 0.5,
+            after: 0.5 + wpa,
+            wpa,
+            shares: shares.to_vec(),
+            victim,
+        }
+    }
+
+    /// El desglose no es una vista aparte: es de donde sale el total. Si las
+    /// cuatro partes dejaran de sumarlo, la cabecera de Impacto diría una cosa y
+    /// las barras de debajo otra.
+    #[test]
+    fn las_partes_del_desglose_suman_el_total() {
+        let jugadas = vec![
+            jugada("kill", 0.04, &[(1, 0.7), (2, 0.3)], Some(6)),
+            jugada("dragon", 0.03, &[(1, 0.5), (3, 0.5)], None),
+            jugada("tower", 0.02, &[(1, 1.0)], None),
+            jugada("plate", 0.01, &[(2, 1.0)], None),
+            jugada("baron", 0.05, &[(3, 1.0)], None),
+        ];
+        let desglose = per_player_breakdown(&jugadas);
+        let total = per_player(&jugadas);
+        for (pid, b) in &desglose {
+            assert!(
+                (b.total() - total[pid]).abs() < 1e-9,
+                "el desglose de {pid} no suma su total"
+            );
+        }
+
+        let yo = &desglose[&1];
+        assert!((yo.kills - 0.028).abs() < 1e-9, "kills: {}", yo.kills);
+        assert!((yo.objectives - 0.015).abs() < 1e-9, "objetivos: {}", yo.objectives);
+        assert!((yo.structures - 0.02).abs() < 1e-9, "estructuras: {}", yo.structures);
+        assert_eq!(yo.deaths, 0.0, "no murió: no debe restarle nada");
+    }
+
+    /// Morir es lo único que resta, y resta entero: es el evento de quien muere,
+    /// igual que el asesinato es de quien lo hace. Sin esto, quien alimentaba sin
+    /// parar salía en positivo.
+    #[test]
+    fn morir_resta_y_se_carga_a_quien_murio() {
+        let jugadas = vec![jugada("kill", 0.06, &[(1, 1.0)], Some(7))];
+        let d = per_player_breakdown(&jugadas);
+        assert!((d[&7].deaths + 0.06).abs() < 1e-9);
+        assert_eq!(d[&7].kills, 0.0);
+        assert!(d[&7].total() < 0.0);
+        assert!(d[&1].total() > 0.0);
+    }
+
+    /// Las placas cuentan como estructura, no como objetivo: si cayeran en el
+    /// mismo saco que el barón, "de dónde salió tu impacto" mezclaría empujar
+    /// una línea con robar un objetivo.
+    #[test]
+    fn cada_tipo_de_jugada_cae_en_su_saco() {
+        let casos = [
+            ("kill", "kills"),
+            ("tower", "estructuras"),
+            ("inhibitor", "estructuras"),
+            ("plate", "estructuras"),
+            ("dragon", "objetivos"),
+            ("baron", "objetivos"),
+            ("herald", "objetivos"),
+            ("grubs", "objetivos"),
+        ];
+        for (kind, saco) in casos {
+            let d = per_player_breakdown(&[jugada(kind, 0.02, &[(1, 1.0)], None)]);
+            let b = d[&1];
+            let real = if b.kills > 0.0 {
+                "kills"
+            } else if b.structures > 0.0 {
+                "estructuras"
+            } else {
+                "objetivos"
+            };
+            assert_eq!(real, saco, "{kind} fue a parar a {real}");
+        }
+    }
 
     #[test]
     fn una_ventaja_de_oro_sube_la_probabilidad() {

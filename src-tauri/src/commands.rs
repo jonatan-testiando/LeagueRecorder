@@ -155,12 +155,42 @@ pub async fn get_match_attribution(
 
 /// Procesa el vídeo de una partida para sacar posiciones densas del minimapa.
 ///
-/// Devuelve enseguida: el trabajo (unos 2 min) va en un hilo aparte porque no
-/// hay nada que esperar — cuando termine, el fichero estará ahí y el análisis lo
-/// usará la próxima vez que se pida.
+/// Devuelve enseguida: el trabajo (unos 2 min) va en un hilo aparte y avisa por
+/// el evento `minimap_progress` con `(match_id, porcentaje)`. El −1 significa
+/// que terminó mal.
+///
+/// **Lo pide el usuario, no la navegación.** Esto se llamaba solo al abrir la
+/// pestaña de Impacto y, como el hijo salía con consola propia, cerrar esa
+/// ventana negra mataba el trabajo antes de que escribiera nada.
 #[tauri::command]
 pub async fn process_match_minimap(app: tauri::AppHandle, match_id: String) -> Result<(), String> {
-    crate::minimap::spawn_processing(&app, &match_id);
+    crate::minimap::spawn_processing(&app, &match_id)
+}
+
+/// En qué punto está ese procesado, y cuánto hay hecho de una pasada anterior.
+#[derive(serde::Serialize)]
+pub struct MinimapStatus {
+    pub state: crate::minimap::Estado,
+    /// 0-100 de lo ya guardado, si quedó trabajo a medias.
+    pub saved_progress: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn get_minimap_status(
+    app: tauri::AppHandle,
+    match_id: String,
+) -> Result<MinimapStatus, String> {
+    Ok(MinimapStatus {
+        state: crate::minimap::estado(&app, &match_id),
+        saved_progress: crate::minimap::avance_guardado(&match_id),
+    })
+}
+
+/// Para el procesado a medias. Lo calculado hasta ahora se conserva y la
+/// siguiente pasada lo retoma donde lo dejó.
+#[tauri::command]
+pub async fn cancel_match_minimap(match_id: String) -> Result<(), String> {
+    crate::minimap::cancelar(&match_id);
     Ok(())
 }
 

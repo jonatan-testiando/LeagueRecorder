@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase, TimelineMarker } from "../../../types";
+import { MatchMetadata, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
@@ -10,8 +10,9 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, processMatchMinimap, saveMatchComments, syncMatchNow, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
-import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary, fmtClock } from "../../training/api";
+import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type MinimapStatus, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
+import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
+import { clock } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
 import { TacticalMap } from "./TacticalMap";
 import { MapAwarenessWidget } from "./MapAwarenessWidget";
@@ -23,11 +24,12 @@ import { useDialog } from "../../../components/ui/DialogProvider";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
 import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
+import { individualEvents } from "../../../core/matchEvents";
+import { champIcon } from "../../../core/ddragon";
 import { useT } from "../../../core/LanguageProvider";
 import { styles } from "./videoPlayerStyles";
 import { mix } from "../../../core/color";
 import {
-  champIcon,
   itemIcon,
   DDRAGON_VER,
   streamUrl,
@@ -38,6 +40,16 @@ import {
 } from "./videoPlayerUtils";
 
 type LoadState = "loading" | "ready" | "error";
+
+// Geometría de los marcadores de la línea de tiempo. Dos filas: con una sola,
+// cualquier pelea de equipo obligaba a desplazar media docena de marcas.
+//
+// Las medidas están atadas al alto real del carril (56 px): las dos filas
+// apiladas lo llenan justo, sin invadir la cabecera ni la tira de saltos de
+// cámara del pie. Si el carril crece, esto se puede ensanchar.
+const MARK_SIZE = 22;        // diámetro del marcador, en px
+const MARK_PITCH = 24;       // separación mínima entre centros de una misma fila
+const MARK_ROWS = [12, 34];  // distancia al suelo de cada fila, en px
 
 interface VideoPlayerProps {
   match: MatchMetadata;
@@ -115,6 +127,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // Tramos de presion absorbida. Se piden junto al credito, en la misma pestana.
   const [pressure, setPressure] = useState<PressureWindow[] | null>(null);
   const [pressureErr, setPressureErr] = useState<string | null>(null);
+  // Procesado del minimapa: en que punto esta y como va la pasada actual.
+  const [mmStatus, setMmStatus] = useState<MinimapStatus | null>(null);
+  const [mmPct, setMmPct] = useState<number | null>(null);
+  const [mmErr, setMmErr] = useState<string | null>(null);
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
@@ -392,12 +408,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     return () => window.removeEventListener("keydown", onKey);
   }, [handlePlayPause, seekTo, goToAdjacentEvent]);
 
-  const formatTime = (seconds: number): string => {
-    if (!isFinite(seconds) || seconds < 0) seconds = 0;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
 
   // --- Comentarios (persistidos en el JSON de la partida vía backend) ---
   const persistComments = useCallback(
@@ -460,15 +470,79 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       .catch((e) => { if (vivo) setCreditsErr(String(e)); });
     // El error se ENSENA, no se traga: tragarselo hacia que un fallo del comando
     // y "esta partida no tuvo tramos" fueran indistinguibles.
-    // Se pide procesar el video en cuanto se abre Impacto. Si ya esta hecho no
-    // hace nada; si no, deja las posiciones listas para la proxima vez. No se
-    // espera: tarda ~2 min y no hay nada que mostrar mientras.
-    processMatchMinimap(match.id).catch(() => {});
+    //
+    // Aqui se lanzaba ADEMAS el procesado del video (dos minutos de Python) solo
+    // por entrar en la pestana. Salia con consola propia -la ventana negra- y
+    // cerrarla mataba el trabajo antes de que escribiera nada, asi que a la
+    // siguiente visita vuelta a empezar. Ahora se pide desde el panel.
     getMatchPressure(match.id)
       .then((ws) => { if (vivo) setPressure(ws); })
       .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
     return () => { vivo = false; };
   }, [tab, match.id, match.is_vod]);
+
+  // Estado del procesado del video. Se consulta al abrir Impacto (y al cambiar
+  // de partida) y se mantiene al dia con el evento de progreso del backend.
+  useEffect(() => {
+    if (tab !== "impact" || match.is_vod) return;
+    let vivo = true;
+    setMmErr(null);
+    getMinimapStatus(match.id)
+      .then((st) => {
+        if (!vivo) return;
+        setMmStatus(st);
+        // Si quedo trabajo a medias, la barra arranca donde se quedo: lo hecho
+        // no se repite, y empezar de cero haria pensar que si.
+        setMmPct(st.state === "en_curso" ? st.saved_progress ?? 0 : null);
+      })
+      .catch(() => { if (vivo) setMmStatus(null); });
+    return () => { vivo = false; };
+  }, [tab, match.id, match.is_vod]);
+
+  useEffect(() => {
+    const un = listen<[string, number]>("minimap_progress", (e) => {
+      const [id, pct] = e.payload;
+      if (id !== match.id) return;
+      if (pct < 0) {
+        // -1 es "termino mal". Sin distinguirlo, el unico aviso de un fallo era
+        // una barra congelada a la mitad.
+        setMmPct(null);
+        setMmErr(t("The video analysis failed. Check the log for details."));
+        getMinimapStatus(match.id).then(setMmStatus).catch(() => {});
+        return;
+      }
+      setMmPct(pct);
+      if (pct >= 100) {
+        setMmPct(null);
+        getMinimapStatus(match.id).then(setMmStatus).catch(() => {});
+        // Los tramos se recalculan: ahora tienen el video detras y sus bordes
+        // dejan de ser una cota inferior.
+        getMatchPressure(match.id).then(setPressure).catch(() => {});
+      }
+    });
+    return () => { un.then((f) => f()).catch(() => {}); };
+  }, [match.id, t]);
+
+  const empezarMinimapa = async () => {
+    setMmErr(null);
+    setMmPct(mmStatus?.saved_progress ?? 0);
+    try {
+      await processMatchMinimap(match.id);
+      setMmStatus(await getMinimapStatus(match.id));
+    } catch (e) {
+      setMmPct(null);
+      setMmErr(String(e));
+    }
+  };
+
+  const pararMinimapa = async () => {
+    try {
+      await cancelMatchMinimap(match.id);
+    } finally {
+      setMmPct(null);
+      setMmStatus(await getMinimapStatus(match.id).catch(() => null));
+    }
+  };
 
   // --- Redimensionar el panel lateral arrastrando su borde izquierdo ---
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -486,7 +560,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     window.addEventListener("pointerup", onUp);
   };
 
-  const timedEvents = match.events.filter((ev) => ev.type !== "GameStart" && ev.type !== "GameEnd");
+  // Sin marcadores: la lista lateral describe los sucesos del directo (con actor y
+  // víctima). `individualEvents` quita los que duplican a otro (multikill, first blood).
+  const timedEvents = React.useMemo(() => individualEvents(match.events), [match.events]);
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // Marcas del eje temporal adaptadas a la duración real del vídeo (antes fijas a 30 min).
@@ -555,68 +631,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // Cerramos la línea hasta el borde inferior para rellenar el área bajo la curva de APM.
   const apmAreaPath = apmLinePath ? `${apmLinePath} L 100 100 L 0 100 Z` : "";
 
-  // Agrupamos eventos cercanos en el tiempo en un único marcador con badge de cantidad,
-  // para que no se solapen en la línea de tiempo (estilo Ascent).
-  const eventClusters = React.useMemo(() => {
-    if (!isFinite(duration) || duration <= 0) return [] as { events: MatchEvent[] }[];
+  // Una marca por suceso: se acabaron los grupos con contador. Un doble asesinato
+  // son dos kills, no una marca con un "2" encima, y lo mismo cada asistencia.
+  //
+  // Para que no se pisen: la segunda de dos marcas juntas sube a la fila de
+  // arriba, y solo cuando ni así caben se desplaza lo justo — con una guía que la
+  // ata a su instante real, porque el marcador puede mentir de sitio pero no de
+  // cuándo.
+  // La colocación de marcadores se hace en píxeles: el solapamiento es un hecho
+  // de pantalla, no de porcentaje, y depende de lo ancha que esté la ventana.
+  const [trackSize, setTrackSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = progressBarRef.current;
+    if (!el) return;
+    const measure = () => setTrackSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-    // Los marcadores de la Timeline de Riot repiten kills, muertes y objetivos que ya
-    // llegan por la API en directo (con mejor descripción): ahora que ambos van en el
-    // mismo eje de tiempo, se solaparían en la misma marca y contarían doble.
-    const alreadyLive = (tm: TimelineMarker) =>
-      match.events.some((ev) => {
-        if (Math.abs(ev.time - tm.time) > 6) return false;
-        switch (tm.event_type) {
-          case "kill": return ev.type === "ChampionKill" && ev.subtype !== "death";
-          case "death": return ev.type === "ChampionKill" && ev.subtype === "death";
-          case "dragon": return ev.type === "DragonKill";
-          case "herald": return ev.type === "HeraldKill" || ev.type === "BaronKill";
-          case "tower": return ev.type === "TowerKill";
-          default: return false;
-        }
-      });
-
-    const timelineEvents: MatchEvent[] = (match.timeline_markers ?? [])
-      // `gank_attempt` es materia prima del widget de ganks (una marca por minuto de
-      // presencia en línea), no un evento que pintar en la línea de tiempo.
-      .filter((tm) => tm.event_type !== "gank_attempt" && !alreadyLive(tm))
-      .map((tm) => {
-        let type = "ChampionKill";
-        let subtype: string | undefined = "kill";
-        if (tm.event_type === "kill") { type = "ChampionKill"; subtype = "kill"; }
-        else if (tm.event_type === "death") { type = "ChampionKill"; subtype = "death"; }
-        else if (tm.event_type === "dragon") { type = "DragonKill"; subtype = "ally"; }
-        else if (tm.event_type === "herald") { type = "HeraldKill"; subtype = "ally"; }
-        else if (tm.event_type === "tower") { type = "TowerKill"; subtype = "ally"; }
-        else if (tm.event_type === "plate") { type = "TowerKill"; subtype = "plate"; }
-
-        return {
-          type,
-          subtype,
-          time: tm.time,
-          description: tm.description,
-        };
-      });
-
-    const allEvs = [...match.events, ...timelineEvents]
-      .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
-      .sort((a, b) => a.time - b.time);
-
-    const gap = Math.max(8, duration * 0.018); // separación mínima entre marcadores (s)
-    const clusters: { events: MatchEvent[] }[] = [];
-    for (const ev of allEvs) {
-      const last = clusters[clusters.length - 1];
-      if (last && ev.time - last.events[last.events.length - 1].time <= gap) last.events.push(ev);
-      else clusters.push({ events: [ev] });
-    }
-    return clusters;
-  }, [match.events, match.timeline_markers, duration]);
-
-  // Evento "principal" de un grupo: el de mayor relevancia (muerte/kill sobre objetivo, etc.).
-  const clusterPrimary = (evs: MatchEvent[]): MatchEvent => {
-    const pri: Record<string, number> = { deaths: 5, kills: 4, objectives: 3, structures: 2, assists: 1, abilities: 0, other: 0 };
-    return [...evs].sort((a, b) => (pri[eventMeta(b).category] ?? 0) - (pri[eventMeta(a).category] ?? 0))[0];
-  };
+  const eventMarks = React.useMemo(() => {
+    if (!isFinite(duration) || duration <= 0) return [];
+    const evs = individualEvents(match.events, match.timeline_markers ?? []);
+    const w = trackSize.w || 1000;
+    const half = MARK_SIZE / 2;
+    const lastX = MARK_ROWS.map(() => -Infinity);
+    return evs.map((ev) => {
+      const exactX = Math.min(w - half, Math.max(half, (ev.time / duration) * w));
+      let row = lastX.findIndex((lx) => exactX - lx >= MARK_PITCH);
+      let x = exactX;
+      if (row === -1) {
+        // Ninguna fila libre: va a la que menos lejos lo deja de su instante.
+        row = lastX.indexOf(Math.min(...lastX));
+        x = lastX[row] + MARK_PITCH;
+      }
+      lastX[row] = x;
+      return { ev, x, exactX, bottom: MARK_ROWS[row] };
+    });
+  }, [match.events, match.timeline_markers, duration, trackSize.w]);
 
   const result = outcome(match.result);
   const isWin = result === "victory";
@@ -778,8 +831,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           {/* Centesimas: en una herramienta de revision hace falta senalar un
               instante, no un minuto. */}
           <span className="tp-tc">
-            <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-            <span className="tp-tc__total"> / {formatTime(duration)}</span>
+            <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+            <span className="tp-tc__total"> / {clock(duration)}</span>
           </span>
 
           <span className="tp-sep" />
@@ -910,7 +963,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         : "var(--color-victory)",
                   }}
                 >
-                  {fmtClock(snapSummary.longest_gap_secs)} blind
+                  {clock(snapSummary.longest_gap_secs)} blind
                 </span>
               </span>
             ) : (
@@ -983,56 +1036,54 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </div>
             )}
 
-            {/* Marcadores de eventos (agrupados) */}
-            {duration > 0 && eventClusters.map((cl, i) => {
-              const primary = clusterPrimary(cl.events);
-              const meta = eventMeta(primary);
-              const pos = (primary.time / duration) * 100;
-              const isActive = cl.events.some((e) => e.time === activeEventTime);
-              const count = cl.events.length;
+            {/* Guías: solo las dibuja el marcador que ha tenido que apartarse,
+                y van de su instante real al pie del propio marcador. */}
+            {duration > 0 && trackSize.w > 0 && (
+              <svg
+                viewBox={`0 0 ${trackSize.w} ${trackSize.h}`}
+                style={{ ...styles.graphSvg, pointerEvents: "none", zIndex: 4 }}
+              >
+                {eventMarks
+                  .filter((m) => Math.abs(m.x - m.exactX) > 1.5)
+                  .map((m, i) => (
+                    <line
+                      key={i}
+                      x1={m.exactX}
+                      y1={trackSize.h - 1}
+                      x2={m.x}
+                      y2={trackSize.h - m.bottom}
+                      stroke={mix(eventMeta(m.ev).color, 40)}
+                      strokeWidth={1}
+                    />
+                  ))}
+              </svg>
+            )}
+
+            {/* Marcadores de eventos: uno por suceso */}
+            {duration > 0 && eventMarks.map((m, i) => {
+              const meta = eventMeta(m.ev, 14);
+              const isActive = m.ev.time === activeEventTime;
               return (
                 <div
                   key={i}
-                  onClick={(e) => { e.stopPropagation(); jumpToClip(primary.time); }}
+                  onClick={(e) => { e.stopPropagation(); jumpToClip(m.ev.time); }}
                   style={{
                     ...styles.eventNode,
-                    left: `${pos}%`,
-                    width: "28px",
-                    height: "28px",
+                    left: `${m.x}px`,
+                    bottom: `${m.bottom}px`,
+                    width: `${MARK_SIZE}px`,
+                    height: `${MARK_SIZE}px`,
                     borderColor: isActive ? meta.color : mix(meta.color, 55),
                     background: isActive ? meta.color : "var(--panel)",
                     transform: "translateX(-50%)",
                     boxShadow: "none",
                     zIndex: isActive ? 10 : 5,
                   }}
-                  title={cl.events.map((e) => `${formatTime(e.time)} · ${eventMeta(e).label} – ${describeEvent(e)}`).join("\n")}
+                  title={`${clock(m.ev.time)} · ${t(meta.label)} – ${describeEvent(m.ev)}`}
                 >
                   <span style={{ color: isActive ? "var(--text)" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.icon}
                   </span>
-                  {count > 1 && (
-                    <span style={{
-                      position: "absolute",
-                      top: "-7px",
-                      right: "-7px",
-                      minWidth: "16px",
-                      height: "16px",
-                      padding: "0 4px",
-                      borderRadius: "10px",
-                      background: "color-mix(in srgb, var(--ground) 95%, transparent)",
-                      border: `1.5px solid ${meta.color}`,
-                      color: "var(--text)",
-                      fontSize: "10px",
-                      fontWeight: 800,
-                      fontFamily: "var(--font-mono)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      boxShadow: "0 2px 6px rgba(0,0,0,0.8)",
-                    }}>
-                      {count}
-                    </span>
-                  )}
                 </div>
               );
             })}
@@ -1058,7 +1109,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <div style={styles.axisMarks}>
               {axisMarks.map(m => (
                 <span key={m} style={{position: "absolute", left: `${(m/duration)*100}%`, fontSize: "10px", color: "var(--text-muted)"}}>
-                  {formatTime(m)}
+                  {clock(m)}
                 </span>
               ))}
             </div>
@@ -1083,7 +1134,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 minWidth: "120px"
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", color: "var(--text)" }}>
-                  <span>{formatTime(hoverPct * duration)}</span>
+                  <span>{clock(hoverPct * duration)}</span>
                   <span style={{ color: "var(--accent-violet)" }}>
                     {apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0} APM
                   </span>
@@ -1163,7 +1214,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 {comments.map((c, i) => (
                   <div key={i} style={styles.commentCard}>
                     <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
-                      {formatTime(c.time)}
+                      {clock(c.time)}
                     </button>
                     <span style={styles.commentText}>{c.text}</span>
                     <button style={styles.commentDelete} onClick={() => deleteComment(i)} title="Eliminar comentario"><Trash2 size={14} /></button>
@@ -1171,7 +1222,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 ))}
               </div>
               <div style={styles.commentInputRow}>
-                <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{formatTime(currentTime)}</span>
+                <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{clock(currentTime)}</span>
                 <input
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
@@ -1196,7 +1247,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               >
                 {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
               </span>
-              <span className="u-meta">{match.champion} · {formatTime(duration)}</span>
+              <span className="u-meta">{match.champion} · {clock(duration)}</span>
             </div>
 
             {/* ------------------------------------------------ tu partida */}
@@ -1406,7 +1457,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       key={i}
                       className="insp__buy"
                       onClick={() => seekTo(ip.time, false)}
-                      title={`${formatTime(ip.time)} · ${t("Jump to this moment")}`}
+                      title={`${clock(ip.time)} · ${t("Jump to this moment")}`}
                     >
                       <img
                         src={itemIcon(ddragonVer, ip.item_id)}
@@ -1414,7 +1465,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         style={styles.buyIcon}
                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
                       />
-                      <span className="u-meta">{formatTime(ip.time)}</span>
+                      <span className="u-meta">{clock(ip.time)}</span>
                     </button>
                   ))}
                 </div>
@@ -1464,6 +1515,90 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             diferencial quedaba al final de un scroll largo. */}
         {tab === "impact" && (
           <div className="insp">
+            {/* --------------------------------------- tu impacto
+                El puesto y el percentil ya existian, pero solo en la columna de
+                la biblioteca: quien abria esta pestana veia la tabla de los diez
+                y tenia que buscarse. Y un puesto suelto no se puede revisar, asi
+                que va con el desglose de DONDE salio. */}
+            {!match.is_vod && credits !== null && (() => {
+              const yo = participants.findIndex((p) => p.is_self) + 1;
+              const mio = credits.find((c) => c.participant_id === yo);
+              if (!mio) return null;
+              const puesto =
+                [...credits]
+                  .sort((a, b) => b.role_percentile - a.role_percentile)
+                  .findIndex((c) => c.participant_id === yo) + 1;
+              const partes: [string, number][] = [
+                [t("kills"), mio.wpa_kills],
+                [t("objectives"), mio.wpa_objectives],
+                [t("structures"), mio.wpa_structures],
+                [t("deaths"), mio.wpa_deaths],
+              ];
+              // Todas las barras contra la misma escala: la parte mas grande de
+              // esta partida llena medio carril. Escalar cada una por su cuenta
+              // haria que una aportacion minuscula pareciera enorme.
+              const escala = Math.max(...partes.map(([, v]) => Math.abs(v)), 0.01);
+              return (
+                <section>
+                  <div className="sect__head">
+                    <span className="u-label">{t("Your impact")}</span>
+                    <i className="sect__rule" />
+                  </div>
+                  <div className="imp__head">
+                    <span
+                      className="imp__rank"
+                      style={{ color: puesto === 1 ? "var(--win)" : puesto >= 8 ? "var(--loss)" : undefined }}
+                    >
+                      {puesto === 1 ? t("MVP") : `${puesto}º`}
+                    </span>
+                    <span className="u-meta">{t("of")} {credits.length}</span>
+                    <span
+                      className="u-metric imp__pct"
+                      style={{ color: mio.role_percentile >= 50 ? "var(--win)" : "var(--loss)" }}
+                      title={`${t("win %")}: ${mio.wpa >= 0 ? "+" : ""}${(mio.wpa * 100).toFixed(1)} · ${mio.role}`}
+                    >
+                      {Math.round(mio.role_percentile)}
+                    </span>
+                    <span className="u-meta">{t("vs role")}</span>
+                  </div>
+                  <p className="note">
+                    {t("Win probability you added, and where it came from. The four parts add up to your total.")}
+                  </p>
+                  {partes.map(([nombre, v]) => {
+                    const ancho = (Math.abs(v) / escala) * 50;
+                    const color = v >= 0 ? "var(--win)" : "var(--loss)";
+                    return (
+                      <div key={nombre} className="imp__row">
+                        <span className="imp__rowName">{nombre}</span>
+                        <span className="imp__track">
+                          <span
+                            className="imp__bar"
+                            style={{
+                              background: color,
+                              width: `${ancho}%`,
+                              left: v >= 0 ? "50%" : `${50 - ancho}%`,
+                            }}
+                          />
+                        </span>
+                        <span className="u-metric imp__rowNum" style={{ color }}>
+                          {v >= 0 ? "+" : ""}{(v * 100).toFixed(1)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div className="imp__total">
+                    <span className="u-label">{t("total")}</span>
+                    <span
+                      className="u-metric"
+                      style={{ color: mio.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
+                    >
+                      {mio.wpa >= 0 ? "+" : ""}{(mio.wpa * 100).toFixed(1)}
+                    </span>
+                  </div>
+                </section>
+              );
+            })()}
+
             {/* --------------------------------------- credito real
                 El marcador reparte el oro de un asesinato entero al que remata.
                 Aqui se reparte por el dano que puso cada uno, que es quien hizo
@@ -1561,6 +1696,53 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </section>
             )}
 
+            {/* --------------------------------------- procesado del vídeo
+                Lo que convierte los tramos de abajo de "al menos tanto" en una
+                duración medida. Antes se lanzaba solo al entrar aquí, sin
+                decirlo y sin poder pararlo; ahora se pide, se ve y se corta. */}
+            {!match.is_vod && mmStatus !== null && (
+              <section>
+                <div className="sect__head">
+                  <span className="u-label">{t("Video analysis")}</span>
+                  <i className="sect__rule" />
+                </div>
+                {mmStatus.state === "hecha" ? (
+                  <p className="note">
+                    {t("Positions read from the video: the stretches below are measured, not estimated.")}
+                  </p>
+                ) : mmStatus.state === "no_disponible" ? (
+                  <p className="note">
+                    {t("Not available for this game: it needs the video, the detector and the Riot data.")}
+                  </p>
+                ) : mmPct !== null ? (
+                  <>
+                    <div className="mm__bar">
+                      <div className="mm__fill" style={{ width: `${Math.max(2, mmPct)}%` }} />
+                    </div>
+                    <div className="mm__row">
+                      <span className="u-metric">{Math.round(mmPct)}%</span>
+                      <span className="u-meta">{t("reading the minimap, about two minutes")}</span>
+                      <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto" }} onClick={pararMinimapa}>
+                        {t("Stop")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="note">
+                      {t("Without it each stretch is a lower bound: the API only gives one position per minute. Takes about two minutes and can be stopped; what it has done is kept.")}
+                    </p>
+                    <button className="btn btn--primary btn--sm" onClick={empezarMinimapa}>
+                      {mmStatus.saved_progress
+                        ? `${t("Resume analysis")} (${Math.round(mmStatus.saved_progress)}%)`
+                        : t("Analyze the video")}
+                    </button>
+                  </>
+                )}
+                {mmErr !== null && <p className="note">{mmErr}</p>}
+              </section>
+            )}
+
             {/* --------------------------------------- presión absorbida
                 Los tramos en los que tuviste más rivales encima que aliados, y
                 lo que tu equipo sacó al otro lado del mapa mientras tanto. En un
@@ -1570,12 +1752,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 los demás no ayudan a revisar tu partida. */}
             {!match.is_vod && (pressure !== null || pressureErr !== null) && (() => {
               const yo = participants.findIndex((p) => p.is_self) + 1;
-              // Relevancia = cuánta gente y cuánto rato. Es una aproximación
-              // mía, no una medida: ordenar esto bien es lo que dará el modelo
-              // de probabilidad de victoria.
+              // Se ordena por lo que tu equipo sacó mientras te sujetaban, que
+              // está en probabilidad de victoria. Antes era `rivales × rato`,
+              // una aproximación que ponía arriba el tramo más aparatoso en vez
+              // del que decidió algo. El modelo de probabilidad ya existe: esto
+              // era justo el hueco que quedaba por cerrar.
+              //
+              // El desempate sigue siendo el tamaño del tramo, para los que no
+              // dieron ningún fruto medible (que también son información).
               const mios = (pressure ?? [])
                 .filter((w) => w.participant_id === yo)
-                .sort((a, b) => (b.max_enemies * (b.end - b.start)) - (a.max_enemies * (a.end - a.start)))
+                .sort(
+                  (a, b) =>
+                    b.wpa_elsewhere - a.wpa_elsewhere ||
+                    b.max_enemies * (b.end - b.start) - a.max_enemies * (a.end - a.start),
+                )
                 .slice(0, 6);
               return (
                 <section>
@@ -1606,7 +1797,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         onClick={() => seekTo(Math.max(0, w.start - 5), true)}
                         title={t("Jump to this moment")}
                       >
-                        <span className="u-metric">{formatTime(w.start)}</span>
+                        <span className="u-metric">{clock(w.start)}</span>
                         <span className="insp__pressWhat">
                           {w.max_enemies.toFixed(1)} {t("enemies on you")} ·{" "}
                           {/* El "~" marca que la duracion es una cota inferior:
@@ -1655,7 +1846,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     <div className="evfeat__top">
                       <span className="u-label" style={{ color: tl.color }}>{t(tl.text)}</span>
                       <button className="u-metric evfeat__time" onClick={() => jumpToClip(featured.time)}>
-                        {formatTime(featured.time)}
+                        {clock(featured.time)}
                       </button>
                     </div>
                     <div className="evfeat__name">
@@ -1692,7 +1883,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         onClick={() => jumpToClip(ev.time)}
                       >
                         <span className="evrow__sev" style={{ background: meta.color }} />
-                        <span className="u-metric evrow__time">{formatTime(ev.time)}</span>
+                        <span className="u-metric evrow__time">{clock(ev.time)}</span>
                         <span className="evrow__icon" style={{ color: meta.color }}>{meta.icon}</span>
                         <span className="evrow__label">{meta.label}</span>
                         {describeEvent(ev) && (
@@ -1740,7 +1931,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 {exportType === "clip" ? "Exportar Clip de Video" : "Mark error"}
               </div>
               <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-                {formatTime(clipStart)} - {formatTime(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
+                {clock(clipStart)} - {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
               </div>
             </div>
           </div>

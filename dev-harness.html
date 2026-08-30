@@ -112,6 +112,27 @@
       lane: "mid", outcome: "neutral", confidence: 0.85, time_precision: 9, approach: "flank",
     },
   ];
+  // Pelea de equipo: seis sucesos en catorce segundos, más el Multikill y el
+  // First Blood que la API en directo manda ADEMÁS de las kills que los
+  // provocaron. Es justo el caso que la línea de tiempo resolvía con un grupo y
+  // un "6" encima, así que es lo que hay que mirar al tocarla.
+  matches[0].events.push(
+    { type: "ChampionKill", subtype: "kill", time: 1180, description: "kill", actor: "Zeru", target: "Sett" },
+    { type: "ChampionKill", subtype: "kill", time: 1183, description: "kill", actor: "Zeru", target: "Lee Sin" },
+    { type: "Multikill", subtype: "kill", time: 1183, description: "Double kill", actor: "Zeru", detail: "2" },
+    { type: "ChampionKill", subtype: "assist", time: 1188, description: "assist", actor: "Kai", target: "Orianna" },
+    { type: "ChampionKill", subtype: "death", time: 1191, description: "death", actor: "Kaisa", target: "Zeru" },
+    { type: "ChampionKill", subtype: "assist", time: 1194, description: "assist", actor: "Nox", target: "Nautilus" },
+    { type: "ChampionKill", subtype: "kill", time: 110, description: "kill", actor: "Zeru", target: "Ahri" },
+    { type: "FirstBlood", subtype: "kill", time: 110, description: "First blood" },
+  );
+  // Asistencias por la Timeline de Riot: la de arriba con el tipo nuevo, la de
+  // abajo como la guardan las partidas analizadas antes (tipo 'kill').
+  matches[0].timeline_markers.push(
+    { time: 905, event_type: "assist", description: "Asistencia", position_x: 5200, position_y: 7400 },
+    { time: 952, event_type: "kill", description: "Asistencia", position_x: 6100, position_y: 7900 },
+  );
+
   // Partida analizada con el detector viejo: marcadores sin carril ni resultado,
   // para ver el aviso de «vuelve a sincronizar».
   matches[1].timeline_markers = [
@@ -124,9 +145,36 @@
   matches[0].lane_result = "Even";
   window.__MOCK_MATCHES = matches;
 
+  /**
+   * Dispara un evento del backend a mano, como si lo hubiera emitido Rust.
+   *
+   *   __emit("minimap_progress", ["m0", 42])
+   */
+  window.__emit = (evento, payload) => {
+    const ids = OYENTES[evento] || [];
+    ids.forEach((id) => {
+      const cb = window["_" + id];
+      if (cb) cb({ event: evento, id, payload });
+    });
+    return ids.length;
+  };
+
+  // evento -> ids de callback registrados por listen()
+  const OYENTES = {};
+
   const HANDLERS = {
     "plugin:app|version": () => "1.2.11",
-    "plugin:event|listen": () => 1,
+    // Se apunta qué callback escucha cada evento para poder dispararlos a mano
+    // con `__emit(evento, payload)` desde la consola. Sin esto, nada de lo que
+    // avanza por eventos (progreso del VOD, saltos de cámara, minimapa) se
+    // podía ver moverse sin levantar la app entera.
+    "plugin:event|listen": (args) => {
+      const id = args && args.handler;
+      if (args && args.event && id != null) {
+        (OYENTES[args.event] = OYENTES[args.event] || []).push(id);
+      }
+      return id ?? 1;
+    },
     "plugin:event|unlisten": () => null,
     get_recorded_matches: () => matches,
     get_recorder_status: () => true,
@@ -146,6 +194,11 @@
       ready_for_game_audio: true,
     }),
     get_all_clips: () => [],
+    // La forma es la de `ErrorClipMetadata` (path/name/size/events), no una
+    // inventada: el doble anterior no traía `path` ni `events`, así que la
+    // pantalla de errores se pintaba con `key={undefined}` y React avisaba de
+    // claves repetidas en cada carga. Un arnés que miente entierra los avisos
+    // de verdad entre los suyos.
     get_all_error_clips: () =>
       [
         ["Positioning", "Me adelanto sin visión"],
@@ -153,15 +206,14 @@
         ["Mechanics", "Fallo el combo"],
         ["Positioning", "Ward tardía"],
       ].map(([category, text], i) => ({
-        id: "e" + i,
+        path: `C:/vod/m${i}_error_${i}.mp4`,
+        name: `m${i}_error_${i}.mp4`,
         match_id: "m" + i,
-        time: 600 + i * 240,
-        text,
-        category,
+        size: 12 * 1024 * 1024 + i * 1024 * 1024,
         note: "",
+        events: [{ id: "e" + i, time: 600 + i * 240, text, category }],
+        start_time: 600 + i * 240,
         reviewed: i % 2 === 0,
-        clip_path: null,
-        date: iso(now - i * 86400000),
       })),
     get_vod_reviews: () => [],
     // Actualización: por defecto no hay nada pendiente. Con `?update=ready` en la
@@ -202,6 +254,68 @@
         mode: "keys",
       })),
     get_champion_pool: () => champs,
+    // --- Impacto ---------------------------------------------------------
+    // Diez jugadores con su reparto de crédito y su desglose de WPA. El del
+    // usuario (participant_id 1) lleva a propósito muertes caras: es el caso
+    // que el desglose tiene que saber contar (aportas mucho Y mueres mucho).
+    get_match_attribution: () =>
+      Array.from({ length: 10 }, (_, i) => {
+        const yo = i === 0;
+        const k = (yo ? 0.052 : 0.03 - i * 0.004);
+        const o = (yo ? 0.018 : 0.012 - i * 0.001);
+        const e = (yo ? 0.009 : 0.006);
+        const m = (yo ? -0.041 : -0.02 - i * 0.002);
+        return {
+          participant_id: i + 1,
+          champion: ["Gwen", "Viego", "Ahri", "Jinx", "Thresh", "Sett", "Lee Sin", "Orianna", "Kaisa", "Nautilus"][i],
+          team_id: i < 5 ? 100 : 200,
+          kills: 3 + ((i * 3) % 9),
+          deaths: 2 + (i % 6),
+          assists: 4 + ((i * 5) % 11),
+          killing_blow_gold: 1200 + i * 180,
+          damage_credit_gold: 1200 + i * 180 + (yo ? 640 : -60 * (i % 4)),
+          credit_gap: yo ? 640 : -60 * (i % 4),
+          objective_gold: 400 + i * 40,
+          total_value: 2200 + i * 200,
+          wpa: k + o + e + m,
+          wpa_kills: k,
+          wpa_objectives: o,
+          wpa_structures: e,
+          wpa_deaths: m,
+          role: ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"][i % 5],
+          role_percentile: yo ? 63.4 : 90 - i * 8,
+          death_gold_given: 300 + i * 30,
+          time_dead: 60 + i * 12,
+          deaths_detail: [{ minute: 24 + i, seconds_dead: 38 - i, gold_given: 420 }],
+          damage_participation: 0.6,
+          mean_damage_share: 0.32,
+        };
+      }),
+    // Tramos de presión: el más valioso NO es el más aparatoso, para poder ver
+    // que el orden nuevo (por probabilidad de victoria) hace algo.
+    get_match_pressure: () =>
+      [
+        { start: 690, end: 712, max_enemies: 3.2, wpa_elsewhere: 0.041, towers_elsewhere: 1, gold_elsewhere: 520, died: true, from_video: false },
+        { start: 1180, end: 1230, max_enemies: 4.1, wpa_elsewhere: 0.012, towers_elsewhere: 0, gold_elsewhere: 180, died: false, from_video: false },
+        { start: 1490, end: 1505, max_enemies: 2.4, wpa_elsewhere: 0.0, towers_elsewhere: 0, gold_elsewhere: 0, died: true, from_video: true },
+      ].map((w) => ({
+        participant_id: 1,
+        champion: "Gwen",
+        x: 7000,
+        y: 7000,
+        inhibs_elsewhere: 0,
+        plates_elsewhere: 0,
+        epics_elsewhere: 0,
+        ...w,
+      })),
+    // Estado del procesado del vídeo. `?minimap=` en la URL fuerza el que se
+    // quiera mirar: hecha / en_curso / falta / no_disponible.
+    get_minimap_status: () => ({
+      state: new URLSearchParams(location.search).get("minimap") || "falta",
+      saved_progress: new URLSearchParams(location.search).has("parcial") ? 37 : null,
+    }),
+    process_match_minimap: () => null,
+    cancel_match_minimap: () => null,
     get_camera_snap_summary: () => null,
     list_awareness_records: () => [],
     list_recall_frames: () => [],
@@ -224,13 +338,13 @@
       return id;
     },
     convertFileSrc: (p) => p,
-    invoke(cmd) {
+    invoke(cmd, args) {
       const h = HANDLERS[cmd];
       if (!h) {
         console.warn("[arnés] sin doble para", cmd);
         return Promise.resolve(null);
       }
-      return Promise.resolve(h());
+      return Promise.resolve(h(args));
     },
   };
 })();
@@ -252,10 +366,13 @@
     const TABS = [
       ["Revision", "Revisión", "Review"],
       ["Partida", "Match"],
+      ["Impacto", "Impact"],
       ["Eventos", "Events"],
       ["Notas", "Notes"],
     ];
-    const want = TABS[Number(qs.get("tab"))];
+    // Sin `?tab=`, `Number(null)` es 0 y esto intentaba abrir la primera pestaña
+    // en todas las cargas, avisando por consola de que no la encontraba.
+    const want = qs.has("tab") ? TABS[Number(qs.get("tab"))] : null;
     if (want) {
       setTimeout(() => {
         const b = Array.from(document.querySelectorAll("button"))

@@ -109,7 +109,7 @@ pub struct ItemPurchase {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TimelineMarker {
     pub time: f64, // segundos en el vídeo
-    pub event_type: String, // "kill", "death", "dragon", "herald", "tower", "plate", "gank_attempt"
+    pub event_type: String, // "kill", "assist", "death", "dragon", "herald", "tower", "plate", "gank_attempt"
     pub description: String,
     #[serde(default)]
     pub position_x: Option<i32>,
@@ -210,8 +210,11 @@ pub struct MatchMetadata {
     /// En qué puesto quedaste de los 10 por impacto (1 = el mejor de la partida).
     ///
     /// Se guarda porque la lista de partidas no puede recalcularlo al vuelo:
-    /// necesita la timeline completa. Se rellena al abrir la pestaña Impacto de
-    /// esa partida, así que las antiguas aparecen sin él hasta que las visites.
+    /// necesita la timeline completa. Lo rellenan la sincronización, la pestaña
+    /// de Impacto y `riot_api::spawn_impact_backfill` al arrancar (esta última
+    /// sólo con los `riot_*.json` ya cacheados, sin gastar cuota de la API).
+    /// Antes lo escribía únicamente la pestaña, así que la columna de la
+    /// biblioteca eran rayas hasta que entrabas partida por partida.
     #[serde(default)]
     pub impact_rank: Option<i32>,
     /// Percentil de tu WPA dentro de tu rol, de 0 a 100. Ver `crate::baselines`.
@@ -287,7 +290,7 @@ pub fn realign_to_video_time(m: &mut MatchMetadata) -> bool {
     let marker_times: Vec<f64> = m
         .timeline_markers
         .iter()
-        .filter(|t| t.event_type == "kill" || t.event_type == "death")
+        .filter(|t| t.event_type == "kill" || t.event_type == "assist" || t.event_type == "death")
         .map(|t| t.time)
         .collect();
     if marker_times.is_empty() {
@@ -561,19 +564,40 @@ pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), Str
     save_match_metadata(&m)
 }
 
+/// La metadata que hay dentro de una carpeta de partida.
+///
+/// El fichero se llama como su carpeta (`save_match_metadata`), y aprovecharlo
+/// importa: al lado viven `riot_match.json`, `riot_timeline.json` y ahora
+/// `minimap_positions.json`, y esto los leía y los pasaba por serde **todos**
+/// para descartarlos por no encajar en `MatchMetadata`. Medido sobre 19
+/// partidas: 11 MB de lectura y parseo tirados en cada refresco de la
+/// biblioteca, que además es periódico. Con el minimapa procesado serían 26.
+///
+/// El barrido se conserva como respaldo por si alguna carpeta no sigue la
+/// convención (renombrada a mano, restaurada de una copia): perder una partida
+/// del listado sería mucho peor que leer de más.
+fn metadata_en_carpeta(dir: &Path) -> Option<MatchMetadata> {
+    let leer = |ruta: &Path| -> Option<MatchMetadata> {
+        serde_json::from_str(&fs::read_to_string(ruta).ok()?).ok()
+    };
+
+    if let Some(nombre) = dir.file_name().and_then(|s| s.to_str()) {
+        if let Some(m) = leer(&dir.join(format!("{}.json", nombre))) {
+            return Some(m);
+        }
+    }
+
+    fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+        .find_map(|p| leer(&p))
+}
+
 pub fn load_all_matches() -> Vec<MatchMetadata> {
     let dir = get_videos_dir();
     let mut matches = Vec::new();
-
-    let mut process_file = |path: &Path| {
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(metadata) = serde_json::from_str::<MatchMetadata>(&content) {
-                    matches.push(metadata);
-                }
-            }
-        }
-    };
 
     // Una carpeta por partida. Los sueltos en la raíz ya no se contemplan: `migrate_flat_layout`
     // los recoloca al arrancar.
@@ -581,10 +605,8 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Ok(sub_entries) = fs::read_dir(&path) {
-                    for sub_entry in sub_entries.flatten() {
-                        process_file(&sub_entry.path());
-                    }
+                if let Some(m) = metadata_en_carpeta(&path) {
+                    matches.push(m);
                 }
             }
         }
@@ -600,17 +622,12 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
     let dir = get_reviews_dir();
     let mut matches = Vec::new();
 
-    let mut process_file = |path: &Path| {
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(mut metadata) = serde_json::from_str::<MatchMetadata>(&content) {
-                    if metadata.id.starts_with("vod_") {
-                        // El listado no necesita la estela; el reproductor la carga aparte.
-                        metadata.mouse_events = Vec::new();
-                        matches.push(metadata);
-                    }
-                }
-            }
+    let mut añadir = |metadata: Option<MatchMetadata>| {
+        let Some(mut metadata) = metadata else { return };
+        if metadata.id.starts_with("vod_") {
+            // El listado no necesita la estela; el reproductor la carga aparte.
+            metadata.mouse_events = Vec::new();
+            matches.push(metadata);
         }
     };
 
@@ -618,13 +635,15 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Ok(sub_entries) = fs::read_dir(&path) {
-                    for sub_entry in sub_entries.flatten() {
-                        process_file(&sub_entry.path());
-                    }
-                }
-            } else if path.is_file() {
-                process_file(&path);
+                añadir(metadata_en_carpeta(&path));
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                // Análisis sueltos en la raíz, de antes de que cada uno tuviera
+                // su carpeta.
+                añadir(
+                    fs::read_to_string(&path)
+                        .ok()
+                        .and_then(|c| serde_json::from_str(&c).ok()),
+                );
             }
         }
     }
@@ -902,6 +921,72 @@ pub fn check_storage_quota() {
             Ok(()) => freed += size,
             Err(e) => eprintln!("Cuota: no se pudo borrar {}: {}", m.id, e),
         }
+    }
+}
+
+#[cfg(test)]
+mod metadata_en_carpeta_tests {
+    use super::*;
+
+    fn carpeta(nombre: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "leaguerec-meta-{}-{}",
+            std::process::id(),
+            nombre
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn json_de(id: &str) -> String {
+        format!(
+            r#"{{"id":"{id}","game_duration":1700.0,"video_path":"v.mp4","result":"Victory","champion":"Gwen","date":"2026-08-30 05:00:00","events":[]}}"#
+        )
+    }
+
+    #[test]
+    fn lee_el_fichero_que_se_llama_como_la_carpeta() {
+        let raiz = carpeta("match_x");
+        let dir = raiz.join("match_1");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("match_1.json"), json_de("match_1")).unwrap();
+        assert_eq!(metadata_en_carpeta(&dir).unwrap().id, "match_1");
+    }
+
+    /// Lo que motivó todo esto: al lado de la metadata viven varios JSON grandes
+    /// que NO son metadata, y leerlos para descartarlos costaba megas en cada
+    /// refresco de la biblioteca. Con un `riot_timeline.json` de mentira que
+    /// tampoco encaja, el resultado tiene que ser el mismo y sin tocarlo.
+    #[test]
+    fn no_le_hacen_falta_los_ficheros_vecinos() {
+        let raiz = carpeta("match_vecinos");
+        let dir = raiz.join("match_2");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("match_2.json"), json_de("match_2")).unwrap();
+        fs::write(dir.join("riot_timeline.json"), "{\"info\":{}}").unwrap();
+        fs::write(dir.join("minimap_positions.json"), "{\"samples\":[]}").unwrap();
+        assert_eq!(metadata_en_carpeta(&dir).unwrap().id, "match_2");
+    }
+
+    /// Respaldo: una carpeta renombrada a mano seguiría apareciendo en la
+    /// biblioteca. Perder una partida del listado es peor que leer de más.
+    #[test]
+    fn si_el_nombre_no_cuadra_lo_busca_igual() {
+        let raiz = carpeta("match_renombrada");
+        let dir = raiz.join("copia de match_3");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("match_3.json"), json_de("match_3")).unwrap();
+        assert_eq!(metadata_en_carpeta(&dir).unwrap().id, "match_3");
+    }
+
+    #[test]
+    fn una_carpeta_sin_metadata_no_devuelve_nada() {
+        let raiz = carpeta("match_vacia");
+        let dir = raiz.join("match_4");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("riot_match.json"), "{}").unwrap();
+        assert!(metadata_en_carpeta(&dir).is_none());
     }
 }
 

@@ -32,6 +32,8 @@ use commands::{
     check_riot_key,
     get_match_pressure,
     process_match_minimap,
+    get_minimap_status,
+    cancel_match_minimap,
     spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
     update_error_note,
     upload_clip, get_disk_usage, ActiveMatchState,
@@ -111,6 +113,9 @@ pub fn run() {
                         if let Some(state) = app.try_state::<Arc<RecorderState>>() {
                             recorder::shutdown_recorder(&state);
                         }
+                        // Y el análisis de minimapa, que ahora va sin consola: si no,
+                        // se queda un Python invisible leyendo el vídeo.
+                        minimap::cancelar_todo();
                         std::process::exit(0);
                     }
                     "show" => {
@@ -146,6 +151,10 @@ pub fn run() {
             // Detección automática de partidas (y, con ella, el entrenamiento en vivo).
             let (rec, active, ult, video, training) = monitor_deps;
             spawn_background_monitor(rec, active, ult, video, training, app.handle().clone());
+
+            // Puesto de impacto de las partidas que se analizaron antes de que se
+            // guardara: se calcula de lo que ya hay en disco, sin pedir nada.
+            riot_api::spawn_impact_backfill();
 
             // La actualización se descarga sola por detrás mientras usas la app, para
             // que pulsar "instalar" no sea esperar a que bajen 100 MB.
@@ -197,6 +206,8 @@ pub fn run() {
             check_riot_key,
             get_match_pressure,
             process_match_minimap,
+            get_minimap_status,
+            cancel_match_minimap,
             get_audio_status,
             start_manual_recording,
             stop_manual_recording,
@@ -243,6 +254,7 @@ pub fn run() {
                 if let Some(state) = app_handle.try_state::<Arc<RecorderState>>() {
                     recorder::shutdown_recorder(&state);
                 }
+                minimap::cancelar_todo();
             }
         });
 }

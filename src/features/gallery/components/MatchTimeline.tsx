@@ -1,5 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { MatchEvent } from "../../../types";
+import { individualEvents } from "../../../core/matchEvents";
+import { mmss } from "../../../core/time";
 
 /**
  * Una partida ES su línea de tiempo.
@@ -39,7 +41,6 @@ const classify = (ev: MatchEvent): Kind | null => {
   switch (ev.type) {
     case "ChampionKill":
       return ev.subtype === "death" ? "death" : "kill";
-    case "Multikill":
     case "FirstBlood":
       return "kill";
     case "DragonKill":
@@ -52,12 +53,6 @@ const classify = (ev: MatchEvent): Kind | null => {
     default:
       return null;
   }
-};
-
-const mmss = (s: number) => {
-  const m = Math.floor(s / 60);
-  const r = Math.floor(s % 60);
-  return `${m}:${r < 10 ? "0" : ""}${r}`;
 };
 
 /** Área suavizada del APM, en coordenadas de viewBox. */
@@ -110,7 +105,9 @@ export const MatchTimeline: React.FC<MatchTimelineProps> = ({
 
   const marks = useMemo(
     () =>
-      events
+      // Una marca por suceso: `individualEvents` quita los que ya cuenta otro
+      // (el Multikill sobre sus kills, el First Blood sobre su kill).
+      individualEvents(events)
         .map((ev) => ({ ev, kind: classify(ev) }))
         .filter((m): m is { ev: MatchEvent; kind: Kind } => m.kind !== null)
         .filter((m) => m.ev.time >= 0 && m.ev.time <= safeDur),

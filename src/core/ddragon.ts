@@ -7,6 +7,16 @@ import { useEffect, useState } from "react";
 
 const FALLBACK_VERSION = "15.11.1";
 
+/**
+ * Retrato local, de los 174 que se empaquetan en `public/champions`
+ * (`scripts/download-champions.ps1`).
+ *
+ * Es la vía buena siempre que el nombre venga de Match-V5, que ya da el id de
+ * Data Dragon ("MissFortune"). La API en vivo, en cambio, da el nombre de
+ * display ("Miss Fortune") y ahí hace falta el mapa del CDN.
+ */
+export const champIcon = (champion: string) => `/champions/${champion}.png`;
+
 let versionPromise: Promise<string> | null = null;
 let champMapPromise: Promise<{ version: string; map: Map<string, string> }> | null = null;
 
@@ -54,12 +64,19 @@ export async function resolveChampionIcon(displayName: string): Promise<string |
   return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${id}.png`;
 }
 
-/** Hook React que resuelve la URL del icono del campeón (null mientras carga o si no existe). */
-export function useChampionIcon(champion: string): string | null {
+/**
+ * Hook React que resuelve la URL del icono del campeón en el CDN (null mientras
+ * carga o si no existe).
+ *
+ * `activo` permite no pedir nada: quien tenga el retrato en local no debe salir
+ * a la red para nada. Ver `ChampionAvatar`.
+ */
+export function useChampionIcon(champion: string, activo = true): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     setUrl(null);
+    if (!activo) return;
     resolveChampionIcon(champion)
       .then((u) => {
         if (active) setUrl(u);
@@ -68,6 +85,6 @@ export function useChampionIcon(champion: string): string | null {
     return () => {
       active = false;
     };
-  }, [champion]);
+  }, [champion, activo]);
   return url;
 }

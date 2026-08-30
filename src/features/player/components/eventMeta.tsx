@@ -102,8 +102,9 @@ const structTone = (s?: string): Tone => (s === "ally" ? "mistake" : s === "enem
 const objColor = (s: string | undefined, base: string) => (s === "enemy" ? C_ENEMY : base);
 const structColor = (s?: string) => (s === "ally" ? C_ENEMY : C_STRUCTURE);
 
-export function eventMeta(ev: MatchEvent): EvMeta {
-  const size = 18;
+/** `iconSize` lo fija quien pinta: la línea de tiempo usa marcadores más pequeños. */
+export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
+  const size = iconSize;
   switch (ev.type) {
     case "ChampionKill":
       if (ev.subtype === "kill")

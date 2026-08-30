@@ -660,17 +660,6 @@ async fn details_for(
 ///
 /// Tira del caché en disco, así que después de la primera vez no gasta cuota:
 /// se puede recalcular tantas veces como cambie el análisis.
-/// Igual que `attribution_for`, pero además pide que se procese el vídeo si aún
-/// no se hizo. Es el punto natural: para cuando el usuario abre el análisis, ya
-/// existen el vídeo y la timeline.
-pub async fn attribution_for_with_video(
-    app: &tauri::AppHandle,
-    match_id: &str,
-) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
-    crate::minimap::spawn_processing(app, match_id);
-    attribution_for(match_id).await
-}
-
 pub async fn attribution_for(
     match_id: &str,
 ) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
@@ -689,7 +678,21 @@ pub async fn attribution_for(
 
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
-    let mut filas = crate::attribution::analyze(&tl, &details.info.participants);
+    Ok(impacto(&mut metadata, &tl, &details.info.participants))
+}
+
+/// Reparto de crédito de los 10, con el puesto del jugador ya guardado.
+///
+/// Se comparte entre pedir el análisis y sincronizar: la sincronización ya tiene
+/// en la mano el `details` y la `timeline` que esto necesita, así que calcularlo
+/// allí sale gratis y **llena la columna de impacto de la biblioteca sin que
+/// haya que entrar partida por partida**, que era lo que la dejaba en "—".
+fn impacto(
+    metadata: &mut crate::storage::MatchMetadata,
+    tl: &TimelineDto,
+    participants: &[ParticipantDto],
+) -> Vec<crate::attribution::PlayerCredit> {
+    let mut filas = crate::attribution::analyze(tl, participants);
 
     // Con el rango conocido, el percentil se compara contra el baremo de ese
     // nivel en vez del general. Si no se sabe, `percentil_en_tramo` cae solo al
@@ -713,11 +716,52 @@ pub async fn attribution_for(
             if metadata.impact_rank != nuevo_rank || metadata.impact_percentile != nuevo_pct {
                 metadata.impact_rank = nuevo_rank;
                 metadata.impact_percentile = nuevo_pct;
-                let _ = crate::storage::save_match_metadata(&metadata);
+                let _ = crate::storage::save_match_metadata(metadata);
             }
         }
     }
-    Ok(filas)
+    filas
+}
+
+/// Rellena el puesto de impacto de las partidas viejas, sin tocar la API.
+///
+/// La columna de impacto de la biblioteca sólo se llenaba al abrir la pestaña de
+/// esa partida, así que quien tenía veinte partidas veía diecinueve rayas. Aquí
+/// se calcula al arrancar, **sólo con lo que ya está en disco**: si a una
+/// partida le falta el `riot_match.json` o el `riot_timeline.json`, se salta —
+/// pedirlos gastaría cuota de la API sin que nadie lo haya pedido.
+pub fn spawn_impact_backfill() {
+    std::thread::spawn(|| {
+        let pendientes: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+            .into_iter()
+            .filter(|m| m.impact_rank.is_none() && !m.participants.is_empty())
+            .collect();
+        if pendientes.is_empty() {
+            return;
+        }
+        let mut hechas = 0;
+        for m in pendientes {
+            let (Some(raw), Some(raw_tl)) = (
+                crate::storage::load_raw_match(&m.id),
+                crate::storage::load_raw_timeline(&m.id),
+            ) else {
+                continue;
+            };
+            let (Ok(details), Ok(tl)) = (
+                serde_json::from_str::<MatchDto>(&raw),
+                serde_json::from_str::<TimelineDto>(&raw_tl),
+            ) else {
+                continue;
+            };
+            // `impacto` guarda el metadata si el puesto cambia.
+            let mut meta = m;
+            impacto(&mut meta, &tl, &details.info.participants);
+            hechas += 1;
+        }
+        if hechas > 0 {
+            log::info!("impacto: puesto calculado para {hechas} partidas que no lo tenían");
+        }
+    });
 }
 
 /// Tramos de presión absorbida de una partida ya sincronizada.
@@ -926,7 +970,7 @@ fn process_timeline_full(
                     } else if ev.victimId == self_participant_id {
                         timeline_markers.push(marker(sec, "death", "Muerte", pos_x, pos_y));
                     } else if ev.assistingParticipantIds.contains(&self_participant_id) {
-                        timeline_markers.push(marker(sec, "kill", "Asistencia", pos_x, pos_y));
+                        timeline_markers.push(marker(sec, "assist", "Asistencia", pos_x, pos_y));
                     }
                 }
                 "ELITE_MONSTER_KILL" => {
@@ -1175,6 +1219,7 @@ pub async fn backfill_participants(
             metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
             metadata.gank_impact_15 = analysis.gank_impact_15;
             metadata.lane_result = analysis.lane_result;
+            impacto(&mut metadata, &tl, &details.info.participants);
         }
     }
     let _ = crate::storage::save_match_metadata(&metadata);
@@ -1265,6 +1310,7 @@ pub async fn sync_riot_data(
                 metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
                 metadata.gank_impact_15 = analysis.gank_impact_15;
                 metadata.lane_result = analysis.lane_result;
+                impacto(&mut metadata, &tl, &info.participants);
             }
         }
 

@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
@@ -47,9 +47,12 @@ type LoadState = "loading" | "ready" | "error";
 // Las medidas están atadas al alto real del carril (56 px): las dos filas
 // apiladas lo llenan justo, sin invadir la cabecera ni la tira de saltos de
 // cámara del pie. Si el carril crece, esto se puede ensanchar.
-const MARK_SIZE = 22;        // diámetro del marcador, en px
-const MARK_PITCH = 24;       // separación mínima entre centros de una misma fila
-const MARK_ROWS = [12, 34];  // distancia al suelo de cada fila, en px
+const MARK_SIZE = 21;        // diámetro del marcador, en px
+const MARK_PITCH = 23;       // separación mínima entre centros de una misma fila
+// Con dos marcas en la misma vertical (lo normal en una pelea), las filas
+// pegadas se leían como una sola mancha. 2 px de aire las separan sin salirse
+// del carril: 12+21 = 33, y la de arriba ocupa de 35 a 56.
+const MARK_ROWS = [12, 35];
 
 interface VideoPlayerProps {
   match: MatchMetadata;
@@ -92,7 +95,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     return parseFloat(localStorage.getItem("mouseSyncOffset") || "1.0");
   });
   const [currentTime, setCurrentTime] = useState<number>(0);
+  // La duración de la partida, hasta que el vídeo diga la suya (que es la buena).
+  //
+  // El valor inicial de `useState` solo se usa al montar, así que al pasar de una
+  // partida a otra SIN desmontar el reproductor se quedaba la duración de la
+  // anterior: los marcadores, las marcas del eje y el reloj se calculaban contra
+  // una longitud que no era la de ese vídeo. Se ve enseguida cuando las dos
+  // partidas duran distinto.
   const [duration, setDuration] = useState<number>(match.game_duration || 0);
+  useEffect(() => {
+    setDuration(match.game_duration || 0);
+  }, [match.id, match.game_duration]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [volume, setVolume] = useState<number>(0.5);
@@ -656,19 +669,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const evs = individualEvents(match.events, match.timeline_markers ?? []);
     const w = trackSize.w || 1000;
     const half = MARK_SIZE / 2;
-    const lastX = MARK_ROWS.map(() => -Infinity);
-    return evs.map((ev) => {
-      const exactX = Math.min(w - half, Math.max(half, (ev.time / duration) * w));
-      let row = lastX.findIndex((lx) => exactX - lx >= MARK_PITCH);
-      let x = exactX;
-      if (row === -1) {
-        // Ninguna fila libre: va a la que menos lejos lo deja de su instante.
-        row = lastX.indexOf(Math.min(...lastX));
-        x = lastX[row] + MARK_PITCH;
+    const sitio = (t: number) => Math.min(w - half, Math.max(half, (t / duration) * w));
+    const marcas = evs.map((ev) => ({ ev, exactX: sitio(ev.time) }));
+
+    // Racimos: sucesos cuyos INSTANTES REALES caen tan juntos que sus marcas se
+    // pisarían. Se encadena por vecindad de tiempo, nunca por dónde acabó la
+    // marca anterior — que era el fallo de la versión anterior: al empujar cada
+    // marca a la derecha, la siguiente medía contra la posición ya empujada y
+    // heredaba el desplazamiento. En una partida de 57 sucesos eso arrastraba
+    // TODAS las marcas (hasta 128 px, casi tres minutos de partida) y subía a la
+    // fila de arriba marcas que no tenían a nadie al lado.
+    const racimos: { ev: MatchEvent; exactX: number }[][] = [];
+    for (const m of marcas) {
+      const ult = racimos[racimos.length - 1];
+      if (ult && m.exactX - ult[ult.length - 1].exactX < MARK_PITCH) ult.push(m);
+      else racimos.push([m]);
+    }
+
+    // Cada racimo se dibuja en columnas de dos —las dos filas se tocan sin
+    // solaparse, así que caben dos marcas en la misma vertical— y se centra en
+    // su propio instante. Centrar en vez de empujar reparte el error a los dos
+    // lados y deja el racimo encima del momento en que pasó.
+    const ancho = (n: number) => (Math.ceil(n / 2) - 1) * MARK_PITCH;
+    const centro = (g: typeof marcas) => (g[0].exactX + g[g.length - 1].exactX) / 2;
+
+    // Dos racimos ya centrados pueden pisarse entre ellos. En vez de fundirlos
+    // —que engorda el bloque, y el bloque gordo se come al siguiente hasta
+    // formar un bloque de media partida— se separan repartiendo el solape a
+    // partes iguales entre los dos. Así el ajuste se queda entre vecinos y cada
+    // racimo sigue encima de su momento.
+    const anchos = racimos.map((g) => ancho(g.length));
+    const inicios = racimos.map((g, i) => centro(g) - anchos[i] / 2);
+    const limitar = (x: number, i: number) =>
+      Math.max(half, Math.min(w - half - anchos[i], x));
+    for (let vuelta = 0; vuelta < 12; vuelta++) {
+      let movido = false;
+      for (let i = 0; i < racimos.length - 1; i++) {
+        const solape = inicios[i] + anchos[i] + MARK_PITCH - inicios[i + 1];
+        if (solape > 0.5) {
+          inicios[i] = limitar(inicios[i] - solape / 2, i);
+          inicios[i + 1] = limitar(inicios[i + 1] + solape / 2, i + 1);
+          movido = true;
+        }
       }
-      lastX[row] = x;
-      return { ev, x, exactX, bottom: MARK_ROWS[row] };
-    });
+      if (!movido) break;
+    }
+
+    return racimos.flatMap((g, gi) =>
+      g.map((m, i) => ({
+        ev: m.ev,
+        exactX: m.exactX,
+        x: limitar(inicios[gi], gi) + (i >> 1) * MARK_PITCH,
+        bottom: MARK_ROWS[i & 1],
+      }))
+    );
   }, [match.events, match.timeline_markers, duration, trackSize.w]);
 
   const result = outcome(match.result);

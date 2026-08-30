@@ -143,6 +143,35 @@
   matches[0].gank_impact_15 = 2;
   matches[0].jungle_cs_diff_15 = -4;
   matches[0].lane_result = "Even";
+  // Una partida DENSA, como las de verdad: 60 sucesos en media hora, repartidos
+  // en peleas (rachas de 4-6 en pocos segundos) con tramos tranquilos en medio.
+  // Es la única forma de ver si los marcadores de la línea de tiempo se colocan
+  // bien; con 15 sucesos espaciados no se nota nada.
+  matches[2].events = (() => {
+    const ev = [];
+    const kinds = ["kill", "death", "assist"];
+    const peleas = [95, 220, 380, 520, 610, 705, 860, 1010, 1105, 1240, 1380, 1500, 1620, 1740];
+    peleas.forEach((t0, i) => {
+      const n = 2 + (i % 4); // de 2 a 5 sucesos por pelea
+      for (let k = 0; k < n; k++) {
+        ev.push({
+          type: "ChampionKill",
+          subtype: kinds[(i + k) % 3],
+          time: t0 + k * (2 + (k % 3)),
+          description: "suceso",
+          actor: "Zeru",
+          target: "Rival",
+        });
+      }
+    });
+    // Y sucesos sueltos, que son los que tienen que quedarse en la fila de abajo.
+    [160, 300, 450, 660, 940, 1160, 1300, 1450, 1560, 1690].forEach((t) =>
+      ev.push({ type: "DragonKill", subtype: "ally", time: t, description: "dragón" })
+    );
+    return ev.sort((a, b) => a.time - b.time);
+  })();
+  matches[2].game_duration = 1833;
+
   window.__MOCK_MATCHES = matches;
 
   /**

@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { HardDrive, Target, Radio } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
 
+import { relativeDay } from "../../../core/time";
 /**
  * Hoy: en qué estás trabajando.
  *
@@ -22,17 +23,6 @@ interface DiskSpaceInfo {
   used_bytes: number;
   total_bytes: number;
 }
-
-const relativeDay = (iso: string): string => {
-  const d = new Date(iso.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return iso.split(" ")[0];
-  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((start(new Date()) - start(d)) / 86400000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days}d ago`;
-  return iso.split(" ")[0];
-};
 
 export interface HomePanelProps {
   matches: MatchMetadata[];
@@ -158,7 +148,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                           <span style={styles.miniName}>
                             {m.champion}
                             <span className="u-meta" style={{ display: "block", marginTop: 2 }}>
-                              {t(res === "victory" ? "victory" : res === "defeat" ? "defeat" : "no result")} · {t(relativeDay(m.date))}
+                              {t(res === "victory" ? "victory" : res === "defeat" ? "defeat" : "no result")} · {relativeDay(m.date, t)}
                             </span>
                           </span>
                           <span className="u-metric" style={styles.miniDur}>
@@ -214,7 +204,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                     }}
                   >
                     <div style={styles.reviewName}>{m.champion}</div>
-                    <div className="u-meta" style={{ marginTop: 3 }}>{t(relativeDay(m.date))}</div>
+                    <div className="u-meta" style={{ marginTop: 3 }}>{relativeDay(m.date, t)}</div>
                     <div
                       className="u-metric"
                       style={{

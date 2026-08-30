@@ -5,7 +5,9 @@ import { MatchMetadata } from "../../../types";
 import { Badge } from "../../../components/ui/Badge";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { useT } from "../../../core/LanguageProvider";
+import { mmss } from "../../../core/time";
 
+import { streamUrl } from "../../../core/media";
 /**
  * Los errores marcados.
  *
@@ -18,9 +20,6 @@ import { useT } from "../../../core/LanguageProvider";
  * campeón, fecha y el minuto en que ocurrió.
  */
 
-const streamUrl = (path: string): string =>
-  `http://stream.localhost/${encodeURIComponent(path)}`;
-
 /** Quita los segundos: "2026-08-13 02:21:20" → "2026-08-13 02:21". */
 const trimSeconds = (d: string): string =>
   /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d) ? d.slice(0, 16) : d;
@@ -30,12 +29,6 @@ const dateFromMatchId = (id: string): string | null => {
   const m = /^match_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})/.exec(id);
   if (!m) return null;
   return `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
-};
-
-const mmss = (s: number): string => {
-  const m = Math.floor(s / 60);
-  const r = Math.floor(s % 60);
-  return `${m}:${r < 10 ? "0" : ""}${r}`;
 };
 
 interface ErrorsGalleryProps {

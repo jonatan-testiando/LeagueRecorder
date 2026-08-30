@@ -9,11 +9,7 @@ import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { useT } from "../../../core/LanguageProvider";
-
-// El protocolo de streaming se sirve en http://stream.localhost/<ruta> (igual que
-// en el reproductor principal). El esquema "stream://localhost/" no resuelve en el WebView.
-const streamUrl = (path: string): string =>
-  `http://stream.localhost/${encodeURIComponent(path)}`;
+import { streamUrl } from "../../../core/media";
 
 const CATBOX_LIMIT = 200 * 1024 * 1024; // 200 MB (límite de catbox permanente)
 const LITTERBOX_LIMIT = 1024 * 1024 * 1024; // 1 GB (límite de litterbox temporal)

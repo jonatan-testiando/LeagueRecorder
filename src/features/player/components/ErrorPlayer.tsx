@@ -10,8 +10,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { mix } from "../../../core/color";
 import { useT } from "../../../core/LanguageProvider";
 
-const streamUrl = (path: string): string => `http://stream.localhost/${encodeURIComponent(path)}`;
+import { clock } from "../../../core/time";
 
+import { streamUrl } from "../../../core/media";
 interface ErrorPlayerProps {
   clip: ErrorClipMetadata;
   onUpdate: () => void;
@@ -121,13 +122,6 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
     }
   };
 
-  const formatTime = (seconds: number): string => {
-    if (!isFinite(seconds) || seconds < 0) seconds = 0;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
   const handleSaveNote = async () => {
     if (!noteText.trim()) return;
     try {
@@ -189,7 +183,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               </span>
               {clip.start_time !== undefined && clip.start_time !== null && (
                 <span className="u-meta" style={{ marginTop: 2 }}>
-                  at {formatTime(clip.start_time)} in the game
+                  at {clock(clip.start_time)} in the game
                 </span>
               )}
             </div>
@@ -243,8 +237,8 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
             </button>
 
             <span className="tp-tc">
-              <b>{formatTime(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-              <span className="tp-tc__total"> / {formatTime(duration)}</span>
+              <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+              <span className="tp-tc__total"> / {clock(duration)}</span>
             </span>
 
             <span style={{ flex: 1, minWidth: 12 }} />
@@ -340,7 +334,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 style={styles.addForm}
               >
                 <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  {t("Note at")} {formatTime(currentTime)}
+                  {t("Note at")} {clock(currentTime)}
                 </div>
                 <select
                   value={noteCategory}
@@ -387,7 +381,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 >
                   <div style={styles.reviewCardHeader}>
                     <span style={{ color: "var(--text-muted)", fontSize: "10px", fontWeight: "bold" }}>
-                      {formatTime(ev.time)}
+                      {clock(ev.time)}
                     </span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <div style={{...styles.toneBadge, color: conf.color, backgroundColor: mix(conf.color, 13)}}>

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export { streamUrl } from "../../core/media";
 // ---------------------------------------------------------------------------
 // Configuración
 // ---------------------------------------------------------------------------
@@ -180,18 +181,10 @@ export const listRecallFrames = (): Promise<RecallFrame[]> =>
   invoke<RecallFrame[]>("list_recall_frames");
 
 /** Ruta local → URL servible por el protocolo `stream` registrado en Rust. */
-export const streamUrl = (path: string): string =>
-  `http://stream.localhost/${encodeURIComponent(path)}`;
 
 // ---------------------------------------------------------------------------
 // Utilidades compartidas
 // ---------------------------------------------------------------------------
-
-/** Segundos → "mm:ss". */
-export const fmtClock = (secs: number): string => {
-  const s = Math.max(0, Math.round(secs));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
 
 /**
  * Normaliza la tecla de un evento de teclado al mismo formato que guarda la

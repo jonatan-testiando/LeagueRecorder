@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Brain, ArrowLeft, Check, X, Eye, Timer, RefreshCw } from "lucide-react";
+import { clock } from "../../../core/time";
 import {
   AwarenessSummary,
   CameraStats,
   QuizPayload,
   QuizResult,
-  fmtClock,
   generateAwarenessQuiz,
   listAwarenessRecords,
   submitAwarenessQuiz,
@@ -26,7 +26,7 @@ const CameraStatsRow: React.FC<{ stats: CameraStats }> = ({ stats }) => (
           color: stats.longest_gap_secs > 120 ? "var(--color-defeat)" : "var(--color-victory)",
         }}
       >
-        {fmtClock(stats.longest_gap_secs)}
+        {clock(stats.longest_gap_secs)}
       </span>
     </div>
     <div style={styles.stat}>
@@ -247,7 +247,7 @@ export const AwarenessQuiz: React.FC = () => {
                 <Eye size={13} /> {r.camera.presses_per_minute.toFixed(1)} checks/min
               </span>
               <span style={styles.metaItem}>
-                <Timer size={13} /> {fmtClock(r.camera.longest_gap_secs)} blind
+                <Timer size={13} /> {clock(r.camera.longest_gap_secs)} blind
               </span>
               {r.metronome && (
                 <span

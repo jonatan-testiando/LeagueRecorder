@@ -2,12 +2,11 @@ import React, { useEffect, useState } from "react";
 import { MatchMetadata } from "../../../types";
 import { getRecordedMatches } from "../../../core/tauri-ipc";
 import { TrendingUp, TrendingDown, Minus, ShieldCheck } from "lucide-react";
+import { champIcon } from "../../../core/ddragon";
 
 interface PerformanceTrendsWidgetProps {
   currentMatch: MatchMetadata;
 }
-
-const champIcon = (champion: string) => `/champions/${champion}.png`;
 
 export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = ({ currentMatch }) => {
   const [championMatches, setChampionMatches] = useState<MatchMetadata[]>([]);

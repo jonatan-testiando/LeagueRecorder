@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { TimelineMarker } from "../../../types";
 import { Map } from "lucide-react";
+import { mmss } from "../../../core/time";
 
 interface TacticalMapProps {
   markers: TimelineMarker[];
@@ -20,7 +21,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
 
   const filtered = validMarkers.filter((m) => {
     if (filter === "all") return true;
-    if (filter === "kill") return m.event_type === "kill";
+    if (filter === "kill") return m.event_type === "kill" || m.event_type === "assist";
     if (filter === "death") return m.event_type === "death";
     if (filter === "objective") return m.event_type === "dragon" || m.event_type === "herald" || m.event_type === "tower";
     return true;
@@ -34,14 +35,8 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
     return { px, py };
   };
 
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
-
   const getMarkerColor = (type: string) => {
-    if (type === "kill") return "var(--color-victory)";
+    if (type === "kill" || type === "assist") return "var(--color-victory)";
     if (type === "death") return "var(--color-defeat)";
     if (type === "dragon" || type === "herald") return "var(--color-objective)";
     if (type === "tower" || type === "plate") return "var(--accent-blue)";
@@ -188,7 +183,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
             pointerEvents: "none",
           }}>
             <span style={{ fontWeight: 700 }}>
-              {formatTime(activeMarker.time)} · {activeMarker.description}
+              {mmss(activeMarker.time)} · {activeMarker.description}
             </span>
             <span style={{ fontSize: "10px", color: "var(--accent-violet)", fontWeight: 800 }}>
               Clic para saltar

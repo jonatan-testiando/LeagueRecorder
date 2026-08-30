@@ -1,6 +1,7 @@
 import React from "react";
 import { TimelineMarker } from "../../../types";
 import { EyeOff, AlertTriangle } from "lucide-react";
+import { mmss } from "../../../core/time";
 
 interface MapAwarenessWidgetProps {
   cameraSnaps?: number[];
@@ -30,12 +31,6 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
   });
 
   const totalBlindCount = blindDeaths.filter((bd) => bd.isBlind).length;
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
 
   return (
     <div
@@ -103,7 +98,7 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
                   borderRadius: "4px",
                 }}
               >
-                {formatTime(item.marker.time)}
+                {mmss(item.marker.time)}
               </span>
               <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)" }}>
                 {item.isBlind ? "Muerte sin información previa" : "Chequeo de mapa registrado"}

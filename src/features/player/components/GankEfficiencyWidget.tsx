@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { TimelineMarker } from "../../../types";
 import { Crosshair, CheckCircle2, AlertCircle, XCircle, Filter, Compass, Lightbulb } from "lucide-react";
+import { mmss } from "../../../core/time";
 
 interface GankEfficiencyWidgetProps {
   markers?: TimelineMarker[];
@@ -61,12 +62,6 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
   const successCount = gankEvents.filter((g) => g.outcome === "success").length;
   const neutralCount = gankEvents.filter((g) => g.outcome === "neutral").length;
   const failedCount = gankEvents.filter((g) => g.outcome === "failed").length;
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
 
   return (
     <div
@@ -273,7 +268,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                           : "Instante exacto: anclado al evento de la partida"
                       }
                     >
-                      {formatTime(item.marker.time)}
+                      {mmss(item.marker.time)}
                       {item.precision > 0 && (
                         <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>
                           {" "}±{Math.round(item.precision)}s

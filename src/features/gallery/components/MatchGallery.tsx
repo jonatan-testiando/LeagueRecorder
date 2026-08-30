@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useT } from "../../../core/LanguageProvider";
 
+import { relativeDay } from "../../../core/time";
 interface DiskSpaceInfo {
   used_bytes: number;
   total_bytes: number;
@@ -37,18 +38,6 @@ const queueLabel = (q?: number): string => {
  * Fecha relativa. Con 19 partidas repartidas en cinco dias, "2026-08-12"
  * repetido no distingue nada; "hace 2 dias" si.
  */
-const relativeDay = (iso: string): string => {
-  const d = new Date(iso.replace(" ", "T"));
-  if (Number.isNaN(d.getTime())) return iso.split(" ")[0];
-  const today = new Date();
-  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const days = Math.round((start(today) - start(d)) / 86400000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days}d ago`;
-  return iso.split(" ")[0];
-};
-
 type Filter = "all" | "unreviewed" | "defeats";
 
 interface MatchGalleryProps {
@@ -105,9 +94,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     const out: Row[] = [];
     let i = 0;
     while (i < visible.length) {
-      const label = relativeDay(visible[i].date);
+      const label = relativeDay(visible[i].date, t);
       let j = i;
-      while (j < visible.length && relativeDay(visible[j].date) === label) j++;
+      while (j < visible.length && relativeDay(visible[j].date, t) === label) j++;
       out.push({ kind: "day", label, count: j - i, key: `day-${label}-${i}` });
       for (let k = i; k < j; k++) {
         out.push({ kind: "match", match: visible[k], key: visible[k].id });
@@ -307,7 +296,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             <span style={{ ...styles.result, color: accent }}>
                               {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
                             </span>
-                            <span className="u-meta">{t(relativeDay(match.date))}</span>
+                            <span className="u-meta">{relativeDay(match.date, t)}</span>
                             {unreviewed && (
                               <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
                             )}

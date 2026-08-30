@@ -1,16 +1,14 @@
 import React from "react";
 import { ItemPurchase, TimelineMarker } from "../../../types";
 import { Zap } from "lucide-react";
+import { mmss } from "../../../core/time";
+import { DDRAGON_VER, itemIcon } from "./videoPlayerUtils";
 
 interface PowerSpikeWidgetProps {
   itemPurchases?: ItemPurchase[];
   markers?: TimelineMarker[];
   onSeek: (seconds: number) => void;
 }
-
-const DDRAGON_VER = "16.13.1";
-const itemIcon = (id: number) =>
-  `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VER}/img/item/${id}.png`;
 
 export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
   itemPurchases = [],
@@ -19,7 +17,10 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
 }) => {
   if (itemPurchases.length === 0) return null;
 
-  const kills = markers.filter((m) => m.event_type === "kill");
+  // Participación, no remates: una asistencia justo después de comprar el ítem
+  // dice lo mismo del pico de poder que una kill. ('assist' es un tipo nuevo;
+  // las partidas viejas guardan las asistencias como 'kill'.)
+  const kills = markers.filter((m) => m.event_type === "kill" || m.event_type === "assist");
 
   // Calcular Kills dentro de los 3 minutos posteriores a cada compra
   const purchasesWithImpact = itemPurchases.map((ip) => {
@@ -31,12 +32,6 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
       killsAfter,
     };
   });
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s < 10 ? "0" : ""}${s}`;
-  };
 
   return (
     <div
@@ -93,10 +88,10 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
               border: "1px solid var(--border-subtle)",
               cursor: "pointer",
             }}
-            title={`Comprado en ${formatTime(item.purchase.time)} · Ir a ese momento`}
+            title={`Comprado en ${mmss(item.purchase.time)} · Ir a ese momento`}
           >
             <img
-              src={itemIcon(item.purchase.item_id)}
+              src={itemIcon(DDRAGON_VER, item.purchase.item_id)}
               alt=""
               style={{ width: "24px", height: "24px", borderRadius: "4px" }}
               onError={(e) => {
@@ -112,7 +107,7 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
                   color: "var(--text-secondary)",
                 }}
               >
-                {formatTime(item.purchase.time)}
+                {mmss(item.purchase.time)}
               </span>
               {item.killsAfter > 0 && (
                 <span style={{ fontSize: "10px", color: "var(--color-victory)", fontWeight: 800 }}>

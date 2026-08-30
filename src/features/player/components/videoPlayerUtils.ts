@@ -3,16 +3,11 @@
 
 import { MatchMetadata } from "../../../types";
 
-// Retratos de campeón: bundleados localmente en public/champions (script scripts/download-champions.ps1).
-export const champIcon = (champion: string) => `/champions/${champion}.png`;
-
+export { streamUrl } from "../../../core/media";
 // Los iconos de items sí se piden a Data Dragon (conjunto grande y volátil). Versión de fallback.
 export const DDRAGON_VER = "16.13.1";
 export const itemIcon = (ver: string, id: number) =>
   `https://ddragon.leagueoflegends.com/cdn/${ver}/img/item/${id}.png`;
-
-export const streamUrl = (path: string): string =>
-  `http://stream.localhost/${encodeURIComponent(path)}`;
 
 /** Segundos que un clip de error coge antes y después del instante marcado. */
 export const CLIP_BEFORE = 5;

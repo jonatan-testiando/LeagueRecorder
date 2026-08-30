@@ -42,11 +42,15 @@ const kindOf = (ev: MatchEvent): string | null => {
 
 /** Marcador de la Timeline de Riot → suceso, con el mismo vocabulario que el directo. */
 const fromMarker = (tm: TimelineMarker): MatchEvent | null => {
+  // Sin `description`. La del marcador es una frase fija en español
+  // ("Asesinato", "Dragón abatido") que no dice nada que el tipo y el icono no
+  // digan ya, y que se colaba en una lista por lo demás traducida. El tipo lleva
+  // toda la información que trae un marcador de Riot: quién no lo sabe.
   const ev = (t: string, s?: string): MatchEvent => ({
     type: t,
     subtype: s,
     time: tm.time,
-    description: tm.description,
+    description: "",
   });
   switch (tm.event_type) {
     case "kill":

@@ -573,9 +573,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     window.addEventListener("pointerup", onUp);
   };
 
-  // Sin marcadores: la lista lateral describe los sucesos del directo (con actor y
-  // víctima). `individualEvents` quita los que duplican a otro (multikill, first blood).
-  const timedEvents = React.useMemo(() => individualEvents(match.events), [match.events]);
+  // La MISMA lista que pinta la línea de tiempo, marcadores de Riot incluidos.
+  //
+  // Iban por separado, y eso hacía que al pulsar una marca que sólo existía en la
+  // timeline de Riot no se seleccionara nada en la pestaña de Eventos: se podía
+  // hacer clic en algo que la lista no tenía.
+  const timedEvents = React.useMemo(
+    () => individualEvents(match.events, match.timeline_markers ?? []),
+    [match.events, match.timeline_markers]
+  );
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // Marcas del eje temporal adaptadas a la duración real del vídeo (antes fijas a 30 min).
@@ -666,7 +672,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const eventMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
-    const evs = individualEvents(match.events, match.timeline_markers ?? []);
+    const evs = timedEvents;
     const w = trackSize.w || 1000;
     const half = MARK_SIZE / 2;
     const sitio = (t: number) => Math.min(w - half, Math.max(half, (t / duration) * w));
@@ -723,7 +729,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         bottom: MARK_ROWS[i & 1],
       }))
     );
-  }, [match.events, match.timeline_markers, duration, trackSize.w]);
+  }, [timedEvents, duration, trackSize.w]);
 
   const result = outcome(match.result);
   const isWin = result === "victory";
@@ -1133,7 +1139,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     boxShadow: "none",
                     zIndex: isActive ? 10 : 5,
                   }}
-                  title={`${clock(m.ev.time)} · ${t(meta.label)} – ${describeEvent(m.ev)}`}
+                  title={[`${clock(m.ev.time)} · ${t(meta.label)}`, describeEvent(m.ev)]
+                    .filter(Boolean)
+                    .join(" – ")}
                 >
                   <span style={{ color: isActive ? "var(--text)" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {meta.icon}
@@ -1934,6 +1942,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         key={i}
                         className="evrow"
                         data-on={isActive || undefined}
+                        // Traerla a la vista si la selección vino de fuera (una
+                        // marca de la línea de tiempo, o las flechas): marcar una
+                        // fila que se ha quedado fuera de la lista es no marcar
+                        // nada. `nearest` no mueve la lista si ya se está viendo.
+                        ref={(el) => {
+                          if (isActive && el) el.scrollIntoView({ block: "nearest" });
+                        }}
                         onClick={() => jumpToClip(ev.time)}
                       >
                         <span className="evrow__sev" style={{ background: meta.color }} />

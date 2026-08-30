@@ -854,6 +854,14 @@ async fn finalize_match(
         camera_snaps,
         video_offset,
     };
+
+    // Las miradas al mapa: las teclas de cámara que se acaban de recoger MÁS los
+    // clics de minimapa de la estela, que hasta ahora nadie leía. Con esto una
+    // grabación local no necesita el detector por vídeo. Ver `camera_input`.
+    let mut metadata = metadata;
+    metadata.camera_snaps = crate::camera_input::snaps_from_input(&metadata, &metadata.camera_snaps);
+    crate::camera_input::write_report(&metadata, &metadata.camera_snaps);
+
     match save_match_metadata(&metadata) {
         Ok(_) => {
             println!("Metadatos guardados con éxito para la partida {}", match_id);

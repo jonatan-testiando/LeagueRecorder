@@ -2,6 +2,7 @@ mod riot_live_api;
 mod attribution;
 mod awareness;
 mod baselines;
+mod camera_input;
 mod camera_snaps;
 mod commands;
 mod cv_analyzer;
@@ -155,6 +156,11 @@ pub fn run() {
             // Puesto de impacto de las partidas que se analizaron antes de que se
             // guardara: se calcula de lo que ya hay en disco, sin pedir nada.
             riot_api::spawn_impact_backfill();
+
+            // Y las miradas al mapa, que salen de los clics ya grabados: las
+            // partidas de antes también las tienen, sólo que nadie las había
+            // leído. Ver `camera_input`.
+            camera_input::spawn_backfill();
 
             // La actualización se descarga sola por detrás mientras usas la app, para
             // que pulsar "instalar" no sea esperar a que bajen 100 MB.

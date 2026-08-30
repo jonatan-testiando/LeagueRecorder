@@ -145,7 +145,9 @@ pub struct MinuteFrameDto {
     pub self_jungle_cs_diff: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// `Default` para poder construir una partida de mentira en un test citando sólo
+// los campos que importan, en vez de rellenar los treinta a mano.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MatchMetadata {
     pub id: String,
     pub game_duration: f64,

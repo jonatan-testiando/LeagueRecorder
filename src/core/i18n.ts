@@ -347,6 +347,10 @@ const ES: Record<string, string> = {
   "Mark error": "Marcar error",
   "Will be anchored to this moment": "Se anclará a este momento",
   "Drag to resize": "Arrastra para redimensionar",
+  "How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.":
+    "Cuánto sacaste la cámara de ti: clics en el minimapa y teclas de cámara aliada, contados de lo que pulsaste de verdad. «Blind» es el rato más largo sin mirar ni una vez.",
+  "Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.":
+    "Buscar movimientos de cámara en el vídeo. Solo hace falta para VODs importados: una partida grabada aquí ya lo sabe por tus clics y tus teclas.",
   "Camera moves": "Movimientos de cámara",
   "Clip": "Clip",
   "Error": "Error",

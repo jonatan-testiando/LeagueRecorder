@@ -1011,7 +1011,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {snapSummary?.analyzed ? (
               <span
                 style={styles.snapLabel}
-                title="Camera repositions found in the video (deaths excluded). This counts ally camera keys AND minimap clicks — it is a proxy for how often you took the camera off yourself, not an exact F-key count. Games recorded from now on measure the keys exactly."
+                title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
               >
                 <Eye size={13} /> {snapSummary.per_minute.toFixed(1)}/min
                 <span style={{ color: "var(--text-muted)" }}>·</span>
@@ -1031,7 +1031,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 onClick={runSnapAnalysis}
                 disabled={snapBusy}
                 style={{ ...styles.ghostBtn, opacity: snapBusy ? 0.6 : 1 }}
-                title="Scan the video for camera repositions (ally camera keys and minimap clicks)"
+                title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
               >
                 <Eye size={14} />
                 {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : t("Camera moves")}

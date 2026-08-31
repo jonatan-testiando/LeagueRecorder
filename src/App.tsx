@@ -190,8 +190,12 @@ export const App: React.FC = () => {
               className="updpill updpill--lista"
               onClick={async () => {
                 // En Windows esto no vuelve: el instalador toma el relevo y la
-                // /R del NSIS relanza la app sola. El velo cubre ese tránsito.
+                // /R del NSIS relanza la app sola. El velo cubre ese tránsito —
+                // y se le dan unos segundos de escena ANTES de lanzar el
+                // instalador, porque el cierre real es tan rápido que sin la
+                // pausa el velo ni se ve y el reinicio parece un crash.
                 setInstalling(true);
+                await new Promise((r) => setTimeout(r, 4500));
                 try {
                   await installPendingUpdate();
                 } catch (e) {

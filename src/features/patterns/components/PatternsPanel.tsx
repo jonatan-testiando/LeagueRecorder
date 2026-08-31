@@ -444,7 +444,7 @@ export const PatternsPanel: React.FC = () => {
 
         {/* ------------------------------------------------ cruces honestos */}
         {(cruceMiradas !== null || cruceOro !== null) && (
-          <div className="card" style={styles.card}>
+          <div className="card" style={{ ...styles.card, background: "var(--media-sheen)" }}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Crossings")}</span>
               <span className="u-meta">{t(c.label)}</span>

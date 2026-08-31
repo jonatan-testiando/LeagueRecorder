@@ -130,12 +130,17 @@
   --surface-1: var(--panel);
   --surface-2: var(--raised);
 
-  /* Brillo de fila multimedia (clips, errores): el gesto de Mobalytics que
-     pidió el usuario. NO es la capa de vidrio que se retiró — aquello eran
-     láminas translúcidas sobre lavados globales; esto es un degradado OPACO y
-     direccional dentro de una fila: sube hacia la derecha con un aliento de
-     violeta (el tinte de los hallazgos), y los dos extremos son colores
-     sólidos, así que el fondo de debajo no se cuela. */
+  /* Brillo de HALLAZGO. Degradado opaco y direccional que sube hacia el
+     violeta (el tinte de los hallazgos del analizador). NO es la capa de
+     vidrio retirada (aquello era translúcido sobre lavados globales).
+
+     La regla de dónde ponerlo, para que siga significando algo:
+       - superficies que ENSEÑAN un hallazgo o una pieza de la colección del
+         usuario (clips, errores, el punto ciego de Hoy, el evento destacado
+         del reproductor, los cruces de Patrones);
+       - UNA superficie, nunca una lista de filas repetidas: veinte degradados
+         apilados son una persiana (es la misma lección del brillo de
+         .game-row, que por eso es solo-hover). */
   /* Medido contra la referencia: al 13% el violeta era imperceptible en una
      fila de pantalla completa (el propio usuario lo dio por ausente). Mobalytics
      llega a un morado franco en el extremo; esto se queda un paso por debajo
@@ -1443,6 +1448,8 @@ a:focus:not(:focus-visible) {
 .evfeat {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line-soft);
+  /* Es la superficie de hallazgo de la pestaña: el evento que estás mirando. */
+  background: var(--media-sheen);
 }
 .evfeat__top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .evfeat__time {

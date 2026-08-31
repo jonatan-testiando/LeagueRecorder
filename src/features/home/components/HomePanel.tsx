@@ -362,7 +362,7 @@ const styles: Record<string, React.CSSProperties> = {
   blind: {
     marginTop: "var(--space-4)",
     padding: "var(--space-4)",
-    background: "var(--surface-1)",
+    background: "var(--media-sheen)",
     border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-lg)",
   },

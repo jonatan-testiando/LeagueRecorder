@@ -456,6 +456,11 @@ export const PatternsPanel: React.FC = () => {
                 <div style={{ minWidth: 0 }}>
                   <div className="u-metric" style={{ fontSize: 15, fontWeight: 700 }}>
                     {prediccion.wins}V {prediccion.losses}D
+                    {prediccion.avgScore != null && (
+                      <span style={{ marginLeft: 8, color: "var(--brand)" }} title={t("Performance percentile inside each game's lobby, recent games weigh double")}>
+                        {Math.round(prediccion.avgScore)} {t("score")}
+                      </span>
+                    )}
                     <span
                       style={{
                         marginLeft: 8,
@@ -468,7 +473,7 @@ export const PatternsPanel: React.FC = () => {
                     <span className="u-meta"> {t("per game at this pace")}</span>
                   </div>
                   <p style={{ ...styles.insightText, marginTop: 4 }}>
-                    {t("Linear projection of your recent form (latest games weigh double, LP swings measured from your own games). It points, it doesn't promise.")}
+                    {t("Record and performance, blended: your score inside each lobby corrects the winrate (losing while outplaying projects up). LP swings measured from your own games. It points, it doesn't promise.")}
                   </p>
                 </div>
               </div>

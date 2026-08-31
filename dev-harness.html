@@ -414,6 +414,9 @@
         champion: ["Gwen", "Ahri", "Lee Sin"][i % 3],
         kills: 5 + (i % 7), deaths: 2 + (i % 5), assists: 6 + (i % 9),
         game_end_ms: now - i * 8 * 3600 * 1000,
+        // Nota alta en las recientes: jugando por encima del marcador, como el
+        // caso D3→D1 que contaba el usuario.
+        score: [82, 74, 61, 88, 79, 71, 55, 68, 47, 76, 64, 42, 70, 66, 39, 45, 62, 41, 38, 58][i],
       })),
       tier: "EMERALD", division: "II", lp: 64,
       avg_gain: 24, avg_loss: 19,

@@ -66,8 +66,11 @@ const ES: Record<string, string> = {
   "your last {n} ranked games, recorded or not": "tus últimas {n} ranked de la cuenta, grabadas o no",
   "in ~20 games": "en ~20 partidas",
   "per game at this pace": "por partida a este ritmo",
-  "Linear projection of your recent form (latest games weigh double, LP swings measured from your own games). It points, it doesn't promise.":
-    "Proyección lineal de tu forma reciente (las últimas pesan doble, los LP salen de tus propias partidas). Apunta, no promete.",
+  "Record and performance, blended: your score inside each lobby corrects the winrate (losing while outplaying projects up). LP swings measured from your own games. It points, it doesn't promise.":
+    "Marcador y rendimiento, mezclados: tu nota dentro de cada lobby corrige el winrate (perder jugando mejor proyecta subir). Los LP salen de tus propias partidas. Apunta, no promete.",
+  "score": "de nota",
+  "Performance percentile inside each game's lobby, recent games weigh double":
+    "Percentil de rendimiento dentro del lobby de cada partida; las recientes pesan doble",
   "your climb, LP across {n} recorded games": "tu escalada: LP en {n} partidas grabadas",
   "Your pool": "Tu pool",
   "who you actually win with": "con quién ganas de verdad",

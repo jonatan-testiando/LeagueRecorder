@@ -871,6 +871,67 @@ pub fn spawn_impact_backfill() {
     });
 }
 
+/// Nota de rendimiento 0–100 de un jugador dentro de SU partida, estilo
+/// AI-Score: cinco métricas (KDA, daño a campeones, cs/min, visión/min y
+/// participación en kills), cada una convertida a rango entre los 10 del
+/// lobby, ponderadas, y el compuesto vuelto percentil. Comparar dentro del
+/// lobby la hace robusta a duración, parche y elo: ser el mejor de tu partida
+/// vale lo mismo en Hierro que en Master.
+fn nota_en_partida(yo_idx: usize, jugadores: &[ParticipantDto], dur_s: i64) -> f64 {
+    if jugadores.len() < 2 || yo_idx >= jugadores.len() {
+        return 50.0;
+    }
+    let min = (dur_s.max(60) as f64) / 60.0;
+    let kills_de_equipo = |team: i32| -> i32 {
+        jugadores.iter().filter(|p| p.teamId == team).map(|p| p.kills).sum()
+    };
+    // (métrica, peso): daño y KDA mandan, como en cualquier report card.
+    let metricas: Vec<(Vec<f64>, f64)> = vec![
+        (
+            jugadores.iter().map(|p| (p.kills + p.assists) as f64 / p.deaths.max(1) as f64).collect(),
+            0.25,
+        ),
+        (
+            jugadores.iter().map(|p| p.totalDamageDealtToChampions as f64 / min).collect(),
+            0.25,
+        ),
+        (
+            jugadores.iter().map(|p| (p.totalMinionsKilled + p.neutralMinionsKilled) as f64 / min).collect(),
+            0.15,
+        ),
+        (
+            jugadores.iter().map(|p| p.visionScore as f64 / min).collect(),
+            0.15,
+        ),
+        (
+            jugadores
+                .iter()
+                .map(|p| (p.kills + p.assists) as f64 / kills_de_equipo(p.teamId).max(1) as f64)
+                .collect(),
+            0.20,
+        ),
+    ];
+    let n = jugadores.len();
+    // rango de cada jugador en cada métrica (0 = peor, n-1 = mejor)
+    let compuesto: Vec<f64> = (0..n)
+        .map(|j| {
+            metricas
+                .iter()
+                .map(|(vals, peso)| {
+                    let rango = vals.iter().filter(|&&v| v < vals[j]).count() as f64
+                        + vals.iter().filter(|&&v| v == vals[j]).count() as f64 / 2.0
+                        - 0.5;
+                    peso * rango / (n - 1) as f64
+                })
+                .sum()
+        })
+        .collect();
+    let mejores = compuesto.iter().filter(|&&c| c < compuesto[yo_idx]).count() as f64
+        + compuesto.iter().filter(|&&c| c == compuesto[yo_idx]).count() as f64 / 2.0
+        - 0.5;
+    (mejores / (n - 1) as f64 * 100.0).clamp(0.0, 100.0)
+}
+
 /// El puuid del jugador y su plataforma ("la1"), sacados de cualquier partida
 /// sincronizada con su DTO cacheado: los participants guardados van en el
 /// mismo orden que los del DTO, así que el índice de is_self vale.
@@ -934,9 +995,10 @@ pub async fn get_season_form() -> Result<SeasonForm, String> {
         let Ok(details) = api.get_match_details(id).await else {
             continue; // rate limit o red: mejor 18 de 20 que un error total
         };
-        let Some(p) = details.info.participants.iter().find(|p| p.puuid == puuid) else {
+        let Some(yo_idx) = details.info.participants.iter().position(|p| p.puuid == puuid) else {
             continue;
         };
+        let p = &details.info.participants[yo_idx];
         let g = crate::storage::SeasonGame {
             riot_match_id: id.clone(),
             win: p.win,
@@ -945,6 +1007,7 @@ pub async fn get_season_form() -> Result<SeasonForm, String> {
             deaths: p.deaths,
             assists: p.assists,
             game_end_ms: details.info.gameEndTimestamp,
+            score: nota_en_partida(yo_idx, &details.info.participants, details.info.gameDuration),
         };
         cache.push(g.clone());
         games.push(g);
@@ -1613,4 +1676,45 @@ pub async fn sync_riot_data(
     }
 
     Ok(metadata)
+}
+
+#[cfg(test)]
+mod tests_nota {
+    use super::*;
+
+    fn jugador(k: i32, d: i32, a: i32, dmg: i32, cs: i32, vis: i32, team: i32) -> ParticipantDto {
+        let mut p: ParticipantDto = serde_json::from_str("{\"puuid\":\"x\",\"kills\":0,\"deaths\":0,\"assists\":0,\"goldEarned\":0,\"totalDamageDealtToChampions\":0,\"win\":false}").unwrap();
+        p.kills = k;
+        p.deaths = d;
+        p.assists = a;
+        p.totalDamageDealtToChampions = dmg;
+        p.totalMinionsKilled = cs;
+        p.visionScore = vis;
+        p.teamId = team;
+        p
+    }
+
+    #[test]
+    fn el_mejor_del_lobby_roza_cien_y_el_peor_cero() {
+        // Diez jugadores en escalera: el i-ésimo es mejor que el anterior en todo.
+        let lobby: Vec<ParticipantDto> = (0..10)
+            .map(|i| jugador(i, 10 - i, i, i * 3000, i * 40, i * 5, if i < 5 { 100 } else { 200 }))
+            .collect();
+        let peor = nota_en_partida(0, &lobby, 1800);
+        let mejor = nota_en_partida(9, &lobby, 1800);
+        assert!(peor < 15.0, "el peor del lobby: {peor}");
+        assert!(mejor > 85.0, "el mejor del lobby: {mejor}");
+        assert!(nota_en_partida(5, &lobby, 1800) > peor);
+    }
+
+    #[test]
+    fn lobby_identico_da_cincuenta_a_todos() {
+        let lobby: Vec<ParticipantDto> = (0..10)
+            .map(|i| jugador(5, 5, 5, 15000, 200, 20, if i < 5 { 100 } else { 200 }))
+            .collect();
+        for i in 0..10 {
+            let n = nota_en_partida(i, &lobby, 1800);
+            assert!((n - 50.0).abs() < 1.0, "jugador {i}: {n}");
+        }
+    }
 }

@@ -212,19 +212,29 @@ export interface RankForecast {
   losses: number;
   /** Winrate ponderado por recencia (las 10 últimas pesan doble). */
   wr: number;
+  /** Nota media de rendimiento (estilo AI-Score), recencia ponderada. Null
+   *  si las partidas no traen nota. */
+  avgScore: number | null;
   /** LP netos por partida a este ritmo. */
   netPerGame: number;
   pred: { tier: string; division: string | null; lp: number };
 }
 
 /**
- * Proyección de rango a 20 partidas vista, estilo deeplol pero sin humo:
- * winrate reciente (recencia ponderada) × lo que dan/quitan TUS partidas
- * según los deltas de LP medidos, sobre la escalera. Con menos de 8 partidas
- * no hay forma que proyectar y se devuelve null.
+ * Proyección de rango a 20 partidas vista, estilo deeplol pero sin humo.
+ *
+ * Dos señales, no una — que era lo simplista que señaló el usuario:
+ *  - lo que PASÓ: winrate reciente (recencia ponderada, las 10 últimas doble);
+ *  - lo que MERECIÓ pasar: la nota media de rendimiento dentro de cada lobby
+ *    (estilo AI-Score). La nota es un percentil entre los 10 de la partida,
+ *    así que /100 ya es una probabilidad de "juegas como quien gana".
+ * Se mezclan 60/40 — el marcador manda, el juego corrige: quien pierde
+ * jugando como el mejor del lobby proyecta subir; quien gana siendo llevado,
+ * menos de lo que dice su racha. LP por partida de los deltas medidos.
+ * Con menos de 8 partidas no hay forma que proyectar: null.
  */
 export function forecastRank(
-  games: { win: boolean }[],
+  games: { win: boolean; score?: number }[],
   tier: string | null | undefined,
   division: string | null | undefined,
   lp: number | null | undefined,
@@ -234,16 +244,24 @@ export function forecastRank(
   if (!tier || lp == null || games.length < 8) return null;
   let ganadas = 0;
   let total = 0;
+  let nota = 0;
+  let notaPeso = 0;
   games.forEach((g, i) => {
     const peso = i < 10 ? 2 : 1; // recientes primero: la forma de AHORA
     total += peso;
     if (g.win) ganadas += peso;
+    if (g.score != null && g.score > 0) {
+      nota += g.score * peso;
+      notaPeso += peso;
+    }
   });
   const wr = ganadas / total;
+  const avgScore = notaPeso >= 8 ? nota / notaPeso : null;
+  const wrEfectiva = avgScore != null ? 0.6 * wr + 0.4 * (avgScore / 100) : wr;
   const gain = avgGain ?? 25;
   const loss = avgLoss ?? 25;
-  const net = wr * gain - (1 - wr) * loss;
+  const net = wrEfectiva * gain - (1 - wrEfectiva) * loss;
   const abs = ladderLp(tier, division, lp) + net * 20;
   const wins = games.filter((g) => g.win).length;
-  return { wins, losses: games.length - wins, wr, netPerGame: net, pred: ladderRank(abs) };
+  return { wins, losses: games.length - wins, wr, avgScore, netPerGame: net, pred: ladderRank(abs) };
 }

@@ -260,6 +260,8 @@ export interface SeasonGame {
   deaths: number;
   assists: number;
   game_end_ms: number;
+  /** Nota de rendimiento 0–100 dentro del lobby de esa partida. */
+  score: number;
 }
 
 /** La forma de la cuenta: últimos ranked, rango actual y LP medios por partida. */

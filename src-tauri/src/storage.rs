@@ -564,10 +564,16 @@ pub struct SeasonGame {
     pub assists: i32,
     /// Fin de partida en ms epoch, para ordenar sin re-pedir nada.
     pub game_end_ms: i64,
+    /// Nota de rendimiento 0–100: percentil de tu juego DENTRO del lobby de
+    /// esa partida (estilo AI-Score de deeplol). 50 = el quinto de diez.
+    #[serde(default)]
+    pub score: f64,
 }
 
 pub fn season_form_cache_path() -> PathBuf {
-    get_config_path().with_file_name("season_form.json")
+    // v2: las entradas viejas no traían la nota de rendimiento; con el nombre
+    // nuevo la caché se rehace sola en la primera apertura.
+    get_config_path().with_file_name("season_form_v2.json")
 }
 
 pub fn load_season_form_cache() -> Vec<SeasonGame> {

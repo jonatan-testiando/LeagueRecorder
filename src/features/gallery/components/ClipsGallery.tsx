@@ -41,8 +41,7 @@ const LS_KEY = "clipLinks";
 
 // Medidas del grid. Están aquí y no solo en el CSS porque el virtualizador necesita
 // calcular a mano cuántas columnas caben.
-const CARD_MIN_WIDTH = 280;
-const GRID_GAP = 24;
+const GRID_GAP = 8;
 
 const expiresAt = (l: StoredLink): number =>
   l.expiry === "permanent" ? Infinity : l.uploadedAt + (DURATION_MS[l.expiry] ?? 0);
@@ -92,27 +91,14 @@ export const ClipsGallery: React.FC = () => {
   // "sin clips". Declararlos después haría que el número de hooks cambiara entre
   // renders y React abortaría con "Rendered more hooks than during the previous render".
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [columns, setColumns] = useState(3);
-
-  // El grid solo existe cuando hay clips que pintar: mientras se carga o si no hay
-  // ninguno se devuelve otra cosa más abajo, y `scrollRef` está vacío.
-  const showGrid = !loading && clips.length > 0;
+  // Filas horizontales de una columna: el cálculo de columnas por anchura se
+  // retiró con la rejilla de tarjetas.
+  const columns = 1;
 
   // Cuántas tarjetas caben por fila. Replica a mano lo que hacía
   // `grid-template-columns: repeat(auto-fill, minmax(CARD_MIN_WIDTH, 1fr))`,
   // porque el virtualizador necesita saber el número de columnas para agrupar.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width;
-        setColumns(Math.max(1, Math.floor((width + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [showGrid]);
+  // (el observador de anchura se fue con la rejilla)
 
   const rowCount = Math.ceil(clips.length / columns);
   const rowVirtualizer = useVirtualizer({
@@ -264,7 +250,7 @@ export const ClipsGallery: React.FC = () => {
                   <motion.div
                     key={clip.path}
                     style={styles.card}
-                    whileHover={{ scale: 1.02 }}
+                    whileHover={{ scale: 1.005 }}
                   >
                     <div style={styles.thumbnailWrapper}>
                       <video
@@ -404,14 +390,16 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "var(--radius-lg)",
     border: "1px solid var(--border-subtle)",
     overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
+    display: "grid",
+    gridTemplateColumns: "240px 1fr",
   },
   thumbnailWrapper: {
     width: "100%",
     aspectRatio: "16/9",
     backgroundColor: "var(--sunken)",
     position: "relative",
+    alignSelf: "center",
+    borderRight: "1px solid var(--line-soft)",
   },
   videoPreview: {
     width: "100%",

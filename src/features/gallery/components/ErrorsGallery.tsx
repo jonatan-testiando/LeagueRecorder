@@ -165,15 +165,15 @@ const styles: Record<string, React.CSSProperties> = {
   header: { marginBottom: "var(--space-5)" },
   title: { margin: 0, fontSize: "var(--font-xl)" },
   grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(272px, 1fr))",
-    gap: "var(--space-4)",
-    alignItems: "start",
-  },
-  card: {
-    overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+    gap: "var(--space-2)",
+  },
+  /* Fila horizontal: la miniatura es el índice, el texto es la fila. */
+  card: {
+    overflow: "hidden",
+    display: "grid",
+    gridTemplateColumns: "220px 1fr",
     padding: 0,
   },
   thumb: {
@@ -181,7 +181,7 @@ const styles: Record<string, React.CSSProperties> = {
     aspectRatio: "16/9",
     backgroundColor: "var(--sunken)",
     position: "relative",
-    borderBottom: "1px solid var(--line-soft)",
+    borderRight: "1px solid var(--line-soft)",
   },
   video: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
   thumbVeil: {
@@ -205,10 +205,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontVariantNumeric: "tabular-nums",
   },
   body: {
-    padding: "var(--space-3) var(--space-4) var(--space-4)",
+    padding: "var(--space-3) var(--space-4)",
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-3)",
+    justifyContent: "center",
+    gap: "var(--space-2)",
+    minWidth: 0,
   },
   lesson: {
     margin: 0,

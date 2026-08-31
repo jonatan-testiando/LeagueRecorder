@@ -222,7 +222,21 @@
       all_devices: ["CABLE Output (VB-Audio)", "Altavoces"],
       ready_for_game_audio: true,
     }),
-    get_all_clips: () => [],
+    get_all_clips: () =>
+      [
+        ["Doble kill en bot", true, 48],
+        ["Teleport a la pelea", false, 112],
+        ["Robo de dragon", false, 74],
+      ].map(function (c, i) {
+        return {
+          path: "C:/vod/clip_" + i + ".mp4",
+          name: c[0],
+          match_id: "m" + i,
+          size: c[2] * 1024 * 1024,
+          favorite: c[1],
+          created: iso(now - i * 3600000),
+        };
+      }),
     // La forma es la de `ErrorClipMetadata` (path/name/size/events), no una
     // inventada: el doble anterior no traía `path` ni `events`, así que la
     // pantalla de errores se pintaba con `key={undefined}` y React avisaba de

@@ -223,6 +223,82 @@ export const PatternsPanel: React.FC = () => {
           )}
         </div>
 
+        {/* ---------------------------------------------------- reloj */}
+        <div className="card" style={styles.card}>
+          <div style={styles.cardHead}>
+            <span className="u-label">{t("When you die")}</span>
+            <span className="u-meta">{t("by minute of game")}</span>
+          </div>
+
+          <div style={styles.clock}>
+            {clock.buckets.map((b) => {
+              const isPeak = clock.peak !== null && b.from === clock.peak.from;
+              return (
+                <div
+                  key={b.from}
+                  style={styles.clockRow}
+                  title={`${b.total} deaths · ${b.inWins} in wins, ${b.inLosses} in losses`}
+                >
+                  <span
+                    className="u-metric"
+                    style={{
+                      ...styles.clockTime,
+                      color: isPeak ? "var(--loss)" : "var(--faint)",
+                    }}
+                  >
+                    {b.from}–{b.to}
+                  </span>
+                  <span style={styles.clockTrack}>
+                    <span
+                      style={{
+                        ...styles.clockFill,
+                        width: `${maxBucket ? (b.total / maxBucket) * 100 : 0}%`,
+                        opacity: isPeak ? 1 : 0.45,
+                      }}
+                    />
+                  </span>
+                  <span className="u-metric" style={styles.clockValue}>{b.total}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {clock.peak && (
+            <div style={styles.insight}>
+              <p style={styles.insightText}>
+                <strong style={{ color: "var(--text)" }}>
+                  {t("Minute {a}–{b} is your worst window.", { a: clock.peak.from, b: clock.peak.to })}
+                </strong>{" "}
+                {t("{n} of your {total} deaths land there ({pct}%).", {
+                  n: clock.peak.total,
+                  total: clock.total,
+                  pct: Math.round((clock.peak.total / clock.total) * 100),
+                })}
+              </p>
+              <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 6 }}>
+                {t(c.note)}
+              </p>
+            </div>
+          )}
+
+          {clock.deathsPerWin !== null && clock.deathsPerLoss !== null && (
+            <div style={styles.split}>
+              <div>
+                <div className="u-metric" style={{ fontSize: 16, color: "var(--win)" }}>
+                  {clock.deathsPerWin.toFixed(1)}
+                </div>
+                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per win")}</div>
+              </div>
+              <div>
+                <div className="u-metric" style={{ fontSize: 16, color: "var(--loss)" }}>
+                  {clock.deathsPerLoss.toFixed(1)}
+                </div>
+                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per loss")}</div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={styles.sideCol}>
           {/* Tu puesto, partida a partida. */}
           <div className="card" style={styles.card}>
@@ -275,12 +351,13 @@ export const PatternsPanel: React.FC = () => {
         </div>
       </div>
 
+      <div style={styles.grid}>
       {/* --------------------------------------- el punto ciego, por partida */}
       {zonas.length >= 3 && (() => {
         const filas = zonas.slice(-12);
         const peorDe = (g: [number, number, number]) => g.indexOf(Math.max(...g));
         return (
-          <div className="card" style={{ ...styles.card, marginBottom: "var(--space-4)" }}>
+          <div className="card" style={styles.card}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Blind spot, game by game")}</span>
               <span className="u-meta">{t("longest stretch without a look, per lane")}</span>
@@ -314,80 +391,6 @@ export const PatternsPanel: React.FC = () => {
           </div>
         );
       })()}
-
-      <div style={styles.grid}>
-        {/* ---------------------------------------------------- reloj */}
-        <div className="card" style={styles.card}>
-          <div style={styles.cardHead}>
-            <span className="u-label">{t("When you die")}</span>
-            <span className="u-meta">{t("by minute of game")}</span>
-          </div>
-
-          <div style={styles.clock}>
-            {clock.buckets.map((b) => {
-              const isPeak = clock.peak !== null && b.from === clock.peak.from;
-              return (
-                <div
-                  key={b.from}
-                  style={styles.clockRow}
-                  title={`${b.total} deaths · ${b.inWins} in wins, ${b.inLosses} in losses`}
-                >
-                  <span
-                    className="u-metric"
-                    style={{
-                      ...styles.clockTime,
-                      color: isPeak ? "var(--loss)" : "var(--faint)",
-                    }}
-                  >
-                    {b.from}–{b.to}
-                  </span>
-                  <span style={styles.clockTrack}>
-                    <span
-                      style={{
-                        ...styles.clockFill,
-                        width: `${maxBucket ? (b.total / maxBucket) * 100 : 0}%`,
-                        opacity: isPeak ? 1 : 0.45,
-                      }}
-                    />
-                  </span>
-                  <span className="u-metric" style={styles.clockValue}>{b.total}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          {clock.peak && (
-            <div style={styles.insight}>
-              <p style={styles.insightText}>
-                <strong style={{ color: "var(--text)" }}>
-                  Minute {clock.peak.from}–{clock.peak.to} is your worst window.
-                </strong>{" "}
-                {clock.peak.total} of your {clock.total} deaths land there
-                {" "}({Math.round((clock.peak.total / clock.total) * 100)}%).
-              </p>
-              <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 6 }}>
-                {t(c.note)}
-              </p>
-            </div>
-          )}
-
-          {clock.deathsPerWin !== null && clock.deathsPerLoss !== null && (
-            <div style={styles.split}>
-              <div>
-                <div className="u-metric" style={{ fontSize: 16, color: "var(--win)" }}>
-                  {clock.deathsPerWin.toFixed(1)}
-                </div>
-                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per win")}</div>
-              </div>
-              <div>
-                <div className="u-metric" style={{ fontSize: 16, color: "var(--loss)" }}>
-                  {clock.deathsPerLoss.toFixed(1)}
-                </div>
-                <div className="u-label" style={{ marginTop: 3 }}>{t("deaths per loss")}</div>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* ---------------------------------------------- tus etiquetas */}
         <div className="card" style={styles.card}>
@@ -428,7 +431,10 @@ export const PatternsPanel: React.FC = () => {
             <div style={{ ...styles.insight, borderLeftColor: "var(--gold)" }}>
               <p style={styles.insightText}>
                 <strong style={{ color: "var(--text)" }}>
-                  {cats.reduce((a, x) => a + x.count, 0)} notes across {clock.total} deaths.
+                  {t("{n} notes across {total} deaths.", {
+                    n: cats.reduce((a, x) => a + x.count, 0),
+                    total: clock.total,
+                  })}
                 </strong>{" "}
                 {t("The window above comes from the data, not from your reading of it. Flagging even one moment per game is what turns \"when\" into \"why\".")}
               </p>
@@ -503,7 +509,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   heroRow: {
     display: "grid",
-    gridTemplateColumns: "minmax(360px, 520px) 1fr",
+    // mapa | reloj | puesto+presencia: las tres preguntas de la pantalla en la
+    // primera fila, sin dejar el ancho muerto que dejaba el reloj viviendo abajo.
+    gridTemplateColumns: "minmax(360px, 480px) minmax(340px, 1fr) minmax(300px, 400px)",
     gap: "var(--space-4)",
     alignItems: "start",
     marginBottom: "var(--space-4)",
@@ -594,8 +602,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   insightText: {
     margin: 0,
-    fontSize: "var(--font-xs)",
-    lineHeight: 1.55,
+    // 13px, no 12: es prosa que se LEE, no una etiqueta que se reconoce. La
+    // queja de "no sé si es la fuente" era en parte este escalón que faltaba.
+    fontSize: "13px",
+    lineHeight: 1.6,
     color: "var(--muted)",
   },
   split: {

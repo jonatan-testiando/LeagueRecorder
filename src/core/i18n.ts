@@ -134,6 +134,10 @@ const ES: Record<string, string> = {
   "This is the row to watch after training a lane: it is the only screen that can tell whether it is working.":
     "Esta es la fila que hay que mirar después de entrenar un carril: es la única pantalla que puede decir si está funcionando.",
   "Crossings": "Cruces",
+  "Minute {a}–{b} is your worst window.": "El minuto {a}–{b} es tu peor tramo.",
+  "{n} of your {total} deaths land there ({pct}%).":
+    "Ahí caen {n} de tus {total} muertes ({pct}%).",
+  "{n} notes across {total} deaths.": "{n} notas sobre {total} muertes.",
   "In your low map-checking games you die {pct}% more than in the high ones ({n} games).":
     "En tus partidas de mirar poco el mapa mueres un {pct}% más que en las de mirar mucho ({n} partidas).",
   "Your deaths barely change with how much you check the map ({n} games).":

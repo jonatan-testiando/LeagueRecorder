@@ -224,7 +224,7 @@ export const PatternsPanel: React.FC = () => {
         </div>
 
         {/* ---------------------------------------------------- reloj */}
-        <div className="card" style={styles.card}>
+        <div className="card" style={{ ...styles.card, display: "flex", flexDirection: "column" }}>
           <div style={styles.cardHead}>
             <span className="u-label">{t("When you die")}</span>
             <span className="u-meta">{t("by minute of game")}</span>
@@ -301,7 +301,7 @@ export const PatternsPanel: React.FC = () => {
 
         <div style={styles.sideCol}>
           {/* Tu puesto, partida a partida. */}
-          <div className="card" style={styles.card}>
+          <div className="card" style={{ ...styles.card, flex: 1 }}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Your rank, game by game")}</span>
               <span className="u-meta">{puestos.length ? `${t("latest")} ${puestos.length}` : ""}</span>
@@ -332,7 +332,7 @@ export const PatternsPanel: React.FC = () => {
 
           {/* Lo que compra tu presencia. */}
           {presion !== null && presion.windows > 0 && (
-            <div className="card" style={styles.card}>
+            <div className="card" style={{ ...styles.card, flex: 1 }}>
               <div style={styles.cardHead}>
                 <span className="u-label">{t("What your presence buys")}</span>
                 <span className="u-meta">{presion.games} {t("games")}</span>
@@ -505,7 +505,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
     gap: "var(--space-4)",
-    alignItems: "start",
   },
   heroRow: {
     display: "grid",
@@ -513,10 +512,11 @@ const styles: Record<string, React.CSSProperties> = {
     // primera fila, sin dejar el ancho muerto que dejaba el reloj viviendo abajo.
     gridTemplateColumns: "minmax(360px, 480px) minmax(340px, 1fr) minmax(300px, 400px)",
     gap: "var(--space-4)",
-    alignItems: "start",
+    // stretch, no start: en una fila, todas las tarjetas al mismo alto. El
+    // desnivel era lo que el usuario leía como "raro".
     marginBottom: "var(--space-4)",
   },
-  sideCol: { display: "flex", flexDirection: "column", gap: "var(--space-4)" },
+  sideCol: { display: "flex", flexDirection: "column", gap: "var(--space-4)", height: "100%" },
   mapWrap: {
     position: "relative",
     width: "100%",
@@ -612,7 +612,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: "var(--space-4)",
-    marginTop: "var(--space-4)",
+    // auto y no un margen fijo: con la tarjeta estirada a la altura del mapa,
+    // el par victoria/derrota se ancla al pie en vez de flotar a media altura.
+    marginTop: "auto",
     paddingTop: "var(--space-4)",
     borderTop: "1px solid var(--line-soft)",
   },

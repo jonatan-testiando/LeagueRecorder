@@ -173,9 +173,21 @@ pub fn spawn_backfill() {
     std::thread::spawn(|| {
         let mut hechas = 0;
         for m in crate::storage::load_all_matches() {
-            if m.is_vod || crate::camera_snaps::report_path(&m.id).exists() {
+            if m.is_vod {
                 continue;
             }
+            // Un informe SIN posiciones es de la primera hornada (cuando las
+            // miradas aún no llevaban x/y) y se regenera: saltarlo dejaba
+            // "Dónde miraste" y la tendencia de Patrones vacíos para siempre.
+            let viejo_sin_pos = match crate::camera_snaps::load_report(&m.id) {
+                Some(r) => {
+                    if r.snaps.iter().any(|s| s.x.is_some()) {
+                        continue; // ya está al día
+                    }
+                    true
+                }
+                None => false,
+            };
             // `load_all_matches` no trae la estela: hay que leer la partida entera.
             let Ok(full) = crate::storage::get_match_metadata(&m.id) else {
                 continue;
@@ -183,7 +195,12 @@ pub fn spawn_backfill() {
             if full.mouse_events.is_empty() {
                 continue;
             }
-            let looks = looks_from_input(&full, &full.camera_snaps);
+            // OJO al regenerar: `camera_snaps` ya es la lista FUSIONADA de la
+            // hornada anterior. Pasarla como "teclas" haría que cada clic se
+            // fundiera con su propio duplicado sin posición y las perdiera
+            // todas otra vez. Las teclas reales eran 0-1 por partida.
+            let teclas: &[f64] = if viejo_sin_pos { &[] } else { &full.camera_snaps };
+            let looks = looks_from_input(&full, teclas);
             if looks.is_empty() {
                 continue;
             }

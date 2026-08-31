@@ -82,6 +82,31 @@ std::string pick_h264_encoder() {
     return "obs_x264";
 }
 
+// Elige el encoder AV1 de NVIDIA si este runtime y esta GPU lo traen.
+//
+// AV1 a igual calidad visual pesa ~40-50% menos que h264, y el reproductor de
+// la app es Chromium (WebView2), que lo decodifica nativo. Devuelve "" cuando
+// no hay: entonces se sigue con h264 exactamente como siempre — AV1 es una
+// mejora, nunca un requisito. Solo NVENC a propósito: es el único que hemos
+// medido; un AV1 por CPU (svt/aom) arruinaría la partida en vivo.
+std::string pick_av1_encoder() {
+    const char *id = nullptr;
+    std::vector<std::string> ids;
+    for (size_t i = 0; obs_enum_encoder_types(i, &id); ++i) {
+        if (!id) continue;
+        const char *codec = obs_get_encoder_codec(id);
+        if (codec && std::strcmp(codec, "av1") == 0)
+            ids.emplace_back(id);
+    }
+    static const char *const kPreferred[] = {
+        "obs_nvenc_av1_tex", "obs_nvenc_av1_cuda", "jim_av1_nvenc",
+    };
+    for (const char *want : kPreferred)
+        if (std::find(ids.begin(), ids.end(), want) != ids.end())
+            return want;
+    return "";
+}
+
 obs_source_t *make_video_source(const RecordConfig &cfg) {
     // "titulo:clase:exe". OJO: para window_capture WGC la clase NO puede ir vacía
     // (ms_find_window_top_level hace `if(!class) return NULL`). Con priority=título su valor
@@ -282,13 +307,22 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
     if (audio_src_)
         obs_set_output_source(1, audio_src_);
 
-    std::string venc_id = pick_h264_encoder();
+    // AV1 primero si la GPU lo trae; h264 como siempre si no.
+    std::string venc_id = pick_av1_encoder();
+    const bool es_av1 = !venc_id.empty();
+    if (!es_av1)
+        venc_id = pick_h264_encoder();
+    fprintf(stderr, "[leaguerec] encoder de video: %s\n", venc_id.c_str());
+
     obs_data_t *venc_settings = obs_data_create();
     // CQP y no CBR: el CBR gastaba el bitrate entero también en la tienda, la pantalla de muerte
     // y el mapa quieto, que es la mayor parte de una partida de LoL. Con calidad constante el
     // encoder solo gasta bits donde hay movimiento; a igual nitidez el archivo baja ~50-60%.
     obs_data_set_string(venc_settings, "rate_control", "CQP");
-    obs_data_set_int(venc_settings, "cqp", cfg.cqp);
+    // Las escalas de CQ de AV1 y h264 no son la misma: el mismo número da MÁS
+    // compresión en AV1. +7 deja la calidad percibida donde estaba (28-30 de
+    // AV1 ≈ 21-23 de h264) y aun así el archivo baja ~40-50%.
+    obs_data_set_int(venc_settings, "cqp", es_av1 ? cfg.cqp + 7 : cfg.cqp);
     // El preset va por partida doble a propósito: el NVENC moderno (obs_nvenc_h264_tex) lee
     // "preset", pero el shim de compatibilidad (jim_nvenc) lee "preset2", y pick_h264_encoder()
     // puede devolver cualquiera de los dos. Además el valor DEBE ser p1..p7: get_nv_preset() no

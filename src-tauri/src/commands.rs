@@ -1335,6 +1335,34 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
             }
         }
     }
+    // Los rescatados: recortes cuya partida se borró. El id de partida se saca
+    // del nombre, que siempre lo lleva delante ("match_X_clip_N.mp4").
+    let rescate = crate::storage::rescue_dir();
+    if let Ok(mut entries) = tokio::fs::read_dir(rescate).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.ends_with(".mp4") || !name.contains("_clip_") {
+                continue;
+            }
+            let match_id = name.split("_clip_").next().unwrap_or("").to_string();
+            let size = entry.metadata().await.map(|m| m.len()).unwrap_or(0);
+            let json_path = entry.path().with_extension("json");
+            let mut favorite = false;
+            if let Ok(content) = tokio::fs::read_to_string(&json_path).await {
+                if let Ok(meta) = serde_json::from_str::<ClipMetadata>(&content) {
+                    favorite = meta.favorite;
+                }
+            }
+            clips.push(ClipMetadata {
+                path: entry.path().to_string_lossy().to_string(),
+                name,
+                match_id,
+                size,
+                favorite,
+            });
+        }
+    }
+
     // Sort descending by name
     clips.sort_by(|a, b| b.name.cmp(&a.name));
     clips
@@ -1458,6 +1486,14 @@ pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
                         while let Ok(Some(sub_entry)) = sub_entries.next_entry().await {
                             let name = sub_entry.file_name().to_string_lossy().to_string();
                             if name.contains("_error_") && name.ends_with(".mp4") {
+                                // En la carpeta de rescatados el id de la partida
+                                // ya no es el nombre del directorio: va delante
+                                // en el propio fichero.
+                                let match_id = if match_id == "recortes" {
+                                    name.split("_error_").next().unwrap_or("").to_string()
+                                } else {
+                                    match_id.clone()
+                                };
                                 let size = sub_entry.metadata().await.map(|m| m.len()).unwrap_or(0);
                                 let json_path = sub_entry.path().with_extension("json");
                                 let mut note = String::new();

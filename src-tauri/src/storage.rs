@@ -798,9 +798,54 @@ pub async fn get_match_details(id: String) -> Option<MatchMetadata> {
     load_match_by_id(&id)
 }
 
+/// Carpeta donde viven los recortes cuya partida ya no existe.
+///
+/// Los clips y errores nacen dentro de la carpeta de su partida, pero NO son
+/// suyos: son la colección del usuario. Borrar la partida (que es lo que pesa:
+/// 4 GB de vídeo) no debe llevarse un clip de 80 MB con la lección escrita.
+pub fn rescue_dir() -> PathBuf {
+    let dir = get_videos_dir().join("recortes");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir
+}
+
+/// Muda los recortes (mp4 de clip/error y su JSON) fuera de una carpeta que va
+/// a borrarse. Devuelve cuántos ficheros salvó.
+fn rescue_clips(match_dir: &Path) -> usize {
+    rescue_clips_into(match_dir, &rescue_dir())
+}
+
+fn rescue_clips_into(match_dir: &Path, destino: &Path) -> usize {
+    let mut salvados = 0;
+    let Ok(entries) = fs::read_dir(match_dir) else { return 0 };
+    for e in entries.flatten() {
+        let nombre = e.file_name().to_string_lossy().to_string();
+        let es_recorte = (nombre.contains("_clip_") || nombre.contains("_error_"))
+            && (nombre.ends_with(".mp4") || nombre.ends_with(".json"));
+        if !es_recorte {
+            continue;
+        }
+        // `rename` y no copia: mismo volumen, instantáneo. Si ya existiera uno
+        // con ese nombre (no debería: el id de partida va en el nombre), no se
+        // pisa — mejor un duplicado sin salvar que una lección sobrescrita.
+        let a = destino.join(&nombre);
+        let _ = fs::create_dir_all(destino);
+        if !a.exists() && fs::rename(e.path(), &a).is_ok() {
+            salvados += 1;
+        }
+    }
+    salvados
+}
+
 pub fn delete_match_files(id: &str) -> Result<(), String> {
     let match_dir = get_match_dir(id);
     if match_dir.exists() {
+        let n = rescue_clips(&match_dir);
+        if n > 0 {
+            log::info!("borrado de {id}: {n} recortes mudados a recortes/");
+        }
         let _ = fs::remove_dir_all(&match_dir);
         return Ok(());
     }
@@ -923,6 +968,56 @@ pub fn check_storage_quota() {
             Ok(()) => freed += size,
             Err(e) => eprintln!("Cuota: no se pudo borrar {}: {}", m.id, e),
         }
+    }
+}
+
+#[cfg(test)]
+mod rescate_tests {
+    use super::*;
+
+    fn dir_tmp(nombre: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("leaguerec-rescate-{}-{}", std::process::id(), nombre));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// Lo que motivó esto: el usuario borró partidas para liberar espacio y se
+    /// llevaron por delante su colección de clips y errores.
+    #[test]
+    fn los_recortes_se_salvan_y_el_video_gordo_no() {
+        let partida = dir_tmp("partida");
+        let destino = dir_tmp("destino");
+        for f in [
+            "match_1.mp4",              // el vídeo de 4 GB: ese SÍ debe morir
+            "match_1.json",
+            "riot_timeline.json",
+            "match_1_clip_1.mp4",
+            "match_1_clip_1.json",
+            "match_1_error_2.mp4",
+            "match_1_error_2.json",
+        ] {
+            fs::write(partida.join(f), b"x").unwrap();
+        }
+        let n = rescue_clips_into(&partida, &destino);
+        assert_eq!(n, 4, "clip y error, con sus JSON");
+        assert!(destino.join("match_1_clip_1.mp4").exists());
+        assert!(destino.join("match_1_error_2.json").exists());
+        // Lo pesado se queda para que el borrado lo elimine.
+        assert!(partida.join("match_1.mp4").exists());
+        assert!(!partida.join("match_1_clip_1.mp4").exists());
+    }
+
+    /// Un rescate no pisa a otro: mejor un duplicado sin salvar que una lección
+    /// sobrescrita.
+    #[test]
+    fn no_se_pisa_un_rescatado_anterior() {
+        let partida = dir_tmp("partida2");
+        let destino = dir_tmp("destino2");
+        fs::write(partida.join("match_2_clip_1.mp4"), b"nuevo").unwrap();
+        fs::write(destino.join("match_2_clip_1.mp4"), b"viejo").unwrap();
+        assert_eq!(rescue_clips_into(&partida, &destino), 0);
+        assert_eq!(fs::read(destino.join("match_2_clip_1.mp4")).unwrap(), b"viejo");
     }
 }
 

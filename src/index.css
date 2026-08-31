@@ -42,25 +42,27 @@
      tentación es teñir toda la escala por igual, y entonces el croma vuelve a
      crecer hacia arriba: medido, la versión directa daba 2,8 en el fondo y 6,3
      en los bordes, o sea las aristas otra vez como lo más saturado de la
-     pantalla. Estos valores mantienen el croma entre 2,5 y 4,4, con el máximo
-     en el panel (que es superficie) y no en las líneas (que son estructura).
+     pantalla. Esta escala (piel B, 2026-08-30) mantiene el croma entre 1,8 y
+     4,0 —un 40% menos de tinte que la anterior— con el máximo en --raised
+     (superficie) y las líneas por debajo (3,1): la estructura sigue sin ser lo
+     más saturado.
      ========================================================================= */
-  --ground: #070F1F;     /* fondo de ventana */
-  --panel: #0D1A2E;      /* rail, barras, tarjetas, inspector */
-  --raised: #1B2839;     /* elemento activo, hover, botón */
-  --sunken: #020811;     /* campos y pistas hundidas */
+  --ground: #080D16;     /* fondo de ventana */
+  --panel: #0B1220;      /* rail, barras, tarjetas, inspector */
+  --raised: #142033;     /* elemento activo, hover, botón */
+  --sunken: #04070E;     /* campos y pistas hundidas */
 
-  --line: #2C3A4E;       /* bordes y divisiones */
-  --line-soft: #16202E;  /* separadores tenues */
+  --line: #16202E;       /* bordes y divisiones */
+  --line-soft: #101A29;  /* separadores tenues */
   --hairline: rgba(200, 170, 110, 0.32); /* filete dorado, gesto del marco de Riot */
 
   /* Texto */
-  --text: #F0E6D2;       /* Riot Grey 1, hueso cálido */
-  --muted: #A09B8C;      /* Riot Grey 2 */
+  --text: #EDEAE3;       /* hueso, un punto menos cálido que el Riot Grey 1 */
+  --muted: #C6CBD3;      /* secundario frío: contraste 11,5 (antes 6,3) */
   /* Sobre grafito este gris era un verde-azulado apagado; sobre marino se
      hundía en el fondo y los metadatos dejaban de leerse. Sube de luminosidad y
      se alinea con el tono de la escala. */
-  --faint: #63809F;      /* etiquetas y metadatos */
+  --faint: #7A8798;      /* etiquetas y metadatos */
 
   /* Tintes */
   --brand: #C8AA6E;      /* oro hextech: marca, nav activa, filete */
@@ -109,22 +111,11 @@
      que leer como profundidad, no como una ventana. Si el texto de debajo se
      adivina, se ha ido de la mano.
      ========================================================================= */
-  --canvas: radial-gradient(
-      75% 52% at 6% -10%,
-      color-mix(in srgb, var(--brand) 17%, transparent) 0%,
-      transparent 60%
-    ),
-    radial-gradient(
-      62% 55% at 97% 0%,
-      color-mix(in srgb, var(--cool) 14%, transparent) 0%,
-      transparent 62%
-    ),
-    radial-gradient(
-      95% 62% at 66% 115%,
-      color-mix(in srgb, var(--flag) 11%, transparent) 0%,
-      transparent 60%
-    ),
-    var(--ground);
+  /* Antes: tres lavados radiales oro/jade/violeta. Eran una de las cuatro
+     causas medidas de la pesadez: con color debajo de todo, ninguna
+     superficie descansa. El fondo ahora es plano; el color lo ponen los
+     datos. */
+  --canvas: var(--ground);
 
   /* La lámina parte de un panel LEVANTADO, no del panel a secas: un gris oscuro
      translúcido sobre un fondo oscuro no se ve translúcido, se ve más oscuro.
@@ -132,41 +123,32 @@
   --glass-base: color-mix(in srgb, var(--text) 6%, var(--panel));
   --glass-base-2: color-mix(in srgb, var(--text) 11%, var(--panel));
 
-  --surface-1: linear-gradient(
-    157deg,
-    color-mix(in srgb, var(--glass-base) 84%, transparent) 0%,
-    color-mix(in srgb, var(--glass-base) 52%, transparent) 100%
-  );
-  --surface-2: linear-gradient(
-    157deg,
-    color-mix(in srgb, var(--glass-base-2) 88%, transparent) 0%,
-    color-mix(in srgb, var(--glass-base-2) 58%, transparent) 100%
-  );
+  /* Escalones OPACOS. La lámina translúcida sobre fondo oscuro no se leía
+     como vidrio sino como más color; dos tarjetas iguales en sitios
+     distintos del lavado se veían distintas. Ahora una tarjeta es un
+     escalón de valor, igual en toda la pantalla. */
+  --surface-1: var(--panel);
+  --surface-2: var(--raised);
 
   /* El rail es alto y va pegado al borde: su degradado es vertical y termina
      dejando ver el fondo, para que no corte la ventana en dos bloques. */
-  --rail: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--glass-base) 86%, transparent) 0%,
-    color-mix(in srgb, var(--panel) 72%, transparent) 55%,
-    color-mix(in srgb, var(--ground) 62%, transparent) 100%
-  );
+  --rail: var(--panel);
 
   --glass-line: color-mix(in srgb, var(--text) 13%, transparent);
   --glass-line-soft: color-mix(in srgb, var(--text) 8%, transparent);
-  --glass-blur: blur(18px) saturate(130%);
+  --glass-blur: none; /* sin láminas no hay nada que desenfocar */
 
   /* Aureola de superficie principal: es lo que ya hacía a mano la tarjeta de
      "Hoy". Oro arriba a la derecha, turquesa detrás y más abajo, para que el
      color tenga una dirección y no sea una mancha centrada. */
   --halo: radial-gradient(
       60% 120% at 80% 25%,
-      color-mix(in srgb, var(--brand) 13%, transparent) 0%,
+      color-mix(in srgb, var(--brand) 7%, transparent) 0%,
       transparent 60%
     ),
     radial-gradient(
       80% 140% at 96% 75%,
-      color-mix(in srgb, var(--cool) 9%, transparent) 0%,
+      color-mix(in srgb, var(--cool) 5%, transparent) 0%,
       transparent 55%
     );
 
@@ -297,6 +279,10 @@
 body {
   margin: 0;
   padding: 0;
+  /* Densidad de producto de datos: el censo dio 159 elementos heredando los
+     16px por defecto y casi nada entre 12 y 16. Base 14 llena ese escalón de
+     golpe; lo que declara su tamaño (títulos, métricas) no se mueve. */
+  font-size: 14px;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -337,6 +323,7 @@ h1 {
    ========================================================================= */
 .u-label {
   font-family: var(--font-mono);
+  font-weight: 500;
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -353,8 +340,12 @@ h1 {
   letter-spacing: 0.04em;
   color: var(--faint);
 }
+/* El peso lleva la jerarquía. El censo dio 175 elementos a peso 400 y diez
+   repartidos entre el resto: toda la jerarquía la cargaba el color, que es lo
+   que dejaba la interfaz hablando a un solo volumen. */
 h2, h3, h4 {
   letter-spacing: -0.01em;
+  font-weight: 600;
 }
 
 /* Transiciones suaves globales */

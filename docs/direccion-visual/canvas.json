@@ -1,0 +1,77 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1180,
+      "h": 800,
+      "title": "Diagnóstico medido"
+    },
+    {
+      "file": "Actual.dc.html",
+      "x": 1300,
+      "y": 0,
+      "w": 1040,
+      "h": 620,
+      "title": "Hoy — la biblioteca tal cual"
+    },
+    {
+      "file": "DireccionA.dc.html",
+      "x": 1300,
+      "y": 760,
+      "w": 1040,
+      "h": 620,
+      "title": "Dirección A · Taller"
+    },
+    {
+      "file": "DireccionB.dc.html",
+      "x": 1300,
+      "y": 1520,
+      "w": 1040,
+      "h": 620,
+      "title": "Dirección B · Sala de datos"
+    },
+    {
+      "file": "Reproductor.dc.html",
+      "x": 0,
+      "y": 940,
+      "w": 1240,
+      "h": 420,
+      "title": "La cubierta, en dirección B"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "como-leerlo",
+      "x": 0,
+      "y": -150,
+      "w": 460,
+      "text": "Las tres columnas de la izquierda son medidas, no impresiones: mismo script sobre las tres interfaces.\n\nA la derecha, la MISMA pantalla tres veces. A y B salen ahora de una única plantilla: mismo contenido, misma densidad, sólo cambian los tokens. Si una se ve mejor, es la piel."
+    },
+    {
+      "id": "eje-a",
+      "x": 2400,
+      "y": 760,
+      "w": 300,
+      "text": "A · Taller\nQuita el tinte del fondo (croma 0,9–1,4, como Blitz). El gris tenue subió a #7E8590: el original suspendía AA (3,77) y castigaba a A por un defecto corregible. Ahora 4,82.\n\nCuesta: la piel de League desaparece del cromo."
+    },
+    {
+      "id": "eje-b",
+      "x": 2400,
+      "y": 1520,
+      "w": 300,
+      "text": "B · Sala de datos\nMantiene marino y oro con un 40% menos de tinte que hoy (croma 2,1–4,0 frente a 3,6–4,4). Mejor contraste en los tres niveles de texto (5,12 el tenue).\n\nCuesta: sigue siendo temática."
+    },
+    {
+      "id": "nota-cubierta",
+      "x": 0,
+      "y": 1420,
+      "w": 420,
+      "text": "La tira de miradas por carril ya está construida: aquí solo cambia cómo se lee. El hueco de top entre 08:00 y 14:00 es el dato real de tus partidas."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Instrument Sans', system-ui, sans-serif; }
+    a { color: #C8AA6E; } a:hover { color: #D9BE85; }
+  </style>
+</helmet>
+
+<div style="width: 1040px; height: 620px; box-sizing: border-box; overflow: hidden; background: #0C0E12; color: #E9EAEC;">
+
+  <div style="display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 14px; background: #14171D; border-bottom: 1px solid #1C1F26;">
+    <span style="width: 8px; height: 8px; border-radius: 2px; background: #C8AA6E;"></span>
+    <span style="font-size: 12px; font-weight: 500; color: #7E8590;">LeagueRecorder</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 152px 1fr; height: 586px;">
+
+    <div style="padding: 12px 8px; background: #14171D; border-right: 1px solid #1C1F26; display: flex; flex-direction: column; gap: 1px;">
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; color: #7E8590;">Hoy</div>
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; background: #191C23; color: #E9EAEC;">Biblioteca</div>
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; color: #7E8590;">Clips</div>
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; color: #7E8590;">Errores</div>
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; color: #7E8590;">Patrones</div>
+      <div style="padding: 6px 10px; border-radius: 8px; font-size: 13px; color: #7E8590;">Entrenamiento</div>
+    </div>
+
+    <div style="padding: 18px 24px; overflow: hidden;">
+      <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px;">
+        <h1 style="margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em;">Biblioteca</h1>
+        <span style="font-size: 12px; color: #7E8590;">19 partidas · 16 por revisar</span>
+      </div>
+
+      <div style="background: #14171D; border: 1px solid #1C1F26; border-radius: 10px; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 34px 1fr repeat(5, 72px); gap: 12px; padding: 8px 12px; background: #191C23; border-bottom: 1px solid #1C1F26; font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #7E8590;">
+          <span></span><span>Partida</span><span style="text-align: right;">Puesto</span><span style="text-align: right;">KDA</span><span style="text-align: right;">Oro @15</span><span style="text-align: right;">Dur.</span><span style="text-align: right;">APM</span>
+        </div>
+        <sc-for list="{{filas}}" as="f" hint-placeholder-count="6">
+          <div style="display: grid; grid-template-columns: 34px 1fr repeat(5, 72px); gap: 12px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #171A20; box-shadow: inset 2px 0 0 {{f.color}};">
+            <div style="width: 24px; height: 24px; border-radius: 9999px; background: #191C23;"></div>
+            <div style="display: flex; align-items: baseline; gap: 8px; min-width: 0;">
+              <span style="font-size: 13px; font-weight: 600;">{{f.champ}}</span>
+              <span style="font-size: 11px; color: #7E8590;">{{f.cuando}}</span>
+              <sc-if value="{{f.porRevisar}}" hint-placeholder-val="{{ true }}">
+                <span style="font-size: 10px; font-weight: 600; letter-spacing: 0.04em; color: #9B6DFF;">POR REVISAR</span>
+              </sc-if>
+            </div>
+            <div style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: {{f.puestoColor}};">{{f.puesto}}</div>
+            <div style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #B4B8C0;">{{f.kda}}</div>
+            <div style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: {{f.oroColor}};">{{f.oro}}</div>
+            <div style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7E8590;">{{f.dur}}</div>
+            <div style="text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7E8590;">{{f.apm}}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+        <div style="background: #14171D; border: 1px solid #1C1F26; border-radius: 10px; padding: 12px 14px;">
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #7E8590; margin-bottom: 6px;">Punto ciego</div>
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: #E05260;">Top</span>
+            <span style="font-size: 12px; color: #7E8590;">13 de 13 partidas</span>
+          </div>
+        </div>
+        <div style="background: #14171D; border: 1px solid #1C1F26; border-radius: 10px; padding: 12px 14px;">
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #7E8590; margin-bottom: 6px;">Hueco medio</div>
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700;">05:05</span>
+            <span style="font-size: 12px; color: #7E8590;">sin mirar</span>
+          </div>
+        </div>
+        <div style="background: #14171D; border: 1px solid #1C1F26; border-radius: 10px; padding: 12px 14px;">
+          <div style="font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: #7E8590; margin-bottom: 6px;">Miradas / min</div>
+          <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: #3BA97D;">8,4</span>
+            <span style="font-size: 12px; color: #7E8590;">media</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      filas: [
+        { champ: 'Gwen', color: '#3BA97D', cuando: 'hoy', porRevisar: true, puesto: '7\u00ba', puestoColor: '#B4B8C0', kda: '9/3/12', oro: '+740', oroColor: '#3BA97D', dur: '28:57', apm: '303' },
+        { champ: 'Lillia', color: '#E05260', cuando: 'hoy', porRevisar: true, puesto: '4\u00ba', puestoColor: '#B4B8C0', kda: '5/7/14', oro: '\u2212320', oroColor: '#E05260', dur: '34:21', apm: '271' },
+        { champ: 'Gwen', color: '#3BA97D', cuando: 'ayer', porRevisar: false, puesto: 'MVP', puestoColor: '#C8AA6E', kda: '12/2/8', oro: '+2.1k', oroColor: '#3BA97D', dur: '26:04', apm: '288' },
+        { champ: 'Lillia', color: '#E05260', cuando: 'ayer', porRevisar: false, puesto: '8\u00ba', puestoColor: '#E05260', kda: '3/9/6', oro: '\u22121.4k', oroColor: '#E05260', dur: '41:21', apm: '244' },
+        { champ: 'Gwen', color: '#3BA97D', cuando: 'hace 2d', porRevisar: true, puesto: '5\u00ba', puestoColor: '#B4B8C0', kda: '7/4/11', oro: '+180', oroColor: '#3BA97D', dur: '30:33', apm: '263' },
+        { champ: 'Lillia', color: '#3BA97D', cuando: 'hace 2d', porRevisar: false, puesto: '2\u00ba', puestoColor: '#B4B8C0', kda: '8/5/15', oro: '+960', oroColor: '#3BA97D', dur: '27:12', apm: '279' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

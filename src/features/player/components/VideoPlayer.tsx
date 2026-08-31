@@ -676,7 +676,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // isFullscreen en las deps A PROPÓSITO: la tira cambia de padre al entrar y
+    // salir de pantalla completa (baraja ↔ overlay), o sea que el nodo se
+    // remonta. Con deps [] el observador seguía vigilando el nodo muerto y los
+    // racimos quedaban colocados con el ancho viejo hasta recargar — el
+    // descuadre que veía el usuario al volver del fullscreen.
+  }, [isFullscreen]);
 
   const eventMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
@@ -869,213 +874,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   //
   // Va acoplado a la baraja, y solo flota sobre el vídeo en pantalla completa,
   // que es cuando la baraja no existe.
-  const transportBar = (
-        <div className="tp" style={isFullscreen ? styles.transportOverlay : styles.transportDocked}>
-          <button
-            className="tp-b"
-            onClick={() => goToAdjacentEvent(-1)}
-            title={t("Previous moment")}
-            aria-label={t("Previous moment")}
-          >
-            <SkipBack size={14} fill="currentColor" />
-          </button>
-          <button
-            className="tp-b tp-b--primary"
-            onClick={handlePlayPause}
-            title={t(isPlaying ? "Pause" : "Play")}
-            aria-label={t(isPlaying ? "Pause" : "Play")}
-          >
-            {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
-          </button>
-          <button
-            className="tp-b"
-            onClick={() => goToAdjacentEvent(1)}
-            title={t("Next moment")}
-            aria-label={t("Next moment")}
-          >
-            <SkipForward size={14} fill="currentColor" />
-          </button>
-
-          {/* Centesimas: en una herramienta de revision hace falta senalar un
-              instante, no un minuto. */}
-          <span className="tp-tc">
-            <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-            <span className="tp-tc__total"> / {clock(duration)}</span>
-          </span>
-
-          <span className="tp-sep" />
-
-          {/* Segmentado y no desplegable: durante una revision la velocidad se
-              cambia constantemente y un desplegable son dos clics cada vez. */}
-          <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
-            {[0.25, 0.5, 1, 2].map((r) => (
-              <button
-                key={r}
-                onClick={() => setPlaybackRate(r)}
-                aria-pressed={playbackRate === r}
-                data-on={playbackRate === r ? "" : undefined}
-              >
-                {r}&times;
-              </button>
-            ))}
-          </span>
-
-          <span style={{ flex: 1, minWidth: 12 }} />
-
-          <div className="tp-vol">
-            <button className="tp-b" onClick={toggleMute} title={t(muted ? "Unmute" : "Mute")} aria-label={t(muted ? "Unmute" : "Mute")}>
-              {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
-            </button>
-            <input
-              type="range" min="0" max="1" step="0.05"
-              value={muted ? 0 : volume}
-              onChange={handleVolumeChange}
-              aria-label={t("Volume")}
-              style={styles.volumeSlider}
-            />
-          </div>
-
-          <details className="tp-more">
-            <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
-              <MoreHorizontal size={15} />
-            </summary>
-            <div className="tp-pop">
-              <label className="tp-pop__row">
-                <span>{t("Broadcast overlay")}</span>
-                <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
-              </label>
-              <label className="tp-pop__row">
-                <span>{t("Mouse trail")}</span>
-                <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
-              </label>
-              <div className="tp-pop__row tp-pop__row--stack">
-                <span>
-                  {t("Mouse trail sync")}
-                  <em>{t("Shifts the trail against the video, in seconds.")}</em>
-                </span>
-                <div className="tp-pop__sync">
-                  <input
-                    type="range" min="-3" max="3" step="0.1" value={mouseSync}
-                    aria-label={t("Mouse trail sync")}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      setMouseSync(val);
-                      localStorage.setItem("mouseSyncOffset", val.toString());
-                    }}
-                  />
-                  <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
-                </div>
-              </div>
-            </div>
-          </details>
-
-          <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
-            <Maximize size={15} />
-          </button>
-        </div>
-  );
-
-  return (
-    <div ref={containerRef} style={styles.container}>
-      <div style={styles.leftColumn}>
-        <div style={styles.videoWrapper}>
-          <div style={styles.topBar}>
-            <div style={styles.topBarLeft}></div>
-          </div>
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            style={styles.video}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onClick={handlePlayPause}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            preload="auto"
-          />
-          {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>{t("Couldn't load the video")}</span></div>}
-          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
-          
-          {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
-          <EsportsPlayerOverlay
-            currentTime={currentTime}
-            match={currentMatch}
-            visible={showEsportsHud}
-          />
-
-          {isFullscreen && transportBar}
-        </div>
-        {/* Transporte y linea de tiempo son la misma herramienta: antes eran una
-            barra flotando sobre el video y, separada y mas abajo, una tira con el
-            APM y los eventos que ademas hacia de barra de busqueda. Por eso el
-            centro del transporte estaba vacio: le faltaba su mitad. */}
-        {!isFullscreen && (
-        <div style={styles.deck}>
-          {transportBar}
-          <div style={styles.timelineHeaderRow}>
-            <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
-            {/* Métricas de uso de las teclas de cámara aliada. */}
-            {snapSummary?.analyzed ? (
-              <span
-                style={styles.snapLabel}
-                title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
-              >
-                <Eye size={13} /> {snapSummary.per_minute.toFixed(1)}/min
-                <span style={{ color: "var(--text-muted)" }}>·</span>
-                <span
-                  style={{
-                    color:
-                      snapSummary.longest_gap_secs > 120
-                        ? "var(--color-defeat)"
-                        : "var(--color-victory)",
-                  }}
-                >
-                  {clock(snapSummary.longest_gap_secs)} blind
-                </span>
-              </span>
-            ) : (
-              <button
-                onClick={runSnapAnalysis}
-                disabled={snapBusy}
-                style={{ ...styles.ghostBtn, opacity: snapBusy ? 0.6 : 1 }}
-                title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
-              >
-                <Eye size={14} />
-                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : t("Camera moves")}
-              </button>
-            )}
-            <div style={styles.timelineHeaderRight}>
-              <button 
-                onClick={() => {
-                  setExportType("clip");
-                  if (!isClippingMode) {
-                    setClipStart(Math.max(0, currentTime - 10));
-                    setClipEnd(Math.min(duration, currentTime + 10));
-                  }
-                  setIsClippingMode(!isClippingMode);
-                }} 
-                style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
-              >
-                <Scissors size={14} /> {t("Clip")}
-              </button>
-              <button 
-                onClick={() => {
-                  setExportType("error");
-                  if (!isClippingMode) {
-                    setClipStart(Math.max(0, currentTime - 10));
-                    setClipEnd(Math.min(duration, currentTime + 10));
-                  }
-                  setIsClippingMode(!isClippingMode);
-                }} 
-                style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
-              >
-                <AlertTriangle size={14} /> {t("Error")}
-              </button>
-            </div>
-          </div>
-
-          <div 
+  // La tira de eventos ES la barra de búsqueda de este reproductor: en
+  // pantalla completa también tiene que existir (sin ella no había forma de
+  // saltar a un minuto, que fue lo que señaló el usuario).
+  const timelineStrip = (
+    <div 
             style={styles.timelineGraph} 
             ref={progressBarRef} 
             onPointerDown={handlePointerDown}
@@ -1267,6 +1070,220 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </div>
             )}
           </div>
+  );
+
+  const transportBar = (
+        <div className="tp" style={isFullscreen ? styles.transportOverlay : styles.transportDocked}>
+          <button
+            className="tp-b"
+            onClick={() => goToAdjacentEvent(-1)}
+            title={t("Previous moment")}
+            aria-label={t("Previous moment")}
+          >
+            <SkipBack size={14} fill="currentColor" />
+          </button>
+          <button
+            className="tp-b tp-b--primary"
+            onClick={handlePlayPause}
+            title={t(isPlaying ? "Pause" : "Play")}
+            aria-label={t(isPlaying ? "Pause" : "Play")}
+          >
+            {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
+          </button>
+          <button
+            className="tp-b"
+            onClick={() => goToAdjacentEvent(1)}
+            title={t("Next moment")}
+            aria-label={t("Next moment")}
+          >
+            <SkipForward size={14} fill="currentColor" />
+          </button>
+
+          {/* Centesimas: en una herramienta de revision hace falta senalar un
+              instante, no un minuto. */}
+          <span className="tp-tc">
+            <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+            <span className="tp-tc__total"> / {clock(duration)}</span>
+          </span>
+
+          <span className="tp-sep" />
+
+          {/* Segmentado y no desplegable: durante una revision la velocidad se
+              cambia constantemente y un desplegable son dos clics cada vez. */}
+          <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
+            {[0.25, 0.5, 1, 2].map((r) => (
+              <button
+                key={r}
+                onClick={() => setPlaybackRate(r)}
+                aria-pressed={playbackRate === r}
+                data-on={playbackRate === r ? "" : undefined}
+              >
+                {r}&times;
+              </button>
+            ))}
+          </span>
+
+          <span style={{ flex: 1, minWidth: 12 }} />
+
+          <div className="tp-vol">
+            <button className="tp-b" onClick={toggleMute} title={t(muted ? "Unmute" : "Mute")} aria-label={t(muted ? "Unmute" : "Mute")}>
+              {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
+            </button>
+            <input
+              type="range" min="0" max="1" step="0.05"
+              value={muted ? 0 : volume}
+              onChange={handleVolumeChange}
+              aria-label={t("Volume")}
+              style={styles.volumeSlider}
+            />
+          </div>
+
+          <details className="tp-more">
+            <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
+              <MoreHorizontal size={15} />
+            </summary>
+            <div className="tp-pop">
+              <label className="tp-pop__row">
+                <span>{t("Broadcast overlay")}</span>
+                <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
+              </label>
+              <label className="tp-pop__row">
+                <span>{t("Mouse trail")}</span>
+                <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
+              </label>
+              <div className="tp-pop__row tp-pop__row--stack">
+                <span>
+                  {t("Mouse trail sync")}
+                  <em>{t("Shifts the trail against the video, in seconds.")}</em>
+                </span>
+                <div className="tp-pop__sync">
+                  <input
+                    type="range" min="-3" max="3" step="0.1" value={mouseSync}
+                    aria-label={t("Mouse trail sync")}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      setMouseSync(val);
+                      localStorage.setItem("mouseSyncOffset", val.toString());
+                    }}
+                  />
+                  <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
+                </div>
+              </div>
+            </div>
+          </details>
+
+          <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
+            <Maximize size={15} />
+          </button>
+        </div>
+  );
+
+  return (
+    <div ref={containerRef} style={styles.container}>
+      <div style={styles.leftColumn}>
+        <div style={styles.videoWrapper}>
+          <div style={styles.topBar}>
+            <div style={styles.topBarLeft}></div>
+          </div>
+          <video
+            ref={videoRef}
+            src={videoSrc}
+            style={styles.video}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onClick={handlePlayPause}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            preload="auto"
+          />
+          {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
+          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>{t("Couldn't load the video")}</span></div>}
+          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
+          
+          {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
+          <EsportsPlayerOverlay
+            currentTime={currentTime}
+            match={currentMatch}
+            visible={showEsportsHud}
+          />
+
+          {isFullscreen && (
+            <div style={styles.fsBottom}>
+              <div style={styles.fsTimeline}>{timelineStrip}</div>
+              {transportBar}
+            </div>
+          )}
+        </div>
+        {/* Transporte y linea de tiempo son la misma herramienta: antes eran una
+            barra flotando sobre el video y, separada y mas abajo, una tira con el
+            APM y los eventos que ademas hacia de barra de busqueda. Por eso el
+            centro del transporte estaba vacio: le faltaba su mitad. */}
+        {!isFullscreen && (
+        <div style={styles.deck}>
+          {transportBar}
+          <div style={styles.timelineHeaderRow}>
+            <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
+            {/* Métricas de uso de las teclas de cámara aliada. */}
+            {snapSummary?.analyzed ? (
+              <span
+                style={styles.snapLabel}
+                title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
+              >
+                <Eye size={13} /> {snapSummary.per_minute.toFixed(1)}/min
+                <span style={{ color: "var(--text-muted)" }}>·</span>
+                <span
+                  style={{
+                    color:
+                      snapSummary.longest_gap_secs > 120
+                        ? "var(--color-defeat)"
+                        : "var(--color-victory)",
+                  }}
+                >
+                  {clock(snapSummary.longest_gap_secs)} blind
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={runSnapAnalysis}
+                disabled={snapBusy}
+                style={{ ...styles.ghostBtn, opacity: snapBusy ? 0.6 : 1 }}
+                title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
+              >
+                <Eye size={14} />
+                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : t("Camera moves")}
+              </button>
+            )}
+            <div style={styles.timelineHeaderRight}>
+              <button 
+                onClick={() => {
+                  setExportType("clip");
+                  if (!isClippingMode) {
+                    setClipStart(Math.max(0, currentTime - 10));
+                    setClipEnd(Math.min(duration, currentTime + 10));
+                  }
+                  setIsClippingMode(!isClippingMode);
+                }} 
+                style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
+              >
+                <Scissors size={14} /> {t("Clip")}
+              </button>
+              <button 
+                onClick={() => {
+                  setExportType("error");
+                  if (!isClippingMode) {
+                    setClipStart(Math.max(0, currentTime - 10));
+                    setClipEnd(Math.min(duration, currentTime + 10));
+                  }
+                  setIsClippingMode(!isClippingMode);
+                }} 
+                style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
+              >
+                <AlertTriangle size={14} /> {t("Error")}
+              </button>
+            </div>
+          </div>
+
+          {timelineStrip}
         </div>
         )}
       </div>

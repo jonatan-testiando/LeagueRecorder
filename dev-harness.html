@@ -236,7 +236,17 @@
       return id ?? 1;
     },
     "plugin:event|unlisten": () => null,
-    get_recorded_matches: () => matches,
+    // Copia SIEMPRE: el backend real devuelve JSON fresco en cada invoke. Si el
+    // mock devuelve el mismo array mutado, los useMemo de la app no ven cambio
+    // de referencia y el arnés inventa bugs que la app real no tiene.
+    get_recorded_matches: () => matches.map((m) => ({ ...m })),
+    // Borrar borra de verdad: el bug de fichas solapadas tras eliminar solo se
+    // reproduce si la lista encoge y los índices del virtualizador se corren.
+    delete_match: ({ id }) => {
+      const i = matches.findIndex((m) => m.id === id);
+      if (i >= 0) matches.splice(i, 1);
+      return null;
+    },
     get_recorder_status: () => true,
     get_disk_usage: () => ({ used_bytes: 159 * 1024 ** 3, total_bytes: 931 * 1024 ** 3 }),
     get_app_config: () => ({

@@ -171,6 +171,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
+    // Clave ESTABLE por fila: sin ella las medidas se cachean por índice y al
+    // borrar una partida todo lo de debajo cambia de índice y hereda la altura
+    // de otra fila (una ficha con la medida de un separador se pisa con la
+    // siguiente — el bug que vio el usuario al eliminar).
+    getItemKey: (index) => rows[index].key,
     getScrollElement: () => parentRef.current,
     // Estimación inicial; la altura real se mide con `measureElement`. Cerca
     // de la real (ficha 112 + aire) para que el primer cuadro no baile.

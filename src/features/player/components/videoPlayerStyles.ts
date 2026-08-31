@@ -61,18 +61,31 @@ export const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.7)",
   },
-  // En pantalla completa no hay baraja, asi que el transporte vuelve a flotar
-  // sobre el video.
+  // En pantalla completa no hay baraja: tira y transporte flotan juntos sobre
+  // el video, dentro de fsBottom (que pone el degradado y la posición).
   transportOverlay: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+  },
+  fsBottom: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: "var(--space-3) var(--space-4)",
-    background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)",
+    zIndex: 10,
     display: "flex",
-    alignItems: "center",
+    flexDirection: "column",
     gap: "var(--space-2)",
+    padding: "18px 16px 12px",
+    background: "linear-gradient(to top, rgba(0,0,0,0.92), rgba(0,0,0,0.55) 70%, transparent)",
+  },
+  // La tira necesita alto propio: en la baraja lo heredaba del deck.
+  fsTimeline: {
+    height: 64,
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
   },
   // Acoplado a la baraja: sin degradado encima del video, y separado de la tira
   // por una linea, no por un hueco. Son una sola herramienta.

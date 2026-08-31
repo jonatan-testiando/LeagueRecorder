@@ -138,10 +138,10 @@
        - superficies que ENSEÑAN un hallazgo o una pieza de la colección del
          usuario (clips, errores, partidas de la biblioteca, el punto ciego de
          Hoy, el evento destacado del reproductor, los cruces de Patrones).
-     La biblioteca entró por decisión del usuario (2026-08-31) sabiendo el
-     riesgo de la persiana (filas repetidas con degradado); al ser horizontal
-     y subir solo al final, apilado se lee como textura y no como veinte
-     brillos. Si algún día vuelve a cansar, este es el sitio del que quitarlo. */
+     La biblioteca lo llevó un día (2026-08-31) y lo cambió por otro degradado
+     con más información: vertical y teñido por el RESULTADO de la partida
+     (jade/rojo, inline en MatchGallery, referencia op.gg del usuario). Ahí el
+     violeta genérico no vuelve: diría menos que lo que hay. */
   /* Medido contra la referencia: al 13% el violeta era imperceptible en una
      fila de pantalla completa (el propio usuario lo dio por ausente). Mobalytics
      llega a un morado franco en el extremo; esto se queda un paso por debajo
@@ -352,6 +352,13 @@ h1 {
   text-transform: uppercase;
   color: var(--faint);
 }
+/* La ficha de la biblioteca habla en la sans de su columna izquierda ("Ranked
+   Solo/Duo"): a esta densidad el mono se le hacía duro al usuario. Los
+   tabular-nums del .u-metric se conservan para que las cifras sigan en columna. */
+.filaficha .u-metric {
+  font-family: var(--font-sans);
+}
+
 .u-metric {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

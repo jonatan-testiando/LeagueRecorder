@@ -55,3 +55,25 @@ export const relativeDay = (
   if (dias < 7) return t("{d}d ago", { d: dias });
   return iso.split(" ")[0];
 };
+
+/**
+ * Hace cuánto se jugó, con la unidad que pide la distancia: minutos si acaba de
+ * pasar, horas el mismo día o el siguiente, días después — y a partir de una
+ * semana, los días CON la fecha, que a dos semanas "hace 16 d" ya no ubica.
+ */
+export const matchAge = (
+  iso: string,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): string => {
+  const d = new Date(iso.replace(" ", "T"));
+  if (Number.isNaN(d.getTime())) return iso.split(" ")[0];
+  const min = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+  if (min < 2) return t("just now");
+  if (min < 60) return t("{m} min ago", { m: min });
+  const h = Math.round(min / 60);
+  if (h < 36) return t("{h} h ago", { h });
+  const dias = Math.round(h / 24);
+  if (dias < 7) return t("{d}d ago", { d: dias });
+  const fecha = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return t("{d} d ago · {date}", { d: dias, date: fecha });
+};

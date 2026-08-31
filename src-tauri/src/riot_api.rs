@@ -25,6 +25,8 @@ pub struct MatchDto {
 #[allow(non_snake_case)]
 pub struct MatchInfo {
     pub gameDuration: i64,
+    #[serde(default)]
+    pub gameVersion: String,
     pub participants: Vec<ParticipantDto>,
     #[serde(default)]
     pub teams: Vec<TeamDto>,
@@ -351,6 +353,10 @@ pub struct ParticipantDto {
     pub visionScore: i32,
     #[serde(default)]
     pub wardsPlaced: i32,
+    #[serde(default)]
+    pub summoner1Id: i32,
+    #[serde(default)]
+    pub summoner2Id: i32,
     // --- Aguante, utilidad y objetivos: lo que un KDA no ve ---
     #[serde(default)]
     pub totalDamageTaken: i32,
@@ -678,7 +684,7 @@ pub async fn attribution_for(
 
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
-    Ok(impacto(&mut metadata, &tl, &details.info.participants))
+    Ok(impacto(&mut metadata, &tl, &details.info))
 }
 
 /// Reparto de crédito de los 10, con el puesto del jugador ya guardado.
@@ -687,11 +693,18 @@ pub async fn attribution_for(
 /// en la mano el `details` y la `timeline` que esto necesita, así que calcularlo
 /// allí sale gratis y **llena la columna de impacto de la biblioteca sin que
 /// haya que entrar partida por partida**, que era lo que la dejaba en "—".
+/// "16.13.688.1234" → "16.13". Vacío si Riot no lo mandó.
+fn parche_de(game_version: &str) -> Option<String> {
+    let corto: Vec<&str> = game_version.split('.').take(2).collect();
+    (corto.len() == 2).then(|| corto.join("."))
+}
+
 fn impacto(
     metadata: &mut crate::storage::MatchMetadata,
     tl: &TimelineDto,
-    participants: &[ParticipantDto],
+    info: &MatchInfo,
 ) -> Vec<crate::attribution::PlayerCredit> {
+    let participants = &info.participants;
     let mut filas = crate::attribution::analyze(tl, participants);
 
     // Con el rango conocido, el percentil se compara contra el baremo de ese
@@ -713,9 +726,26 @@ fn impacto(
         if let Some(pos) = orden.iter().position(|c| c.participant_id == yo) {
             let nuevo_rank = Some(pos as i32 + 1);
             let nuevo_pct = orden.get(pos).map(|c| (c.role_percentile * 10.0).round() / 10.0);
-            if metadata.impact_rank != nuevo_rank || metadata.impact_percentile != nuevo_pct {
+            let nuevo_parche = parche_de(&info.gameVersion).or(metadata.patch.clone());
+            // Los hechizos de invocador no existían cuando se guardaron las
+            // partidas viejas; el DTO cacheado los trae, así que se reponen aquí.
+            let mut spells_repuestos = false;
+            if metadata.participants.len() == participants.len() {
+                for (mp, dto) in metadata.participants.iter_mut().zip(participants.iter()) {
+                    if mp.spells.is_empty() && (dto.summoner1Id != 0 || dto.summoner2Id != 0) {
+                        mp.spells = vec![dto.summoner1Id, dto.summoner2Id];
+                        spells_repuestos = true;
+                    }
+                }
+            }
+            if metadata.impact_rank != nuevo_rank
+                || metadata.impact_percentile != nuevo_pct
+                || metadata.patch != nuevo_parche
+                || spells_repuestos
+            {
                 metadata.impact_rank = nuevo_rank;
                 metadata.impact_percentile = nuevo_pct;
+                metadata.patch = nuevo_parche;
                 let _ = crate::storage::save_match_metadata(metadata);
             }
         }
@@ -734,7 +764,12 @@ pub fn spawn_impact_backfill() {
     std::thread::spawn(|| {
         let pendientes: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
             .into_iter()
-            .filter(|m| m.impact_rank.is_none() && !m.participants.is_empty())
+            .filter(|m| {
+                (m.impact_rank.is_none()
+                    || m.patch.is_none()
+                    || m.participants.iter().any(|p| p.spells.is_empty()))
+                    && !m.participants.is_empty()
+            })
             .collect();
         if pendientes.is_empty() {
             return;
@@ -755,7 +790,7 @@ pub fn spawn_impact_backfill() {
             };
             // `impacto` guarda el metadata si el puesto cambia.
             let mut meta = m;
-            impacto(&mut meta, &tl, &details.info.participants);
+            impacto(&mut meta, &tl, &details.info);
             hechas += 1;
         }
         if hechas > 0 {
@@ -1223,6 +1258,7 @@ fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Particip
         items: vec![
             p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6,
         ],
+        spells: vec![p.summoner1Id, p.summoner2Id],
         damage: p.totalDamageDealtToChampions,
         vision_score: p.visionScore,
         wards_placed: p.wardsPlaced,
@@ -1275,7 +1311,7 @@ pub async fn backfill_participants(
             metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
             metadata.gank_impact_15 = analysis.gank_impact_15;
             metadata.lane_result = analysis.lane_result;
-            impacto(&mut metadata, &tl, &details.info.participants);
+            impacto(&mut metadata, &tl, &details.info);
         }
     }
     let _ = crate::storage::save_match_metadata(&metadata);
@@ -1366,7 +1402,7 @@ pub async fn sync_riot_data(
                 metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
                 metadata.gank_impact_15 = analysis.gank_impact_15;
                 metadata.lane_result = analysis.lane_result;
-                impacto(&mut metadata, &tl, &info.participants);
+                impacto(&mut metadata, &tl, &info);
             }
         }
 

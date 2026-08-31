@@ -9,6 +9,28 @@ export const DDRAGON_VER = "16.13.1";
 export const itemIcon = (ver: string, id: number) =>
   `https://ddragon.leagueoflegends.com/cdn/${ver}/img/item/${id}.png`;
 
+/* Id de hechizo de invocador → nombre de fichero en Data Dragon. La API manda
+   el id numérico; el CDN solo entiende el nombre interno. Tabla estática:
+   estos ids llevan años sin moverse. */
+const SPELL_NAMES: Record<number, string> = {
+  1: "SummonerBoost", // Limpiar
+  3: "SummonerExhaust",
+  4: "SummonerFlash",
+  6: "SummonerHaste", // Fantasmal
+  7: "SummonerHeal",
+  11: "SummonerSmite",
+  12: "SummonerTeleport",
+  13: "SummonerMana", // Claridad (ARAM)
+  14: "SummonerDot", // Ignición
+  21: "SummonerBarrier",
+  32: "SummonerSnowball", // Marca (ARAM)
+};
+
+export const spellIcon = (ver: string, id: number): string | null => {
+  const nombre = SPELL_NAMES[id];
+  return nombre ? `https://ddragon.leagueoflegends.com/cdn/${ver}/img/spell/${nombre}.png` : null;
+};
+
 /** Segundos que un clip de error coge antes y después del instante marcado. */
 export const CLIP_BEFORE = 5;
 export const CLIP_AFTER = 10;

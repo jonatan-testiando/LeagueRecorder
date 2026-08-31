@@ -58,7 +58,9 @@ export interface Participant {
   cs: number;
   gold: number;
   is_self: boolean;
-  items?: number[]; // item0..item6 (0 = casilla vacía)
+  items?: number[];
+  /** Hechizos de invocador [summoner1Id, summoner2Id]. */
+  spells?: number[]; // item0..item6 (0 = casilla vacía)
   damage?: number;
   vision_score?: number;
   wards_placed?: number;
@@ -140,6 +142,8 @@ export interface MatchMetadata {
   impact_rank?: number | null;
   /** Percentil de tu WPA dentro de tu rol (0-100). */
   impact_percentile?: number | null;
+  /** Parche en que se jugó ("16.13"). */
+  patch?: string | null;
   timeline_markers?: TimelineMarker[];
   minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo

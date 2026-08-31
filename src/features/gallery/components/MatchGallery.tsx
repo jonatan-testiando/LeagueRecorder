@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration, type KDA } from "../../../core/matchStats";
-import { DDRAGON_VER, itemIcon } from "../../player/components/videoPlayerUtils";
+import { DDRAGON_VER, itemIcon, spellIcon } from "../../player/components/videoPlayerUtils";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { Metric } from "../../../components/ui/Metric";
 import { Button } from "../../../components/ui/Button";
@@ -11,7 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useT } from "../../../core/LanguageProvider";
 
-import { relativeDay } from "../../../core/time";
+import { matchAge, relativeDay } from "../../../core/time";
 interface DiskSpaceInfo {
   used_bytes: number;
   total_bytes: number;
@@ -49,7 +49,7 @@ interface MatchGalleryProps {
 
 /* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
    avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
-const FILA_GRID = "28px minmax(150px, 1fr) 80px 112px 92px 60px 76px 152px 30px";
+const FILA_GRID = "90px 44px minmax(104px, 1fr) 72px 48px 36px 52px 126px minmax(120px, 170px) 50px 26px";
 
 /** El KDA guardado ("9/3/12") o el contado de los eventos, como números. */
 const kdaDe = (m: MatchMetadata, contado: KDA): KDA => {
@@ -250,13 +250,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           <>
           <div style={styles.headRow}>
             <span />
+            <span />
             <span className="u-label">{t("Game")}</span>
-            <span className="u-label" style={{ textAlign: "right" }}>{t("rank · score")}</span>
             <span className="u-label" style={{ textAlign: "right" }}>KDA</span>
             <span className="u-label" style={{ textAlign: "right" }}>CS</span>
             <span className="u-label" style={{ textAlign: "right" }}>KP</span>
             <span className="u-label" style={{ textAlign: "right" }}>{t("Gold @15")}</span>
             <span className="u-label">{t("Items")}</span>
+            <span className="u-label">{t("vs rival")}</span>
+            <span className="u-label" style={{ textAlign: "right" }}>Score</span>
             <span />
           </div>
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
@@ -298,6 +300,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               const kp = yo && kills_equipo > 0 ? Math.round(((yo.kills + yo.assists) / kills_equipo) * 100) : null;
               const csmin = yo && match.game_duration > 0 ? (yo.cs / (match.game_duration / 60)).toFixed(1) : null;
               const objetos = (yo?.items ?? []).filter((it) => it > 0).slice(0, 6);
+              // El rival de tu ROL: Riot ordena 1-5 azul / 6-10 rojo por
+              // posición, así que es el espejo de tu índice (el mismo truco que
+              // usa el backend para el gank y el impacto).
+              const idxYo = match.participants?.findIndex((p) => p.is_self) ?? -1;
+              const rival =
+                idxYo >= 0 && match.participants!.length === 10
+                  ? match.participants![(idxYo + 5) % 10]
+                  : null;
               const res = outcome(match.result);
               const accent =
                 res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--line)";
@@ -320,8 +330,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   {/* Sin `animateIn`: esta lista está virtualizada y la
                       animación de entrada se redispararía al hacer scroll. */}
                   <div
-                    className="card card--interactive"
-                    style={{ ...styles.row, borderLeft: `2px solid ${accent}` }}
+                    className="card card--interactive filaficha"
+                    style={{
+                      ...styles.row,
+                      borderLeft: `2px solid ${accent}`,
+                      // El resultado tiñe la ficha desde arriba, como en la
+                      // referencia: la derrota sangra rojo, la victoria jade.
+                      background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 12%, var(--panel)) 0%, var(--panel) 78%)`,
+                    }}
                     onClick={() => onSelectMatch(match)}
                     role="button"
                     tabIndex={0}
@@ -330,14 +346,30 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                     }}
                   >
                     <div style={styles.rowGrid}>
-                      <ChampionAvatar champion={match.champion} size={26} />
+                      <div style={styles.colIzq}>
+                        <span style={styles.cola}>{queueLabel(match.queue)}</span>
+                        <span className="u-meta">{matchAge(match.date, t)}</span>
+                        <span className="u-meta">{match.patch ? `${t("Patch")} ${match.patch}` : " "}</span>
+                        <span className="u-meta">{formatDuration(match.game_duration)}</span>
+                      </div>
+                      <div style={styles.caraCell}>
+                        <ChampionAvatar champion={match.champion} size={28} />
+                        {yo?.spells && yo.spells.length > 0 && (
+                          <div style={styles.spellCol}>
+                            {yo.spells.slice(0, 2).map((sp, si) => {
+                              const src = spellIcon(DDRAGON_VER, sp);
+                              return src ? <img key={si} src={src} alt="" style={styles.spellIcon} loading="lazy" /> : null;
+                            })}
+                          </div>
+                        )}
+                      </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={styles.champ}>{match.champion}</div>
                         <div style={styles.meta}>
                           <span style={{ ...styles.result, color: accent }}>
                             {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
                           </span>
-                          <span className="u-meta">{relativeDay(match.date, t)} · {formatDuration(match.game_duration)}</span>
+
                           {unreviewed && (
                             <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
                           )}
@@ -345,24 +377,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                       </div>
 
                       <Metric
-                        value={
-                          match.impact_rank
-                            ? <span style={{ color: match.impact_rank === 1 ? "var(--win)" : match.impact_rank >= 8 ? "var(--loss)" : undefined }}>
-                                {match.impact_rank === 1 ? "MVP" : `${match.impact_rank}º`}
-                                {match.impact_percentile != null && (
-                                  <span className="u-meta"> · {Math.round(match.impact_percentile)}</span>
-                                )}
-                              </span>
-                            : "—"
-                        }
-                        title={
-                          match.impact_percentile != null
-                            ? `${t("vs role")}: ${Math.round(match.impact_percentile)}`
-                            : t("Open the game to compute it")
-                        }
-                      />
-                      <Metric
-                        value={<>{kda.kills} / <span style={{ color: "var(--loss)" }}>{kda.deaths}</span> / {kda.assists}</>}
+                        value={<>{kda.kills}/<span style={{ color: "var(--loss)" }}>{kda.deaths}</span>/{kda.assists}</>}
                         label={`${kdaRatio(kda)} KDA`}
                       />
                       <Metric
@@ -402,6 +417,65 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                               />
                             ))
                           : <span className="u-meta">—</span>}
+                      </div>
+
+                      {/* El rival de tu rol, como en la referencia. */}
+                      <div style={styles.rivalCell}>
+                        {rival ? (
+                          <>
+                            <div style={styles.caraCell}>
+                              <ChampionAvatar champion={rival.champion} size={26} />
+                              {rival.spells && rival.spells.length > 0 && (
+                                <div style={styles.spellCol}>
+                                  {rival.spells.slice(0, 2).map((sp, si) => {
+                                    const src = spellIcon(DDRAGON_VER, sp);
+                                    return src ? <img key={si} src={src} alt="" style={styles.spellIconSm} loading="lazy" /> : null;
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={styles.rivalNombre}>{rival.champion}</div>
+                              <div className="u-meta" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {rival.kills}/<span style={{ color: "var(--loss)" }}>{rival.deaths}</span>/{rival.assists} · {rival.cs} cs
+                              </div>
+                              <div style={styles.rivalItems}>
+                                {(rival.items ?? []).filter((it) => it > 0).slice(0, 6).map((it, ii) => (
+                                  <img key={ii} src={itemIcon(DDRAGON_VER, it)} alt="" style={styles.rivalItemIcon} loading="lazy" />
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="u-meta">—</span>
+                        )}
+                      </div>
+
+                      {/* Score y puesto, juntos: la nota grande y el puesto
+                          debajo, que es como se lee la referencia. */}
+                      <div style={{ textAlign: "right" }}>
+                        {match.impact_percentile != null ? (
+                          <>
+                            <div
+                              className="u-metric"
+                              style={{
+                                fontSize: 18,
+                                fontWeight: 700,
+                                color: match.impact_percentile >= 50 ? "var(--win)" : "var(--loss)",
+                              }}
+                            >
+                              {Math.round(match.impact_percentile)}
+                            </div>
+                            <div
+                              className="u-meta"
+                              style={{ color: match.impact_rank === 1 ? "var(--gold)" : undefined }}
+                            >
+                              {match.impact_rank === 1 ? "MVP" : match.impact_rank ? `${match.impact_rank}º` : ""}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="u-meta">—</span>
+                        )}
                       </div>
 
                       <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -523,17 +597,76 @@ const styles: Record<string, React.CSSProperties> = {
   row: {
     padding: "var(--space-1) var(--space-3)",
     borderRadius: "var(--radius-md)",
-    // El brillo de colección, pedido por el usuario también aquí. Va en línea
-    // a propósito: pisa el fondo de .card y el hover sigue hablando por el
-    // borde, no por el fondo.
-    background: "var(--media-sheen)",
   },
   rowGrid: {
     display: "grid",
     gridTemplateColumns: FILA_GRID,
-    gap: "var(--space-3)",
+    gap: "var(--space-2)",
     alignItems: "center",
-    minHeight: 44,
+    // Ficha, no fila: la columna izquierda apila cuatro líneas.
+    minHeight: 92,
+  },
+  caraCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: 3,
+  },
+  spellCol: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  spellIcon: {
+    width: 13,
+    height: 13,
+    borderRadius: 3,
+    display: "block",
+  },
+  spellIconSm: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    display: "block",
+  },
+  rivalItems: {
+    display: "flex",
+    gap: 2,
+    marginTop: 3,
+  },
+  rivalItemIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    display: "block",
+  },
+  colIzq: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 1,
+    minWidth: 0,
+  },
+  cola: {
+    // 11px porque "Ranked Solo/Duo" tiene que caber entero en 96px.
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--text)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  rivalCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  rivalNombre: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: "var(--muted)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
   },
   itemsCell: {
     display: "flex",
@@ -541,8 +674,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
   },
   itemIcon: {
-    width: 22,
-    height: 22,
+    width: 19,
+    height: 19,
     borderRadius: "var(--radius-sm)",
     border: "1px solid var(--line-soft)",
     background: "var(--sunken)",
@@ -551,7 +684,7 @@ const styles: Record<string, React.CSSProperties> = {
   headRow: {
     display: "grid",
     gridTemplateColumns: FILA_GRID,
-    gap: "var(--space-3)",
+    gap: "var(--space-2)",
     alignItems: "center",
     // 2px del borde de resultado + el padding horizontal de la fila,
     // para que las columnas caigan en la misma vertical.

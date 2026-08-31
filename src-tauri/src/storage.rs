@@ -78,6 +78,10 @@ pub struct Participant {
     pub is_self: bool,
     #[serde(default)]
     pub items: Vec<i32>, // item0..item6 (0 = casilla vacía)
+    /// Hechizos de invocador [summoner1Id, summoner2Id]. Vacío en partidas
+    /// guardadas antes de existir el campo; el backfill de arranque lo rellena.
+    #[serde(default)]
+    pub spells: Vec<i32>,
     #[serde(default)]
     pub damage: i32, // daño a campeones
     #[serde(default)]
@@ -222,6 +226,9 @@ pub struct MatchMetadata {
     /// Percentil de tu WPA dentro de tu rol, de 0 a 100. Ver `crate::baselines`.
     #[serde(default)]
     pub impact_percentile: Option<f64>,
+    /// Parche en que se jugó ("16.13"). De `info.gameVersion` de Riot.
+    #[serde(default)]
+    pub patch: Option<String>,
     /// Tramo de rango en que se jugó: "bajo", "medio" o "alto".
     ///
     /// Hace falta para comparar contra el baremo correcto — el percentil de un

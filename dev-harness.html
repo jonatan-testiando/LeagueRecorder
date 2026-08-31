@@ -12,7 +12,12 @@
 (function () {
   const champs = ["Gwen", "Viego", "Ahri", "Lee Sin", "Jinx", "Thresh"];
   const now = Date.now();
-  const iso = (d) => new Date(d).toISOString().slice(0, 19).replace("T", " ");
+  // Hora LOCAL, como la escribe el backend (chrono::Local). Con toISOString
+  // (UTC sin la Z) los "hace N h" del arnés salian corridos por la zona horaria.
+  const iso = (d) => {
+    const x = new Date(d), p = (n) => String(n).padStart(2, "0");
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())} ${p(x.getHours())}:${p(x.getMinutes())}:${p(x.getSeconds())}`;
+  };
 
   const mkEvents = (dur) => {
     const ev = [];
@@ -66,6 +71,7 @@
     gold: 10500 + i * 640,
     is_self: i === 0,
     items: [3153, 3006, 3071, 3742, 0, 0, 3340].slice(0, 7),
+    spells: i === 0 ? [4, 14] : [[4, 12], [4, 11], [4, 14], [7, 4], [3, 4], [4, 12], [11, 4], [4, 21], [7, 4], [14, 4]][i],
     damage: 14000 + i * 1600,
     vision_score: 18 + i,
     wards_placed: 6 + (i % 9),
@@ -174,6 +180,8 @@
 
   // Muertes con posición repartidas por el mapa, para el hero de Patrones.
   matches.forEach(function (m, mi) {
+    // El parche lo tienen todas: el backfill real lo rellena partida a partida.
+    m.patch = "16.13";
     if (mi % 2) return;
     for (var k = 0; k < 6; k++) {
       m.timeline_markers = m.timeline_markers || [];

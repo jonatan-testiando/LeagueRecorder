@@ -87,6 +87,8 @@ export interface MatchTimelineProps {
   height?: number;
   /** Marcas de la cámara detectadas por el analizador. */
   cameraSnaps?: number[];
+  /** Sin eje de tiempos debajo: para vivir dentro de una fila de una línea. */
+  compact?: boolean;
 }
 
 export const MatchTimeline: React.FC<MatchTimelineProps> = ({
@@ -95,6 +97,7 @@ export const MatchTimeline: React.FC<MatchTimelineProps> = ({
   apmSeries,
   height = 34,
   cameraSnaps,
+  compact = false,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scrub, setScrub] = useState<number | null>(null);
@@ -221,11 +224,13 @@ export const MatchTimeline: React.FC<MatchTimelineProps> = ({
         )}
       </div>
 
+      {!compact && (
       <div className="mtl__axis">
         <span>0:00</span>
         <span>{mmss(safeDur / 2)}</span>
         <span>{mmss(safeDur)}</span>
       </div>
+      )}
     </div>
   );
 };

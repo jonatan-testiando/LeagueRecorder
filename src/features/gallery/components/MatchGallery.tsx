@@ -47,6 +47,10 @@ interface MatchGalleryProps {
   isRecording: boolean;
 }
 
+/* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
+   avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
+const FILA_GRID = "28px minmax(150px, 185px) minmax(120px, 1fr) 86px 96px 76px 52px 44px 30px";
+
 export const MatchGallery: React.FC<MatchGalleryProps> = ({
   matches,
   onSelectMatch,
@@ -220,6 +224,18 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             }
           />
         ) : (
+          <>
+          <div style={styles.headRow}>
+            <span />
+            <span className="u-label">{t("Game")}</span>
+            <span />
+            <span className="u-label" style={{ textAlign: "right" }}>{t("rank · score")}</span>
+            <span className="u-label" style={{ textAlign: "right" }}>K D A</span>
+            <span className="u-label" style={{ textAlign: "right" }}>{t("Gold @15")}</span>
+            <span className="u-label" style={{ textAlign: "right" }}>{t("Dur.")}</span>
+            <span className="u-label" style={{ textAlign: "right" }}>APM</span>
+            <span />
+          </div>
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const row = rows[virtualRow.index];
@@ -282,37 +298,37 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectMatch(match); }
                     }}
                   >
-                    <div style={styles.rowTop}>
-                      <div style={styles.who}>
-                        <ChampionAvatar champion={match.champion} size={30} />
-                        <div style={{ minWidth: 0 }}>
-                          <div style={styles.champ}>{match.champion}</div>
-                          {/* La cola sale de la fila: es "Ranked Solo/Duo" en las
-                              15 partidas sincronizadas, o sea 0% de dispersion.
-                              Un dato identico en todas las filas no es
-                              informacion, es ruido con ancho. Sigue estando en
-                              el buscador. */}
-                          <div style={styles.meta}>
-                            <span style={{ ...styles.result, color: accent }}>
-                              {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
-                            </span>
-                            <span className="u-meta">{relativeDay(match.date, t)}</span>
-                            {unreviewed && (
-                              <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
-                            )}
-                          </div>
+                    <div style={styles.rowGrid}>
+                      <ChampionAvatar champion={match.champion} size={26} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={styles.champ}>{match.champion}</div>
+                        <div style={styles.meta}>
+                          <span style={{ ...styles.result, color: accent }}>
+                            {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
+                          </span>
+                          <span className="u-meta">{relativeDay(match.date, t)}</span>
+                          {unreviewed && (
+                            <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
+                          )}
                         </div>
                       </div>
 
-                      {/* El peso va por dispersion. En estas 19 partidas el oro@15
-                          va de -2587 a +2710 y el APM de 219 a 307: uno separa una
-                          partida de otra y el otro es casi el mismo numero
-                          siempre. Antes se pintaban igual. */}
-                      {/* El puesto entre los diez. Es lo primero que se quiere
-                          saber de una partida y hasta ahora no estaba en ningun
-                          sitio: "fui el mejor" o "fui el peor" dice mas que un
-                          KDA. Sale "—" hasta que se abre la pestana Impacto de
-                          esa partida, que es cuando se calcula y se guarda. */}
+                      {/* La silueta de la partida vive en el hueco que antes
+                          quedaba muerto entre el nombre y las cifras, en vez de
+                          en una planta propia que doblaba la altura. */}
+                      <div style={{ minWidth: 0, alignSelf: "center" }}>
+                        <MatchTimeline
+                          events={match.events}
+                          duration={match.game_duration}
+                          apmSeries={match.apm_series}
+                          cameraSnaps={match.camera_snaps}
+                          height={26}
+                          compact
+                        />
+                      </div>
+
+                      {/* Sin etiqueta: la lleva la cabecera de la tabla, una
+                          vez, en lugar de repetirse en cada fila. */}
                       <Metric
                         value={
                           match.impact_rank
@@ -324,7 +340,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                               </span>
                             : "—"
                         }
-                        label={t("rank · score")}
                         title={
                           match.impact_percentile != null
                             ? `${t("vs role")}: ${Math.round(match.impact_percentile)}`
@@ -337,7 +352,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             ? match.kda.replace(/\//g, " / ")
                             : <>{kda.kills} / <span style={{ color: "var(--loss)" }}>{kda.deaths}</span> / {kda.assists}</>
                         }
-                        label="K D A"
                         title={`${kdaRatio(kda)} KDA`}
                       />
                       <Metric
@@ -346,7 +360,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             ? "—"
                             : `${match.gold_diff_15 >= 0 ? "+" : "−"}${Math.abs(match.gold_diff_15)}`
                         }
-                        label={t("Gold @15")}
                         emphasis="lead"
                         tone={
                           match.gold_diff_15 === undefined || match.gold_diff_15 === null
@@ -355,10 +368,10 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         }
                         title={match.lane_result ? `Lane: ${match.lane_result}` : undefined}
                       />
-                      <Metric value={formatDuration(match.game_duration)} label={t("Dur.")} />
-                      <Metric value={Math.round(match.apm || 0)} label={t("APM")} tone="muted" />
+                      <Metric value={formatDuration(match.game_duration)} />
+                      <Metric value={Math.round(match.apm || 0)} tone="muted" />
 
-                      <div style={{ width: 36, display: "flex", justifyContent: "flex-end" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
                         <Button
                           variant="danger"
                           size="sm"
@@ -369,18 +382,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         />
                       </div>
                     </div>
-
-                    <MatchTimeline
-                      events={match.events}
-                      duration={match.game_duration}
-                      apmSeries={match.apm_series}
-                      cameraSnaps={match.camera_snaps}
-                    />
                   </div>
                 </div>
               );
             })}
           </div>
+          </>
         )}
       </div>
 
@@ -498,25 +505,29 @@ const styles: Record<string, React.CSSProperties> = {
     paddingTop: "var(--space-2)",
   },
   row: {
-    padding: "var(--space-2) var(--space-4) var(--space-3)",
+    padding: "var(--space-1) var(--space-3)",
     borderRadius: "var(--radius-md)",
+  },
+  rowGrid: {
+    display: "grid",
+    gridTemplateColumns: FILA_GRID,
+    gap: "var(--space-3)",
+    alignItems: "center",
+    minHeight: 44,
+  },
+  headRow: {
+    display: "grid",
+    gridTemplateColumns: FILA_GRID,
+    gap: "var(--space-3)",
+    alignItems: "center",
+    // 2px del borde de resultado + el padding horizontal de la fila,
+    // para que las columnas caigan en la misma vertical.
+    padding: "0 var(--space-3) var(--space-2) calc(var(--space-3) + 2px)",
   },
   result: {
     fontFamily: "var(--font-mono)",
     fontSize: "10px",
     letterSpacing: "0.12em",
-  },
-  rowTop: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-  },
-  who: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    flex: 1,
-    minWidth: 0,
   },
   champ: {
     fontSize: "var(--font-sm)",

@@ -299,21 +299,56 @@ impl MetronomeRunner {
         self.pending = None;
     }
 
-    /// Avanza un tick. `now` es el tiempo de juego y `presses` el histórico
-    /// acumulado de pulsaciones de cámara de la partida.
+    /// Carril del mapa que corresponde a cada puesto.
+    ///
+    /// El jungla no tiene: un clic de minimapa dice a qué zona miraste, y la
+    /// jungla no es una zona que se pueda separar así. Para ese puesto sigue
+    /// haciendo falta la tecla de cámara.
+    fn carril_de(role: &str) -> Option<&'static str> {
+        match role {
+            "TOP" => Some("top"),
+            "MID" | "MIDDLE" => Some("mid"),
+            "ADC" | "BOTTOM" | "SUPPORT" | "UTILITY" => Some("bot"),
+            _ => None,
+        }
+    }
+
+    /// Avanza un tick. `now` es el tiempo de juego, `presses` el histórico de
+    /// pulsaciones de cámara y `looks` los clics de minimapa con su carril, los
+    /// dos en tiempo de juego.
+    ///
+    /// Aceptar el clic no es una comodidad: medido sobre las partidas del
+    /// usuario, las teclas de cámara aliada salen a 0 ó 1 por partida y los
+    /// clics de minimapa a más de 300. Un drill que sólo mira las teclas está
+    /// puntuando a cero a alguien que comprueba el mapa quince veces por minuto.
     pub fn tick(
         &mut self,
         now: f64,
         presses: &[crate::awareness::CameraPress],
+        looks: &[(f64, &'static str)],
     ) -> Option<MetronomeEvent> {
         if !self.enabled || self.bindings.is_empty() {
             return None;
         }
 
         if let Some((role, at)) = self.pending.clone() {
-            // Solo cuenta una pulsación del rol pedido y posterior al aviso.
-            if let Some(p) = presses.iter().find(|p| p.t >= at && p.role == role) {
-                let latency_ms = ((p.t - at) * 1000.0).max(0.0);
+            // Sólo cuenta una respuesta del puesto pedido y posterior al aviso:
+            // la tecla de ese aliado, o un clic de minimapa en su carril.
+            let carril = Self::carril_de(&role);
+            let respuesta = presses
+                .iter()
+                .find(|p| p.t >= at && p.role == role)
+                .map(|p| p.t)
+                .into_iter()
+                .chain(
+                    looks
+                        .iter()
+                        .filter(|(t, c)| *t >= at && carril == Some(*c))
+                        .map(|(t, _)| *t),
+                )
+                .min_by(f64::total_cmp);
+            if let Some(t_resp) = respuesta {
+                let latency_ms = ((t_resp - at) * 1000.0).max(0.0);
                 self.results.push(crate::awareness::MetronomeResult {
                     t: at,
                     role: role.clone(),
@@ -428,6 +463,72 @@ pub async fn save_drill_session(session: DrillSession) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn metronomo(role: &str) -> MetronomeRunner {
+        let cfg = TrainingConfig {
+            metronome_enabled: true,
+            metronome_interval_secs: 20,
+            metronome_window_secs: 3,
+            bindings: vec![CameraBinding { key: "F1".into(), role: role.into() }],
+            ..Default::default()
+        };
+        let mut m = MetronomeRunner::default();
+        m.start(&cfg, 100.0);
+        m
+    }
+
+    /// Lo que motivó el cambio: el usuario mira el mapa con el ratón, no con
+    /// F1-F5, y el drill le puntuaba a cero. Un clic en el carril del puesto que
+    /// se pidió cuenta como respuesta.
+    #[test]
+    fn un_clic_en_el_carril_pedido_responde_al_metronomo() {
+        let mut m = metronomo("TOP");
+        assert!(matches!(m.tick(100.0, &[], &[]), Some(MetronomeEvent::Prompt { .. })));
+        let ack = m.tick(101.0, &[], &[(100.5, "top")]);
+        match ack {
+            Some(MetronomeEvent::Ack { ok, latency_ms, .. }) => {
+                assert!(ok, "el clic en top tenía que valer");
+                assert!((latency_ms - 500.0).abs() < 1.0, "latencia: {latency_ms}");
+            }
+            otro => panic!("esperaba un Ack, llegó {otro:?}"),
+        }
+    }
+
+    /// Mirar OTRO carril no es haber mirado el que se pidió.
+    #[test]
+    fn un_clic_en_otro_carril_no_vale() {
+        let mut m = metronomo("TOP");
+        m.tick(100.0, &[], &[]);
+        assert!(m.tick(101.0, &[], &[(100.5, "bot")]).is_none());
+        // Y al pasar la ventana, se cuenta como fallo.
+        match m.tick(104.0, &[], &[(100.5, "bot")]) {
+            Some(MetronomeEvent::Ack { ok, .. }) => assert!(!ok),
+            otro => panic!("esperaba un Ack fallido, llegó {otro:?}"),
+        }
+    }
+
+    /// Un clic ANTERIOR al aviso tampoco: responder es mirar después de que te
+    /// lo pidan, no haber mirado por casualidad hace un rato.
+    #[test]
+    fn un_clic_anterior_al_aviso_no_cuenta() {
+        let mut m = metronomo("TOP");
+        m.tick(100.0, &[], &[]);
+        assert!(m.tick(101.0, &[], &[(99.0, "top")]).is_none());
+    }
+
+    /// Al jungla no se le puede responder con el minimapa: su cámara no es una
+    /// zona del mapa. Ahí sigue haciendo falta la tecla.
+    #[test]
+    fn el_jungla_sigue_exigiendo_la_tecla() {
+        let mut m = metronomo("JUNGLE");
+        m.tick(100.0, &[], &[]);
+        assert!(m.tick(101.0, &[], &[(100.5, "top")]).is_none());
+        let presses = [crate::awareness::CameraPress { t: 100.7, role: "JUNGLE".into() }];
+        match m.tick(101.0, &presses, &[]) {
+            Some(MetronomeEvent::Ack { ok, .. }) => assert!(ok),
+            otro => panic!("esperaba un Ack bueno, llegó {otro:?}"),
+        }
+    }
+
     #[test]
     fn parsea_digitos_y_fkeys() {
         assert_eq!(parse_key("1"), Some(rdev::Key::Num1));
@@ -463,11 +564,11 @@ mod tests {
         m.start(&cfg_metronomo(), 60.0);
 
         // Antes de la hora no pide nada.
-        assert_eq!(m.tick(59.0, &[]), None);
+        assert_eq!(m.tick(59.0, &[], &[]), None);
 
         // Primer aviso: el primer binding (TOP → tecla 1).
         assert_eq!(
-            m.tick(60.0, &[]),
+            m.tick(60.0, &[], &[]),
             Some(MetronomeEvent::Prompt {
                 role: "TOP".into(),
                 key: "1".into(),
@@ -477,7 +578,7 @@ mod tests {
 
         // Respondemos a los 400 ms.
         let presses = vec![CameraPress { t: 60.4, role: "TOP".into() }];
-        match m.tick(61.0, &presses) {
+        match m.tick(61.0, &presses, &[]) {
             Some(MetronomeEvent::Ack { ok, role, latency_ms }) => {
                 assert!(ok);
                 assert_eq!(role, "TOP");
@@ -487,8 +588,8 @@ mod tests {
         }
 
         // El siguiente aviso llega un intervalo después y es el rol siguiente.
-        assert_eq!(m.tick(70.0, &presses), None);
-        match m.tick(81.0, &presses) {
+        assert_eq!(m.tick(70.0, &presses, &[]), None);
+        match m.tick(81.0, &presses, &[]) {
             Some(MetronomeEvent::Prompt { role, .. }) => assert_eq!(role, "MID"),
             other => panic!("esperaba prompt de MID, llegó {:?}", other),
         }
@@ -498,11 +599,11 @@ mod tests {
     fn metronomo_falla_al_pasar_la_ventana() {
         let mut m = MetronomeRunner::default();
         m.start(&cfg_metronomo(), 60.0);
-        m.tick(60.0, &[]);
+        m.tick(60.0, &[], &[]);
         // Dentro de la ventana todavía no se decide nada.
-        assert_eq!(m.tick(64.0, &[]), None);
+        assert_eq!(m.tick(64.0, &[], &[]), None);
         assert_eq!(
-            m.tick(66.0, &[]),
+            m.tick(66.0, &[], &[]),
             Some(MetronomeEvent::Ack {
                 ok: false,
                 role: "TOP".into(),
@@ -520,10 +621,10 @@ mod tests {
         m.start(&cfg_metronomo(), 60.0);
         // Una pulsación de TOP ANTES del aviso no debe validarlo.
         let previas = vec![CameraPress { t: 30.0, role: "TOP".into() }];
-        m.tick(60.0, &previas);
-        assert_eq!(m.tick(61.0, &previas), None);
+        m.tick(60.0, &previas, &[]);
+        assert_eq!(m.tick(61.0, &previas, &[]), None);
         assert!(matches!(
-            m.tick(66.0, &previas),
+            m.tick(66.0, &previas, &[]),
             Some(MetronomeEvent::Ack { ok: false, .. })
         ));
     }
@@ -533,7 +634,7 @@ mod tests {
         let mut m = MetronomeRunner::default();
         m.start(&TrainingConfig::default(), 0.0); // metronome_enabled = false
         assert!(!m.is_enabled());
-        assert_eq!(m.tick(1000.0, &[]), None);
+        assert_eq!(m.tick(1000.0, &[], &[]), None);
     }
 
     #[test]

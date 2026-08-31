@@ -368,6 +368,11 @@ pub fn spawn_background_monitor(
             // pulsaciones de las teclas de cámara aliada (para las métricas).
             let mut snapshots: Vec<GameSnapshot> = Vec::new();
             let mut cam_presses: Vec<CameraPress> = Vec::new();
+            // Clics de minimapa con su carril, en tiempo de juego. El metrónomo
+            // los acepta como respuesta igual que una tecla de cámara: es el
+            // gesto con el que la mayoría mira el mapa.
+            let mut cam_looks: Vec<(f64, &'static str)> = Vec::new();
+            let espacio_raton = crate::ultimate::mouse_coordinate_space();
             let mut last_snapshot_time: f64 = -1e9;
             // Metrónomo: rotación de roles, aviso pendiente y resultados.
             let mut metro: MetronomeRunner = MetronomeRunner::default();
@@ -550,7 +555,7 @@ pub fn spawn_background_monitor(
                     }
 
                     // Metrónomo: pedir el siguiente aliado o resolver el aviso anterior.
-                    match metro.tick(last_game_time, &cam_presses) {
+                    match metro.tick(last_game_time, &cam_presses, &cam_looks) {
                         Some(MetronomeEvent::Prompt { role, key, window_secs }) => {
                             let _ = app.emit(
                                 "metronome_prompt",
@@ -597,9 +602,23 @@ pub fn spawn_background_monitor(
                         let mut me_guard = active_match.mouse_events.lock().await;
                         let rec_start_guard = active_match.recording_start.lock().await;
                         if let Some(rec_start) = *rec_start_guard {
+                            // `game_time_offset` guarda `t_partida - t_vídeo`, así que
+                            // sumarlo lleva un instante del vídeo al reloj de la partida,
+                            // que es en el que trabaja el metrónomo.
+                            let desfase = active_match.game_time_offset.lock().await.unwrap_or(0.0);
                             for (inst, x, y, evt_str) in raw_mouse_events {
                                 // Usamos el instante relativo al momento en que empezó el video
                                 let gt = inst.saturating_duration_since(rec_start).as_secs_f64();
+                                if evt_str == "left_click" {
+                                    if let Some(carril) = crate::camera_input::lane_of_click(
+                                        x,
+                                        y,
+                                        espacio_raton.0 as f64,
+                                        espacio_raton.1 as f64,
+                                    ) {
+                                        cam_looks.push((gt + desfase, carril));
+                                    }
+                                }
                                 me_guard.push(MouseEventData {
                                     t: gt,
                                     x,

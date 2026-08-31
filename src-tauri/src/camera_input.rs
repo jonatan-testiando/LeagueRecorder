@@ -117,6 +117,20 @@ pub fn snaps_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<f64> {
     looks_from_input(m, teclas).into_iter().map(|l| l.t).collect()
 }
 
+/// Carril al que va un clic de minimapa, o `None` si el clic no está en el
+/// minimapa o cae lejos de los tres carriles.
+///
+/// Lo usa el metrónomo en vivo, que trabaja con clics sueltos según llegan y no
+/// tiene todavía metadata de la partida donde mirar la resolución.
+pub fn lane_of_click(x: f64, y: f64, w: f64, h: f64) -> Option<&'static str> {
+    let e = MouseEventData { t: 0.0, x, y, evt: String::new() };
+    if w <= 0.0 || h <= 0.0 || !en_minimapa(&e, w, h) {
+        return None;
+    }
+    let (mx, my) = punto_del_mapa(&e, w, h);
+    crate::gank::Lane::nearest_within(mx, my, RADIO_CARRIL).map(|l| l.key())
+}
+
 /// Cuánto dura la partida a efectos de este informe: lo que diga el reloj de
 /// juego más la pantalla de carga, o lo que se llegó a grabar si fue más.
 fn duracion(m: &MatchMetadata) -> f64 {

@@ -4,14 +4,20 @@ import {
   deathClock,
   errorCategories,
   confidenceOf,
+  forecastRank,
+  ladderLp,
   type Confidence,
 } from "../../../core/patterns";
+import { rankIcon, rankLabel } from "../../../core/ddragon";
+import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import {
   ErrorClipMetadata,
   getAllErrorClips,
   getCameraZoneHistory,
   getPressureSummary,
   getRecordedMatches,
+  getSeasonForm,
+  type SeasonForm,
   type PressureSummary,
   type ZoneHistoryRow,
 } from "../../../core/tauri-ipc";
@@ -62,6 +68,7 @@ export const PatternsPanel: React.FC = () => {
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
   const [zonas, setZonas] = useState<ZoneHistoryRow[]>([]);
   const [presion, setPresion] = useState<PressureSummary | null>(null);
+  const [forma, setForma] = useState<SeasonForm | null>(null);
   const [loading, setLoading] = useState(true);
   const t = useT();
 
@@ -82,6 +89,11 @@ export const PatternsPanel: React.FC = () => {
       })
       .catch(console.error)
       .finally(() => alive && setLoading(false));
+    // La forma de temporada va aparte: puede tardar (hasta 20 detalles de la
+    // API la primera vez) y la página no tiene por qué esperarla.
+    getSeasonForm()
+      .then((f) => alive && setForma(f))
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -140,6 +152,63 @@ export const PatternsPanel: React.FC = () => {
   }, [own]);
 
   // Cruce oro@15 ↔ resultado.
+  // La predicción, con la forma de la CUENTA (grabadas o no).
+  const prediccion = useMemo(
+    () =>
+      forma
+        ? forecastRank(forma.games, forma.tier, forma.division, forma.lp, forma.avg_gain, forma.avg_loss)
+        : null,
+    [forma]
+  );
+
+  // La escalada: LP absoluto en la escalera, partida grabada a partida.
+  const escalada = useMemo(() => {
+    return own
+      .filter((m) => m.rank_lp != null && m.rank_tier)
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .map((m) => ladderLp(m.rank_tier as string, m.rank_division, m.rank_lp as number));
+  }, [own]);
+
+  // Tu pool: con quién juegas y con quién GANAS, del histórico grabado.
+  const pool = useMemo(() => {
+    const por = new Map<string, { games: number; wins: number; k: number; d: number; a: number }>();
+    for (const m of own) {
+      const e = por.get(m.champion) ?? { games: 0, wins: 0, k: 0, d: 0, a: 0 };
+      e.games += 1;
+      if (m.result === "Victory") e.wins += 1;
+      const kda = (m.kda ?? "").split("/").map(Number);
+      if (kda.length === 3 && kda.every((x) => !Number.isNaN(x))) {
+        e.k += kda[0]; e.d += kda[1]; e.a += kda[2];
+      }
+      por.set(m.champion, e);
+    }
+    return [...por.entries()]
+      .map(([champion, e]) => ({ champion, ...e, wr: e.wins / e.games }))
+      .sort((a, b) => b.games - a.games)
+      .slice(0, 6);
+  }, [own]);
+
+  // Tus rivales de carril: el espejo de índice, agregado.
+  const rivales = useMemo(() => {
+    const por = new Map<string, { games: number; losses: number }>();
+    for (const m of own) {
+      const ps = m.participants;
+      if (!ps || ps.length !== 10) continue;
+      const idx = ps.findIndex((p) => p.is_self);
+      if (idx < 0) continue;
+      const rival = ps[(idx + 5) % 10];
+      const e = por.get(rival.champion) ?? { games: 0, losses: 0 };
+      e.games += 1;
+      if (m.result !== "Victory") e.losses += 1;
+      por.set(rival.champion, e);
+    }
+    return [...por.entries()]
+      .map(([champion, e]) => ({ champion, ...e, wr: (e.games - e.losses) / e.games }))
+      .filter((r) => r.games >= 1)
+      .sort((a, b) => b.losses - a.losses || b.games - a.games)
+      .slice(0, 6);
+  }, [own]);
+
   const cruceOro = useMemo(() => {
     const con = own.filter((m) => m.gold_diff_15 != null);
     const g = (xs: MatchMetadata[]) =>
@@ -351,7 +420,137 @@ export const PatternsPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* ------------------------- trayectoria: dónde estás y hacia dónde vas */}
+      {(prediccion || escalada.length >= 3) && (
+        <div className="card" style={{ ...styles.card, marginBottom: "var(--space-4)" }}>
+          <div style={styles.cardHead}>
+            <span className="u-label">{t("Rank forecast")}</span>
+            {forma && (
+              <span className="u-meta">
+                {t("your last {n} ranked games, recorded or not", { n: forma.games.length })}
+              </span>
+            )}
+          </div>
+          <div style={styles.trayRow}>
+            {prediccion && forma?.tier && (
+              <div style={styles.predBlock}>
+                <div style={styles.predChip}>
+                  <img src={rankIcon(forma.tier)} alt="" style={styles.predIcono} />
+                  <div>
+                    <div style={styles.predRango}>{rankLabel(forma.tier, forma.division)}</div>
+                    <div className="u-meta">{forma.lp} LP</div>
+                  </div>
+                </div>
+                <span style={styles.predFlecha}>→</span>
+                <div style={{ ...styles.predChip, borderColor: "var(--brand)" }}>
+                  <img src={rankIcon(prediccion.pred.tier)} alt="" style={styles.predIcono} />
+                  <div>
+                    <div style={styles.predRango}>
+                      {rankLabel(prediccion.pred.tier, prediccion.pred.division)}
+                    </div>
+                    <div className="u-meta">
+                      {t("in ~20 games")}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="u-metric" style={{ fontSize: 15, fontWeight: 700 }}>
+                    {prediccion.wins}V {prediccion.losses}D
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        color: prediccion.netPerGame >= 0 ? "var(--win)" : "var(--loss)",
+                      }}
+                    >
+                      {prediccion.netPerGame >= 0 ? "+" : "−"}
+                      {Math.abs(prediccion.netPerGame).toFixed(1)} LP
+                    </span>
+                    <span className="u-meta"> {t("per game at this pace")}</span>
+                  </div>
+                  <p style={{ ...styles.insightText, marginTop: 4 }}>
+                    {t("Linear projection of your recent form (latest games weigh double, LP swings measured from your own games). It points, it doesn't promise.")}
+                  </p>
+                </div>
+              </div>
+            )}
+            {escalada.length >= 3 && (() => {
+              const min = Math.min(...escalada);
+              const max = Math.max(...escalada);
+              const rango = Math.max(1, max - min);
+              const W = 220;
+              const H = 44;
+              const pts = escalada
+                .map((v, i) => `${((i / (escalada.length - 1)) * W).toFixed(1)},${(H - 4 - ((v - min) / rango) * (H - 8)).toFixed(1)}`)
+                .join(" ");
+              const sube = escalada[escalada.length - 1] >= escalada[0];
+              return (
+                <div style={styles.escaladaBlock}>
+                  <svg width={W} height={H} style={{ display: "block" }}>
+                    <polyline
+                      points={pts}
+                      fill="none"
+                      stroke={sube ? "var(--win)" : "var(--loss)"}
+                      strokeWidth="1.5"
+                    />
+                  </svg>
+                  <span className="u-meta">
+                    {t("your climb, LP across {n} recorded games", { n: escalada.length })}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       <div style={styles.grid}>
+        {/* ------------------------------------------------ tu pool y tus rivales */}
+        {pool.length >= 2 && (
+          <div className="card" style={styles.card}>
+            <div style={styles.cardHead}>
+              <span className="u-label">{t("Your pool")}</span>
+              <span className="u-meta">{t("who you actually win with")}</span>
+            </div>
+            {pool.map((c) => (
+              <div key={c.champion} style={styles.poolRow}>
+                <ChampionAvatar champion={c.champion} size={22} />
+                <span style={styles.poolNombre}>{c.champion}</span>
+                <span className="u-meta">{c.games} {t(c.games === 1 ? "game" : "games")}</span>
+                <span
+                  className="u-metric"
+                  style={{ marginLeft: "auto", color: c.wr >= 0.5 ? "var(--win)" : "var(--loss)", fontWeight: 600 }}
+                >
+                  {Math.round(c.wr * 100)}%
+                </span>
+                <span className="u-meta" style={{ width: 74, textAlign: "right" }}>
+                  {c.d > 0 ? ((c.k + c.a) / c.d).toFixed(1) : "∞"} KDA
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {rivales.length >= 2 && (
+          <div className="card" style={styles.card}>
+            <div style={styles.cardHead}>
+              <span className="u-label">{t("Your rivals")}</span>
+              <span className="u-meta">{t("the lane opponents that beat you")}</span>
+            </div>
+            {rivales.map((r) => (
+              <div key={r.champion} style={styles.poolRow}>
+                <ChampionAvatar champion={r.champion} size={22} />
+                <span style={styles.poolNombre}>vs {r.champion}</span>
+                <span className="u-meta">{r.games} {t(r.games === 1 ? "game" : "games")}</span>
+                <span
+                  className="u-metric"
+                  style={{ marginLeft: "auto", color: r.wr >= 0.5 ? "var(--win)" : "var(--loss)", fontWeight: 600 }}
+                >
+                  {Math.round(r.wr * 100)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       {/* --------------------------------------- el punto ciego, por partida */}
       {zonas.length >= 3 && (() => {
         const filas = zonas.slice(-12);
@@ -506,6 +705,40 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
     gap: "var(--space-4)",
   },
+  trayRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-5)",
+    flexWrap: "wrap",
+  },
+  predBlock: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    flex: 1,
+    minWidth: 320,
+  },
+  predChip: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 12px",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--line)",
+    background: "var(--raised)",
+  },
+  predIcono: { width: 28, height: 28, display: "block" },
+  predRango: { fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" },
+  predFlecha: { color: "var(--faint)", fontSize: 16 },
+  escaladaBlock: { display: "flex", flexDirection: "column", gap: 4 },
+  poolRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "5px 0",
+    borderBottom: "1px solid var(--line-soft)",
+  },
+  poolNombre: { fontSize: 13, fontWeight: 500 },
   heroRow: {
     display: "grid",
     // mapa | reloj | puesto+presencia: las tres preguntas de la pantalla en la

@@ -551,6 +551,38 @@ pub fn load_raw_match(id: &str) -> Option<String> {
     fs::read_to_string(get_raw_match_path(id)).ok()
 }
 
+/// Resumen mínimo de una ranked de la TEMPORADA (grabada o no) para la forma
+/// reciente y la predicción de rango. Viene de match-v5 por puuid y se cachea
+/// aquí para no repedir detalles ya vistos.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeasonGame {
+    pub riot_match_id: String,
+    pub win: bool,
+    pub champion: String,
+    pub kills: i32,
+    pub deaths: i32,
+    pub assists: i32,
+    /// Fin de partida en ms epoch, para ordenar sin re-pedir nada.
+    pub game_end_ms: i64,
+}
+
+pub fn season_form_cache_path() -> PathBuf {
+    get_config_path().with_file_name("season_form.json")
+}
+
+pub fn load_season_form_cache() -> Vec<SeasonGame> {
+    fs::read_to_string(season_form_cache_path())
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_season_form_cache(games: &[SeasonGame]) {
+    if let Ok(s) = serde_json::to_string(games) {
+        let _ = fs::write(season_form_cache_path(), s);
+    }
+}
+
 pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
     let dir = get_match_dir(&metadata.id);
     let file_path = dir.join(format!("{}.json", metadata.id));

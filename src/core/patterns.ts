@@ -179,3 +179,71 @@ export function currentFocus(matches: MatchMetadata[]): Focus | null {
     confidence: confidenceOf(matches.length),
   };
 }
+
+/* ========================================================================
+   La escalera de rango y la predicción.
+   ======================================================================== */
+
+const TIERS = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND"];
+const DIVS = ["IV", "III", "II", "I"];
+
+/** Posición absoluta en la escalera: 100 LP por división, 400 por rango;
+ *  Master+ es LP puro sobre el tope de Diamante I (2800). */
+export function ladderLp(tier: string, division: string | null | undefined, lp: number): number {
+  const ti = TIERS.indexOf(tier);
+  if (ti < 0) return 2800 + lp; // MASTER / GRANDMASTER / CHALLENGER
+  const di = Math.max(0, DIVS.indexOf(division ?? "IV"));
+  return ti * 400 + di * 100 + lp;
+}
+
+/** La vuelta: de LP absoluto a rango legible. Por encima de 2800 se dice
+ *  Master a secas — los cortes de GM/Challenger son de ladder, no de LP,
+ *  y fingirlos sería mentir. */
+export function ladderRank(abs: number): { tier: string; division: string | null; lp: number } {
+  const a = Math.max(0, Math.round(abs));
+  if (a >= 2800) return { tier: "MASTER", division: null, lp: a - 2800 };
+  const ti = Math.min(6, Math.floor(a / 400));
+  const resto = a - ti * 400;
+  return { tier: TIERS[ti], division: DIVS[Math.min(3, Math.floor(resto / 100))], lp: resto % 100 };
+}
+
+export interface RankForecast {
+  wins: number;
+  losses: number;
+  /** Winrate ponderado por recencia (las 10 últimas pesan doble). */
+  wr: number;
+  /** LP netos por partida a este ritmo. */
+  netPerGame: number;
+  pred: { tier: string; division: string | null; lp: number };
+}
+
+/**
+ * Proyección de rango a 20 partidas vista, estilo deeplol pero sin humo:
+ * winrate reciente (recencia ponderada) × lo que dan/quitan TUS partidas
+ * según los deltas de LP medidos, sobre la escalera. Con menos de 8 partidas
+ * no hay forma que proyectar y se devuelve null.
+ */
+export function forecastRank(
+  games: { win: boolean }[],
+  tier: string | null | undefined,
+  division: string | null | undefined,
+  lp: number | null | undefined,
+  avgGain: number | null | undefined,
+  avgLoss: number | null | undefined
+): RankForecast | null {
+  if (!tier || lp == null || games.length < 8) return null;
+  let ganadas = 0;
+  let total = 0;
+  games.forEach((g, i) => {
+    const peso = i < 10 ? 2 : 1; // recientes primero: la forma de AHORA
+    total += peso;
+    if (g.win) ganadas += peso;
+  });
+  const wr = ganadas / total;
+  const gain = avgGain ?? 25;
+  const loss = avgLoss ?? 25;
+  const net = wr * gain - (1 - wr) * loss;
+  const abs = ladderLp(tier, division, lp) + net * 20;
+  const wins = games.filter((g) => g.win).length;
+  return { wins, losses: games.length - wins, wr, netPerGame: net, pred: ladderRank(abs) };
+}

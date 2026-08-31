@@ -251,6 +251,31 @@ export const getPressureSummary = async (): Promise<PressureSummary> => {
   return await invoke<PressureSummary>("get_pressure_summary");
 };
 
+/** Una ranked de la TEMPORADA (grabada o no), resumida para la forma reciente. */
+export interface SeasonGame {
+  riot_match_id: string;
+  win: boolean;
+  champion: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  game_end_ms: number;
+}
+
+/** La forma de la cuenta: últimos ranked, rango actual y LP medios por partida. */
+export interface SeasonForm {
+  games: SeasonGame[];
+  tier: string | null;
+  division: string | null;
+  lp: number | null;
+  avg_gain: number | null;
+  avg_loss: number | null;
+}
+
+export const getSeasonForm = async (): Promise<SeasonForm> => {
+  return await invoke<SeasonForm>("get_season_form");
+};
+
 /** El carril que peor miras, mirando toda la biblioteca. */
 export interface BlindSpot {
   lane: string;

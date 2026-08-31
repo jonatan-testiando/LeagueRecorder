@@ -252,6 +252,7 @@ pub fn run() {
             camera_snaps::get_blind_spot,
             camera_snaps::get_camera_zone_history,
             riot_api::get_pressure_summary,
+            riot_api::get_season_form,
             overlay::preview_metronome_overlay,
             app_update::get_pending_update,
             app_update::install_pending_update,

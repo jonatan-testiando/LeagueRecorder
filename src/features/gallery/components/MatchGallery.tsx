@@ -3,7 +3,7 @@ import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration, type KDA } from "../../../core/matchStats";
 import { DDRAGON_VER, itemIcon, spellIcon } from "../../player/components/videoPlayerUtils";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { rankIcon } from "../../../core/ddragon";
+import { rankIcon, rankLabel } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { HardDrive, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
@@ -50,10 +50,6 @@ interface MatchGalleryProps {
 /* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
    avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
 const FILA_GRID = "90px minmax(150px, 220px) 1fr 170px 84px 26px 170px 84px 1fr 50px 26px";
-
-/** "MASTER" + "I" → "Master I". */
-const rangoBonito = (tier?: string | null, div?: string | null): string | null =>
-  tier ? tier.charAt(0) + tier.slice(1).toLowerCase() + (div ? ` ${div}` : "") : null;
 
 /** El KDA guardado ("9/3/12") o el contado de los eventos, como números. */
 const kdaDe = (m: MatchMetadata, contado: KDA): KDA => {
@@ -396,7 +392,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                               return (
                                 <>
                                   <span className="u-meta" style={{ color: "var(--muted)" }}>
-                                    {rangoBonito(match.rank_tier, match.rank_division)}
+                                    {rankLabel(match.rank_tier, match.rank_division)}
                                     {/* El absoluto solo cuando no hay resta que enseñar:
                                         juntos no caben y el delta dice más. */}
                                     {lp == null && match.rank_lp != null ? ` · ${match.rank_lp} LP` : ""}

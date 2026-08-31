@@ -405,6 +405,19 @@
         };
       }),
     get_pressure_summary: () => ({ games: 9, windows: 23, wpa: 0.48, towers: 7, gold: 6100 }),
+    // La forma de temporada: 13V 7D con buena racha reciente, para que la
+    // predicción proyecte subida (Emerald II 64 → Emerald I y pico).
+    get_season_form: () => ({
+      games: Array.from({ length: 20 }, (_, i) => ({
+        riot_match_id: "LA1_S" + i,
+        win: [1,1,0,1,1,1,0,1,0,1,1,0,1,1,0,0,1,0,0,1][i] === 1,
+        champion: ["Gwen", "Ahri", "Lee Sin"][i % 3],
+        kills: 5 + (i % 7), deaths: 2 + (i % 5), assists: 6 + (i % 9),
+        game_end_ms: now - i * 8 * 3600 * 1000,
+      })),
+      tier: "EMERALD", division: "II", lp: 64,
+      avg_gain: 24, avg_loss: 19,
+    }),
     get_blind_spot: () => ({
       lane: "top",
       games: 13,

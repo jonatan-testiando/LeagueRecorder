@@ -27,6 +27,8 @@ pub struct MatchInfo {
     pub gameDuration: i64,
     #[serde(default)]
     pub gameVersion: String,
+    #[serde(default)]
+    pub gameEndTimestamp: i64,
     pub participants: Vec<ParticipantDto>,
     #[serde(default)]
     pub teams: Vec<TeamDto>,
@@ -566,9 +568,20 @@ impl RiotApiClient {
         puuid: &str,
         count: i32,
     ) -> Result<Vec<String>, String> {
+        self.match_ids(puuid, count, None).await
+    }
+
+    /// Como `get_match_ids_by_puuid` pero con filtro de cola (420 = solo/dúo).
+    pub async fn match_ids(
+        &self,
+        puuid: &str,
+        count: i32,
+        queue: Option<i32>,
+    ) -> Result<Vec<String>, String> {
+        let cola = queue.map(|q| format!("&queue={}", q)).unwrap_or_default();
         let url = format!(
-            "https://{}.api.riotgames.com/lol/match/v5/matches/by-puuid/{}/ids?start=0&count={}",
-            self.region, puuid, count
+            "https://{}.api.riotgames.com/lol/match/v5/matches/by-puuid/{}/ids?start=0&count={}{}",
+            self.region, puuid, count, cola
         );
 
         let resp = self
@@ -835,19 +848,7 @@ pub fn spawn_impact_backfill() {
         }
         // El puuid propio sale del DTO cacheado: mismo orden que los
         // participants guardados, así que el índice de is_self vale.
-        let Some((puuid, plataforma)) = sin_rango.iter().find_map(|m| {
-            let raw = crate::storage::load_raw_match(&m.id)?;
-            let details = serde_json::from_str::<MatchDto>(&raw).ok()?;
-            let idx = m.participants.iter().position(|p| p.is_self)?;
-            let puuid = details.info.participants.get(idx)?.puuid.clone();
-            let plataforma = m
-                .riot_match_id
-                .as_deref()?
-                .split('_')
-                .next()?
-                .to_lowercase();
-            Some((puuid, plataforma))
-        }) else {
+        let Some((puuid, plataforma)) = puuid_propio(&sin_rango) else {
             return;
         };
         let api = RiotApiClient::new(config.riot_api_key);
@@ -868,6 +869,125 @@ pub fn spawn_impact_backfill() {
         }
         log::info!("rango: {tier} {division} ({lp} LP) estampado en {cuantas} partidas sin rango");
     });
+}
+
+/// El puuid del jugador y su plataforma ("la1"), sacados de cualquier partida
+/// sincronizada con su DTO cacheado: los participants guardados van en el
+/// mismo orden que los del DTO, así que el índice de is_self vale.
+fn puuid_propio(partidas: &[crate::storage::MatchMetadata]) -> Option<(String, String)> {
+    partidas.iter().find_map(|m| {
+        let raw = crate::storage::load_raw_match(&m.id)?;
+        let details = serde_json::from_str::<MatchDto>(&raw).ok()?;
+        let idx = m.participants.iter().position(|p| p.is_self)?;
+        let puuid = details.info.participants.get(idx)?.puuid.clone();
+        let plataforma = m
+            .riot_match_id
+            .as_deref()?
+            .split('_')
+            .next()?
+            .to_lowercase();
+        Some((puuid, plataforma))
+    })
+}
+
+/// La forma reciente de la CUENTA: últimos ranked de la temporada (grabados o
+/// no), rango actual y lo que suelen dar/quitar tus partidas según los deltas
+/// de LP ya guardados. Todo lo que la predicción de rango necesita.
+#[derive(serde::Serialize)]
+pub struct SeasonForm {
+    /// Recientes primero.
+    pub games: Vec<crate::storage::SeasonGame>,
+    pub tier: Option<String>,
+    pub division: Option<String>,
+    pub lp: Option<i32>,
+    /// Media de LP que GANA una victoria, de tus deltas reales (None si aún
+    /// no hay muestra: el frontend usa ±25 por defecto).
+    pub avg_gain: Option<f64>,
+    /// Media de LP que QUITA una derrota, en positivo.
+    pub avg_loss: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn get_season_form() -> Result<SeasonForm, String> {
+    let config = crate::storage::load_config();
+    if config.riot_api_key.is_empty() {
+        return Err("Configura tu Riot API Key en Ajustes".to_string());
+    }
+    let todas = crate::storage::load_all_matches();
+    let Some((puuid, plataforma)) = puuid_propio(&todas) else {
+        return Err("Sincroniza al menos una partida para saber tu cuenta".to_string());
+    };
+
+    let api = RiotApiClient::new(config.riot_api_key);
+    let ids = api.match_ids(&puuid, 20, Some(420)).await?;
+
+    // Caché primero: cada detalle son ~200 KB de API que se resumen en 6
+    // campos; repedirlos en cada apertura de Patrones quemaría la cuota.
+    let mut cache = crate::storage::load_season_form_cache();
+    let mut games: Vec<crate::storage::SeasonGame> = Vec::new();
+    let mut nuevos = 0;
+    for id in &ids {
+        if let Some(g) = cache.iter().find(|g| &g.riot_match_id == id) {
+            games.push(g.clone());
+            continue;
+        }
+        let Ok(details) = api.get_match_details(id).await else {
+            continue; // rate limit o red: mejor 18 de 20 que un error total
+        };
+        let Some(p) = details.info.participants.iter().find(|p| p.puuid == puuid) else {
+            continue;
+        };
+        let g = crate::storage::SeasonGame {
+            riot_match_id: id.clone(),
+            win: p.win,
+            champion: p.championName.clone(),
+            kills: p.kills,
+            deaths: p.deaths,
+            assists: p.assists,
+            game_end_ms: details.info.gameEndTimestamp,
+        };
+        cache.push(g.clone());
+        games.push(g);
+        nuevos += 1;
+        // Ritmo suave: la cuota de desarrollo es 20 peticiones / segundo.
+        tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+    }
+    if nuevos > 0 {
+        // La caché no crece sin límite: con 60 sobra para una ventana de 20.
+        cache.sort_by_key(|g| -g.game_end_ms);
+        cache.truncate(60);
+        crate::storage::save_season_form_cache(&cache);
+    }
+    games.sort_by_key(|g| -g.game_end_ms);
+
+    let rango = api.rango_solo(&plataforma, &puuid).await;
+
+    // Lo que dan/quitan TUS partidas, medido: deltas de LP entre ranked
+    // consecutivas del mismo rango y división (mismo criterio que la ficha).
+    let mut con_lp: Vec<&crate::storage::MatchMetadata> =
+        todas.iter().filter(|m| m.rank_lp.is_some()).collect();
+    con_lp.sort_by(|a, b| a.date.cmp(&b.date));
+    let (mut ganes, mut pierdes): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+    for par in con_lp.windows(2) {
+        if par[0].rank_tier == par[1].rank_tier && par[0].rank_division == par[1].rank_division {
+            let d = (par[1].rank_lp.unwrap() - par[0].rank_lp.unwrap()) as f64;
+            if d > 0.0 {
+                ganes.push(d);
+            } else if d < 0.0 {
+                pierdes.push(-d);
+            }
+        }
+    }
+    let media = |xs: &[f64]| (!xs.is_empty()).then(|| xs.iter().sum::<f64>() / xs.len() as f64);
+
+    Ok(SeasonForm {
+        games,
+        tier: rango.as_ref().map(|r| r.0.clone()),
+        division: rango.as_ref().map(|r| r.1.clone()),
+        lp: rango.as_ref().map(|r| r.2),
+        avg_gain: media(&ganes),
+        avg_loss: media(&pierdes),
+    })
 }
 
 /// Lo que compró tu presencia, sumado entre partidas.

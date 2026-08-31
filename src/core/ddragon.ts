@@ -21,6 +21,14 @@ export const champIcon = (champion: string) => `/champions/${champion}.png`;
  *  empaquetan en `public/ranks` (mini-crests de Community Dragon a 64px). */
 export const rankIcon = (tier: string) => `/ranks/${tier.toLowerCase()}.png`;
 
+/** "MASTER" + "I" → "Master I". En Master+ la división no dice nada: fuera. */
+export const rankLabel = (tier?: string | null, division?: string | null): string | null => {
+  if (!tier) return null;
+  const bonito = tier.charAt(0) + tier.slice(1).toLowerCase();
+  const apex = tier === "MASTER" || tier === "GRANDMASTER" || tier === "CHALLENGER";
+  return apex || !division ? bonito : `${bonito} ${division}`;
+};
+
 let versionPromise: Promise<string> | null = null;
 let champMapPromise: Promise<{ version: string; map: Map<string, string> }> | null = null;
 

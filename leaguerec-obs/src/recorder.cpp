@@ -98,8 +98,13 @@ std::string pick_av1_encoder() {
         if (codec && std::strcmp(codec, "av1") == 0)
             ids.emplace_back(id);
     }
+    // NVIDIA > AMD > Intel. Los de AMD/Intel hoy no viajan en el runtime
+    // empaquetado (solo se ensamblan obs-nvenc y obs-x264), pero se piden por
+    // si algún día se añaden: enumerar un id que no existe no cuesta nada, y
+    // así esas GPU entrarían a AV1 sin tocar este fichero.
     static const char *const kPreferred[] = {
         "obs_nvenc_av1_tex", "obs_nvenc_av1_cuda", "jim_av1_nvenc",
+        "av1_texture_amf",   "av1_fallback_amf",   "obs_qsv11_av1",
     };
     for (const char *want : kPreferred)
         if (std::find(ids.begin(), ids.end(), want) != ids.end())
@@ -319,10 +324,14 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
     // y el mapa quieto, que es la mayor parte de una partida de LoL. Con calidad constante el
     // encoder solo gasta bits donde hay movimiento; a igual nitidez el archivo baja ~50-60%.
     obs_data_set_string(venc_settings, "rate_control", "CQP");
-    // Las escalas de CQ de AV1 y h264 no son la misma: el mismo número da MÁS
-    // compresión en AV1. +7 deja la calidad percibida donde estaba (28-30 de
-    // AV1 ≈ 21-23 de h264) y aun así el archivo baja ~40-50%.
-    obs_data_set_int(venc_settings, "cqp", es_av1 ? cfg.cqp + 7 : cfg.cqp);
+    // OJO con la escala: obs-nvenc multiplica este valor POR 4 para AV1
+    // (nvenc.c: `cqp * 4`, hacia el qindex 0-255). El +4 está MEDIDO sobre una
+    // pelea real de 15 s a 1080p60, con VMAF contra la fuente:
+    //   h264 qp23:        15,9 MB  VMAF 95,5   (lo que grababa hasta ahora)
+    //   AV1 +0 (q 92):    10,0 MB  VMAF 94,9   (-37%, calidad idéntica)
+    //   AV1 +4 (q 108):    7,5 MB  VMAF 93,0   (-53%, imperceptible al revisar)
+    //   AV1 +7 (q 120):    6,1 MB  VMAF 91,4   (el primer intento: se pasaba)
+    obs_data_set_int(venc_settings, "cqp", es_av1 ? cfg.cqp + 4 : cfg.cqp);
     // El preset va por partida doble a propósito: el NVENC moderno (obs_nvenc_h264_tex) lee
     // "preset", pero el shim de compatibilidad (jim_nvenc) lee "preset2", y pick_h264_encoder()
     // puede devolver cualquiera de los dos. Además el valor DEBE ser p1..p7: get_nv_preset() no

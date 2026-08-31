@@ -1644,35 +1644,46 @@ a:focus:not(:focus-visible) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  background: color-mix(in srgb, var(--ground) 90%, transparent);
   backdrop-filter: blur(6px);
+  /* Aparece fundido, como en la demo: un velo que aparece de golpe se lee
+     como un fallo, no como un tránsito. */
+  animation: updv-in var(--t-base) var(--e-out) both;
 }
 
 .updpill {
   margin-top: var(--space-2);
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--cool);
-  background: color-mix(in srgb, var(--cool) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--cool) 28%, transparent);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: background var(--t-quick) var(--e-move);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 8px 11px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  cursor: default;
+  text-align: left;
+  transition: background var(--t-quick) var(--e-move),
+    border-color var(--t-quick) var(--e-move);
 }
-.updpill:hover { background: color-mix(in srgb, var(--cool) 20%, transparent); }
+/* Lista para instalar: pide un clic, así que habla en oro (instalar ES la
+   acción de esta superficie). */
+.updpill--lista { cursor: pointer; border-color: var(--brand); color: var(--text); font-weight: 700; }
+.updpill--lista:hover { background: var(--raised); }
 .updpill__dot {
-  width: 6px;
-  height: 6px;
+  display: inline-block;
+  width: 7px;
+  height: 7px;
   border-radius: var(--radius-full);
-  background: var(--cool);
+  background: var(--brand);
   flex: none;
+  animation: updpill-lat 1.6s ease-in-out infinite;
 }
+@keyframes updpill-lat { 50% { opacity: 0.35; } }
 
 /* Velo de instalacion. El instalador va en silencio y la app tiene que cerrarse
    para poder reemplazar su propio .exe, asi que hay unos segundos con todo

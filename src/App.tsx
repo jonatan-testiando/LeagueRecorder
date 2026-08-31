@@ -187,7 +187,7 @@ export const App: React.FC = () => {
           </button>
           {pendingUpdate ? (
             <button
-              className="updpill"
+              className="updpill updpill--lista"
               onClick={async () => {
                 // En Windows esto no vuelve: el instalador toma el relevo y la
                 // /R del NSIS relanza la app sola. El velo cubre ese tránsito.
@@ -201,12 +201,14 @@ export const App: React.FC = () => {
               }}
               title={t("Downloaded and ready. One click: it installs and the app comes back by itself.")}
             >
-              <span className="updpill__dot" />
-              {t("Install v{v}", { v: pendingUpdate.version })}
+              <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <span className="updpill__dot" />
+                {t("Install v{v}", { v: pendingUpdate.version })}
+              </span>
             </button>
           ) : updProgress ? (
             <div className="updpill" style={{ cursor: "default" }} title={t("Downloading in the background. You can keep using the app.")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <span className="updpill__dot" />
                 <span>v{updProgress.version} · {updProgress.percent}%</span>
               </div>

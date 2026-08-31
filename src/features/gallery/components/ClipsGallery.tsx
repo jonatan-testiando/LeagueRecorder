@@ -41,7 +41,10 @@ const LS_KEY = "clipLinks";
 
 // Medidas del grid. Están aquí y no solo en el CSS porque el virtualizador necesita
 // calcular a mano cuántas columnas caben.
-const GRID_GAP = 8;
+const GRID_GAP = 12;
+// Ancho mínimo de la tarjeta HORIZONTAL: 2 por hilera en un portátil, 3 en un
+// monitor ancho.
+const CARD_MIN_WIDTH = 540;
 
 const expiresAt = (l: StoredLink): number =>
   l.expiry === "permanent" ? Infinity : l.uploadedAt + (DURATION_MS[l.expiry] ?? 0);
@@ -91,14 +94,21 @@ export const ClipsGallery: React.FC = () => {
   // "sin clips". Declararlos después haría que el número de hooks cambiara entre
   // renders y React abortaría con "Rendered more hooks than during the previous render".
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  // Filas horizontales de una columna: el cálculo de columnas por anchura se
-  // retiró con la rejilla de tarjetas.
-  const columns = 1;
+  const [columns, setColumns] = useState(2);
 
   // Cuántas tarjetas caben por fila. Replica a mano lo que hacía
   // `grid-template-columns: repeat(auto-fill, minmax(CARD_MIN_WIDTH, 1fr))`,
   // porque el virtualizador necesita saber el número de columnas para agrupar.
-  // (el observador de anchura se fue con la rejilla)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const medir = () =>
+      setColumns(Math.max(1, Math.floor((el.clientWidth + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading, clips.length]);
 
   const rowCount = Math.ceil(clips.length / columns);
   const rowVirtualizer = useVirtualizer({
@@ -391,26 +401,30 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--border-subtle)",
     overflow: "hidden",
     display: "grid",
-    gridTemplateColumns: "240px 1fr",
+    gridTemplateColumns: "224px 1fr",
+    height: 168,
   },
   thumbnailWrapper: {
     width: "100%",
-    aspectRatio: "16/9",
+    height: "100%",
     backgroundColor: "var(--sunken)",
     position: "relative",
-    alignSelf: "center",
     borderRight: "1px solid var(--line-soft)",
   },
   videoPreview: {
     width: "100%",
     height: "100%",
-    objectFit: "contain",
+    objectFit: "cover",
+    display: "block",
   },
   cardInfo: {
-    padding: "var(--space-4)",
+    padding: "var(--space-3) var(--space-4)",
     display: "flex",
     flexDirection: "column",
+    justifyContent: "center",
     gap: "var(--space-2)",
+    minWidth: 0,
+    overflow: "hidden",
   },
   clipName: {
     color: "var(--text)",

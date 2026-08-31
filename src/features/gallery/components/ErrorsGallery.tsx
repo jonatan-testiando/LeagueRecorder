@@ -165,21 +165,22 @@ const styles: Record<string, React.CSSProperties> = {
   header: { marginBottom: "var(--space-5)" },
   title: { margin: 0, fontSize: "var(--font-xl)" },
   grid: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(540px, 1fr))",
+    gap: "var(--space-3)",
   },
   /* Fila horizontal: la miniatura es el índice, el texto es la fila. */
   card: {
     overflow: "hidden",
     display: "grid",
-    gridTemplateColumns: "220px 1fr",
+    gridTemplateColumns: "224px 1fr",
+    height: 168,
     padding: 0,
     background: "var(--media-sheen)",
   },
   thumb: {
     width: "100%",
-    aspectRatio: "16/9",
+    height: "100%",
     backgroundColor: "var(--sunken)",
     position: "relative",
     borderRight: "1px solid var(--line-soft)",
@@ -218,6 +219,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "var(--font-sm)",
     lineHeight: 1.5,
     color: "var(--text)",
+    display: "-webkit-box",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 3,
+    overflow: "hidden",
   },
   lessonEmpty: {
     margin: 0,

@@ -95,6 +95,14 @@ const ES: Record<string, string> = {
   "Where it happened": "Dónde ocurrió",
   "You die between minute {a} and {b}": "Te mueres entre el minuto {a} y el {b}",
   "Train camera control": "Entrenar control de cámara",
+  "It is your worst window: {n} of your {total} deaths land there ({pct}%).":
+    "Es tu peor tramo: {n} de tus {total} muertes caen ahí ({pct}%).",
+  "With {n} games this is a lead, not a conclusion — it sharpens as you record more.":
+    "Con {n} partidas esto es una pista, no una conclusión — se afina según grabas más.",
+  "The window above comes from the data, not from your reading of it. Flagging even one moment per game is what turns \"when\" into \"why\".":
+    "El tramo de arriba sale de los datos, no de tu lectura de ellos. Marcar aunque sea un momento por partida es lo que convierte el «cuándo» en «por qué».",
+  "Couldn't load the video": "No se pudo cargar el vídeo",
+  "AI Analysis": "Análisis por IA",
   "Recording": "Grabando",
   "Idle — records itself when a game starts":
     "En espera — se graba sola al detectar partida",
@@ -443,9 +451,3 @@ export function translate(
   return out;
 }
 
-/** Cuántas cadenas quedan sin traducir, para saber por dónde va la cobertura. */
-export function coverage(keys: string[], lang: Language): { done: number; total: number } {
-  if (lang === "en") return { done: keys.length, total: keys.length };
-  const done = keys.filter((k) => DICTS[lang][k] !== undefined).length;
-  return { done, total: keys.length };
-}

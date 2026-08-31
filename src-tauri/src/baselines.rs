@@ -16,6 +16,7 @@
 //! tres tramos. Tres y no diez porque cada celda del baremo es (tramo x rol):
 //! con diez harían falta 50 celdas con muestra suficiente.
 
+#[cfg(test)]
 /// Los cinco puestos, tal y como los nombra Riot en `teamPosition`.
 pub const ROLES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
@@ -33,6 +34,7 @@ const DECILES: [(&str, [f64; 9]); 5] = [
     ("UTILITY", [-0.093, -0.061, -0.039, -0.020, -0.002, 0.016, 0.037, 0.062, 0.103]),   // n=25937
 ];
 
+#[cfg(test)]
 /// Tramos de rango, de menor a mayor.
 pub const TRAMOS: [&str; 3] = ["bajo", "medio", "alto"];
 

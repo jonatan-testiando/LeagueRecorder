@@ -234,8 +234,7 @@ export const PatternsPanel: React.FC = () => {
                 <strong style={{ color: "var(--text)" }}>
                   {cats.reduce((a, x) => a + x.count, 0)} notes across {clock.total} deaths.
                 </strong>{" "}
-                The window above comes from the data, not from your reading of it. Flagging
-                even one moment per game is what turns "when" into "why".
+                {t("The window above comes from the data, not from your reading of it. Flagging even one moment per game is what turns \"when\" into \"why\".")}
               </p>
             </div>
           )}

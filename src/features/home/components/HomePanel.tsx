@@ -113,12 +113,15 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                 </h1>
 
                 <p style={styles.focusText}>
-                  It is your worst window: <strong style={{ color: "var(--text)" }}>
-                  {focus.bucket.total} of your {clock.total} deaths</strong> land there
-                  {" "}({Math.round(focus.share * 100)}% of them).
+                  {t("It is your worst window: {n} of your {total} deaths land there ({pct}%).", {
+                    n: focus.bucket.total,
+                    total: clock.total,
+                    pct: Math.round(focus.share * 100),
+                  })}
                   {conf === "low" && (
                     <span style={{ color: "var(--faint)" }}>
-                      {" "}With {own.length} games this is a lead, not a conclusion — it sharpens as you record more.
+                      {" "}
+                      {t("With {n} games this is a lead, not a conclusion — it sharpens as you record more.", { n: own.length })}
                     </span>
                   )}
                 </p>

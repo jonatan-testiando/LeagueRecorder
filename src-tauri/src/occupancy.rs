@@ -48,6 +48,8 @@ pub struct Anchor {
     pub sec: f64,
     pub x: f64,
     pub y: f64,
+    /// Se escribe siempre, pero sólo lo leen las mediciones (que son tests).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub kind: AnchorKind,
 }
 
@@ -221,6 +223,10 @@ impl Occupancy {
         Self { anchors, speed, factor_sigma: FACTOR_SIGMA }
     }
 
+/// Sólo lo usan las mediciones sobre el corpus, que son tests. Se marca en vez
+/// de borrarse: es el instrumento con el que se fijaron las constantes de este
+/// módulo, y hará falta la próxima vez que haya que revisarlas.
+    #[cfg(test)]
     pub fn anchors_of(&self, pid: i32) -> &[Anchor] {
         self.anchors.get(&pid).map(Vec::as_slice).unwrap_or(&[])
     }

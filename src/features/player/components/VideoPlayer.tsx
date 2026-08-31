@@ -947,7 +947,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </label>
               <div className="tp-pop__row tp-pop__row--stack">
                 <span>
-                  Mouse trail sync
+                  {t("Mouse trail sync")}
                   <em>{t("Shifts the trail against the video, in seconds.")}</em>
                 </span>
                 <div className="tp-pop__sync">
@@ -991,7 +991,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             preload="auto"
           />
           {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>Couldn't load the video</span></div>}
+          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>{t("Couldn't load the video")}</span></div>}
           <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
           
           {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}

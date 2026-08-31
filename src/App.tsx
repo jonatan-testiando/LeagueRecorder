@@ -214,7 +214,7 @@ export const App: React.FC = () => {
                   <ArrowLeft size={20} />
                 </button>
                 <div style={styles.playerTitleBlock}>
-                  <h2 style={styles.playerTitle}>AI Analysis</h2>
+                  <h2 style={styles.playerTitle}>{t("AI Analysis")}</h2>
                   <span style={styles.playerSub}>{selectedVod.date}</span>
                 </div>
               </div>

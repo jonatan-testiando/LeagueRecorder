@@ -450,8 +450,12 @@ pub fn refinar_con_video_with(
 /// muerte, el radio está bien; si hay que estirarlo mucho, se está quedando
 /// fuera la pelea y el radio es demasiado apretado.
 pub struct AjusteVideo {
+    /// Los dos siguientes son el instrumento del barrido de radios: se
+    /// escriben siempre y sólo los lee ese test, que es quien fijó el 1200.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub murio: bool,
     /// Segundos que hubo que añadir para que la muerte cupiera.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub estiron: f64,
 }
 

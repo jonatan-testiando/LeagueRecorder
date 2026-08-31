@@ -523,6 +523,10 @@ const styles: Record<string, React.CSSProperties> = {
   row: {
     padding: "var(--space-1) var(--space-3)",
     borderRadius: "var(--radius-md)",
+    // El brillo de colección, pedido por el usuario también aquí. Va en línea
+    // a propósito: pisa el fondo de .card y el hover sigue hablando por el
+    // borde, no por el fondo.
+    background: "var(--media-sheen)",
   },
   rowGrid: {
     display: "grid",

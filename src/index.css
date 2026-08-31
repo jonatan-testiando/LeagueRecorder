@@ -136,11 +136,12 @@
 
      La regla de dónde ponerlo, para que siga significando algo:
        - superficies que ENSEÑAN un hallazgo o una pieza de la colección del
-         usuario (clips, errores, el punto ciego de Hoy, el evento destacado
-         del reproductor, los cruces de Patrones);
-       - UNA superficie, nunca una lista de filas repetidas: veinte degradados
-         apilados son una persiana (es la misma lección del brillo de
-         .game-row, que por eso es solo-hover). */
+         usuario (clips, errores, partidas de la biblioteca, el punto ciego de
+         Hoy, el evento destacado del reproductor, los cruces de Patrones).
+     La biblioteca entró por decisión del usuario (2026-08-31) sabiendo el
+     riesgo de la persiana (filas repetidas con degradado); al ser horizontal
+     y subir solo al final, apilado se lee como textura y no como veinte
+     brillos. Si algún día vuelve a cansar, este es el sitio del que quitarlo. */
   /* Medido contra la referencia: al 13% el violeta era imperceptible en una
      fila de pantalla completa (el propio usuario lo dio por ausente). Mobalytics
      llega a un morado franco en el extremo; esto se queda un paso por debajo

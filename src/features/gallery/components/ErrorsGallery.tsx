@@ -175,6 +175,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "220px 1fr",
     padding: 0,
+    background: "var(--media-sheen)",
   },
   thumb: {
     width: "100%",

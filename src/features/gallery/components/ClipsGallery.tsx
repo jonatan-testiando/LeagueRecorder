@@ -386,7 +386,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
   },
   card: {
-    background: "var(--surface-1)",
+    background: "var(--media-sheen)",
     borderRadius: "var(--radius-lg)",
     border: "1px solid var(--border-subtle)",
     overflow: "hidden",

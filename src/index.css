@@ -136,11 +136,15 @@
      direccional dentro de una fila: sube hacia la derecha con un aliento de
      violeta (el tinte de los hallazgos), y los dos extremos son colores
      sólidos, así que el fondo de debajo no se cuela. */
+  /* Medido contra la referencia: al 13% el violeta era imperceptible en una
+     fila de pantalla completa (el propio usuario lo dio por ausente). Mobalytics
+     llega a un morado franco en el extremo; esto se queda un paso por debajo
+     pero ya se VE: 26% en el borde y arrancando antes. */
   --media-sheen: linear-gradient(
     90deg,
     var(--panel) 0%,
-    color-mix(in srgb, var(--flag) 6%, var(--panel)) 62%,
-    color-mix(in srgb, var(--flag) 13%, var(--panel)) 100%
+    color-mix(in srgb, var(--flag) 11%, var(--panel)) 55%,
+    color-mix(in srgb, var(--flag) 26%, var(--panel)) 100%
   );
 
   /* El rail es alto y va pegado al borde: su degradado es vertical y termina

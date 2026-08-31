@@ -120,6 +120,28 @@ const ES: Record<string, string> = {
 
   // ---------------------------------------------------------------- patrones
   "When you die": "Cuándo mueres",
+  "Where you die": "Dónde mueres",
+  "Deaths get a map position when the game syncs with Riot.":
+    "Las muertes ganan posición en el mapa cuando la partida se sincroniza con Riot.",
+  "Your rank, game by game": "Tu puesto, partida a partida",
+  "Ranks appear as games sync with Riot.": "Los puestos aparecen según las partidas se sincronizan con Riot.",
+  "latest": "últimas",
+  "What your presence buys": "Lo que compra tu presencia",
+  "win prob. your team took elsewhere": "de prob. de victoria que tu equipo sacó lejos de ti",
+  "stretches": "tramos",
+  "Blind spot, game by game": "El punto ciego, partida a partida",
+  "longest stretch without a look, per lane": "el rato más largo sin mirar, por carril",
+  "This is the row to watch after training a lane: it is the only screen that can tell whether it is working.":
+    "Esta es la fila que hay que mirar después de entrenar un carril: es la única pantalla que puede decir si está funcionando.",
+  "Crossings": "Cruces",
+  "In your low map-checking games you die {pct}% more than in the high ones ({n} games).":
+    "En tus partidas de mirar poco el mapa mueres un {pct}% más que en las de mirar mucho ({n} partidas).",
+  "Your deaths barely change with how much you check the map ({n} games).":
+    "Tus muertes apenas cambian con cuánto miras el mapa ({n} partidas).",
+  "Gold @15 averages {vic} in your wins and {der} in your losses ({n} games).":
+    "El oro @15 promedia {vic} en tus victorias y {der} en tus derrotas ({n} partidas).",
+  "Comparisons, not causes: with this sample they point, they don't prove.":
+    "Comparaciones, no causas: con esta muestra apuntan, no demuestran.",
   "by minute of game": "por minuto de partida",
   "What you flag yourself": "Lo que marcas tú",
   "notes": "notas",

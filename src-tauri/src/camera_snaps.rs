@@ -430,6 +430,50 @@ pub struct BlindSpot {
     pub worst_match_id: String,
 }
 
+/// El hueco ciego por carril de UNA partida, para pintar la tendencia.
+#[derive(Serialize)]
+pub struct ZoneHistoryRow {
+    pub match_id: String,
+    pub date: String,
+    /// Hueco más largo sin mirar cada carril, en segundos: [top, mid, bot].
+    pub gaps: [f64; 3],
+    pub looks: [usize; 3],
+}
+
+/// Una fila por partida con miradas, de la más antigua a la más nueva.
+///
+/// `get_blind_spot` responde "¿cuál es mi punto ciego?"; esto responde la
+/// pregunta que le sigue: "¿está mejorando?". La foto agregada no distingue
+/// mejorar de empeorar.
+#[tauri::command]
+pub async fn get_camera_zone_history() -> Vec<ZoneHistoryRow> {
+    let mut out: Vec<ZoneHistoryRow> = Vec::new();
+    for m in crate::storage::load_all_matches() {
+        if m.is_vod {
+            continue;
+        }
+        let Some(r) = load_report(&m.id) else { continue };
+        let zonas = zonas_de(&r);
+        if zonas.is_empty() {
+            continue;
+        }
+        let mut gaps = [0.0; 3];
+        let mut looks = [0; 3];
+        for z in &zonas {
+            let i = match z.key.as_str() {
+                "top" => 0,
+                "mid" => 1,
+                _ => 2,
+            };
+            gaps[i] = z.longest_gap_secs;
+            looks[i] = z.looks;
+        }
+        out.push(ZoneHistoryRow { match_id: m.id, date: m.date, gaps, looks });
+    }
+    out.sort_by(|a, b| a.date.cmp(&b.date));
+    out
+}
+
 #[tauri::command]
 pub async fn get_blind_spot() -> Option<BlindSpot> {
     let mut peor_por_partida: Vec<(String, String, f64)> = Vec::new(); // (partida, carril, hueco)

@@ -225,6 +225,32 @@ export const processMatchMinimap = async (matchId: string): Promise<void> => {
   return await invoke<void>("process_match_minimap", { matchId });
 };
 
+/** El hueco ciego por carril de UNA partida, para la tendencia de Patrones. */
+export interface ZoneHistoryRow {
+  match_id: string;
+  date: string;
+  /** [top, mid, bot], en segundos. */
+  gaps: [number, number, number];
+  looks: [number, number, number];
+}
+
+export const getCameraZoneHistory = async (): Promise<ZoneHistoryRow[]> => {
+  return await invoke<ZoneHistoryRow[]>("get_camera_zone_history");
+};
+
+/** Lo que compró tu presencia, sumado entre partidas (sólo caché de Riot). */
+export interface PressureSummary {
+  games: number;
+  windows: number;
+  wpa: number;
+  towers: number;
+  gold: number;
+}
+
+export const getPressureSummary = async (): Promise<PressureSummary> => {
+  return await invoke<PressureSummary>("get_pressure_summary");
+};
+
 /** El carril que peor miras, mirando toda la biblioteca. */
 export interface BlindSpot {
   lane: string;

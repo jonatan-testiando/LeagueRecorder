@@ -172,6 +172,23 @@
   })();
   matches[2].game_duration = 1833;
 
+  // Muertes con posición repartidas por el mapa, para el hero de Patrones.
+  matches.forEach(function (m, mi) {
+    if (mi % 2) return;
+    for (var k = 0; k < 6; k++) {
+      m.timeline_markers = m.timeline_markers || [];
+      m.timeline_markers.push({
+        time: 200 + k * 190,
+        event_type: "death",
+        description: "Muerte",
+        position_x: 2500 + ((mi * 31 + k * 47) % 100) * 110,
+        position_y: 2200 + ((mi * 17 + k * 71) % 100) * 115,
+      });
+    }
+    m.impact_rank = [7, 4, 1, 8, 5, 2, 6, 3, 9][mi % 9];
+    m.impact_percentile = 40 + (mi * 7) % 55;
+  });
+
   window.__MOCK_MATCHES = matches;
 
   /**
@@ -363,6 +380,17 @@
     // 6-8 s, con mid muy poblado y top con huecos largos.
     // El punto ciego agregado. Los números son los reales del usuario: top es el
     // peor en las 13 partidas con datos.
+    // Historial de zonas y presión agregada, para la pantalla de Patrones.
+    get_camera_zone_history: () =>
+      Array.from({ length: 10 }, function (_, i) {
+        return {
+          match_id: "m" + i,
+          date: iso(now - (9 - i) * 86400000),
+          gaps: [420 - i * 22, 130 + (i % 3) * 12, 210 + (i % 4) * 18],
+          looks: [20 + i, 120 + i * 4, 60 + i * 2],
+        };
+      }),
+    get_pressure_summary: () => ({ games: 9, windows: 23, wpa: 0.48, towers: 7, gold: 6100 }),
     get_blind_spot: () => ({
       lane: "top",
       games: 13,

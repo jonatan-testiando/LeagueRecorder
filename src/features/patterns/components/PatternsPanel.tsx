@@ -6,7 +6,17 @@ import {
   confidenceOf,
   type Confidence,
 } from "../../../core/patterns";
-import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from "../../../core/tauri-ipc";
+import {
+  ErrorClipMetadata,
+  getAllErrorClips,
+  getCameraZoneHistory,
+  getPressureSummary,
+  getRecordedMatches,
+  type PressureSummary,
+  type ZoneHistoryRow,
+} from "../../../core/tauri-ipc";
+import { computeKDA } from "../../../core/matchStats";
+import { mmss } from "../../../core/time";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { BarChart3 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
@@ -50,16 +60,25 @@ const CATEGORY_COLOR: Record<string, string> = {
 export const PatternsPanel: React.FC = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
+  const [zonas, setZonas] = useState<ZoneHistoryRow[]>([]);
+  const [presion, setPresion] = useState<PressureSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const t = useT();
 
   useEffect(() => {
     let alive = true;
-    Promise.all([getRecordedMatches(), getAllErrorClips().catch(() => [])])
-      .then(([ms, cs]) => {
+    Promise.all([
+      getRecordedMatches(),
+      getAllErrorClips().catch(() => []),
+      getCameraZoneHistory().catch(() => []),
+      getPressureSummary().catch(() => null),
+    ])
+      .then(([ms, cs, zs, pr]) => {
         if (!alive) return;
         setMatches(ms);
         setClips(cs);
+        setZonas(zs);
+        setPresion(pr);
       })
       .catch(console.error)
       .finally(() => alive && setLoading(false));
@@ -76,6 +95,60 @@ export const PatternsPanel: React.FC = () => {
     [clock]
   );
   const maxCat = useMemo(() => cats.reduce((a, c) => Math.max(a, c.count), 0), [cats]);
+
+  // Todas tus muertes con sitio, de todas las partidas. La marca de muerte de
+  // la timeline de Riot ya es sólo tuya y lleva coordenadas de mapa.
+  const muertes = useMemo(
+    () =>
+      own.flatMap((m) =>
+        (m.timeline_markers ?? []).filter(
+          (tm) => tm.event_type === "death" && tm.position_x != null && tm.position_y != null
+        )
+      ),
+    [own]
+  );
+
+  // Tu puesto, de la más antigua a la más nueva (para leerse como una línea).
+  const puestos = useMemo(
+    () =>
+      own
+        .filter((m) => m.impact_rank != null)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .slice(-15),
+    [own]
+  );
+
+  // Cruce miradas ↔ muertes: se parten tus partidas por la mediana de
+  // miradas/min y se comparan las muertes medias de cada mitad. No es
+  // causalidad y la pantalla no la promete: es la comparación honesta que se
+  // puede hacer con quince partidas.
+  const cruceMiradas = useMemo(() => {
+    const filas = own
+      .filter((m) => (m.camera_snaps?.length ?? 0) > 0 && m.game_duration > 60)
+      .map((m) => ({
+        ritmo: (m.camera_snaps!.length / m.game_duration) * 60,
+        muertes: computeKDA(m.events).deaths,
+      }));
+    if (filas.length < 6) return null;
+    const orden = [...filas].sort((a, b) => a.ritmo - b.ritmo);
+    const mitad = Math.floor(orden.length / 2);
+    const media = (xs: typeof filas) => xs.reduce((a, x) => a + x.muertes, 0) / xs.length;
+    const pocaVista = media(orden.slice(0, mitad));
+    const muchaVista = media(orden.slice(orden.length - mitad));
+    if (muchaVista === 0) return null;
+    return { pct: Math.round(((pocaVista - muchaVista) / muchaVista) * 100), n: filas.length };
+  }, [own]);
+
+  // Cruce oro@15 ↔ resultado.
+  const cruceOro = useMemo(() => {
+    const con = own.filter((m) => m.gold_diff_15 != null);
+    const g = (xs: MatchMetadata[]) =>
+      xs.length ? xs.reduce((a, m) => a + (m.gold_diff_15 ?? 0), 0) / xs.length : null;
+    const vic = g(con.filter((m) => m.result === "Victory"));
+    const der = g(con.filter((m) => m.result !== "Victory"));
+    if (vic === null || der === null || con.length < 6) return null;
+    return { vic: Math.round(vic), der: Math.round(der), n: con.length };
+  }, [own]);
 
   if (loading) {
     return (
@@ -116,12 +189,135 @@ export const PatternsPanel: React.FC = () => {
         </span>
       </div>
 
+      {/* ------------------------------------------------- dónde mueres */}
+      {/* El hero de la página, y por eso lleva la aureola (una por pantalla):
+          la pregunta con la que se entra aquí es "¿qué me está matando?", y el
+          DÓNDE enseña más que el cuándo. */}
+      <div style={styles.heroRow}>
+        <div className="card surface-hero" style={styles.card}>
+          <div style={styles.cardHead}>
+            <span className="u-label">{t("Where you die")}</span>
+            <span className="u-meta">{muertes.length} {t("deaths")} · {own.length} {t("games")}</span>
+          </div>
+          {muertes.length === 0 ? (
+            <p style={styles.insightText}>{t("Deaths get a map position when the game syncs with Riot.")}</p>
+          ) : (
+            <div style={styles.mapWrap}>
+              <img
+                src="https://ddragon.leagueoflegends.com/cdn/14.1.1/img/map/map11.png"
+                alt=""
+                style={styles.mapImg}
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+              />
+              {muertes.map((d, i) => (
+                <span
+                  key={i}
+                  style={{
+                    ...styles.deathDot,
+                    left: `${Math.max(1, Math.min(99, (d.position_x! / 14820) * 100))}%`,
+                    top: `${Math.max(1, Math.min(99, (1 - d.position_y! / 14881) * 100))}%`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={styles.sideCol}>
+          {/* Tu puesto, partida a partida. */}
+          <div className="card" style={styles.card}>
+            <div style={styles.cardHead}>
+              <span className="u-label">{t("Your rank, game by game")}</span>
+              <span className="u-meta">{puestos.length ? `${t("latest")} ${puestos.length}` : ""}</span>
+            </div>
+            {puestos.length === 0 ? (
+              <p style={styles.insightText}>{t("Ranks appear as games sync with Riot.")}</p>
+            ) : (
+              <div style={styles.rankStrip}>
+                {puestos.map((m) => (
+                  <span
+                    key={m.id}
+                    className="u-metric"
+                    title={`${m.champion} · ${m.date}`}
+                    style={{
+                      ...styles.rankChip,
+                      color:
+                        m.impact_rank === 1 ? "var(--gold)" : m.impact_rank! >= 8 ? "var(--loss)" : "var(--text)",
+                      borderColor:
+                        m.impact_rank === 1 ? "var(--gold)" : "var(--line)",
+                    }}
+                  >
+                    {m.impact_rank === 1 ? "MVP" : `${m.impact_rank}º`}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Lo que compra tu presencia. */}
+          {presion !== null && presion.windows > 0 && (
+            <div className="card" style={styles.card}>
+              <div style={styles.cardHead}>
+                <span className="u-label">{t("What your presence buys")}</span>
+                <span className="u-meta">{presion.games} {t("games")}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <span className="u-metric" style={{ fontSize: 22, fontWeight: 700, color: "var(--win)" }}>
+                  +{(presion.wpa * 100).toFixed(0)}%
+                </span>
+                <span className="u-meta">{t("win prob. your team took elsewhere")}</span>
+              </div>
+              <p style={{ ...styles.insightText, marginTop: 8 }}>
+                {presion.windows} {t("stretches")} · {presion.towers} {t("towers")} · {Math.round(presion.gold / 1000)}k {t("gold")}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* --------------------------------------- el punto ciego, por partida */}
+      {zonas.length >= 3 && (() => {
+        const filas = zonas.slice(-12);
+        const peorDe = (g: [number, number, number]) => g.indexOf(Math.max(...g));
+        return (
+          <div className="card" style={{ ...styles.card, marginBottom: "var(--space-4)" }}>
+            <div style={styles.cardHead}>
+              <span className="u-label">{t("Blind spot, game by game")}</span>
+              <span className="u-meta">{t("longest stretch without a look, per lane")}</span>
+            </div>
+            <div style={styles.zoneGrid}>
+              <span />
+              <span className="u-label" style={{ textAlign: "right" }}>Top</span>
+              <span className="u-label" style={{ textAlign: "right" }}>Mid</span>
+              <span className="u-label" style={{ textAlign: "right" }}>Bot</span>
+              {filas.map((z) => {
+                const peor = peorDe(z.gaps);
+                return (
+                  <React.Fragment key={z.match_id}>
+                    <span className="u-meta">{z.date.slice(5, 10)}</span>
+                    {z.gaps.map((g, i) => (
+                      <span
+                        key={i}
+                        className="u-metric"
+                        style={{ textAlign: "right", color: i === peor ? "var(--loss)" : "var(--muted)" }}
+                      >
+                        {mmss(g)}
+                      </span>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 10 }}>
+              {t("This is the row to watch after training a lane: it is the only screen that can tell whether it is working.")}
+            </p>
+          </div>
+        );
+      })()}
+
       <div style={styles.grid}>
         {/* ---------------------------------------------------- reloj */}
-        {/* Es la tarjeta que contesta la pregunta con la que entras a esta
-            pantalla, así que lleva la aureola. Una por pantalla: si la llevaran
-            las dos, no destacaría ninguna. */}
-        <div className="card surface-hero" style={styles.card}>
+        <div className="card" style={styles.card}>
           <div style={styles.cardHead}>
             <span className="u-label">{t("When you die")}</span>
             <span className="u-meta">{t("by minute of game")}</span>
@@ -239,6 +435,35 @@ export const PatternsPanel: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* ------------------------------------------------ cruces honestos */}
+        {(cruceMiradas !== null || cruceOro !== null) && (
+          <div className="card" style={styles.card}>
+            <div style={styles.cardHead}>
+              <span className="u-label">{t("Crossings")}</span>
+              <span className="u-meta">{t(c.label)}</span>
+            </div>
+            {cruceMiradas !== null && (
+              <p style={styles.insightText}>
+                {cruceMiradas.pct > 0
+                  ? t("In your low map-checking games you die {pct}% more than in the high ones ({n} games).", { pct: cruceMiradas.pct, n: cruceMiradas.n })
+                  : t("Your deaths barely change with how much you check the map ({n} games).", { n: cruceMiradas.n })}
+              </p>
+            )}
+            {cruceOro !== null && (
+              <p style={styles.insightText}>
+                {t("Gold @15 averages {vic} in your wins and {der} in your losses ({n} games).", {
+                  vic: `${cruceOro.vic >= 0 ? "+" : ""}${cruceOro.vic}`,
+                  der: `${cruceOro.der >= 0 ? "+" : ""}${cruceOro.der}`,
+                  n: cruceOro.n,
+                })}
+              </p>
+            )}
+            <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 6 }}>
+              {t("Comparisons, not causes: with this sample they point, they don't prove.")}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -275,6 +500,57 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
     gap: "var(--space-4)",
     alignItems: "start",
+  },
+  heroRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(360px, 520px) 1fr",
+    gap: "var(--space-4)",
+    alignItems: "start",
+    marginBottom: "var(--space-4)",
+  },
+  sideCol: { display: "flex", flexDirection: "column", gap: "var(--space-4)" },
+  mapWrap: {
+    position: "relative",
+    width: "100%",
+    aspectRatio: "1 / 1",
+    background: "var(--sunken)",
+    borderRadius: "var(--radius-md)",
+    overflow: "hidden",
+    border: "1px solid var(--line-soft)",
+  },
+  mapImg: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "fill",
+    filter: "brightness(0.55) saturate(0.7)",
+  },
+  /* Punto de muerte: pequeño y translúcido a propósito — el calor lo hace la
+     acumulación, no cada punto. */
+  deathDot: {
+    position: "absolute",
+    width: 9,
+    height: 9,
+    borderRadius: "50%",
+    background: "color-mix(in srgb, var(--loss) 75%, transparent)",
+    boxShadow: "0 0 8px 3px color-mix(in srgb, var(--loss) 45%, transparent)",
+    transform: "translate(-50%, -50%)",
+    pointerEvents: "none",
+  },
+  rankStrip: { display: "flex", flexWrap: "wrap", gap: 6 },
+  rankChip: {
+    padding: "2px 7px",
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--line)",
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  zoneGrid: {
+    display: "grid",
+    gridTemplateColumns: "56px 1fr 1fr 1fr",
+    gap: "4px 12px",
+    alignItems: "baseline",
   },
   card: { padding: "var(--space-4)" },
   cardHead: {

@@ -764,6 +764,62 @@ pub fn spawn_impact_backfill() {
     });
 }
 
+/// Lo que compró tu presencia, sumado entre partidas.
+///
+/// SOLO ficheros ya cacheados en disco: un agregado que se pinta al abrir una
+/// pestaña no justifica gastar cuota de la API. Una partida sin caché
+/// simplemente no cuenta (y `games` dice cuántas sí).
+#[derive(serde::Serialize)]
+pub struct PressureSummary {
+    /// Partidas con datos que entraron en la suma.
+    pub games: usize,
+    /// Tramos tuyos en los que tu equipo sacó algo lejos de ti.
+    pub windows: usize,
+    /// Probabilidad de victoria total que tu equipo ganó lejos mientras te
+    /// sujetaban (suma de `wpa_elsewhere`).
+    pub wpa: f64,
+    pub towers: i64,
+    pub gold: f64,
+}
+
+#[tauri::command]
+pub async fn get_pressure_summary() -> PressureSummary {
+    let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0 };
+    for m in crate::storage::load_all_matches() {
+        if m.is_vod || m.riot_match_id.is_none() {
+            continue;
+        }
+        let (Some(raw), Some(raw_tl)) = (
+            crate::storage::load_raw_match(&m.id),
+            crate::storage::load_raw_timeline(&m.id),
+        ) else {
+            continue;
+        };
+        let (Ok(details), Ok(tl)) = (
+            serde_json::from_str::<MatchDto>(&raw),
+            serde_json::from_str::<TimelineDto>(&raw_tl),
+        ) else {
+            continue;
+        };
+        let Some(idx) = m.participants.iter().position(|p| p.is_self) else { continue };
+        let yo = (idx + 1) as i32;
+        let ventanas = crate::pressure::detect(&tl, &details.info.participants);
+        let mias = ventanas.iter().filter(|w| w.participant_id == yo);
+        let mut alguna = false;
+        for w in mias {
+            alguna = true;
+            sum.windows += 1;
+            sum.wpa += w.wpa_elsewhere.max(0.0);
+            sum.towers += w.towers_elsewhere as i64;
+            sum.gold += w.gold_elsewhere;
+        }
+        if alguna {
+            sum.games += 1;
+        }
+    }
+    sum
+}
+
 /// Tramos de presión absorbida de una partida ya sincronizada.
 ///
 /// Los tiempos salen **en el eje del vídeo**, no en tiempo de partida, para que

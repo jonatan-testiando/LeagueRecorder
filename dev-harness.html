@@ -61,6 +61,7 @@
   matches[0].participants = Array.from({ length: 10 }, (_, i) => ({
     champion: ["Gwen", "Viego", "Ahri", "Jinx", "Thresh", "Sett", "Lee Sin", "Orianna", "Kaisa", "Nautilus"][i],
     name: NAMES[i],
+    tag: ["KR2", "LAN", "NA1", "EUW", "3333", "LAN", "KR1", "LAS", "BR1", "LAN"][i],
     team_id: i < 5 ? 100 : 200,
     win: i < 5,
     level: 14 + (i % 4),
@@ -182,6 +183,11 @@
   matches.forEach(function (m, mi) {
     // El parche lo tienen todas: el backfill real lo rellena partida a partida.
     m.patch = "16.13";
+    // Rango y LP al jugar cada una: la resta entre consecutivas es el LP de la
+    // partida (ganadas +, perdidas −, como el result de arriba).
+    m.rank_tier = "EMERALD";
+    m.rank_division = "II";
+    m.rank_lp = [64, 41, 58, 75, 52, 33, 47, 62, 40, 55, 30, 44, 60, 38][mi] ?? 50;
     if (mi % 2) return;
     for (var k = 0; k < 6; k++) {
       m.timeline_markers = m.timeline_markers || [];

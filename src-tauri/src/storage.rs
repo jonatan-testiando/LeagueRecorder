@@ -82,6 +82,10 @@ pub struct Participant {
     /// guardadas antes de existir el campo; el backfill de arranque lo rellena.
     #[serde(default)]
     pub spells: Vec<i32>,
+    /// El "#KR2" del riot id. Vacío en partidas viejas hasta que el backfill
+    /// lo repone del DTO cacheado.
+    #[serde(default)]
+    pub tag: String,
     #[serde(default)]
     pub damage: i32, // daño a campeones
     #[serde(default)]
@@ -237,6 +241,16 @@ pub struct MatchMetadata {
     /// después y lo que importa es el que tenía al jugarla.
     #[serde(default)]
     pub tier_bucket: Option<String>,
+    /// Rango exacto al jugarla: "MASTER", "EMERALD"... (league-v4, solo/dúo).
+    #[serde(default)]
+    pub rank_tier: Option<String>,
+    /// División dentro del rango ("I".."IV"; en Master+ Riot devuelve "I").
+    #[serde(default)]
+    pub rank_division: Option<String>,
+    /// LP al sincronizar (justo tras la partida): la resta entre partidas
+    /// consecutivas es lo que ganaste o perdiste en cada una.
+    #[serde(default)]
+    pub rank_lp: Option<i32>,
     /// Marcadores de eventos para la barra del reproductor de vídeo
     #[serde(default)]
     pub timeline_markers: Vec<TimelineMarker>,

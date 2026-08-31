@@ -357,6 +357,8 @@ pub struct ParticipantDto {
     pub summoner1Id: i32,
     #[serde(default)]
     pub summoner2Id: i32,
+    #[serde(default)]
+    pub riotIdTagline: String,
     // --- Aguante, utilidad y objetivos: lo que un KDA no ve ---
     #[serde(default)]
     pub totalDamageTaken: i32,
@@ -484,6 +486,28 @@ impl RiotApiClient {
     /// Se agrupa en tres y no en diez porque el baremo es (tramo x rol): con
     /// diez rangos harían falta 50 celdas con muestra suficiente.
     pub async fn tier_bucket(&self, plataforma: &str, puuid: &str) -> Option<String> {
+        let (tier, _, _) = self.rango_solo(plataforma, puuid).await?;
+        Some(Self::tramo_de(&tier))
+    }
+
+    /// "MASTER" → "alto", etc. El baremo de WPA agrupa en tres tramos.
+    fn tramo_de(tier: &str) -> String {
+        match tier {
+            "IRON" | "BRONZE" | "SILVER" => "bajo",
+            "GOLD" | "PLATINUM" | "EMERALD" => "medio",
+            _ => "alto",
+        }
+        .to_string()
+    }
+
+    /// La entrada de solo/dúo entera: (tier, división, LP). Pedida al
+    /// sincronizar — justo tras la partida — para que la resta de LP entre
+    /// partidas consecutivas sea lo que dio o quitó cada una.
+    pub async fn rango_solo(
+        &self,
+        plataforma: &str,
+        puuid: &str,
+    ) -> Option<(String, String, i32)> {
         let url = format!(
             "https://{}.api.riotgames.com/lol/league/v4/entries/by-puuid/{}",
             plataforma, puuid
@@ -499,20 +523,12 @@ impl RiotApiClient {
             return None;
         }
         let entradas: Vec<serde_json::Value> = resp.json().await.ok()?;
-        let tier = entradas
-            .iter()
-            .find(|e| e["queueType"] == "RANKED_SOLO_5x5")?
-            .get("tier")?
-            .as_str()?
-            .to_string();
-        Some(
-            match tier.as_str() {
-                "IRON" | "BRONZE" | "SILVER" => "bajo",
-                "GOLD" | "PLATINUM" | "EMERALD" => "medio",
-                _ => "alto",
-            }
-            .to_string(),
-        )
+        let e = entradas.iter().find(|e| e["queueType"] == "RANKED_SOLO_5x5")?;
+        Some((
+            e.get("tier")?.as_str()?.to_string(),
+            e.get("rank").and_then(|r| r.as_str()).unwrap_or("I").to_string(),
+            e.get("leaguePoints").and_then(|l| l.as_i64()).unwrap_or(0) as i32,
+        ))
     }
 
     /// Obtiene el PUUID del jugador usando su Riot ID (GameName y TagLine)
@@ -734,6 +750,10 @@ fn impacto(
                 for (mp, dto) in metadata.participants.iter_mut().zip(participants.iter()) {
                     if mp.spells.is_empty() && (dto.summoner1Id != 0 || dto.summoner2Id != 0) {
                         mp.spells = vec![dto.summoner1Id, dto.summoner2Id];
+                        spells_repuestos = true;
+                    }
+                    if mp.tag.is_empty() && !dto.riotIdTagline.is_empty() {
+                        mp.tag = dto.riotIdTagline.clone();
                         spells_repuestos = true;
                     }
                 }
@@ -1259,6 +1279,7 @@ fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Particip
             p.item0, p.item1, p.item2, p.item3, p.item4, p.item5, p.item6,
         ],
         spells: vec![p.summoner1Id, p.summoner2Id],
+        tag: p.riotIdTagline.clone(),
         damage: p.totalDamageDealtToChampions,
         vision_score: p.visionScore,
         wards_placed: p.wardsPlaced,
@@ -1372,9 +1393,14 @@ pub async fn sync_riot_data(
         let _ = crate::storage::save_raw_match(match_id, &raw);
         // El rango se pide aquí y se guarda: después puede cambiar, y lo que
         // vale para comparar es el que tenías al jugar esta partida.
-        if metadata.tier_bucket.is_none() {
+        if metadata.tier_bucket.is_none() || metadata.rank_lp.is_none() {
             let plataforma = riot_id.split('_').next().unwrap_or("la1").to_lowercase();
-            metadata.tier_bucket = api.tier_bucket(&plataforma, &puuid).await;
+            if let Some((tier, division, lp)) = api.rango_solo(&plataforma, &puuid).await {
+                metadata.tier_bucket = Some(RiotApiClient::tramo_de(&tier));
+                metadata.rank_tier = Some(tier);
+                metadata.rank_division = Some(division);
+                metadata.rank_lp = Some(lp);
+            }
         }
         metadata.riot_match_id = Some(riot_id.clone());
         metadata.kda = Some(format!(

@@ -60,7 +60,9 @@ export interface Participant {
   is_self: boolean;
   items?: number[];
   /** Hechizos de invocador [summoner1Id, summoner2Id]. */
-  spells?: number[]; // item0..item6 (0 = casilla vacía)
+  spells?: number[];
+  /** El "#KR2" del riot id. */
+  tag?: string; // item0..item6 (0 = casilla vacía)
   damage?: number;
   vision_score?: number;
   wards_placed?: number;
@@ -144,6 +146,12 @@ export interface MatchMetadata {
   impact_percentile?: number | null;
   /** Parche en que se jugó ("16.13"). */
   patch?: string | null;
+  /** Rango exacto al jugarla: "MASTER", "EMERALD"... */
+  rank_tier?: string | null;
+  /** División dentro del rango ("I".."IV"). */
+  rank_division?: string | null;
+  /** LP al sincronizar, justo tras la partida. */
+  rank_lp?: number | null;
   timeline_markers?: TimelineMarker[];
   minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo

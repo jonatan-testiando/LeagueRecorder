@@ -102,8 +102,16 @@ export const ClipsGallery: React.FC = () => {
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const medir = () =>
-      setColumns(Math.max(1, Math.floor((el.clientWidth + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
+    let anchoPrevio = 0;
+    const medir = () => {
+      const w = el.clientWidth;
+      setColumns(Math.max(1, Math.floor((w + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
+      // Mismo bug que la biblioteca: la ruta se oculta con display:none sin
+      // desmontarse y el virtualizador cachea medidas a 0. Al reaparecer, se
+      // remide.
+      if (anchoPrevio === 0 && w > 0) rowVirtualizer.measure();
+      anchoPrevio = w;
+    };
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(el);

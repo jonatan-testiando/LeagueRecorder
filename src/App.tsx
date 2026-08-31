@@ -15,7 +15,14 @@ import { Titlebar } from "./components/Titlebar";
 import { Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { BrandMark } from "./components/BrandMark";
 import { getVersion } from "@tauri-apps/api/app";
-import { getPendingUpdate, onUpdateReady, type PendingUpdate } from "./core/updates";
+import {
+  getPendingUpdate,
+  installPendingUpdate,
+  onUpdateProgress,
+  onUpdateReady,
+  type PendingUpdate,
+  type UpdateProgress,
+} from "./core/updates";
 import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 
@@ -49,6 +56,10 @@ export const App: React.FC = () => {
   // Actualización ya descargada por detrás. El aviso vive aquí, junto a la
   // versión, y no en un modal: no interrumpe, solo deja de decir "v1.2.11".
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  // Progreso de la descarga en segundo plano, para que la actualización se VEA
+  // llegar en vez de aparecer de golpe como "lista".
+  const [updProgress, setUpdProgress] = useState<UpdateProgress | null>(null);
+  const [installing, setInstalling] = useState(false);
   const t = useT();
 
   const selectedError = useAppStore(state => state.selectedError);
@@ -61,7 +72,12 @@ export const App: React.FC = () => {
     // Puede haberse descargado antes de montar este componente (o en otra
     // sesión de la ventana), así que se pregunta además de escuchar.
     getPendingUpdate().then(setPendingUpdate).catch(() => {});
-    const stop = onUpdateReady(setPendingUpdate);
+    const stop = onUpdateReady((u) => {
+      setPendingUpdate(u);
+      setUpdProgress(null);
+    });
+    const stopProg = onUpdateProgress(setUpdProgress);
+    void stopProg;
     return () => { stop.then((f) => f()).catch(() => {}); };
   }, []);
 
@@ -172,12 +188,32 @@ export const App: React.FC = () => {
           {pendingUpdate ? (
             <button
               className="updpill"
-              onClick={() => goTo("/settings")}
-              title={t("Downloaded and ready. Installing takes a few seconds.")}
+              onClick={async () => {
+                // En Windows esto no vuelve: el instalador toma el relevo y la
+                // /R del NSIS relanza la app sola. El velo cubre ese tránsito.
+                setInstalling(true);
+                try {
+                  await installPendingUpdate();
+                } catch (e) {
+                  console.error(e);
+                  setInstalling(false);
+                }
+              }}
+              title={t("Downloaded and ready. One click: it installs and the app comes back by itself.")}
             >
               <span className="updpill__dot" />
-              {t("Update ready")} · v{pendingUpdate.version}
+              {t("Install v{v}", { v: pendingUpdate.version })}
             </button>
+          ) : updProgress ? (
+            <div className="updpill" style={{ cursor: "default" }} title={t("Downloading in the background. You can keep using the app.")}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+                <span className="updpill__dot" />
+                <span>v{updProgress.version} · {updProgress.percent}%</span>
+              </div>
+              <div className="updpill__track">
+                <div className="updpill__fill" style={{ width: `${updProgress.percent}%` }} />
+              </div>
+            </div>
           ) : appVersion ? (
             <div className="u-meta" style={{ textAlign: "center", marginTop: "var(--space-2)" }}>
               v{appVersion}
@@ -264,6 +300,21 @@ export const App: React.FC = () => {
         )}
       </div>
       </div>
+
+      {/* El tránsito de la actualización: el instalador cierra este proceso y
+          la app vuelve sola en unos segundos. Sin el velo eso se lee como un
+          cierre inesperado; con él, como una continuación. */}
+      {installing && (
+        <div className="upd-veil">
+          <div className="spinner" />
+          <div style={{ marginTop: 14, fontWeight: 600 }}>
+            {t("Installing v{v}…", { v: pendingUpdate?.version ?? "" })}
+          </div>
+          <div className="u-meta" style={{ marginTop: 6 }}>
+            {t("The app restarts by itself in a few seconds.")}
+          </div>
+        </div>
+      )}
     </>
   );
 };

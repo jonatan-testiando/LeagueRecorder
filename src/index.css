@@ -1622,6 +1622,31 @@ a:focus:not(:focus-visible) {
 /* Aviso de actualizacion lista, en el hueco de la version de la barra lateral.
    Sustituye al "v1.2.11" en vez de anadir un modal encima: se ve, pero no corta
    lo que estabas haciendo. */
+.updpill__track {
+  margin-top: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.updpill__fill {
+  height: 100%;
+  background: var(--action);
+  border-radius: 2px;
+  transition: width var(--t-base) var(--e-move);
+}
+.upd-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--ground) 88%, transparent);
+  backdrop-filter: blur(6px);
+}
+
 .updpill {
   margin-top: var(--space-2);
   width: 100%;

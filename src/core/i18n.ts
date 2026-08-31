@@ -285,6 +285,13 @@ const ES: Record<string, string> = {
   "MVP": "MVP",
   "Starting download…": "Empezando la descarga…",
   "Downloading…": "Descargando…",
+  "Install v{v}": "Instalar v{v}",
+  "Installing v{v}…": "Instalando v{v}…",
+  "The app restarts by itself in a few seconds.": "La app se reinicia sola en unos segundos.",
+  "Downloading in the background. You can keep using the app.":
+    "Descargando en segundo plano. Puedes seguir usando la app.",
+  "Downloaded and ready. One click: it installs and the app comes back by itself.":
+    "Descargada y lista. Un clic: se instala y la app vuelve sola.",
   "Update ready": "Actualización lista",
   "Downloaded and ready. Installing takes a few seconds.":
     "Descargada y lista. Instalarla son unos segundos.",

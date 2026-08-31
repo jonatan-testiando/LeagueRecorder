@@ -119,6 +119,26 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     return out;
   }, [visible]);
 
+  // Las rutas de la app se ocultan con display:none SIN desmontarse. Si llega
+  // una partida mientras la biblioteca está oculta, el virtualizador mide las
+  // filas a altura 0 y los desplazamientos quedan corruptos al volver: las más
+  // recientes "desaparecen" hasta un Ctrl+R o hasta entrar y salir de una
+  // partida (que sí remonta este componente). Al volver a ser visible, se
+  // remide todo.
+  const anchoPrevio = useRef(0);
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (anchoPrevio.current === 0 && w > 0) rowVirtualizer.measure();
+      anchoPrevio.current = w;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,

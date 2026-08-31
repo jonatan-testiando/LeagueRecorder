@@ -108,8 +108,16 @@ export const ClipsGallery: React.FC = () => {
       setColumns(Math.max(1, Math.floor((w + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
       // Mismo bug que la biblioteca: la ruta se oculta con display:none sin
       // desmontarse y el virtualizador cachea medidas a 0. Al reaparecer, se
-      // remide.
-      if (anchoPrevio === 0 && w > 0) rowVirtualizer.measure();
+      // remide — y los elementos que siguieron montados se remiden a mano,
+      // porque measure() solo limpia la caché y su observer interno ya disparó.
+      if (anchoPrevio === 0 && w > 0) {
+        rowVirtualizer.measure();
+        requestAnimationFrame(() => {
+          el.querySelectorAll("[data-index]").forEach((n) =>
+            rowVirtualizer.measureElement(n as HTMLElement)
+          );
+        });
+      }
       anchoPrevio = w;
     };
     medir();

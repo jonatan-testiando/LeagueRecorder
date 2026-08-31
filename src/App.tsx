@@ -278,27 +278,42 @@ export const App: React.FC = () => {
 
         {panel(
           "/review",
-          selectedMatch ? (
-            <div style={styles.playerWrapper}>
-              <div style={styles.playerTopBar}>
-                <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
-                  <ArrowLeft size={20} />
-                </button>
-                <div style={styles.playerTitleBlock}>
-                  <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
-                  <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+          <>
+            {selectedMatch && (
+              <div style={styles.playerWrapper}>
+                <div style={styles.playerTopBar}>
+                  <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
+                    <ArrowLeft size={20} />
+                  </button>
+                  <div style={styles.playerTitleBlock}>
+                    <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
+                    <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+                  </div>
                 </div>
+                <VideoPlayer match={selectedMatch} />
               </div>
-              <VideoPlayer match={selectedMatch} />
+            )}
+            {/* La galería NO se desmonta al abrir una partida: se oculta, igual
+                que las rutas. Montarla de cero al volver hacía que el
+                virtualizador recolocara todo desde una estimación (fichas
+                pisándose unas a otras un instante) y perdía el scroll. Oculta,
+                su ResizeObserver ya sabe remedir al reaparecer. */}
+            <div
+              style={{
+                display: selectedMatch ? "none" : "flex",
+                flexDirection: "column",
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              <MatchGallery
+                matches={matches}
+                onSelectMatch={setSelectedMatch}
+                onDeleteMatch={deleteMatch}
+                isRecording={isRecording}
+              />
             </div>
-          ) : (
-            <MatchGallery
-              matches={matches}
-              onSelectMatch={setSelectedMatch}
-              onDeleteMatch={deleteMatch}
-              isRecording={isRecording}
-            />
-          )
+          </>
         )}
       </div>
       </div>

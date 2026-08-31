@@ -791,9 +791,6 @@ pub fn spawn_impact_backfill() {
                     && !m.participants.is_empty()
             })
             .collect();
-        if pendientes.is_empty() {
-            return;
-        }
         let mut hechas = 0;
         for m in pendientes {
             let (Some(raw), Some(raw_tl)) = (
@@ -817,6 +814,9 @@ pub fn spawn_impact_backfill() {
             log::info!("impacto: puesto calculado para {hechas} partidas que no lo tenían");
         }
 
+        // OJO: nada de returns tempranos por encima de esta línea que no sean
+        // de verdad terminales — este estampado tiene que correr aunque el
+        // impacto no tuviera nada pendiente (así se perdió la primera vez).
         // El rango con LP no existía cuando se guardaron las partidas viejas y
         // league-v4 solo da el actual: se estampa el de hoy una vez (una sola
         // llamada) para que la ficha tenga rango que enseñar, y la cuenta de LP

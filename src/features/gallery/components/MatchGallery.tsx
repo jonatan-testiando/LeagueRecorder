@@ -153,7 +153,19 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
-      if (anchoPrevio.current === 0 && w > 0) rowVirtualizer.measure();
+      if (anchoPrevio.current === 0 && w > 0) {
+        // measure() limpia la caché, pero los elementos que SIGUIERON montados
+        // bajo display:none no se vuelven a medir solos (su observer interno
+        // ya disparó antes del reset) y se quedan en la estimación: con la
+        // estimación corta las fichas se pisan, con la larga se abren huecos.
+        // Tras el reset, se remiden a mano los que están en el DOM.
+        rowVirtualizer.measure();
+        requestAnimationFrame(() => {
+          el.querySelectorAll("[data-index]").forEach((n) =>
+            rowVirtualizer.measureElement(n as HTMLElement)
+          );
+        });
+      }
       anchoPrevio.current = w;
     });
     ro.observe(el);
@@ -164,9 +176,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    // Estimación inicial; la altura real se mide con `measureElement` porque la
-    // línea de tiempo hace que la fila sea más alta de lo que parece.
-    estimateSize: () => 92,
+    // Estimación inicial; la altura real se mide con `measureElement`. Cerca
+    // de la real (ficha 112 + aire) para que el primer cuadro no baile.
+    estimateSize: () => 124,
     overscan: 5,
   });
 
@@ -631,7 +643,8 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     paddingTop: "var(--space-2)",
     // El mismo aire que a la izquierda: sin esto la ficha roza el scroll.
-    paddingRight: "var(--space-2)",
+    // A 8px seguía rozando (lo señaló el usuario): 16px.
+    paddingRight: "var(--space-4)",
   },
   row: {
     padding: "var(--space-1) var(--space-3)",

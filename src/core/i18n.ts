@@ -60,6 +60,7 @@ const ES: Record<string, string> = {
   "Filter games": "Filtrar partidas",
   "KDA": "KDA",
   "Gold @15": "Oro @15",
+  "Items": "Objetos",
   "Duration": "Duración",
   "APM": "APM",
   "Dur.": "Dur.",

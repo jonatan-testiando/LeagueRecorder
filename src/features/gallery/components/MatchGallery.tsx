@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { MatchMetadata } from "../../../types";
-import { computeKDA, kdaRatio, outcome, formatDuration } from "../../../core/matchStats";
+import { computeKDA, kdaRatio, outcome, formatDuration, type KDA } from "../../../core/matchStats";
+import { DDRAGON_VER, itemIcon } from "../../player/components/videoPlayerUtils";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { MatchTimeline } from "./MatchTimeline";
 import { Metric } from "../../../components/ui/Metric";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -49,7 +49,16 @@ interface MatchGalleryProps {
 
 /* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
    avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
-const FILA_GRID = "28px minmax(150px, 185px) minmax(120px, 1fr) 86px 96px 76px 52px 44px 30px";
+const FILA_GRID = "28px minmax(150px, 1fr) 80px 112px 92px 60px 76px 152px 30px";
+
+/** El KDA guardado ("9/3/12") o el contado de los eventos, como números. */
+const kdaDe = (m: MatchMetadata, contado: KDA): KDA => {
+  if (m.kda) {
+    const [k, d, a] = m.kda.split("/").map((x) => parseInt(x, 10));
+    if ([k, d, a].every(Number.isFinite)) return { kills: k, deaths: d, assists: a };
+  }
+  return contado;
+};
 
 export const MatchGallery: React.FC<MatchGalleryProps> = ({
   matches,
@@ -195,15 +204,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         )}
       </div>
 
-      <div style={styles.tableHeader}>
-        <span className="u-label" style={{ flex: 1 }}>{t("Game")}</span>
-        <span className="u-label" style={styles.thNum}>{t("Impact")}</span>
-        <span className="u-label" style={styles.thNum}>{t("KDA")}</span>
-        <span className="u-label" style={styles.thNum}>{t("Gold @15")}</span>
-        <span className="u-label" style={styles.thNum}>{t("Duration")}</span>
-        <span className="u-label" style={styles.thNum}>{t("APM")}</span>
-        <span style={{ width: 36 }} />
-      </div>
+      {/* La cabecera vieja (flex) vivía aquí: no compartía rejilla con las
+          filas, así que sus columnas nunca caían en la misma vertical. La
+          cabecera real es la de dentro de la lista, que usa FILA_GRID. */}
 
       <div style={styles.list} ref={parentRef}>
         {matches.length === 0 ? (
@@ -228,12 +231,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           <div style={styles.headRow}>
             <span />
             <span className="u-label">{t("Game")}</span>
-            <span />
             <span className="u-label" style={{ textAlign: "right" }}>{t("rank · score")}</span>
-            <span className="u-label" style={{ textAlign: "right" }}>K D A</span>
+            <span className="u-label" style={{ textAlign: "right" }}>KDA</span>
+            <span className="u-label" style={{ textAlign: "right" }}>CS</span>
+            <span className="u-label" style={{ textAlign: "right" }}>KP</span>
             <span className="u-label" style={{ textAlign: "right" }}>{t("Gold @15")}</span>
-            <span className="u-label" style={{ textAlign: "right" }}>{t("Dur.")}</span>
-            <span className="u-label" style={{ textAlign: "right" }}>APM</span>
+            <span className="u-label">{t("Items")}</span>
             <span />
           </div>
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
@@ -266,7 +269,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               }
 
               const match = row.match;
-              const kda = computeKDA(match.events);
+              const kda = kdaDe(match, computeKDA(match.events));
+              // Lo que sólo sabe la sincronización con Riot. Sin ella, "—".
+              const yo = match.participants?.find((p) => p.is_self);
+              const kills_equipo = yo
+                ? match.participants!.filter((p) => p.team_id === yo.team_id).reduce((a, p) => a + p.kills, 0)
+                : 0;
+              const kp = yo && kills_equipo > 0 ? Math.round(((yo.kills + yo.assists) / kills_equipo) * 100) : null;
+              const csmin = yo && match.game_duration > 0 ? (yo.cs / (match.game_duration / 60)).toFixed(1) : null;
+              const objetos = (yo?.items ?? []).filter((it) => it > 0).slice(0, 6);
               const res = outcome(match.result);
               const accent =
                 res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--line)";
@@ -306,29 +317,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           <span style={{ ...styles.result, color: accent }}>
                             {t(res === "victory" ? "VICTORY" : res === "defeat" ? "DEFEAT" : "NO RESULT")}
                           </span>
-                          <span className="u-meta">{relativeDay(match.date, t)}</span>
+                          <span className="u-meta">{relativeDay(match.date, t)} · {formatDuration(match.game_duration)}</span>
                           {unreviewed && (
                             <span className="u-meta" style={{ color: "var(--flag)" }}>{t("· to review")}</span>
                           )}
                         </div>
                       </div>
 
-                      {/* La silueta de la partida vive en el hueco que antes
-                          quedaba muerto entre el nombre y las cifras, en vez de
-                          en una planta propia que doblaba la altura. */}
-                      <div style={{ minWidth: 0, alignSelf: "center" }}>
-                        <MatchTimeline
-                          events={match.events}
-                          duration={match.game_duration}
-                          apmSeries={match.apm_series}
-                          cameraSnaps={match.camera_snaps}
-                          height={26}
-                          compact
-                        />
-                      </div>
-
-                      {/* Sin etiqueta: la lleva la cabecera de la tabla, una
-                          vez, en lugar de repetirse en cada fila. */}
                       <Metric
                         value={
                           match.impact_rank
@@ -347,12 +342,18 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         }
                       />
                       <Metric
-                        value={
-                          match.kda
-                            ? match.kda.replace(/\//g, " / ")
-                            : <>{kda.kills} / <span style={{ color: "var(--loss)" }}>{kda.deaths}</span> / {kda.assists}</>
-                        }
-                        title={`${kdaRatio(kda)} KDA`}
+                        value={<>{kda.kills} / <span style={{ color: "var(--loss)" }}>{kda.deaths}</span> / {kda.assists}</>}
+                        label={`${kdaRatio(kda)} KDA`}
+                      />
+                      <Metric
+                        value={yo ? yo.cs : "—"}
+                        label={csmin ? `${csmin}/min` : undefined}
+                        tone={yo ? "default" : "muted"}
+                      />
+                      <Metric
+                        value={kp !== null ? `${kp}%` : "—"}
+                        tone={kp === null ? "muted" : kp >= 60 ? "win" : kp < 35 ? "loss" : "default"}
+                        title={t("Kill participation")}
                       />
                       <Metric
                         value={
@@ -368,8 +369,20 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         }
                         title={match.lane_result ? `Lane: ${match.lane_result}` : undefined}
                       />
-                      <Metric value={formatDuration(match.game_duration)} />
-                      <Metric value={Math.round(match.apm || 0)} tone="muted" />
+                      <div style={styles.itemsCell}>
+                        {objetos.length > 0
+                          ? objetos.map((it, n) => (
+                              <img
+                                key={n}
+                                src={itemIcon(DDRAGON_VER, it)}
+                                alt=""
+                                style={styles.itemIcon}
+                                loading="lazy"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                              />
+                            ))
+                          : <span className="u-meta">—</span>}
+                      </div>
 
                       <div style={{ display: "flex", justifyContent: "flex-end" }}>
                         <Button
@@ -391,13 +404,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         )}
       </div>
 
-      <div className="mtl-legend" style={styles.legend}>
-        <span><i style={{ background: "var(--loss)" }} />{t("Death")}</span>
-        <span><i style={{ background: "var(--win)" }} />{t("Kill")}</span>
-        <span><i style={{ background: "var(--gold)" }} />{t("Objective")}</span>
-        <span><i style={{ background: "var(--cool-fill)" }} />{t("Structure")}</span>
-        <span><i style={{ background: "var(--apm-line)" }} />APM</span>
-      </div>
+      
     </div>
   );
 };
@@ -485,17 +492,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.14em",
     color: "var(--signal)",
   },
-  tableHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    padding: "0 var(--space-4) var(--space-2)",
-    borderBottom: "1px solid var(--line-soft)",
-  },
-  thNum: {
-    width: "84px",
-    textAlign: "right",
-  },
   list: {
     display: "flex",
     flexDirection: "column",
@@ -514,6 +510,19 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
     alignItems: "center",
     minHeight: 44,
+  },
+  itemsCell: {
+    display: "flex",
+    gap: 3,
+    alignItems: "center",
+  },
+  itemIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--line-soft)",
+    background: "var(--sunken)",
+    display: "block",
   },
   headRow: {
     display: "grid",
@@ -541,16 +550,5 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
     marginTop: "2px",
     flexWrap: "wrap",
-  },
-  legend: {
-    display: "flex",
-    gap: "var(--space-4)",
-    flexWrap: "wrap",
-    paddingTop: "var(--space-3)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "9px",
-    letterSpacing: "0.12em",
-    textTransform: "uppercase",
-    color: "var(--faint)",
   },
 };

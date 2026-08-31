@@ -135,6 +135,22 @@ impl Lane {
     }
 }
 
+impl Lane {
+    /// Carril al que pertenece un punto del mapa, o `None` si está lejos de los
+    /// tres (jungla profunda, bases).
+    ///
+    /// Lo usa el recuento de miradas al minimapa: un clic en el foso del dragón
+    /// habla de la parte de abajo, y uno en tu base no habla de ningún carril.
+    pub fn nearest_within(x: f64, y: f64, max_dist: f64) -> Option<Lane> {
+        Lane::ALL
+            .into_iter()
+            .map(|l| (l, project(l, x, y).0))
+            .filter(|(_, d)| *d <= max_dist)
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|(l, _)| l)
+    }
+}
+
 impl Outcome {
     pub fn key(self) -> &'static str {
         match self {

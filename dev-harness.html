@@ -343,6 +343,13 @@
       state: new URLSearchParams(location.search).get("minimap") || "falta",
       saved_progress: new URLSearchParams(location.search).has("parcial") ? 37 : null,
     }),
+    // Reparto de miradas por carril. Los números salen de una partida real del
+    // usuario: top es siempre el punto ciego, y por eso el doble no lo esconde.
+    get_camera_zones: () => [
+      { key: "top", looks: 49, per_minute: 1.7, longest_gap_secs: 198 },
+      { key: "mid", looks: 159, per_minute: 5.5, longest_gap_secs: 122 },
+      { key: "bot", looks: 56, per_minute: 1.9, longest_gap_secs: 228 },
+    ],
     process_match_minimap: () => null,
     cancel_match_minimap: () => null,
     get_camera_snap_summary: () => null,

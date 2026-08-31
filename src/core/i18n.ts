@@ -200,6 +200,11 @@ const ES: Record<string, string> = {
     "La probabilidad de victoria que aportaste, y de dónde salió. Las cuatro partes suman tu total.",
 
   // ------------------------------------------------- procesado del vídeo
+  "Where you looked": "Dónde miraste",
+  "Your minimap clicks, by lane. The gap is the longest stretch you left that lane unwatched.":
+    "Tus clics de minimapa, por carril. El hueco es el rato más largo que dejaste ese carril sin mirar.",
+  "Longest blind spot": "El punto ciego más largo",
+  "looks": "miradas",
   "Video analysis": "Análisis del vídeo",
   "Positions read from the video: the stretches below are measured, not estimated.":
     "Posiciones leídas del vídeo: los tramos de abajo están medidos, no estimados.",

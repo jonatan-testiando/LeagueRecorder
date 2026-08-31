@@ -222,6 +222,21 @@ export const processMatchMinimap = async (matchId: string): Promise<void> => {
   return await invoke<void>("process_match_minimap", { matchId });
 };
 
+/** Cuanto miraste cada carril y cuanto lo tuviste desatendido. */
+export interface ZoneStat {
+  /** "top", "mid" o "bot". */
+  key: string;
+  looks: number;
+  per_minute: number;
+  /** El rato mas largo sin mirar ESE carril. */
+  longest_gap_secs: number;
+}
+
+/** Vacio en los VODs importados: ahi se sabe que la camara salto, no adonde. */
+export const getCameraZones = async (matchId: string): Promise<ZoneStat[]> => {
+  return await invoke<ZoneStat[]>("get_camera_zones", { matchId });
+};
+
 /** En que punto esta el procesado del video de una partida. */
 export type MinimapState = "hecha" | "en_curso" | "falta" | "no_disponible";
 

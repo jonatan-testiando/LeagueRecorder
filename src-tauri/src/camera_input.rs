@@ -37,6 +37,18 @@ use crate::storage::{MatchMetadata, MouseEventData};
 /// como clics inventados, porque el minimapa sólo puede crecer hacia dentro.
 const MINIMAPA: (f64, f64, f64, f64) = (0.787, 0.995, 0.622, 0.972);
 
+/// Lado del mapa, en unidades de juego. La misma escala que usa el detector de
+/// minimapa.
+const MAPA: f64 = 14870.0;
+
+/// Hasta dónde llega "mirar un carril".
+///
+/// Medido sobre 4.715 clics reales: la mediana cae a 715 unidades del eje del
+/// carril más cercano y el percentil 90 a 2.401. Con 2.500 entra el 91% — el
+/// carril y la jungla pegada a él. Lo que queda fuera es jungla profunda y base,
+/// que no habla de ningún carril y no debe contar como si lo hiciera.
+pub const RADIO_CARRIL: f64 = 2500.0;
+
 /// Dos gestos más juntos que esto son la misma mirada.
 ///
 /// Un clic de minimapa suele venir acompañado de un segundo clic de ajuste, y
@@ -50,27 +62,59 @@ fn en_minimapa(e: &MouseEventData, w: f64, h: f64) -> bool {
     e.x >= fx0 * w && e.x <= fx1 * w && e.y >= fy0 * h && e.y <= fy1 * h
 }
 
-/// Instantes (en tiempo de VÍDEO) en que miraste a otra parte del mapa.
+/// Una mirada: cuándo, y adónde si se sabe.
+#[derive(Debug, Clone, Copy)]
+pub struct Look {
+    /// Segundos de VÍDEO.
+    pub t: f64,
+    /// Punto del mapa (0..14870). `None` en las teclas de cámara aliada: mueven
+    /// la cámara a un compañero, y dónde estaba ese compañero no lo sabe el
+    /// teclado.
+    pub pos: Option<(f64, f64)>,
+}
+
+/// Dónde cae un clic de minimapa, en coordenadas de mapa.
+///
+/// El eje Y del juego crece hacia arriba y el de la pantalla hacia abajo, de ahí
+/// el `1 -`. Es la misma conversión que hace `minimap_positions.py` con los
+/// iconos que detecta en el vídeo.
+fn punto_del_mapa(e: &MouseEventData, w: f64, h: f64) -> (f64, f64) {
+    let (fx0, fx1, fy0, fy1) = MINIMAPA;
+    let fx = (e.x - fx0 * w) / ((fx1 - fx0) * w);
+    let fy = (e.y - fy0 * h) / ((fy1 - fy0) * h);
+    (fx * MAPA, (1.0 - fy) * MAPA)
+}
+
+/// Las miradas de una partida, en orden y sin repetir.
 ///
 /// `teclas` son las pulsaciones de cámara aliada, ya en tiempo de vídeo. El
 /// botón derecho NO cuenta: sobre el minimapa es una orden de movimiento, no una
 /// mirada — en la partida medida eran 380 clics derechos dentro del rectángulo
 /// que no había que contar.
-pub fn snaps_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<f64> {
+pub fn looks_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<Look> {
     let (w, h) = (m.mouse_space_w as f64, m.mouse_space_h as f64);
-    let mut t: Vec<f64> = teclas.to_vec();
+    let mut v: Vec<Look> = teclas.iter().map(|t| Look { t: *t, pos: None }).collect();
     if w > 0.0 && h > 0.0 {
-        t.extend(
+        v.extend(
             m.mouse_events
                 .iter()
                 .filter(|e| e.evt == "left_click" && en_minimapa(e, w, h))
-                .map(|e| e.t),
+                .map(|e| Look { t: e.t, pos: Some(punto_del_mapa(e, w, h)) }),
         );
     }
-    t.retain(|x| x.is_finite() && *x >= 0.0);
-    t.sort_by(f64::total_cmp);
-    t.dedup_by(|a, b| *a - *b < MISMA_MIRADA);
-    t
+    v.retain(|l| l.t.is_finite() && l.t >= 0.0);
+    v.sort_by(|a, b| a.t.total_cmp(&b.t));
+    // Al fusionar dos gestos pegados se conserva el primero, que es la mirada; el
+    // segundo suele ser el ajuste.
+    v.dedup_by(|a, b| a.t - b.t < MISMA_MIRADA);
+    v
+}
+
+/// Sólo los instantes, para quien no necesita saber adónde. Hoy la usan los
+/// tests, que es donde se comprueba el filtrado sin ruido de coordenadas.
+#[cfg(test)]
+pub fn snaps_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<f64> {
+    looks_from_input(m, teclas).into_iter().map(|l| l.t).collect()
 }
 
 /// Cuánto dura la partida a efectos de este informe: lo que diga el reloj de
@@ -87,12 +131,18 @@ fn duracion(m: &MatchMetadata) -> f64 {
 /// Compartir formato no es pereza: así el resumen (`get_camera_snap_summary`),
 /// la tira de la línea de tiempo y el entrenamiento siguen leyendo de un único
 /// sitio, sin enterarse de quién lo calculó.
-pub fn write_report(m: &MatchMetadata, snaps: &[f64]) {
+pub fn write_report(m: &MatchMetadata, looks: &[Look]) {
     let informe = serde_json::json!({
         "match_id": m.id,
         "duration": duracion(m),
         "source": "input",
-        "snaps": snaps.iter().map(|t| serde_json::json!({ "t": t })).collect::<Vec<_>>(),
+        "snaps": looks
+            .iter()
+            .map(|l| match l.pos {
+                Some((x, y)) => serde_json::json!({ "t": l.t, "x": x, "y": y }),
+                None => serde_json::json!({ "t": l.t }),
+            })
+            .collect::<Vec<_>>(),
         "stills_skipped": 0,
     });
     if let Ok(txt) = serde_json::to_string(&informe) {
@@ -119,13 +169,13 @@ pub fn spawn_backfill() {
             if full.mouse_events.is_empty() {
                 continue;
             }
-            let snaps = snaps_from_input(&full, &full.camera_snaps);
-            if snaps.is_empty() {
+            let looks = looks_from_input(&full, &full.camera_snaps);
+            if looks.is_empty() {
                 continue;
             }
-            write_report(&full, &snaps);
+            write_report(&full, &looks);
             let mut meta = full;
-            meta.camera_snaps = snaps;
+            meta.camera_snaps = looks.iter().map(|l| l.t).collect();
             let _ = crate::storage::save_match_metadata(&meta);
             hechas += 1;
         }
@@ -186,6 +236,36 @@ mod tests {
             clic(10.0, 2200.0, 1100.0, "left_click"),
         ]);
         assert_eq!(snaps_from_input(&m, &[20.0, 5.0]), vec![5.0, 10.0, 20.0, 30.0]);
+    }
+
+    /// La esquina inferior izquierda del minimapa es la base azul (0,0) y la
+    /// superior derecha la roja: si esto se invierte, "miraste a bot" señala a
+    /// top y la métrica dice lo contrario de lo que pasó.
+    #[test]
+    fn el_clic_se_convierte_a_coordenadas_de_mapa() {
+        let m = meta(vec![
+            // Las esquinas justo por dentro: el borde real en 2560x1440 cae en
+            // x 2014,7..2547,2 e y 895,7..1399,7.
+            clic(1.0, 2015.0, 1399.0, "left_click"), // esquina inferior izquierda
+            clic(9.0, 2547.0, 896.0, "left_click"),  // esquina superior derecha
+        ]);
+        let l = looks_from_input(&m, &[]);
+        let (x0, y0) = l[0].pos.unwrap();
+        let (x1, y1) = l[1].pos.unwrap();
+        assert!(x0 < 60.0 && y0 < 60.0, "abajo-izquierda dio ({x0:.0}, {y0:.0})");
+        assert!(x1 > 14800.0 && y1 > 14800.0, "arriba-derecha dio ({x1:.0}, {y1:.0})");
+    }
+
+    /// Un clic en el carril de abajo tiene que caer en `bot`, y uno en tu base
+    /// en ningún carril.
+    #[test]
+    fn cada_clic_cae_en_su_carril() {
+        use crate::gank::Lane;
+        assert_eq!(Lane::nearest_within(6919.0, 1483.0, RADIO_CARRIL), Some(Lane::Bot));
+        assert_eq!(Lane::nearest_within(7450.0, 7450.0, RADIO_CARRIL), Some(Lane::Mid));
+        assert_eq!(Lane::nearest_within(1512.0, 6699.0, RADIO_CARRIL), Some(Lane::Top));
+        // Base azul: lejos de los tres ejes.
+        assert_eq!(Lane::nearest_within(700.0, 700.0, RADIO_CARRIL), None);
     }
 
     /// Sin resolución de escritorio no se puede situar el minimapa; entonces se

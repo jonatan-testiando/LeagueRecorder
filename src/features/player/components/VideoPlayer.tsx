@@ -10,7 +10,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type MinimapStatus, type PlayerCredit, type PressureWindow } from "../../../core/tauri-ipc";
+import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
@@ -144,6 +144,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [mmStatus, setMmStatus] = useState<MinimapStatus | null>(null);
   const [mmPct, setMmPct] = useState<number | null>(null);
   const [mmErr, setMmErr] = useState<string | null>(null);
+  // Reparto de tus miradas por carril. Sale de la posición del clic de minimapa.
+  const [zonas, setZonas] = useState<ZoneStat[]>([]);
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
@@ -488,6 +490,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     // por entrar en la pestana. Salia con consola propia -la ventana negra- y
     // cerrarla mataba el trabajo antes de que escribiera nada, asi que a la
     // siguiente visita vuelta a empezar. Ahora se pide desde el panel.
+    getCameraZones(match.id)
+      .then((z) => { if (vivo) setZonas(z); })
+      .catch(() => { if (vivo) setZonas([]); });
     getMatchPressure(match.id)
       .then((ws) => { if (vivo) setPressure(ws); })
       .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
@@ -1757,6 +1762,59 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 )}
               </section>
             )}
+
+            {/* --------------------------------------- dónde miraste
+                El clic de minimapa lleva posición, así que la pregunta deja de
+                ser "¿miraste?" y pasa a ser "¿miraste DÓNDE?". El hueco por
+                carril es lo que se corrige jugando: un número global no dice
+                hacia qué lado tienes el punto ciego. */}
+            {!match.is_vod && zonas.length > 0 && (() => {
+              const CARRILES: Record<string, string> = { top: "Top", mid: "Mid", bot: "Bot" };
+              const masMirado = Math.max(...zonas.map((z) => z.per_minute), 0.01);
+              const peor = zonas.reduce((a, b) => (b.longest_gap_secs > a.longest_gap_secs ? b : a));
+              return (
+                <section>
+                  <div className="sect__head">
+                    <span className="u-label">{t("Where you looked")}</span>
+                    <i className="sect__rule" />
+                  </div>
+                  <p className="note">
+                    {t("Your minimap clicks, by lane. The gap is the longest stretch you left that lane unwatched.")}
+                  </p>
+                  {zonas.map((z) => {
+                    // Sólo se marca el PEOR. Con datos reales los tres huecos
+                    // pasan de dos minutos, así que pintarlos todos de rojo era
+                    // gritar sin decir cuál corregir.
+                    const malo = z.key === peor.key && z.longest_gap_secs > 120;
+                    return (
+                      <div key={z.key} className="imp__row">
+                        <span className="imp__rowName">{CARRILES[z.key] ?? z.key}</span>
+                        <span className="imp__track">
+                          <span
+                            className="imp__bar"
+                            style={{
+                              background: "var(--cool)",
+                              width: `${(z.per_minute / masMirado) * 50}%`,
+                              left: "50%",
+                            }}
+                          />
+                        </span>
+                        <span
+                          className="u-metric imp__rowNum"
+                          style={{ color: malo ? "var(--loss)" : "var(--muted)" }}
+                          title={`${z.looks} ${t("looks")} · ${z.per_minute.toFixed(1)}/min`}
+                        >
+                          {clock(z.longest_gap_secs)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <p className="note">
+                    {t("Longest blind spot")}: {CARRILES[peor.key] ?? peor.key} · {clock(peor.longest_gap_secs)}
+                  </p>
+                </section>
+              );
+            })()}
 
             {/* --------------------------------------- procesado del vídeo
                 Lo que convierte los tramos de abajo de "al menos tanto" en una

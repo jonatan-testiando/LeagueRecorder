@@ -35,6 +35,13 @@ pub struct Snap {
     /// Nombre del JPEG extraído dentro de `<carpeta_partida>/snaps/`, si se guardó.
     #[serde(default)]
     pub still: Option<String>,
+    /// Dónde miraste, en coordenadas de mapa. Sólo lo saben las miradas que
+    /// vienen de un clic de minimapa (`camera_input`): el detector por vídeo ve
+    /// que la cámara saltó, no adónde.
+    #[serde(default)]
+    pub x: Option<f64>,
+    #[serde(default)]
+    pub y: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -313,6 +320,59 @@ pub struct SnapSummary {
     pub per_minute: f64,
     pub longest_gap_secs: f64,
     pub stills: usize,
+}
+
+/// Cuánto miraste cada carril y cuánto tiempo lo tuviste desatendido.
+#[derive(Serialize)]
+pub struct ZoneStat {
+    /// "top", "mid" o "bot".
+    pub key: String,
+    pub looks: usize,
+    pub per_minute: f64,
+    /// El rato más largo sin mirar ESE carril, en segundos.
+    pub longest_gap_secs: f64,
+}
+
+/// Reparto de tus miradas por carril.
+///
+/// Sale de la posición del clic, así que sólo hay datos en las partidas grabadas
+/// aquí; un VOD importado tiene saltos de cámara pero no sabe adónde miraste.
+/// Devuelve vacío en ese caso, en vez de inventarse un reparto.
+#[tauri::command]
+pub async fn get_camera_zones(match_id: String) -> Vec<ZoneStat> {
+    let Some(r) = load_report(&match_id) else {
+        return Vec::new();
+    };
+    let con_sitio: Vec<&Snap> = r.snaps.iter().filter(|s| s.x.is_some()).collect();
+    if con_sitio.is_empty() {
+        return Vec::new();
+    }
+    crate::gank::Lane::ALL
+        .into_iter()
+        .map(|lane| {
+            let times: Vec<f64> = con_sitio
+                .iter()
+                .filter(|s| {
+                    crate::gank::Lane::nearest_within(
+                        s.x.unwrap_or(f64::NAN),
+                        s.y.unwrap_or(f64::NAN),
+                        crate::camera_input::RADIO_CARRIL,
+                    ) == Some(lane)
+                })
+                .map(|s| s.t)
+                .collect();
+            ZoneStat {
+                key: lane.key().to_string(),
+                looks: times.len(),
+                per_minute: if r.duration > 0.0 {
+                    times.len() as f64 / (r.duration / 60.0)
+                } else {
+                    0.0
+                },
+                longest_gap_secs: longest_gap(&times, r.duration),
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]

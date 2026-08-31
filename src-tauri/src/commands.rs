@@ -859,8 +859,9 @@ async fn finalize_match(
     // clics de minimapa de la estela, que hasta ahora nadie leía. Con esto una
     // grabación local no necesita el detector por vídeo. Ver `camera_input`.
     let mut metadata = metadata;
-    metadata.camera_snaps = crate::camera_input::snaps_from_input(&metadata, &metadata.camera_snaps);
-    crate::camera_input::write_report(&metadata, &metadata.camera_snaps);
+    let miradas = crate::camera_input::looks_from_input(&metadata, &metadata.camera_snaps);
+    crate::camera_input::write_report(&metadata, &miradas);
+    metadata.camera_snaps = miradas.iter().map(|l| l.t).collect();
 
     match save_match_metadata(&metadata) {
         Ok(_) => {

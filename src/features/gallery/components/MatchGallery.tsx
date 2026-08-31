@@ -3,6 +3,7 @@ import { MatchMetadata } from "../../../types";
 import { computeKDA, kdaRatio, outcome, formatDuration, type KDA } from "../../../core/matchStats";
 import { DDRAGON_VER, itemIcon, spellIcon } from "../../player/components/videoPlayerUtils";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
+import { rankIcon } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { HardDrive, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
@@ -48,7 +49,7 @@ interface MatchGalleryProps {
 
 /* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
    avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
-const FILA_GRID = "90px minmax(128px, 1fr) 158px 74px 22px 158px 74px 50px 26px";
+const FILA_GRID = "90px minmax(150px, 220px) 1fr 170px 84px 26px 170px 84px 1fr 50px 26px";
 
 /** "MASTER" + "I" → "Master I". */
 const rangoBonito = (tier?: string | null, div?: string | null): string | null =>
@@ -272,11 +273,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           <div style={styles.headRow}>
             <span />
             <span className="u-label">{t("Summoner")}</span>
+            <span />
             <span className="u-label">{t("Game")}</span>
             <span className="u-label">Build</span>
             <span />
             <span className="u-label">{t("Rival")}</span>
             <span className="u-label">Build</span>
+            <span />
             <span className="u-label" style={{ textAlign: "right" }}>Score</span>
             <span />
           </div>
@@ -373,16 +376,26 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           {yo?.name || match.champion}
                           {yo?.tag ? <span className="u-meta">#{yo.tag}</span> : null}
                         </div>
-                        {rangoBonito(match.rank_tier, match.rank_division) && (
-                          <div className="u-meta" style={{ whiteSpace: "nowrap" }}>
-                            {rangoBonito(match.rank_tier, match.rank_division)}
+                        {match.rank_tier && (
+                          <div style={styles.rangoLinea}>
+                            <img src={rankIcon(match.rank_tier)} alt="" style={styles.rangoIcono} loading="lazy" />
                             {(() => {
                               const lp = lpDelta.get(match.id);
-                              return lp != null && lp !== 0 ? (
-                                <span style={{ color: lp > 0 ? "var(--win)" : "var(--loss)", fontWeight: 600 }}>
-                                  {" "}{lp > 0 ? "+" : "−"}{Math.abs(lp)} LP
-                                </span>
-                              ) : null;
+                              return (
+                                <>
+                                  <span className="u-meta" style={{ color: "var(--muted)" }}>
+                                    {rangoBonito(match.rank_tier, match.rank_division)}
+                                    {/* El absoluto solo cuando no hay resta que enseñar:
+                                        juntos no caben y el delta dice más. */}
+                                    {lp == null && match.rank_lp != null ? ` · ${match.rank_lp} LP` : ""}
+                                  </span>
+                                  {lp != null && lp !== 0 && (
+                                    <span style={{ color: lp > 0 ? "var(--win)" : "var(--loss)", fontWeight: 700, fontSize: 12 }}>
+                                      {lp > 0 ? "+" : "−"}{Math.abs(lp)} LP
+                                    </span>
+                                  )}
+                                </>
+                              );
                             })()}
                           </div>
                         )}
@@ -396,9 +409,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         </div>
                       </div>
 
+                      <span />
+
                       {/* Tú: avatar, summoners, KDA y cs, como en la referencia. */}
                       <div style={styles.bloque} title={match.champion}>
-                        <ChampionAvatar champion={match.champion} size={38} />
+                        <ChampionAvatar champion={match.champion} size={44} />
                         {yo?.spells && yo.spells.length > 0 && (
                           <div style={styles.spellCol}>
                             {yo.spells.slice(0, 2).map((sp, si) => {
@@ -439,7 +454,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                       <div style={styles.bloque} title={rival?.champion}>
                         {rival ? (
                           <>
-                            <ChampionAvatar champion={rival.champion} size={38} />
+                            <ChampionAvatar champion={rival.champion} size={44} />
                             {rival.spells && rival.spells.length > 0 && (
                               <div style={styles.spellCol}>
                                 {rival.spells.slice(0, 2).map((sp, si) => {
@@ -470,6 +485,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             ))
                           : <span className="u-meta">—</span>}
                       </div>
+
+                      <span />
 
                       {/* Score y puesto, juntos: la nota grande y el puesto
                           debajo, que es como se lee la referencia. */}
@@ -613,6 +630,8 @@ const styles: Record<string, React.CSSProperties> = {
     overflowY: "auto",
     position: "relative",
     paddingTop: "var(--space-2)",
+    // El mismo aire que a la izquierda: sin esto la ficha roza el scroll.
+    paddingRight: "var(--space-2)",
   },
   row: {
     padding: "var(--space-1) var(--space-3)",
@@ -624,7 +643,18 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
     alignItems: "center",
     // Ficha, no fila: la columna izquierda apila cuatro líneas.
-    minHeight: 92,
+    minHeight: 104,
+  },
+  rangoLinea: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    whiteSpace: "nowrap",
+  },
+  rangoIcono: {
+    width: 18,
+    height: 18,
+    display: "block",
   },
   bloque: {
     display: "flex",
@@ -655,14 +685,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 2,
   },
   spellIcon: {
-    width: 17,
-    height: 17,
+    width: 20,
+    height: 20,
     borderRadius: 3,
     display: "block",
   },
   itemsGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(3, 22px)",
+    gridTemplateColumns: "repeat(3, 26px)",
     gap: 2,
     alignContent: "center",
   },
@@ -701,8 +731,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
   },
   itemIcon: {
-    width: 22,
-    height: 22,
+    width: 26,
+    height: 26,
     borderRadius: "var(--radius-sm)",
     border: "1px solid var(--line-soft)",
     background: "var(--sunken)",

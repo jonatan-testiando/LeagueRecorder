@@ -816,6 +816,57 @@ pub fn spawn_impact_backfill() {
         if hechas > 0 {
             log::info!("impacto: puesto calculado para {hechas} partidas que no lo tenían");
         }
+
+        // El rango con LP no existía cuando se guardaron las partidas viejas y
+        // league-v4 solo da el actual: se estampa el de hoy una vez (una sola
+        // llamada) para que la ficha tenga rango que enseñar, y la cuenta de LP
+        // por partida arranca de aquí — el histórico anterior no se puede
+        // recuperar de la API.
+        let config = crate::storage::load_config();
+        if config.riot_api_key.is_empty() {
+            return;
+        }
+        let sin_rango: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+            .into_iter()
+            .filter(|m| m.rank_lp.is_none() && m.riot_match_id.is_some() && !m.participants.is_empty())
+            .collect();
+        if sin_rango.is_empty() {
+            return;
+        }
+        // El puuid propio sale del DTO cacheado: mismo orden que los
+        // participants guardados, así que el índice de is_self vale.
+        let Some((puuid, plataforma)) = sin_rango.iter().find_map(|m| {
+            let raw = crate::storage::load_raw_match(&m.id)?;
+            let details = serde_json::from_str::<MatchDto>(&raw).ok()?;
+            let idx = m.participants.iter().position(|p| p.is_self)?;
+            let puuid = details.info.participants.get(idx)?.puuid.clone();
+            let plataforma = m
+                .riot_match_id
+                .as_deref()?
+                .split('_')
+                .next()?
+                .to_lowercase();
+            Some((puuid, plataforma))
+        }) else {
+            return;
+        };
+        let api = RiotApiClient::new(config.riot_api_key);
+        let Some((tier, division, lp)) =
+            tauri::async_runtime::block_on(api.rango_solo(&plataforma, &puuid))
+        else {
+            return;
+        };
+        let cuantas = sin_rango.len();
+        for mut m in sin_rango {
+            if m.tier_bucket.is_none() {
+                m.tier_bucket = Some(RiotApiClient::tramo_de(&tier));
+            }
+            m.rank_tier = Some(tier.clone());
+            m.rank_division = Some(division.clone());
+            m.rank_lp = Some(lp);
+            let _ = crate::storage::save_match_metadata(&m);
+        }
+        log::info!("rango: {tier} {division} ({lp} LP) estampado en {cuantas} partidas sin rango");
     });
 }
 

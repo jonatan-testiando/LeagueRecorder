@@ -17,6 +17,10 @@ const FALLBACK_VERSION = "15.11.1";
  */
 export const champIcon = (champion: string) => `/champions/${champion}.png`;
 
+/** Emblema local del rango ("EMERALD" → /ranks/emerald.png), de los 10 que se
+ *  empaquetan en `public/ranks` (mini-crests de Community Dragon a 64px). */
+export const rankIcon = (tier: string) => `/ranks/${tier.toLowerCase()}.png`;
+
 let versionPromise: Promise<string> | null = null;
 let champMapPromise: Promise<{ version: string; map: Map<string, string> }> | null = null;
 

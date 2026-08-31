@@ -201,6 +201,9 @@ export interface PressureWindow {
   max_enemies: number;
   x: number;
   y: number;
+  /** Carril en el que te sujetaron: "top", "mid", "bot" — o null si fue lejos
+   *  de los tres (jungla profunda, base). */
+  lane: string | null;
   died: boolean;
   gold_elsewhere: number;
   /** Probabilidad de victoria que tu equipo gano lejos de ti. Se ENSENA aparte,
@@ -220,6 +223,34 @@ export interface PressureWindow {
 // enseguida: el trabajo va por detras y tarda ~2 min.
 export const processMatchMinimap = async (matchId: string): Promise<void> => {
   return await invoke<void>("process_match_minimap", { matchId });
+};
+
+/** El carril que peor miras, mirando toda la biblioteca. */
+export interface BlindSpot {
+  lane: string;
+  /** Partidas con datos de miradas. */
+  games: number;
+  /** En cuantas de ellas ESE carril fue el mas desatendido. */
+  games_worst: number;
+  avg_gap_secs: number;
+  worst_gap_secs: number;
+  worst_match_id: string;
+}
+
+/** null hasta que haya una partida grabada aqui con miradas. */
+export const getBlindSpot = async (): Promise<BlindSpot | null> => {
+  return await invoke<BlindSpot | null>("get_blind_spot");
+};
+
+/** Una mirada con el carril al que fue. */
+export interface CameraLook {
+  t: number;
+  /** "top" | "mid" | "bot", o null si fue lejos de los tres o no se sabe. */
+  lane: string | null;
+}
+
+export const getCameraLooks = async (matchId: string): Promise<CameraLook[]> => {
+  return await invoke<CameraLook[]>("get_camera_looks", { matchId });
 };
 
 /** Cuanto miraste cada carril y cuanto lo tuviste desatendido. */

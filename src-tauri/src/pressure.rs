@@ -130,6 +130,10 @@ pub struct PressureWindow {
     /// Dónde estabas, en coordenadas de mapa.
     pub x: f64,
     pub y: f64,
+    /// Carril en el que te sujetaron ("top", "mid", "bot"), o `None` si el tramo
+    /// cae lejos de los tres (jungla profunda, base). Sale de la misma geometría
+    /// que usan los ganks y las miradas al minimapa.
+    pub lane: Option<String>,
     /// Acabó contigo muerto. No lo invalida: morir aguantando a cuatro mientras
     /// tu equipo saca dos torres es un buen intercambio.
     pub died: bool,
@@ -594,6 +598,9 @@ pub fn detect_with(
                             start: sec,
                             end: sec,
                             max_enemies: enemigos,
+                            // Se rellena al cerrar el tramo: `x`/`y` se mueven al
+                            // punto de máxima presión mientras sigue abierto.
+                            lane: None,
                             x: pos.0,
                             y: pos.1,
                             died: false,
@@ -617,6 +624,13 @@ pub fn detect_with(
     }
 
     out.retain(|w| w.end - w.start >= MINIMO_SEGUNDOS && w.paid_off());
+    // El carril, una vez cerrado el tramo: `x`/`y` ya apuntan al punto de máxima
+    // presión, que es donde te tenían sujeto. Misma geometría que los ganks y
+    // que las miradas al minimapa, con el mismo radio.
+    for w in out.iter_mut() {
+        w.lane = crate::gank::Lane::nearest_within(w.x, w.y, crate::camera_input::RADIO_CARRIL)
+            .map(|l| l.key().to_string());
+    }
     out.sort_by(|a, b| a.start.total_cmp(&b.start));
     out
 }

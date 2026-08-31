@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { MatchMetadata } from "../../../types";
+import { getBlindSpot, type BlindSpot } from "../../../core/tauri-ipc";
+import { clock as reloj } from "../../../core/time";
 import { currentFocus, deathClock, confidenceOf } from "../../../core/patterns";
 import { outcome, formatDuration } from "../../../core/matchStats";
 import { invoke } from "@tauri-apps/api/core";
@@ -43,6 +45,17 @@ export const HomePanel: React.FC<HomePanelProps> = ({
   useEffect(() => {
     invoke<DiskSpaceInfo>("get_disk_usage").then(setDisk).catch(() => {});
   }, [matches]);
+
+  // El punto ciego se pide al backend porque sale de los informes de miradas de
+  // TODAS las partidas, no de la metadata que ya está en memoria.
+  const [ciego, setCiego] = useState<BlindSpot | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    getBlindSpot()
+      .then((b) => { if (vivo) setCiego(b); })
+      .catch(() => { if (vivo) setCiego(null); });
+    return () => { vivo = false; };
+  }, [matches.length]);
 
   const own = useMemo(() => matches.filter((m) => !m.is_vod), [matches]);
   const focus = useMemo(() => currentFocus(own), [own]);
@@ -130,7 +143,8 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                   <div style={styles.affected}>
                     <div className="u-label" style={{ marginBottom: 8 }}>
                       {t("Where it happened")}
-                      {focus.games > affected.length && ` · latest ${affected.length} of ${focus.games}`}
+                      {focus.games > affected.length &&
+                        ` · ${t("latest {n} of {total}", { n: affected.length, total: focus.games })}`}
                     </div>
                     {affected.map((m) => {
                       const res = outcome(m.result);
@@ -173,6 +187,30 @@ export const HomePanel: React.FC<HomePanelProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* El segundo hallazgo, y de otra clase: el de arriba dice CUÁNDO te
+                mueres, este dice HACIA DÓNDE no miras. No compite por el hueco
+                porque no mide lo mismo — y porque una debilidad sostenida en
+                todas las partidas no es un matiz de la otra.
+
+                Sólo aparece cuando se repite: un carril desatendido en una
+                partida suelta es ruido. */}
+            {ciego && ciego.games_worst >= 3 && ciego.avg_gap_secs >= 90 && (
+              <div style={styles.blind}>
+                <span className="u-label">{t("Your blind spot")}</span>
+                <p style={styles.focusText}>
+                  {t("{lane} is the lane you leave unwatched the longest, in {n} of your last {total} games.", {
+                    lane: ciego.lane === "top" ? "Top" : ciego.lane === "mid" ? "Mid" : "Bot",
+                    n: ciego.games_worst,
+                    total: ciego.games,
+                  })}{" "}
+                  {t("On average {avg} without a single look; your worst was {worst}.", {
+                    avg: reloj(ciego.avg_gap_secs),
+                    worst: reloj(ciego.worst_gap_secs),
+                  })}
+                </p>
+              </div>
+            )}
           </section>
         ) : (
           <section style={styles.emptyFocus}>
@@ -320,6 +358,14 @@ const styles: Record<string, React.CSSProperties> = {
   miniStripe: { alignSelf: "stretch", borderRadius: "1px" },
   miniName: { fontSize: "var(--font-xs)", color: "var(--text)", minWidth: 0 },
   miniDur: { fontSize: "11px", color: "var(--faint)" },
+  // Segundo hallazgo. Sin aureola: no compite con el foco, lo acompaña.
+  blind: {
+    marginTop: "var(--space-4)",
+    padding: "var(--space-4)",
+    background: "var(--surface-1)",
+    border: "1px solid var(--line-soft)",
+    borderRadius: "var(--radius-lg)",
+  },
   emptyFocus: {
     border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-lg)",

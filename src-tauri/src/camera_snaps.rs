@@ -333,6 +333,37 @@ pub struct ZoneStat {
     pub longest_gap_secs: f64,
 }
 
+/// Una mirada con su carril, para pintarlas en la línea de tiempo.
+#[derive(Serialize)]
+pub struct CameraLook {
+    /// Segundos de vídeo.
+    pub t: f64,
+    /// "top", "mid", "bot" — o `None` si miraste lejos de los tres (jungla
+    /// profunda, base) o si la mirada no sabe adónde (tecla de cámara, VOD).
+    pub lane: Option<String>,
+}
+
+/// Tus miradas en orden, cada una con el carril al que fue.
+#[tauri::command]
+pub async fn get_camera_looks(match_id: String) -> Vec<CameraLook> {
+    let Some(r) = load_report(&match_id) else {
+        return Vec::new();
+    };
+    r.snaps
+        .iter()
+        .map(|s| CameraLook {
+            t: s.t,
+            lane: match (s.x, s.y) {
+                (Some(x), Some(y)) => {
+                    crate::gank::Lane::nearest_within(x, y, crate::camera_input::RADIO_CARRIL)
+                        .map(|l| l.key().to_string())
+                }
+                _ => None,
+            },
+        })
+        .collect()
+}
+
 /// Reparto de tus miradas por carril.
 ///
 /// Sale de la posición del clic, así que sólo hay datos en las partidas grabadas
@@ -340,9 +371,13 @@ pub struct ZoneStat {
 /// Devuelve vacío en ese caso, en vez de inventarse un reparto.
 #[tauri::command]
 pub async fn get_camera_zones(match_id: String) -> Vec<ZoneStat> {
-    let Some(r) = load_report(&match_id) else {
-        return Vec::new();
-    };
+    match load_report(&match_id) {
+        Some(r) => zonas_de(&r),
+        None => Vec::new(),
+    }
+}
+
+fn zonas_de(r: &SnapReport) -> Vec<ZoneStat> {
     let con_sitio: Vec<&Snap> = r.snaps.iter().filter(|s| s.x.is_some()).collect();
     if con_sitio.is_empty() {
         return Vec::new();
@@ -373,6 +408,88 @@ pub async fn get_camera_zones(match_id: String) -> Vec<ZoneStat> {
             }
         })
         .collect()
+}
+
+/// El carril que peor miras, mirando TODA la biblioteca.
+///
+/// Una partida suelta no dice nada: cualquiera puede desatender un carril media
+/// partida y que sea la excepción. Lo que se puede llevar a la siguiente partida
+/// es "esto te pasa siempre", y para eso hace falta contar en cuántas partidas
+/// ese carril fue el peor.
+#[derive(Serialize)]
+pub struct BlindSpot {
+    pub lane: String,
+    /// Partidas con datos de miradas.
+    pub games: usize,
+    /// En cuántas de ellas ESE carril fue el más desatendido.
+    pub games_worst: usize,
+    /// Media de su hueco más largo, en segundos.
+    pub avg_gap_secs: f64,
+    /// El peor hueco que ha tenido, y en qué partida.
+    pub worst_gap_secs: f64,
+    pub worst_match_id: String,
+}
+
+#[tauri::command]
+pub async fn get_blind_spot() -> Option<BlindSpot> {
+    let mut peor_por_partida: Vec<(String, String, f64)> = Vec::new(); // (partida, carril, hueco)
+    let mut huecos: std::collections::HashMap<String, Vec<f64>> = Default::default();
+    let mut partidas = 0usize;
+
+    for m in crate::storage::load_all_matches() {
+        if m.is_vod {
+            continue;
+        }
+        let Some(r) = load_report(&m.id) else { continue };
+        let zonas = zonas_de(&r);
+        if zonas.is_empty() {
+            continue;
+        }
+        partidas += 1;
+        for z in &zonas {
+            huecos.entry(z.key.clone()).or_default().push(z.longest_gap_secs);
+        }
+        if let Some(peor) = zonas
+            .iter()
+            .max_by(|a, b| a.longest_gap_secs.total_cmp(&b.longest_gap_secs))
+        {
+            peor_por_partida.push((m.id.clone(), peor.key.clone(), peor.longest_gap_secs));
+        }
+    }
+    if partidas == 0 {
+        return None;
+    }
+
+    // El carril que más veces fue el peor. En empate, el de más hueco medio.
+    let medio = |k: &str| {
+        let v = huecos.get(k).cloned().unwrap_or_default();
+        if v.is_empty() { 0.0 } else { v.iter().sum::<f64>() / v.len() as f64 }
+    };
+    let carril = crate::gank::Lane::ALL
+        .into_iter()
+        .map(|l| l.key().to_string())
+        .max_by(|a, b| {
+            let veces = |k: &String| peor_por_partida.iter().filter(|(_, c, _)| c == k).count();
+            veces(a)
+                .cmp(&veces(b))
+                .then_with(|| medio(a).total_cmp(&medio(b)))
+        })?;
+
+    let (peor_id, peor_hueco) = peor_por_partida
+        .iter()
+        .filter(|(_, c, _)| *c == carril)
+        .max_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(id, _, g)| (id.clone(), *g))
+        .unwrap_or_default();
+
+    Some(BlindSpot {
+        games_worst: peor_por_partida.iter().filter(|(_, c, _)| *c == carril).count(),
+        avg_gap_secs: medio(&carril),
+        worst_gap_secs: peor_hueco,
+        worst_match_id: peor_id,
+        lane: carril,
+        games: partidas,
+    })
 }
 
 #[tauri::command]

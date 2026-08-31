@@ -95,6 +95,12 @@ const ES: Record<string, string> = {
   "Where it happened": "Dónde ocurrió",
   "You die between minute {a} and {b}": "Te mueres entre el minuto {a} y el {b}",
   "Train camera control": "Entrenar control de cámara",
+  "Your blind spot": "Tu punto ciego",
+  "latest {n} of {total}": "las {n} últimas de {total}",
+  "{lane} is the lane you leave unwatched the longest, in {n} of your last {total} games.":
+    "{lane} es el carril que más rato dejas sin mirar, en {n} de tus últimas {total} partidas.",
+  "On average {avg} without a single look; your worst was {worst}.":
+    "De media {avg} sin mirarlo ni una vez; tu peor caso fueron {worst}.",
   "It is your worst window: {n} of your {total} deaths land there ({pct}%).":
     "Es tu peor tramo: {n} de tus {total} muertes caen ahí ({pct}%).",
   "With {n} games this is a lead, not a conclusion — it sharpens as you record more.":
@@ -209,6 +215,9 @@ const ES: Record<string, string> = {
 
   // ------------------------------------------------- procesado del vídeo
   "Where you looked": "Dónde miraste",
+  "Top": "Top",
+  "Mid": "Mid",
+  "Bot": "Bot",
   "Your minimap clicks, by lane. The gap is the longest stretch you left that lane unwatched.":
     "Tus clics de minimapa, por carril. El hueco es el rato más largo que dejaste ese carril sin mirar.",
   "Longest blind spot": "El punto ciego más largo",

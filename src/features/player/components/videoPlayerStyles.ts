@@ -138,6 +138,14 @@ export const styles: Record<string, React.CSSProperties> = {
     pointerEvents: "none",
     zIndex: 3,
   },
+  // Una fila por carril dentro de la tira. 3 px de alto y 1 de aire: las tres
+  // caben en los 12 px de la tira sin tocarse.
+  snapLane: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: "3px",
+  },
   snapTick: {
     position: "absolute",
     bottom: 0,

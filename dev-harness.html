@@ -345,6 +345,29 @@
     }),
     // Reparto de miradas por carril. Los números salen de una partida real del
     // usuario: top es siempre el punto ciego, y por eso el doble no lo esconde.
+    // Miradas con carril, para ver la tira de tres filas. Ritmo real: una cada
+    // 6-8 s, con mid muy poblado y top con huecos largos.
+    // El punto ciego agregado. Los números son los reales del usuario: top es el
+    // peor en las 13 partidas con datos.
+    get_blind_spot: () => ({
+      lane: "top",
+      games: 13,
+      games_worst: 13,
+      avg_gap_secs: 305,
+      worst_gap_secs: 609,
+      worst_match_id: "m2",
+    }),
+    get_camera_looks: () => {
+      const out = [];
+      for (let t = 20; t < 1650; t += 4 + (t % 11)) {
+        const r = (t * 7919) % 100;
+        const lane = r < 55 ? "mid" : r < 80 ? "bot" : r < 92 ? "top" : null;
+        // Un agujero deliberado en top entre el 8:00 y el 14:00.
+        if (lane === "top" && t > 480 && t < 840) continue;
+        out.push({ t, lane });
+      }
+      return out;
+    },
     get_camera_zones: () => [
       { key: "top", looks: 49, per_minute: 1.7, longest_gap_secs: 198 },
       { key: "mid", looks: 159, per_minute: 5.5, longest_gap_secs: 122 },

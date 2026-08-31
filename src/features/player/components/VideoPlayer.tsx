@@ -10,7 +10,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
+import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
@@ -608,10 +608,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapPct, setSnapPct] = useState(0);
   const [cameraSnaps, setCameraSnaps] = useState<number[]>(match.camera_snaps ?? []);
+  // Las mismas miradas, pero sabiendo a qué carril fue cada una.
+  const [cameraLooks, setCameraLooks] = useState<CameraLook[]>([]);
 
   useEffect(() => {
     setCameraSnaps(match.camera_snaps ?? []);
     getCameraSnapSummary(match.id).then(setSnapSummary).catch(() => setSnapSummary(null));
+    getCameraLooks(match.id).then(setCameraLooks).catch(() => setCameraLooks([]));
   }, [match.id, match.camera_snaps]);
 
   useEffect(() => {
@@ -1088,9 +1091,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </svg>
             )}
 
-            {/* Saltos de cámara: tira de marcas finas al pie de la curva de APM.
-                Los huecos anchos son exactamente los minutos en que no miraste a nadie. */}
-            {duration > 0 && cameraSnaps.length > 0 && (
+            {/* Miradas al mapa, al pie de la curva de APM. Los huecos anchos son
+                exactamente los minutos en que no miraste.
+
+                Tres carriles en vez de uno: con 250 miradas por partida una sola
+                fila era un peine ilegible, y partirla por carril baja la densidad
+                Y dice de qué lado tienes el punto ciego — el hueco se ve en su
+                fila. De arriba abajo, top / mid / bot, como en el mapa. Las
+                miradas que no caen en ningún carril (jungla profunda, base, o las
+                teclas de cámara, que no saben adónde) no se pintan aquí. */}
+            {duration > 0 && cameraLooks.some((l) => l.lane) ? (
+              <div style={styles.snapStrip}>
+                {(["top", "mid", "bot"] as const).map((carril, fila) => (
+                  <div key={carril} style={{ ...styles.snapLane, top: `${fila * 4}px` }}>
+                    {cameraLooks
+                      .filter((l) => l.lane === carril)
+                      .map((l, i) => (
+                        <div
+                          key={i}
+                          style={{ ...styles.snapTick, left: `${(l.t / duration) * 100}%` }}
+                          title={`${carril} · ${clock(l.t)}`}
+                        />
+                      ))}
+                  </div>
+                ))}
+              </div>
+            ) : duration > 0 && cameraSnaps.length > 0 ? (
               <div style={styles.snapStrip}>
                 {cameraSnaps.map((t, i) => (
                   <div
@@ -1099,7 +1125,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   />
                 ))}
               </div>
-            )}
+            ) : null}
 
             {/* Guías: solo las dibuja el marcador que ha tenido que apartarse,
                 y van de su instante real al pie del propio marcador. */}
@@ -1919,6 +1945,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       >
                         <span className="u-metric">{clock(w.start)}</span>
                         <span className="insp__pressWhat">
+                          {w.lane && <>{t(w.lane === "top" ? "Top" : w.lane === "mid" ? "Mid" : "Bot")} · </>}
                           {w.max_enemies.toFixed(1)} {t("enemies on you")} ·{" "}
                           {/* El "~" marca que la duracion es una cota inferior:
                               sin video, entre minutos la API no dice nada. */}

@@ -248,6 +248,8 @@ pub fn run() {
             camera_snaps::list_recall_frames,
             camera_snaps::get_camera_snap_summary,
             camera_snaps::get_camera_zones,
+            camera_snaps::get_camera_looks,
+            camera_snaps::get_blind_spot,
             overlay::preview_metronome_overlay,
             app_update::get_pending_update,
             app_update::install_pending_update,

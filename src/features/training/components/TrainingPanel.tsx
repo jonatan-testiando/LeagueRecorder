@@ -5,6 +5,7 @@ import { ReflexDrill } from "./ReflexDrill";
 import { RecallDrill } from "./RecallDrill";
 import { AwarenessQuiz } from "./AwarenessQuiz";
 import { TrainingSetup } from "./TrainingSetup";
+import { useT } from "../../../core/LanguageProvider";
 
 type Section = "drills" | "awareness" | "setup";
 
@@ -16,6 +17,7 @@ const SECTIONS: { key: Section; label: string; icon: React.ReactNode }[] = [
 
 /** Curva de latencia media de las últimas sesiones: la única prueba de que mejoras. */
 const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => {
+  const t = useT();
   const data = sessions
     .filter((s) => s.kind === "reflex" && s.avg_latency_ms > 0)
     .slice(0, 20)
@@ -40,7 +42,7 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
     <div style={styles.progressCard}>
       <div style={styles.progressHead}>
         <TrendingUp size={15} color="var(--faint)" />
-        <span style={styles.progressTitle}>Avg latency, last {data.length} sessions</span>
+        <span style={styles.progressTitle}>{t("Avg latency, last {n} sessions", { n: data.length })}</span>
       </div>
       {/* La etiqueta de la referencia va en HTML y no dentro del SVG: el gráfico
           usa preserveAspectRatio="none" para estirarse a lo ancho, y eso deforma
@@ -86,7 +88,9 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
           }}
         >
           {delta <= 0 ? "" : "+"}
-          {delta.toFixed(0)} ms {delta <= 0 ? "faster" : "slower"} than your first
+          {t(delta <= 0 ? "{ms} ms faster than your first" : "{ms} ms slower than your first", {
+            ms: delta.toFixed(0),
+          })}
         </span>
       </div>
     </div>
@@ -97,6 +101,7 @@ export const TrainingPanel: React.FC = () => {
   const [section, setSection] = useState<Section>("drills");
   const [config, setConfig] = useState<TrainingConfig | null>(null);
   const [sessions, setSessions] = useState<DrillSession[]>([]);
+  const t = useT();
 
   const loadSessions = useCallback(() => {
     getDrillSessions(30).then(setSessions).catch(() => setSessions([]));
@@ -108,7 +113,7 @@ export const TrainingPanel: React.FC = () => {
   }, [loadSessions]);
 
   if (!config) {
-    return <div style={styles.wrapper}>Loading…</div>;
+    return <div style={styles.wrapper}>{t("Loading…")}</div>;
   }
 
   const noBindings = config.bindings.length === 0;
@@ -117,10 +122,9 @@ export const TrainingPanel: React.FC = () => {
     <div style={styles.wrapper}>
       <div style={styles.header}>
         <div>
-          <h2 style={styles.pageTitle}>Training</h2>
+          <h2 style={styles.pageTitle}>{t("Training")}</h2>
           <p style={styles.pageSub}>
-            Camera keys are not a speed problem. They are a habit, a 400&nbsp;ms read, and a
-            question you are trying to answer.
+            {t("Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.")}
           </p>
         </div>
       </div>
@@ -135,7 +139,7 @@ export const TrainingPanel: React.FC = () => {
             onClick={() => setSection(s.key)}
           >
             {s.icon}
-            {s.label}
+            {t(s.label)}
           </button>
         ))}
       </div>
@@ -150,12 +154,12 @@ export const TrainingPanel: React.FC = () => {
             <div className="empty-state__icon">
               <Keyboard size={30} color="var(--text-muted)" />
             </div>
-            <p className="empty-state__title">No camera keys configured</p>
+            <p className="empty-state__title">{t("No camera keys configured")}</p>
             <p className="empty-state__text">
-              Set which key you press for each ally in Setup, then come back.
+              {t("Set which key you press for each ally in Setup, then come back.")}
             </p>
             <button className="btn-primary" style={styles.tab} onClick={() => setSection("setup")}>
-              Go to Setup
+              {t("Go to Setup")}
             </button>
           </div>
         ) : (

@@ -96,7 +96,8 @@ export const App: React.FC = () => {
     selectedMatch,
     setSelectedMatch,
     isRecording,
-    deleteMatch
+    deleteMatch,
+    deleteMatches
   } = useGallery();
 
   const goTo = (path: string) => {
@@ -314,6 +315,7 @@ export const App: React.FC = () => {
                 matches={matches}
                 onSelectMatch={setSelectedMatch}
                 onDeleteMatch={deleteMatch}
+                onDeleteMatches={deleteMatches}
                 isRecording={isRecording}
               />
             </div>

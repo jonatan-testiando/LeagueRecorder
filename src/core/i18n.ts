@@ -100,6 +100,24 @@ const ES: Record<string, string> = {
   "reviewed": "revisadas",
   "to review": "por revisar",
 
+  // filtro por rol (biblioteca y patrones)
+  "Jungle": "Jungla",
+  "ADC": "ADC",
+  "Support": "Soporte",
+
+  // selección por lotes
+  "Select": "Seleccionar",
+  "Select several games to delete them at once": "Selecciona varias partidas para eliminarlas de una vez",
+  "{n} games selected": "{n} partidas seleccionadas",
+  "{n} game selected": "{n} partida seleccionada",
+  "Delete selected": "Eliminar seleccionadas",
+  "Delete selected games": "Eliminar partidas seleccionadas",
+  "This permanently deletes {n} recordings with their videos and events. Favourited clips are rescued to the clips folder.":
+    "Se eliminarán permanentemente {n} grabaciones con sus vídeos y eventos. Los clips favoritos se rescatan a la carpeta de recortes.",
+  "Could not delete {n} of the selected games.": "No se pudieron borrar {n} de las partidas seleccionadas.",
+  "Delete": "Eliminar",
+  "Delete reviewed games older than 30 days": "Eliminar revisadas con más de 30 días",
+
   // colas de Riot
   "Ranked Solo/Duo": "Clasificatoria Solo/Dúo",
   "Ranked Flex": "Clasificatoria Flexible",
@@ -186,6 +204,25 @@ const ES: Record<string, string> = {
     "Cuando haya unas cuantas grabadas, esta pantalla empieza a enseñar qué tienen en común.",
   "You haven't categorised any errors yet. The chart on the left comes from the recorded data; this one would come from your own reading of it.":
     "Todavía no has categorizado ningún error. El gráfico de la izquierda sale de los datos grabados; este saldría de tu lectura de ellos.",
+
+  // mapa de muertes interactivo
+  "Early (<14m)": "Early (<14m)",
+  "Mid (14–25m)": "Mid (14–25m)",
+  "Late (>25m)": "Late (>25m)",
+  "Click a death to open that game at that exact moment.":
+    "Haz clic en una muerte para abrir esa partida en ese momento exacto.",
+  "Open this death in the player": "Abrir esta muerte en el reproductor",
+
+  // estado de la predicción de rango
+  "The rank forecast needs your Riot API key.":
+    "La predicción de rango necesita tu clave de la API de Riot.",
+  "Your Riot API key is invalid or has expired.":
+    "Tu clave de la API de Riot no es válida o ha caducado.",
+  "Go to Settings to set up the Riot API key": "Ir a Ajustes para configurar la Riot API Key",
+  "Riot is rate limiting requests right now; the forecast retries on the next visit.":
+    "Riot está limitando las peticiones ahora mismo; la predicción se reintenta en la próxima visita.",
+  "At least 8 ranked games are needed to compute the projection ({n} so far).":
+    "Se necesitan al menos 8 partidas ranked para calcular la proyección (por ahora {n}).",
 
   // ---------------------------------------------------------------- revisión
   "Review": "Revisión",
@@ -489,6 +526,119 @@ const ES: Record<string, string> = {
   "Language": "Idioma",
   "Interface language. Saved with your settings.":
     "Idioma de la interfaz. Se guarda con tus ajustes.",
+
+  // ---------------------------------------------------------------- entrenamiento
+  "Loading…": "Cargando…",
+  "Drills": "Ejercicios",
+  "Awareness": "Lectura de mapa",
+  "Setup": "Configuración",
+  "Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.":
+    "Las teclas de cámara no son un problema de velocidad. Son un hábito, una lectura de 400 ms y una pregunta que intentas responder.",
+  "Avg latency, last {n} sessions": "Latencia media, últimas {n} sesiones",
+  "{ms} ms faster than your first": "{ms} ms más rápido que tu primera",
+  "{ms} ms slower than your first": "{ms} ms más lento que tu primera",
+  "No camera keys configured": "No hay teclas de cámara configuradas",
+  "Set which key you press for each ally in Setup, then come back.":
+    "Configura en Configuración qué tecla pulsas para cada aliado y vuelve.",
+  "Go to Setup": "Ir a Configuración",
+
+  // drill de mapeo
+  "Key mapping drill": "Ejercicio de mapeo de teclas",
+  "A role appears — press its camera key. Target: under 400 ms with 95% accuracy, without looking at the keyboard.":
+    "Aparece un rol — pulsa su tecla de cámara. Objetivo: menos de 400 ms con un 95% de acierto, sin mirar el teclado.",
+  "Rounds": "Rondas",
+  "Prompt": "Estímulo",
+  "Role": "Rol",
+  "Champion": "Campeón",
+  "Load": "Carga",
+  "Mouse tracking": "Seguimiento con el ratón",
+  "Uses champions seen in your recorded games": "Usa campeones vistos en tus partidas grabadas",
+  "Play a recorded game first to build your champion pool":
+    "Graba antes una partida para construir tu pool de campeones",
+  "Adds a mouse-tracking task on top — this is where most people break":
+    "Añade encima una tarea de seguimiento con el ratón — aquí es donde se rompe la mayoría",
+  "Start": "Empezar",
+  "GO": "YA",
+  "Hands on the keys.": "Manos en las teclas.",
+  "Session complete": "Sesión completada",
+  "Accuracy": "Acierto",
+  "Avg latency": "Latencia media",
+  "Best": "Mejor",
+  "Tracking": "Seguimiento",
+  "Again": "Otra vez",
+  "{pressed} — it was {expected}": "{pressed} — era {expected}",
+  "Too slow": "Demasiado lento",
+  "correct": "aciertos",
+  "{ms} ms avg": "{ms} ms de media",
+  "Keep the cursor on the dot": "Mantén el cursor sobre el punto",
+
+  // drill de lectura rápida
+  "Loading frames…": "Cargando fotogramas…",
+  "Fast-read drill": "Ejercicio de lectura rápida",
+  "No frames yet": "Aún no hay fotogramas",
+  "Open a recorded game in Review and hit \"Camera moves\" on the timeline. Every camera reposition it finds becomes a frame for this drill.":
+    "Abre una partida grabada en la Biblioteca y pulsa «Movimientos de cámara» en la línea de tiempo. Cada reposición de cámara que encuentre se convierte en un fotograma para este ejercicio.",
+  "A frame from your own games flashes for {ms} ms, then one question. Commit to an answer before revealing — you grade yourself honestly or this measures nothing. Change the flash duration in Setup.":
+    "Un fotograma de tus propias partidas aparece {ms} ms y desaparece; luego, una pregunta. Comprométete con una respuesta antes de revelar — te corriges con honestidad o esto no mide nada. La duración del destello se cambia en Configuración.",
+  "{n} frames available": "{n} fotogramas disponibles",
+  "Flash": "Destello",
+  "Solid. Drop the flash duration in Setup and make it harder.":
+    "Sólido. Baja la duración del destello en Configuración y ponlo más difícil.",
+  "Keep this flash duration until you are consistently above 80%.":
+    "Mantén esta duración hasta estar por encima del 80% con consistencia.",
+  "What did you see?": "¿Qué has visto?",
+  "You said": "Dijiste",
+  "— were you right?": "— ¿acertaste?",
+  "Yes": "Sí",
+
+  // preguntas del drill de lectura
+  "How much HP did the ally have?": "¿Cuánta vida tenía el aliado?",
+  "How many enemies were visible on the minimap?": "¿Cuántos enemigos se veían en el minimapa?",
+  "What was the ally doing?": "¿Qué estaba haciendo el aliado?",
+  "Pushing": "Empujando",
+  "Holding": "Aguantando",
+  "Backing off": "Retrocediendo",
+  "Fighting": "Peleando",
+  "Which side of the map was the camera on?": "¿En qué zona del mapa estaba la cámara?",
+  "Base": "Base",
+  "Was the wave pushing toward the ally or away?": "¿La oleada empujaba hacia el aliado o se alejaba?",
+  "Toward": "Hacia él",
+  "Away": "Se alejaba",
+  "Even": "Igualada",
+  "No wave": "Sin oleada",
+  "Were there any allies nearby?": "¿Había aliados cerca?",
+  "None": "Ninguno",
+  "One": "Uno",
+  "Two or more": "Dos o más",
+  "Whole team": "Todo el equipo",
+
+  // configuración del entrenamiento
+  "Camera keys": "Teclas de cámara",
+  "The key you actually press in game for each ally, in TAB order. Everything else — drills, metronome, post-game stats — reads from this.":
+    "La tecla que pulsas de verdad en partida para cada aliado, en orden de TAB. Todo lo demás — ejercicios, metrónomo, estadísticas post-partida — lee de aquí.",
+  "press…": "pulsa…",
+  "Remove": "Quitar",
+  "Add key": "Añadir tecla",
+  "Recentre key": "Tecla de recentrar",
+  "Snapping back to yourself has to be part of the same gesture.":
+    "Volver a ti tiene que ser parte del mismo gesto.",
+  "In-game metronome": "Metrónomo en partida",
+  "A transparent overlay asks you to check an ally every N seconds.":
+    "Un overlay transparente te pide mirar a un aliado cada N segundos.",
+  "On": "Activado",
+  "Off": "Apagado",
+  "sec": "seg",
+  "Test": "Probar",
+  "Show the overlay for a few seconds. Run it with the game open to confirm it draws on top — it will not over exclusive fullscreen, only borderless.":
+    "Muestra el overlay unos segundos. Pruébalo con el juego abierto para confirmar que se dibuja encima — no lo hace sobre pantalla completa exclusiva, solo sin bordes.",
+  "Post-game quiz": "Quiz post-partida",
+  "Samples the live game state every N seconds so the quiz can be auto-graded.":
+    "Muestrea el estado de la partida cada N segundos para poder corregir el quiz automáticamente.",
+  "Flash duration": "Duración del destello",
+  "How long the recall drill shows each frame. Lower is harder.":
+    "Cuánto tiempo muestra cada fotograma el ejercicio de lectura. Menos es más difícil.",
+  "Key \"{k}\" is assigned to more than one role.": "La tecla «{k}» está asignada a más de un rol.",
+  "Saved": "Guardado",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

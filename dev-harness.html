@@ -24,7 +24,11 @@
     for (let i = 0; i < 14; i++) {
       const t = Math.round((i + 1) * (dur / 16));
       const kind = i % 3 === 0 ? "death" : i % 3 === 1 ? "kill" : "assist";
-      ev.push({ type: "ChampionKill", subtype: kind, time: t, description: kind });
+      const e = { type: "ChampionKill", subtype: kind, time: t, description: kind };
+      // Las muertes llevan asesino, como en las partidas nuevas: es lo que
+      // enseña el tooltip del mapa de Patrones.
+      if (kind === "death") e.actor = ["Kaisa", "Viego", "Ahri"][i % 3 === 0 ? (i / 3) % 3 : 0];
+      ev.push(e);
     }
     ev.push({ type: "DragonKill", subtype: "ally", time: Math.round(dur * 0.4), description: "dragon" });
     ev.push({ type: "TowerKill", subtype: "enemy", time: Math.round(dur * 0.6), description: "tower" });
@@ -76,6 +80,7 @@
     damage: 14000 + i * 1600,
     vision_score: 18 + i,
     wards_placed: 6 + (i % 9),
+    role: ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"][i % 5],
   }));
   matches[0].objectives = [
     { team_id: 100, win: true, dragons: 3, barons: 1, towers: 8, heralds: 1, inhibitors: 1 },
@@ -188,6 +193,17 @@
     m.rank_tier = "EMERALD";
     m.rank_division = "II";
     m.rank_lp = [64, 41, 58, 75, 52, 33, 47, 62, 40, 55, 30, 44, 60, 38][mi] ?? 50;
+    // El puesto en que se jugó, como lo estampa la sincronización. A las
+    // partidas sin scoreboard completo les basta su propia entrada is_self:
+    // es lo único que mira el filtro de rol.
+    if (!m.participants) {
+      m.participants = [{
+        champion: m.champion, name: "Zeru", team_id: 100, win: m.result === "Victory",
+        level: 16, kills: 5, deaths: 4, assists: 7, cs: 180, gold: 11000,
+        is_self: true, items: [], spells: [], tag: "LAN",
+        role: ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"][mi % 5],
+      }];
+    }
     if (mi % 2) return;
     for (var k = 0; k < 6; k++) {
       m.timeline_markers = m.timeline_markers || [];

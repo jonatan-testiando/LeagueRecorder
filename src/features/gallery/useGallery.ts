@@ -3,6 +3,7 @@ import { MatchMetadata } from "../../types";
 import { useDialog } from "../../components/ui/DialogProvider";
 import { getRecordedMatches, deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
 import { useAppStore } from "../../store/useAppStore";
+import { useT } from "../../core/LanguageProvider";
 
 export const useGallery = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
@@ -13,6 +14,7 @@ export const useGallery = () => {
   const [error, setError] = useState<string | null>(null);
 
   const { showConfirm, showError } = useDialog();
+  const t = useT();
 
   const fetchMatches = useCallback(async () => {
     try {
@@ -65,6 +67,43 @@ export const useGallery = () => {
     }
   }, [showConfirm, showError]);
 
+  /**
+   * Borrado por lotes. Devuelve true solo si el usuario confirmó y se intentó
+   * borrar (para que la galería sepa si limpiar la selección).
+   *
+   * En SERIE a propósito: cada borrado muda clips a `recortes/` y elimina la
+   * carpeta, y dos borrados en paralelo pueden pisarse — el mismo solape que ya
+   * hubo que arreglar en el borrado individual.
+   */
+  const handleDeleteBatch = useCallback(async (ids: string[]): Promise<boolean> => {
+    if (ids.length === 0) return false;
+    const isConfirmed = await showConfirm({
+      title: t("Delete selected games"),
+      message: t(
+        "This permanently deletes {n} recordings with their videos and events. Favourited clips are rescued to the clips folder.",
+        { n: ids.length }
+      ),
+      confirmText: t("Delete"),
+      cancelText: t("Cancel"),
+      type: "error",
+    });
+    if (!isConfirmed) return false;
+
+    let fallos = 0;
+    for (const id of ids) {
+      try {
+        await deleteMatchIpc(id);
+      } catch {
+        fallos++;
+      }
+    }
+    await fetchMatches();
+    if (fallos > 0) {
+      showError(t("Could not delete {n} of the selected games.", { n: fallos }));
+    }
+    return true;
+  }, [showConfirm, showError, fetchMatches, t]);
+
   useEffect(() => {
     fetchMatches();
     checkStatus();
@@ -106,6 +145,7 @@ export const useGallery = () => {
     isLoading,
     error,
     refreshMatches: fetchMatches,
-    deleteMatch: handleDelete
+    deleteMatch: handleDelete,
+    deleteMatches: handleDeleteBatch
   };
 };

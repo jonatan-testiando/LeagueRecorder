@@ -10,6 +10,7 @@ import {
   saveDrillSession,
 } from "../api";
 import { useChampionIcon } from "../../../core/ddragon";
+import { useT } from "../../../core/LanguageProvider";
 
 /** Cuánto esperamos una respuesta antes de contar la ronda como fallada. */
 const TIMEOUT_MS = 3000;
@@ -71,6 +72,7 @@ export const ReflexDrill: React.FC<{
   const [feedback, setFeedback] = useState<Round | null>(null);
   const [pool, setPool] = useState<RoleChampion[]>([]);
   const [tracking, setTracking] = useState(0);
+  const t = useT();
 
   // Refs para no cerrar sobre estado obsoleto dentro de los listeners y timers.
   const promptRef = useRef<Prompt | null>(null);
@@ -257,15 +259,14 @@ export const ReflexDrill: React.FC<{
       <div style={styles.panel}>
         <div style={styles.headerRow}>
           <Zap size={18} color="var(--accent-violet)" />
-          <h3 style={styles.title}>Key mapping drill</h3>
+          <h3 style={styles.title}>{t("Key mapping drill")}</h3>
         </div>
         <p style={styles.desc}>
-          A role appears — press its camera key. Target: under 400&nbsp;ms with 95% accuracy,
-          without looking at the keyboard.
+          {t("A role appears — press its camera key. Target: under 400 ms with 95% accuracy, without looking at the keyboard.")}
         </p>
 
         <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>Rounds</span>
+          <span style={styles.optionLabel}>{t("Rounds")}</span>
           {[20, 30, 50].map((n) => (
             <button
               key={n}
@@ -279,43 +280,43 @@ export const ReflexDrill: React.FC<{
         </div>
 
         <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>Prompt</span>
+          <span style={styles.optionLabel}>{t("Prompt")}</span>
           <button
             className="btn btn--ghost btn--sm" aria-pressed={mode === "role"}
             style={styles.chip}
             onClick={() => setMode("role")}
           >
-            Role
+            {t("Role")}
           </button>
           <button
             className="btn btn--ghost btn--sm" aria-pressed={mode === "champion"}
             style={{ ...styles.chip, opacity: champModeAvailable ? 1 : 0.4 }}
             onClick={() => champModeAvailable && setMode("champion")}
             disabled={!champModeAvailable}
-            title={
+            title={t(
               champModeAvailable
                 ? "Uses champions seen in your recorded games"
                 : "Play a recorded game first to build your champion pool"
-            }
+            )}
           >
-            Champion
+            {t("Champion")}
           </button>
         </div>
 
         <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>Load</span>
+          <span style={styles.optionLabel}>{t("Load")}</span>
           <button
             className="btn btn--ghost btn--sm" aria-pressed={withLoad}
             style={styles.chip}
             onClick={() => setWithLoad((v) => !v)}
-            title="Adds a mouse-tracking task on top — this is where most people break"
+            title={t("Adds a mouse-tracking task on top — this is where most people break")}
           >
-            <Target size={14} /> Mouse tracking
+            <Target size={14} /> {t("Mouse tracking")}
           </button>
         </div>
 
         <button className="btn-primary" style={styles.bigBtn} onClick={start}>
-          <Play size={18} /> Start
+          <Play size={18} /> {t("Start")}
         </button>
       </div>
     );
@@ -324,8 +325,8 @@ export const ReflexDrill: React.FC<{
   if (phase === "countdown") {
     return (
       <div style={styles.panel}>
-        <div style={styles.countdown}>{countdown === 0 ? "GO" : countdown}</div>
-        <p style={styles.desc}>Hands on the keys.</p>
+        <div style={styles.countdown}>{countdown === 0 ? t("GO") : countdown}</div>
+        <p style={styles.desc}>{t("Hands on the keys.")}</p>
       </div>
     );
   }
@@ -337,16 +338,16 @@ export const ReflexDrill: React.FC<{
       <div style={styles.panel}>
         <div style={styles.headerRow}>
           <Zap size={18} color="var(--accent-violet)" />
-          <h3 style={styles.title}>Session complete</h3>
+          <h3 style={styles.title}>{t("Session complete")}</h3>
         </div>
         <div style={styles.statRow}>
-          <Stat label="Accuracy" value={`${acc.toFixed(0)}%`} good={acc >= 95} />
-          <Stat label="Avg latency" value={`${avg.toFixed(0)} ms`} good={avg > 0 && avg < 400} />
+          <Stat label={t("Accuracy")} value={`${acc.toFixed(0)}%`} good={acc >= 95} />
+          <Stat label={t("Avg latency")} value={`${avg.toFixed(0)} ms`} good={avg > 0 && avg < 400} />
           <Stat
-            label="Best"
+            label={t("Best")}
             value={`${hits ? Math.min(...done.filter((r) => r.ok).map((r) => r.latencyMs)).toFixed(0) : "—"} ms`}
           />
-          {withLoad && <Stat label="Tracking" value={`${tracking.toFixed(0)}%`} />}
+          {withLoad && <Stat label={t("Tracking")} value={`${tracking.toFixed(0)}%`} />}
         </div>
 
         <div style={styles.breakdown}>
@@ -383,10 +384,10 @@ export const ReflexDrill: React.FC<{
 
         <div style={{ display: "flex", gap: "var(--space-3)" }}>
           <button className="btn-primary" style={styles.bigBtn} onClick={start}>
-            <RotateCcw size={18} /> Again
+            <RotateCcw size={18} /> {t("Again")}
           </button>
           <button className="btn-ghost" style={styles.bigBtn} onClick={reset}>
-            Back
+            {t("Back")}
           </button>
         </div>
       </div>
@@ -404,7 +405,7 @@ export const ReflexDrill: React.FC<{
           <div style={{ ...styles.progressFill, width: `${(done.length / rounds) * 100}%` }} />
         </div>
         <button className="btn-ghost" style={styles.chip} onClick={reset}>
-          Stop
+          {t("Stop")}
         </button>
       </div>
 
@@ -425,8 +426,11 @@ export const ReflexDrill: React.FC<{
                 <X size={48} color="var(--color-defeat)" />
                 <span style={{ ...styles.feedbackMs, color: "var(--color-defeat)" }}>
                   {feedback.pressedKey
-                    ? `${feedback.pressedKey} — it was ${feedback.expectedKey}`
-                    : "Too slow"}
+                    ? t("{pressed} — it was {expected}", {
+                        pressed: feedback.pressedKey,
+                        expected: feedback.expectedKey,
+                      })
+                    : t("Too slow")}
                 </span>
               </>
             )}
@@ -442,9 +446,9 @@ export const ReflexDrill: React.FC<{
 
       <div style={styles.liveStats}>
         <span>
-          {hits}/{done.length} correct
+          {hits}/{done.length} {t("correct")}
         </span>
-        <span>{avg ? `${avg.toFixed(0)} ms avg` : "—"}</span>
+        <span>{avg ? t("{ms} ms avg", { ms: avg.toFixed(0) }) : "—"}</span>
       </div>
     </div>
   );
@@ -474,6 +478,7 @@ const Stat: React.FC<{ label: string; value: string; good?: boolean }> = ({
  * la única condición en la que importa.
  */
 const TrackingTask: React.FC<{ onScore: (pct: number) => void }> = ({ onScore }) => {
+  const t = useT();
   const areaRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x: 50, y: 50 });
   const posRef = useRef({ x: 50, y: 50, vx: 0.35, vy: 0.25 });
@@ -528,7 +533,7 @@ const TrackingTask: React.FC<{ onScore: (pct: number) => void }> = ({ onScore })
   return (
     <div ref={areaRef} style={styles.trackArea}>
       <div style={{ ...styles.trackTarget, left: `${pos.x}%`, top: `${pos.y}%` }} />
-      <span style={styles.trackHint}>Keep the cursor on the dot</span>
+      <span style={styles.trackHint}>{t("Keep the cursor on the dot")}</span>
     </div>
   );
 };

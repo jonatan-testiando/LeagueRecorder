@@ -8,6 +8,7 @@ import {
   saveDrillSession,
   streamUrl,
 } from "../api";
+import { useT } from "../../../core/LanguageProvider";
 
 /**
  * Banco de preguntas. Todas se contestan mirando UN fotograma durante ~400 ms,
@@ -56,6 +57,7 @@ export const RecallDrill: React.FC<{
   const [question, setQuestion] = useState(QUESTIONS[0]);
   const [chosen, setChosen] = useState<string | null>(null);
   const [results, setResults] = useState<Round[]>([]);
+  const t = useT();
 
   const resultsRef = useRef<Round[]>([]);
   const answerShownAt = useRef(0);
@@ -174,7 +176,7 @@ export const RecallDrill: React.FC<{
   // -------------------------------------------------------------------------
 
   if (frames === null) {
-    return <div style={styles.panel}>Loading frames…</div>;
+    return <div style={styles.panel}>{t("Loading frames…")}</div>;
   }
 
   if (frames.length === 0) {
@@ -182,16 +184,15 @@ export const RecallDrill: React.FC<{
       <div style={styles.panel}>
         <div style={styles.headerRow}>
           <Eye size={18} color="var(--accent-violet)" />
-          <h3 style={styles.title}>Fast-read drill</h3>
+          <h3 style={styles.title}>{t("Fast-read drill")}</h3>
         </div>
         <div className="empty-state" style={{ padding: "var(--space-6)" }}>
           <div className="empty-state__icon">
             <ImageOff size={28} color="var(--text-muted)" />
           </div>
-          <p className="empty-state__title">No frames yet</p>
+          <p className="empty-state__title">{t("No frames yet")}</p>
           <p className="empty-state__text">
-            Open a recorded game in Review and hit <strong>Camera moves</strong> on the
-            timeline. Every camera reposition it finds becomes a frame for this drill.
+            {t("Open a recorded game in Review and hit \"Camera moves\" on the timeline. Every camera reposition it finds becomes a frame for this drill.")}
           </p>
         </div>
       </div>
@@ -203,15 +204,13 @@ export const RecallDrill: React.FC<{
       <div style={styles.panel}>
         <div style={styles.headerRow}>
           <Eye size={18} color="var(--accent-violet)" />
-          <h3 style={styles.title}>Fast-read drill</h3>
+          <h3 style={styles.title}>{t("Fast-read drill")}</h3>
         </div>
         <p style={styles.desc}>
-          A frame from your own games flashes for {config.flash_ms}&nbsp;ms, then one question.
-          Commit to an answer before revealing — you grade yourself honestly or this measures
-          nothing. Change the flash duration in Setup.
+          {t("A frame from your own games flashes for {ms} ms, then one question. Commit to an answer before revealing — you grade yourself honestly or this measures nothing. Change the flash duration in Setup.", { ms: config.flash_ms })}
         </p>
         <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>Rounds</span>
+          <span style={styles.optionLabel}>{t("Rounds")}</span>
           {[10, 15, 25].map((n) => (
             <button
               key={n}
@@ -222,10 +221,10 @@ export const RecallDrill: React.FC<{
               {n}
             </button>
           ))}
-          <span style={styles.poolNote}>{frames.length} frames available</span>
+          <span style={styles.poolNote}>{t("{n} frames available", { n: frames.length })}</span>
         </div>
         <button className="btn-primary" style={styles.bigBtn} onClick={start}>
-          <Play size={18} /> Start
+          <Play size={18} /> {t("Start")}
         </button>
       </div>
     );
@@ -238,11 +237,11 @@ export const RecallDrill: React.FC<{
       <div style={styles.panel}>
         <div style={styles.headerRow}>
           <Eye size={18} color="var(--accent-violet)" />
-          <h3 style={styles.title}>Session complete</h3>
+          <h3 style={styles.title}>{t("Session complete")}</h3>
         </div>
         <div style={styles.statRow}>
           <div style={styles.stat}>
-            <span style={styles.statLabel}>Accuracy</span>
+            <span style={styles.statLabel}>{t("Accuracy")}</span>
             <span
               style={{
                 ...styles.statValue,
@@ -253,25 +252,27 @@ export const RecallDrill: React.FC<{
             </span>
           </div>
           <div style={styles.stat}>
-            <span style={styles.statLabel}>Rounds</span>
+            <span style={styles.statLabel}>{t("Rounds")}</span>
             <span style={styles.statValue}>{results.length}</span>
           </div>
           <div style={styles.stat}>
-            <span style={styles.statLabel}>Flash</span>
+            <span style={styles.statLabel}>{t("Flash")}</span>
             <span style={styles.statValue}>{config.flash_ms} ms</span>
           </div>
         </div>
         <p style={styles.desc}>
-          {acc >= 80
-            ? "Solid. Drop the flash duration in Setup and make it harder."
-            : "Keep this flash duration until you are consistently above 80%."}
+          {t(
+            acc >= 80
+              ? "Solid. Drop the flash duration in Setup and make it harder."
+              : "Keep this flash duration until you are consistently above 80%."
+          )}
         </p>
         <div style={{ display: "flex", gap: "var(--space-3)" }}>
           <button className="btn-primary" style={styles.bigBtn} onClick={start}>
-            <RotateCcw size={18} /> Again
+            <RotateCcw size={18} /> {t("Again")}
           </button>
           <button className="btn-ghost" style={styles.bigBtn} onClick={reset}>
-            Back
+            {t("Back")}
           </button>
         </div>
       </div>
@@ -292,20 +293,20 @@ export const RecallDrill: React.FC<{
           />
         </div>
         <button className="btn-ghost" style={styles.chip} onClick={reset}>
-          Stop
+          {t("Stop")}
         </button>
       </div>
 
       <div style={styles.stage}>
-        {phase === "loading" && <span style={styles.loadingText}>Loading…</span>}
+        {phase === "loading" && <span style={styles.loadingText}>{t("Loading…")}</span>}
         {phase === "flash" && <img src={src} alt="" style={styles.frameImg} />}
-        {phase === "answer" && <span style={styles.hiddenText}>What did you see?</span>}
+        {phase === "answer" && <span style={styles.hiddenText}>{t("What did you see?")}</span>}
         {phase === "reveal" && <img src={src} alt="" style={styles.frameImg} />}
       </div>
 
       {(phase === "answer" || phase === "reveal") && (
         <>
-          <div style={styles.questionText}>{question.prompt}</div>
+          <div style={styles.questionText}>{t(question.prompt)}</div>
           {phase === "answer" ? (
             <div style={styles.options}>
               {question.options.map((opt) => (
@@ -315,20 +316,22 @@ export const RecallDrill: React.FC<{
                   style={styles.option}
                   onClick={() => choose(opt)}
                 >
-                  {opt}
+                  {t(opt)}
                 </button>
               ))}
             </div>
           ) : (
             <div style={styles.gradeRow}>
               <span style={styles.gradePrompt}>
-                You said <strong style={{ color: "var(--text)" }}>{chosen}</strong> — were you right?
+                {t("You said")}{" "}
+                <strong style={{ color: "var(--text)" }}>{chosen ? t(chosen) : ""}</strong>{" "}
+                {t("— were you right?")}
               </span>
               <button className="btn-ghost" style={styles.gradeBtn} onClick={() => grade(true)}>
-                <Check size={16} color="var(--color-victory)" /> Yes
+                <Check size={16} color="var(--color-victory)" /> {t("Yes")}
               </button>
               <button className="btn-ghost" style={styles.gradeBtn} onClick={() => grade(false)}>
-                <X size={16} color="var(--color-defeat)" /> No
+                <X size={16} color="var(--color-defeat)" /> {t("No")}
               </button>
             </div>
           )}

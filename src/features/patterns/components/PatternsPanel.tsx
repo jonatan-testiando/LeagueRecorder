@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MatchMetadata } from "../../../types";
+import { useNavigate } from "react-router-dom";
+import { MatchEvent, MatchMetadata } from "../../../types";
 import {
   deathClock,
   errorCategories,
   confidenceOf,
   forecastRank,
   ladderLp,
+  filterByRole,
+  ROLE_FILTERS,
+  type RoleFilter,
   type Confidence,
 } from "../../../core/patterns";
 import { rankIcon, rankLabel } from "../../../core/ddragon";
@@ -21,11 +25,13 @@ import {
   type PressureSummary,
   type ZoneHistoryRow,
 } from "../../../core/tauri-ipc";
-import { computeKDA } from "../../../core/matchStats";
+import { computeKDA, outcome } from "../../../core/matchStats";
 import { mmss } from "../../../core/time";
+import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { BarChart3 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
+import { useAppStore } from "../../../store/useAppStore";
 
 /**
  * Patrones: la única pantalla que mira más de una partida a la vez.
@@ -63,14 +69,57 @@ const CATEGORY_COLOR: Record<string, string> = {
   Other: "var(--muted)",
 };
 
+/** Fases de partida para filtrar el mapa de muertes, en minutos de partida. */
+type Phase = "all" | "early" | "mid" | "late";
+const PHASES: { key: Phase; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "early", label: "Early (<14m)" },
+  { key: "mid", label: "Mid (14–25m)" },
+  { key: "late", label: "Late (>25m)" },
+];
+const inPhase = (gameMin: number, fase: Phase): boolean => {
+  if (fase === "all") return true;
+  if (fase === "early") return gameMin < 14;
+  if (fase === "mid") return gameMin >= 14 && gameMin <= 25;
+  return gameMin > 25;
+};
+
+/** Una muerte tuya con sitio en el mapa, ya atada a su partida. */
+interface DeathPoint {
+  matchId: string;
+  /** Segundo del VÍDEO (para saltar al reproductor). */
+  time: number;
+  /** Segundo de PARTIDA (para el tooltip y la fase). */
+  gameSec: number;
+  x: number;
+  y: number;
+  result: ReturnType<typeof outcome>;
+  killer: string | null;
+}
+
+/** El asesino de un evento de muerte: el campo estructurado si existe, o la
+ *  frase legada ("Killed by X" / "Te mató X") si no. */
+const killerOf = (ev: MatchEvent): string | null => {
+  if (ev.actor) return ev.actor;
+  const m = /^(?:Killed by|Te mató)\s+(.+)$/.exec(ev.description ?? "");
+  return m ? m[1] : null;
+};
+
 export const PatternsPanel: React.FC = () => {
   const [matches, setMatches] = useState<MatchMetadata[]>([]);
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
   const [zonas, setZonas] = useState<ZoneHistoryRow[]>([]);
   const [presion, setPresion] = useState<PressureSummary | null>(null);
   const [forma, setForma] = useState<SeasonForm | null>(null);
+  const [formaError, setFormaError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [rol, setRol] = useState<RoleFilter>("all");
+  const [fase, setFase] = useState<Phase>("all");
+  const [hover, setHover] = useState<{ d: DeathPoint; left: number; top: number } | null>(null);
   const t = useT();
+  const navigate = useNavigate();
+  const setSelectedMatch = useAppStore((s) => s.setSelectedMatch);
+  const setPendingSeek = useAppStore((s) => s.setPendingSeek);
 
   useEffect(() => {
     let alive = true;
@@ -93,41 +142,82 @@ export const PatternsPanel: React.FC = () => {
     // API la primera vez) y la página no tiene por qué esperarla.
     getSeasonForm()
       .then((f) => alive && setForma(f))
-      .catch(() => {});
+      // El motivo llega con un código estable delante ("no_key: …"): la
+      // tarjeta de la predicción lo usa para decir qué falta, no solo callar.
+      .catch((e) => alive && setFormaError(typeof e === "string" ? e : String(e)));
     return () => { alive = false; };
   }, []);
 
   // Los VODs importados no son partidas tuyas: mezclarlos falsearía el reloj.
   const own = useMemo(() => matches.filter((m) => !m.is_vod), [matches]);
-  const clock = useMemo(() => deathClock(own), [own]);
+  // El filtro de rol se aplica ANTES de agregar: mezclar el reloj de muertes de
+  // support con el de jungla es exactamente el ruido que esta pantalla evita.
+  const propias = useMemo(() => filterByRole(own, rol), [own, rol]);
+  const clock = useMemo(() => deathClock(propias), [propias]);
   const cats = useMemo(() => errorCategories(clips), [clips]);
-  const conf = confidenceOf(own.length);
+  const conf = confidenceOf(propias.length);
   const maxBucket = useMemo(
     () => clock.buckets.reduce((a, b) => Math.max(a, b.total), 0),
     [clock]
   );
   const maxCat = useMemo(() => cats.reduce((a, c) => Math.max(a, c.count), 0), [cats]);
 
-  // Todas tus muertes con sitio, de todas las partidas. La marca de muerte de
-  // la timeline de Riot ya es sólo tuya y lleva coordenadas de mapa.
-  const muertes = useMemo(
-    () =>
-      own.flatMap((m) =>
-        (m.timeline_markers ?? []).filter(
-          (tm) => tm.event_type === "death" && tm.position_x != null && tm.position_y != null
-        )
-      ),
-    [own]
+  // Todas tus muertes con sitio, de las partidas del filtro. La marca de muerte
+  // de la timeline de Riot ya es sólo tuya y lleva coordenadas de mapa; el
+  // asesino se recupera emparejándola con tu evento de muerte más cercano.
+  const muertes = useMemo<DeathPoint[]>(() => {
+    const out: DeathPoint[] = [];
+    for (const m of propias) {
+      const offset = m.video_offset ?? 0;
+      const res = outcome(m.result);
+      const eventosMuerte = m.events
+        .filter((ev) => ev.type === "ChampionKill" && ev.subtype === "death")
+        .map((ev) => ({ time: ev.time, killer: killerOf(ev) }));
+      for (const tm of m.timeline_markers ?? []) {
+        if (tm.event_type !== "death" || tm.position_x == null || tm.position_y == null) continue;
+        // El marcador y el evento en directo son la misma muerte con relojes
+        // distintos; a más de 15 s ya no es ella y mejor no inventar asesino.
+        let killer: string | null = null;
+        let mejor = 15;
+        for (const ev of eventosMuerte) {
+          const d = Math.abs(ev.time - tm.time);
+          if (d < mejor && ev.killer) { mejor = d; killer = ev.killer; }
+        }
+        out.push({
+          matchId: m.id,
+          time: tm.time,
+          gameSec: Math.max(0, tm.time - offset),
+          x: tm.position_x,
+          y: tm.position_y,
+          result: res,
+          killer,
+        });
+      }
+    }
+    return out;
+  }, [propias]);
+
+  const muertesFase = useMemo(
+    () => muertes.filter((d) => inPhase(d.gameSec / 60, fase)),
+    [muertes, fase]
   );
+
+  const abrirMuerte = (d: DeathPoint) => {
+    const m = matches.find((x) => x.id === d.matchId);
+    if (!m) return;
+    setSelectedMatch(m);
+    setPendingSeek(d.time);
+    navigate("/review");
+  };
 
   // Tu puesto, de la más antigua a la más nueva (para leerse como una línea).
   const puestos = useMemo(
     () =>
-      own
+      propias
         .filter((m) => m.impact_rank != null)
         .sort((a, b) => a.date.localeCompare(b.date))
         .slice(-15),
-    [own]
+    [propias]
   );
 
   // Cruce miradas ↔ muertes: se parten tus partidas por la mediana de
@@ -135,7 +225,7 @@ export const PatternsPanel: React.FC = () => {
   // causalidad y la pantalla no la promete: es la comparación honesta que se
   // puede hacer con quince partidas.
   const cruceMiradas = useMemo(() => {
-    const filas = own
+    const filas = propias
       .filter((m) => (m.camera_snaps?.length ?? 0) > 0 && m.game_duration > 60)
       .map((m) => ({
         ritmo: (m.camera_snaps!.length / m.game_duration) * 60,
@@ -149,7 +239,7 @@ export const PatternsPanel: React.FC = () => {
     const muchaVista = media(orden.slice(orden.length - mitad));
     if (muchaVista === 0) return null;
     return { pct: Math.round(((pocaVista - muchaVista) / muchaVista) * 100), n: filas.length };
-  }, [own]);
+  }, [propias]);
 
   // Cruce oro@15 ↔ resultado.
   // La predicción, con la forma de la CUENTA (grabadas o no).
@@ -163,16 +253,16 @@ export const PatternsPanel: React.FC = () => {
 
   // La escalada: LP absoluto en la escalera, partida grabada a partida.
   const escalada = useMemo(() => {
-    return own
+    return propias
       .filter((m) => m.rank_lp != null && m.rank_tier)
       .sort((a, b) => (a.date < b.date ? -1 : 1))
       .map((m) => ladderLp(m.rank_tier as string, m.rank_division, m.rank_lp as number));
-  }, [own]);
+  }, [propias]);
 
   // Tu pool: con quién juegas y con quién GANAS, del histórico grabado.
   const pool = useMemo(() => {
     const por = new Map<string, { games: number; wins: number; k: number; d: number; a: number }>();
-    for (const m of own) {
+    for (const m of propias) {
       const e = por.get(m.champion) ?? { games: 0, wins: 0, k: 0, d: 0, a: 0 };
       e.games += 1;
       if (m.result === "Victory") e.wins += 1;
@@ -186,12 +276,12 @@ export const PatternsPanel: React.FC = () => {
       .map(([champion, e]) => ({ champion, ...e, wr: e.wins / e.games }))
       .sort((a, b) => b.games - a.games)
       .slice(0, 6);
-  }, [own]);
+  }, [propias]);
 
   // Tus rivales de carril: el espejo de índice, agregado.
   const rivales = useMemo(() => {
     const por = new Map<string, { games: number; losses: number }>();
-    for (const m of own) {
+    for (const m of propias) {
       const ps = m.participants;
       if (!ps || ps.length !== 10) continue;
       const idx = ps.findIndex((p) => p.is_self);
@@ -207,17 +297,17 @@ export const PatternsPanel: React.FC = () => {
       .filter((r) => r.games >= 1)
       .sort((a, b) => b.losses - a.losses || b.games - a.games)
       .slice(0, 6);
-  }, [own]);
+  }, [propias]);
 
   const cruceOro = useMemo(() => {
-    const con = own.filter((m) => m.gold_diff_15 != null);
+    const con = propias.filter((m) => m.gold_diff_15 != null);
     const g = (xs: MatchMetadata[]) =>
       xs.length ? xs.reduce((a, m) => a + (m.gold_diff_15 ?? 0), 0) / xs.length : null;
     const vic = g(con.filter((m) => m.result === "Victory"));
     const der = g(con.filter((m) => m.result !== "Victory"));
     if (vic === null || der === null || con.length < 6) return null;
     return { vic: Math.round(vic), der: Math.round(der), n: con.length };
-  }, [own]);
+  }, [propias]);
 
   if (loading) {
     return (
@@ -227,7 +317,10 @@ export const PatternsPanel: React.FC = () => {
     );
   }
 
-  if (clock.total === 0) {
+  // El estado vacío global solo cuando de verdad no hay nada que agregar. Con
+  // un rol filtrado a cero, la página sigue en pie (y el filtro, a la vista)
+  // para poder volver a "Todos".
+  if (rol === "all" && clock.total === 0) {
     return (
       <div style={styles.container} className="panel-enter">
         <div style={styles.header}>
@@ -243,6 +336,7 @@ export const PatternsPanel: React.FC = () => {
   }
 
   const c = CONFIDENCE_COPY[conf];
+  const codigoForma = formaError ? formaError.split(":")[0].trim() : null;
 
   return (
     <div style={styles.container} className="panel-enter">
@@ -250,12 +344,28 @@ export const PatternsPanel: React.FC = () => {
         <div>
           <h1 style={styles.title}>{t("Patterns")}</h1>
           <div className="u-meta" style={{ marginTop: 4 }}>
-            {own.length} {t("games")} · {clock.total} {t("deaths")} · {clock.wins}W {clock.losses}L
+            {propias.length} {t("games")} · {clock.total} {t("deaths")} · {clock.wins}W {clock.losses}L
           </div>
         </div>
         <span style={{ ...styles.confidence, color: c.color, borderColor: c.color }}>
           {t(c.label)}
         </span>
+      </div>
+
+      {/* Filtro de rol: cada agregado de abajo se recalcula solo con las
+          partidas jugadas en ese puesto. */}
+      <div style={styles.roleRow}>
+        {ROLE_FILTERS.map((r) => (
+          <Button
+            key={r.key}
+            variant="ghost"
+            size="sm"
+            aria-pressed={rol === r.key}
+            onClick={() => setRol(r.key)}
+          >
+            {t(r.label)}
+          </Button>
+        ))}
       </div>
 
       {/* ------------------------------------------------- dónde mueres */}
@@ -266,29 +376,83 @@ export const PatternsPanel: React.FC = () => {
         <div className="card surface-hero" style={styles.card}>
           <div style={styles.cardHead}>
             <span className="u-label">{t("Where you die")}</span>
-            <span className="u-meta">{muertes.length} {t("deaths")} · {own.length} {t("games")}</span>
+            <span className="u-meta">{muertesFase.length} {t("deaths")} · {propias.length} {t("games")}</span>
           </div>
           {muertes.length === 0 ? (
             <p style={styles.insightText}>{t("Deaths get a map position when the game syncs with Riot.")}</p>
           ) : (
-            <div style={styles.mapWrap}>
-              <img
-                src="https://ddragon.leagueoflegends.com/cdn/14.1.1/img/map/map11.png"
-                alt=""
-                style={styles.mapImg}
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-              />
-              {muertes.map((d, i) => (
-                <span
-                  key={i}
-                  style={{
-                    ...styles.deathDot,
-                    left: `${Math.max(1, Math.min(99, (d.position_x! / 14820) * 100))}%`,
-                    top: `${Math.max(1, Math.min(99, (1 - d.position_y! / 14881) * 100))}%`,
-                  }}
+            <>
+              {/* Selector de fase: el early y el late cuentan historias
+                  distintas y mezclados se tapan. */}
+              <div style={styles.phaseRow}>
+                {PHASES.map((p) => (
+                  <Button
+                    key={p.key}
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={fase === p.key}
+                    onClick={() => { setFase(p.key); setHover(null); }}
+                  >
+                    {t(p.label)}
+                  </Button>
+                ))}
+              </div>
+              <div style={styles.mapWrap}>
+                <img
+                  src="https://ddragon.leagueoflegends.com/cdn/14.1.1/img/map/map11.png"
+                  alt=""
+                  style={styles.mapImg}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                 />
-              ))}
-            </div>
+                {muertesFase.map((d, i) => {
+                  const left = Math.max(1, Math.min(99, (d.x / 14820) * 100));
+                  const top = Math.max(1, Math.min(99, (1 - d.y / 14881) * 100));
+                  return (
+                    <span
+                      key={`${d.matchId}-${d.time}-${i}`}
+                      style={{ ...styles.deathDot, left: `${left}%`, top: `${top}%` }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={t("Open this death in the player")}
+                      onMouseEnter={() => setHover({ d, left, top })}
+                      onMouseLeave={() => setHover(null)}
+                      onClick={() => abrirMuerte(d)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrirMuerte(d); }
+                      }}
+                    />
+                  );
+                })}
+                {hover && (
+                  <div style={{ ...styles.deathTip, left: `${hover.left}%`, top: `${hover.top}%` }}>
+                    <span className="u-metric">{mmss(hover.d.gameSec)}</span>
+                    {hover.d.killer && <span> · {hover.d.killer}</span>}
+                    <span
+                      style={{
+                        color:
+                          hover.d.result === "victory"
+                            ? "var(--win)"
+                            : hover.d.result === "defeat"
+                              ? "var(--loss)"
+                              : "var(--faint)",
+                      }}
+                    >
+                      {" · "}
+                      {t(
+                        hover.d.result === "victory"
+                          ? "victory"
+                          : hover.d.result === "defeat"
+                            ? "defeat"
+                            : "no result"
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p style={{ ...styles.insightText, color: "var(--faint)", marginTop: 8 }}>
+                {t("Click a death to open that game at that exact moment.")}
+              </p>
+            </>
           )}
         </div>
 
@@ -421,7 +585,7 @@ export const PatternsPanel: React.FC = () => {
       </div>
 
       {/* ------------------------- trayectoria: dónde estás y hacia dónde vas */}
-      {(prediccion || escalada.length >= 3) && (
+      {(prediccion || escalada.length >= 3 || codigoForma || (forma && forma.games.length < 8)) && (
         <div className="card" style={{ ...styles.card, marginBottom: "var(--space-4)" }}>
           <div style={styles.cardHead}>
             <span className="u-label">{t("Rank forecast")}</span>
@@ -431,6 +595,34 @@ export const PatternsPanel: React.FC = () => {
               </span>
             )}
           </div>
+          {/* La predicción cuenta por qué no está, en vez de desaparecer:
+              sin clave, con la clave caducada o con poca muestra. */}
+          {!prediccion && (codigoForma === "no_key" || codigoForma === "key_invalid") && (
+            <div style={styles.formaAviso}>
+              <p style={styles.insightText}>
+                {t(
+                  codigoForma === "no_key"
+                    ? "The rank forecast needs your Riot API key."
+                    : "Your Riot API key is invalid or has expired."
+                )}
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}>
+                {t("Go to Settings to set up the Riot API key")}
+              </Button>
+            </div>
+          )}
+          {!prediccion && codigoForma === "rate_limited" && (
+            <p style={styles.insightText}>
+              {t("Riot is rate limiting requests right now; the forecast retries on the next visit.")}
+            </p>
+          )}
+          {!prediccion && !codigoForma && forma && forma.games.length < 8 && (
+            <p style={styles.insightText}>
+              {t("At least 8 ranked games are needed to compute the projection ({n} so far).", {
+                n: forma.games.length,
+              })}
+            </p>
+          )}
           <div style={styles.trayRow}>
             {prediccion && forma?.tier && (
               <div style={styles.predBlock}>
@@ -773,7 +965,7 @@ const styles: Record<string, React.CSSProperties> = {
     filter: "brightness(0.55) saturate(0.7)",
   },
   /* Punto de muerte: pequeño y translúcido a propósito — el calor lo hace la
-     acumulación, no cada punto. */
+     acumulación, no cada punto. Ahora responde al ratón: tooltip y salto. */
   deathDot: {
     position: "absolute",
     width: 9,
@@ -782,7 +974,41 @@ const styles: Record<string, React.CSSProperties> = {
     background: "color-mix(in srgb, var(--loss) 75%, transparent)",
     boxShadow: "0 0 8px 3px color-mix(in srgb, var(--loss) 45%, transparent)",
     transform: "translate(-50%, -50%)",
+    cursor: "pointer",
+  },
+  /* Tooltip propio sobre el mapa: el `title` nativo tarda un segundo en salir
+     y no puede colorear el resultado. */
+  deathTip: {
+    position: "absolute",
+    transform: "translate(-50%, calc(-100% - 10px))",
+    background: "var(--panel)",
+    border: "1px solid var(--line)",
+    borderRadius: "var(--radius-sm)",
+    padding: "4px 8px",
+    fontSize: 11,
+    color: "var(--text)",
+    whiteSpace: "nowrap",
     pointerEvents: "none",
+    zIndex: 3,
+  },
+  roleRow: {
+    display: "flex",
+    gap: "var(--space-2)",
+    flexWrap: "wrap",
+    marginBottom: "var(--space-4)",
+  },
+  phaseRow: {
+    display: "flex",
+    gap: "var(--space-1)",
+    flexWrap: "wrap",
+    marginBottom: "var(--space-3)",
+  },
+  formaAviso: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "var(--space-2)",
+    marginBottom: "var(--space-3)",
   },
   rankStrip: { display: "flex", flexWrap: "wrap", gap: 6 },
   rankChip: {

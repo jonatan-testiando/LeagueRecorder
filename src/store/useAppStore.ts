@@ -18,6 +18,14 @@ interface AppState {
 
   selectedError: ErrorClipMetadata | null;
   setSelectedError: (err: ErrorClipMetadata | null) => void;
+
+  /**
+   * Segundo de vídeo al que saltar cuando el reproductor abra la partida
+   * seleccionada. Lo deja quien navega hacia /review desde fuera (el mapa de
+   * muertes de Patrones); el reproductor lo consume una sola vez al estar listo.
+   */
+  pendingSeek: number | null;
+  setPendingSeek: (seconds: number | null) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -29,4 +37,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectedError: null,
   setSelectedError: (err) => set({ selectedError: err }),
+
+  pendingSeek: null,
+  setPendingSeek: (seconds) => set({ pendingSeek: seconds }),
 }));

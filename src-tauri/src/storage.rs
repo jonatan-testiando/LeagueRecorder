@@ -92,6 +92,11 @@ pub struct Participant {
     pub vision_score: i32,
     #[serde(default)]
     pub wards_placed: i32,
+    /// Puesto: "TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY". Vacío en partidas
+    /// guardadas antes de existir el campo; el backfill de arranque lo repone del
+    /// DTO cacheado, igual que los hechizos.
+    #[serde(default)]
+    pub role: String,
 }
 
 /// Objetivos conseguidos por un equipo (panel Objectives estilo Ascent).

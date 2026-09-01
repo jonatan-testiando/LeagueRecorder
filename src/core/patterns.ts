@@ -40,6 +40,54 @@ export interface DeathClock {
 const isDeath = (type: string, subtype?: string) =>
   type === "ChampionKill" && subtype === "death";
 
+/* ========================================================================
+   Rol / posición.
+   ======================================================================== */
+
+/** Clave normalizada de puesto. Riot dice "MIDDLE"/"BOTTOM"/"UTILITY"; la UI
+ *  habla de mid/bot(ADC)/support. */
+export type RoleKey = "top" | "jungle" | "mid" | "bot" | "support";
+
+/** Filtro de rol de las pantallas: todos, o uno concreto. */
+export type RoleFilter = "all" | RoleKey;
+
+/** Orden y etiqueta de las píldoras de filtro, compartidos entre pantallas. */
+export const ROLE_FILTERS: { key: RoleFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "top", label: "Top" },
+  { key: "jungle", label: "Jungle" },
+  { key: "mid", label: "Mid" },
+  { key: "bot", label: "ADC" },
+  { key: "support", label: "Support" },
+];
+
+/** "MIDDLE" → "mid", "UTILITY" → "support"… Acepta también los ya
+ *  normalizados, y devuelve null para vacío o desconocido. */
+export function normalizeRole(raw?: string | null): RoleKey | null {
+  switch ((raw ?? "").trim().toUpperCase()) {
+    case "TOP": return "top";
+    case "JUNGLE": return "jungle";
+    case "MIDDLE": case "MID": return "mid";
+    case "BOTTOM": case "BOT": case "ADC": return "bot";
+    case "UTILITY": case "SUPPORT": return "support";
+    default: return null;
+  }
+}
+
+/** El puesto en que se jugó una partida: el del participante `is_self`.
+ *  Null si aún no está sincronizada o es anterior al campo. */
+export function matchRole(m: MatchMetadata): RoleKey | null {
+  const yo = m.participants?.find((p) => p.is_self);
+  return normalizeRole(yo?.role);
+}
+
+/** Aplica el filtro de rol. Las partidas sin rol conocido solo aparecen en
+ *  "all": meterlas en un rol concreto sería inventárselo. */
+export function filterByRole(matches: MatchMetadata[], filter: RoleFilter): MatchMetadata[] {
+  if (filter === "all") return matches;
+  return matches.filter((m) => matchRole(m) === filter);
+}
+
 /**
  * En qué minuto de partida mueres, agregado.
  *

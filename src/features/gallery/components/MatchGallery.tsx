@@ -6,7 +6,8 @@ import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { rankIcon, rankLabel } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
-import { HardDrive, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
+import { matchRole, ROLE_FILTERS, type RoleFilter } from "../../../core/patterns";
+import { Check, HardDrive, ListChecks, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useT } from "../../../core/LanguageProvider";
@@ -44,6 +45,8 @@ interface MatchGalleryProps {
   matches: MatchMetadata[];
   onSelectMatch: (match: MatchMetadata) => void;
   onDeleteMatch: (id: string) => void;
+  /** Borrado por lotes con confirmación. Devuelve true si se llegó a borrar. */
+  onDeleteMatches: (ids: string[]) => Promise<boolean>;
   isRecording: boolean;
 }
 
@@ -64,14 +67,38 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   matches,
   onSelectMatch,
   onDeleteMatch,
+  onDeleteMatches,
   isRecording,
 }) => {
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  // Selección por lotes: se entra con el botón o con Ctrl/Shift+clic sobre una
+  // ficha, y mientras dura, el clic selecciona en vez de abrir.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const t = useT();
 
   const parentRef = useRef<HTMLDivElement>(null);
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setSelectMode(false);
+  };
+
+  const deleteSelected = async () => {
+    if (await onDeleteMatches([...selected])) clearSelection();
+  };
 
   // El buscador y los filtros existen de verdad: antes el campo estaba
   // `disabled` con un placeholder y la fila de pestañas tenía una sola pestaña
@@ -82,6 +109,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     return matches.filter((m) => {
       if (filter === "defeats" && outcome(m.result) !== "defeat") return false;
       if (filter === "unreviewed" && (m.comments?.length ?? 0) > 0) return false;
+      if (roleFilter !== "all" && matchRole(m) !== roleFilter) return false;
       if (!q) return true;
       return (
         m.champion.toLowerCase().includes(q) ||
@@ -89,7 +117,20 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         m.date.toLowerCase().includes(q)
       );
     });
-  }, [matches, query, filter]);
+  }, [matches, query, filter, roleFilter]);
+
+  // Candidatas de la limpieza rápida: revisadas (con notas) y con más de 30
+  // días. Los VODs importados no entran: los trajo el usuario a mano.
+  const viejasRevisadas = useMemo(() => {
+    const corte = Date.now() - 30 * 24 * 3600 * 1000;
+    return matches
+      .filter((m) => !m.is_vod && (m.comments?.length ?? 0) > 0)
+      .filter((m) => {
+        const ms = new Date(m.date.replace(" ", "T")).getTime();
+        return Number.isFinite(ms) && ms < corte;
+      })
+      .map((m) => m.id);
+  }, [matches]);
 
   /**
    * La lista que se pinta: cabeceras de dia intercaladas entre las partidas.
@@ -150,6 +191,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth;
       if (anchoPrevio.current === 0 && w > 0) {
+        // Si la lista se montó ya oculta (abrir una partida desde Hoy o desde
+        // el mapa de muertes de Patrones monta /review con la galería en
+        // display:none), el virtualizador se queda con su rect interno a 0 y
+        // su propio observer no siempre lo repone al reaparecer: la lista
+        // vuelve VACÍA aunque el contenedor mida bien. Se le escribe el rect
+        // real antes de remedir, que es la única pieza que no repone measure().
+        rowVirtualizer.scrollRect = { width: w, height: el.clientHeight };
         // measure() limpia la caché, pero los elementos que SIGUIERON montados
         // bajo display:none no se vuelven a medir solos (su observer interno
         // ya disparó antes del reset) y se quedan en la estimación: con la
@@ -231,7 +279,33 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               {t(label)}
             </Button>
           ))}
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-pressed={selectMode}
+            title={t("Select several games to delete them at once")}
+            icon={<ListChecks size={14} />}
+            onClick={() => (selectMode ? clearSelection() : setSelectMode(true))}
+          >
+            {t("Select")}
+          </Button>
         </div>
+      </div>
+
+      {/* Filtro por rol: el puesto llega con la sincronización de Riot, así que
+          las partidas sin él solo aparecen en "Todos". */}
+      <div style={styles.roleRow}>
+        {ROLE_FILTERS.map((r) => (
+          <Button
+            key={r.key}
+            variant="ghost"
+            size="sm"
+            aria-pressed={roleFilter === r.key}
+            onClick={() => setRoleFilter(r.key)}
+          >
+            {t(r.label)}
+          </Button>
+        ))}
       </div>
 
       <div style={styles.statusRow}>
@@ -251,6 +325,19 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           </span>
           <span className="u-meta">{pct}%</span>
         </div>
+
+        {/* Con el disco ajustado, la salida rápida: lo ya revisado y viejo es
+            lo único que se puede borrar sin perder nada por aprender. */}
+        {diskTight && viejasRevisadas.length > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Trash2 size={13} />}
+            onClick={() => onDeleteMatches(viejasRevisadas)}
+          >
+            {t("Delete reviewed games older than 30 days")} · {viejasRevisadas.length}
+          </Button>
+        )}
 
         {isRecording && (
           <div style={styles.recording}>
@@ -343,6 +430,19 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               const accent =
                 res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--line)";
               const unreviewed = (match.comments?.length ?? 0) === 0;
+              const isSelected = selected.has(match.id);
+              // Ctrl/Shift+clic selecciona aunque no esté el modo activo (y lo
+              // enciende); dentro del modo, el clic normal también selecciona.
+              const handleCardClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+                const conModificador =
+                  "ctrlKey" in e && (e.ctrlKey || e.metaKey || e.shiftKey);
+                if (selectMode || conModificador) {
+                  if (!selectMode) setSelectMode(true);
+                  toggleSelected(match.id);
+                } else {
+                  onSelectMatch(match);
+                }
+              };
 
               return (
                 <div
@@ -368,12 +468,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                       // El resultado tiñe la ficha desde arriba, como en la
                       // referencia: la derrota sangra rojo, la victoria jade.
                       background: `linear-gradient(180deg, color-mix(in srgb, ${accent} 12%, var(--panel)) 0%, var(--panel) 78%)`,
+                      boxShadow: isSelected ? "inset 0 0 0 1px var(--brand)" : undefined,
                     }}
-                    onClick={() => onSelectMatch(match)}
+                    onClick={handleCardClick}
                     role="button"
                     tabIndex={0}
+                    aria-selected={selectMode ? isSelected : undefined}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectMatch(match); }
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCardClick(e); }
                     }}
                   >
                     <div style={styles.rowGrid}>
@@ -529,14 +631,26 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                       </div>
 
                       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          title={t("Delete game")}
-                          aria-label={`Delete ${match.champion} game`}
-                          onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                          icon={<Trash2 size={15} />}
-                        />
+                        {selectMode ? (
+                          <span
+                            style={{
+                              ...styles.checkBox,
+                              ...(isSelected ? styles.checkBoxOn : {}),
+                            }}
+                            aria-hidden
+                          >
+                            {isSelected && <Check size={13} />}
+                          </span>
+                        ) : (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            title={t("Delete game")}
+                            aria-label={`Delete ${match.champion} game`}
+                            onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
+                            icon={<Trash2 size={15} />}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -548,7 +662,28 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         )}
       </div>
 
-      
+      {/* Barra contextual del lote: fuera de la lista virtualizada para que no
+          se la lleve el scroll ni la mida el virtualizador. */}
+      {selected.size > 0 && (
+        <div style={styles.batchBar}>
+          <span className="u-metric" style={{ fontSize: 13 }}>
+            {t(selected.size === 1 ? "{n} game selected" : "{n} games selected", { n: selected.size })}
+          </span>
+          <div style={{ display: "flex", gap: "var(--space-2)", marginLeft: "auto" }}>
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              {t("Cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={14} />}
+              onClick={deleteSelected}
+            >
+              {t("Delete selected")}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -577,6 +712,38 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-2)",
+  },
+  roleRow: {
+    display: "flex",
+    gap: "var(--space-2)",
+    flexWrap: "wrap",
+    marginBottom: "var(--space-3)",
+  },
+  batchBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    padding: "var(--space-3) var(--space-4)",
+    marginTop: "var(--space-3)",
+    background: "var(--panel)",
+    border: "1px solid var(--line)",
+    borderRadius: "var(--radius-md)",
+  },
+  checkBox: {
+    width: 20,
+    height: 20,
+    borderRadius: "var(--radius-sm)",
+    border: "1px solid var(--line)",
+    background: "var(--sunken)",
+    display: "grid",
+    placeItems: "center",
+    color: "transparent",
+    boxShadow: "var(--inset-sunken)",
+  },
+  checkBoxOn: {
+    borderColor: "var(--brand)",
+    color: "var(--brand)",
+    background: "color-mix(in srgb, var(--brand) 14%, transparent)",
   },
   searchBox: {
     display: "flex",

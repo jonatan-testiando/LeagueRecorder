@@ -66,6 +66,10 @@ export interface Participant {
   damage?: number;
   vision_score?: number;
   wards_placed?: number;
+  /** Puesto según Riot: "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY".
+   *  Vacío/ausente en partidas guardadas antes de existir el campo (el
+   *  backfill de arranque lo repone del DTO cacheado). */
+  role?: string;
 }
 
 export interface TeamObjectives {

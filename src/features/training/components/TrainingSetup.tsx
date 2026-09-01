@@ -7,6 +7,7 @@ import {
   previewMetronomeOverlay,
   setTrainingConfig,
 } from "../api";
+import { useT } from "../../../core/LanguageProvider";
 
 const ROLE_OPTIONS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
 
@@ -16,6 +17,7 @@ const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void }> = (
   onChange,
 }) => {
   const [listening, setListening] = useState(false);
+  const t = useT();
 
   useEffect(() => {
     if (!listening) return;
@@ -35,7 +37,7 @@ const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void }> = (
       style={styles.keyBtn}
       onClick={() => setListening(true)}
     >
-      {listening ? "press…" : value || "—"}
+      {listening ? t("press…") : value || "—"}
     </button>
   );
 };
@@ -51,6 +53,7 @@ export const TrainingSetup: React.FC<{
   const [draft, setDraft] = useState<TrainingConfig>(config);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const t = useT();
 
   useEffect(() => setDraft(config), [config]);
 
@@ -83,7 +86,7 @@ export const TrainingSetup: React.FC<{
     const keys = draft.bindings.map((b) => b.key.toUpperCase());
     const dupe = keys.find((k, i) => k && keys.indexOf(k) !== i);
     if (dupe) {
-      setError(`Key "${dupe}" is assigned to more than one role.`);
+      setError(t("Key \"{k}\" is assigned to more than one role.", { k: dupe }));
       return;
     }
     try {
@@ -99,11 +102,10 @@ export const TrainingSetup: React.FC<{
     <div style={styles.panel}>
       <div style={styles.headerRow}>
         <Keyboard size={18} color="var(--accent-violet)" />
-        <h3 style={styles.title}>Camera keys</h3>
+        <h3 style={styles.title}>{t("Camera keys")}</h3>
       </div>
       <p style={styles.desc}>
-        The key you actually press in game for each ally, in TAB order. Everything else —
-        drills, metronome, post-game stats — reads from this.
+        {t("The key you actually press in game for each ally, in TAB order. Everything else — drills, metronome, post-game stats — reads from this.")}
       </p>
 
       <div style={styles.bindings}>
@@ -124,7 +126,7 @@ export const TrainingSetup: React.FC<{
             <button
               className="icon-btn icon-btn--danger"
               onClick={() => removeBinding(i)}
-              title="Remove"
+              title={t("Remove")}
             >
               <Trash2 size={16} />
             </button>
@@ -132,7 +134,7 @@ export const TrainingSetup: React.FC<{
         ))}
         {draft.bindings.length < ROLE_OPTIONS.length && (
           <button className="btn-ghost" style={styles.chip} onClick={addBinding}>
-            <Plus size={14} /> Add key
+            <Plus size={14} /> {t("Add key")}
           </button>
         )}
       </div>
@@ -141,9 +143,9 @@ export const TrainingSetup: React.FC<{
 
       <div style={styles.settingRow}>
         <div>
-          <div style={styles.settingLabel}>Recentre key</div>
+          <div style={styles.settingLabel}>{t("Recentre key")}</div>
           <div style={styles.settingHint}>
-            Snapping back to yourself has to be part of the same gesture.
+            {t("Snapping back to yourself has to be part of the same gesture.")}
           </div>
         </div>
         <KeyCapture value={draft.self_key} onChange={(k) => patch({ self_key: k })} />
@@ -151,9 +153,9 @@ export const TrainingSetup: React.FC<{
 
       <div style={styles.settingRow}>
         <div>
-          <div style={styles.settingLabel}>In-game metronome</div>
+          <div style={styles.settingLabel}>{t("In-game metronome")}</div>
           <div style={styles.settingHint}>
-            A transparent overlay asks you to check an ally every N seconds.
+            {t("A transparent overlay asks you to check an ally every N seconds.")}
           </div>
         </div>
         <div style={styles.settingControls}>
@@ -162,7 +164,7 @@ export const TrainingSetup: React.FC<{
             style={styles.chip}
             onClick={() => patch({ metronome_enabled: !draft.metronome_enabled })}
           >
-            {draft.metronome_enabled ? "On" : "Off"}
+            {t(draft.metronome_enabled ? "On" : "Off")}
           </button>
           <input
             type="number"
@@ -172,23 +174,23 @@ export const TrainingSetup: React.FC<{
             onChange={(e) => patch({ metronome_interval_secs: Number(e.target.value) })}
             style={styles.number}
           />
-          <span style={styles.unit}>sec</span>
+          <span style={styles.unit}>{t("sec")}</span>
           <button
             className="btn-ghost"
             style={styles.chip}
             onClick={() => previewMetronomeOverlay().catch((e) => setError(String(e)))}
-            title="Show the overlay for a few seconds. Run it with the game open to confirm it draws on top — it will not over exclusive fullscreen, only borderless."
+            title={t("Show the overlay for a few seconds. Run it with the game open to confirm it draws on top — it will not over exclusive fullscreen, only borderless.")}
           >
-            <Eye size={14} /> Test
+            <Eye size={14} /> {t("Test")}
           </button>
         </div>
       </div>
 
       <div style={styles.settingRow}>
         <div>
-          <div style={styles.settingLabel}>Post-game quiz</div>
+          <div style={styles.settingLabel}>{t("Post-game quiz")}</div>
           <div style={styles.settingHint}>
-            Samples the live game state every N seconds so the quiz can be auto-graded.
+            {t("Samples the live game state every N seconds so the quiz can be auto-graded.")}
           </div>
         </div>
         <div style={styles.settingControls}>
@@ -197,7 +199,7 @@ export const TrainingSetup: React.FC<{
             style={styles.chip}
             onClick={() => patch({ awareness_quiz_enabled: !draft.awareness_quiz_enabled })}
           >
-            {draft.awareness_quiz_enabled ? "On" : "Off"}
+            {t(draft.awareness_quiz_enabled ? "On" : "Off")}
           </button>
           <input
             type="number"
@@ -207,15 +209,15 @@ export const TrainingSetup: React.FC<{
             onChange={(e) => patch({ snapshot_interval_secs: Number(e.target.value) })}
             style={styles.number}
           />
-          <span style={styles.unit}>sec</span>
+          <span style={styles.unit}>{t("sec")}</span>
         </div>
       </div>
 
       <div style={styles.settingRow}>
         <div>
-          <div style={styles.settingLabel}>Flash duration</div>
+          <div style={styles.settingLabel}>{t("Flash duration")}</div>
           <div style={styles.settingHint}>
-            How long the recall drill shows each frame. Lower is harder.
+            {t("How long the recall drill shows each frame. Lower is harder.")}
           </div>
         </div>
         <div style={styles.settingControls}>
@@ -236,7 +238,7 @@ export const TrainingSetup: React.FC<{
 
       <button className="btn-primary" style={styles.saveBtn} onClick={save}>
         {saved ? <Check size={16} /> : <Save size={16} />}
-        {saved ? "Saved" : "Save"}
+        {t(saved ? "Saved" : "Save")}
       </button>
     </div>
   );

@@ -21,6 +21,7 @@ import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { useAppStore } from "../../../store/useAppStore";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
 import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
@@ -292,6 +293,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   useEffect(() => () => {
     if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
   }, []);
+
+  // Salto pedido desde fuera (el mapa de muertes de Patrones): se consume una
+  // sola vez, cuando el vídeo ya sabe su duración — antes, seekTo lo recortaría.
+  const pendingSeek = useAppStore((s) => s.pendingSeek);
+  const setPendingSeek = useAppStore((s) => s.setPendingSeek);
+  useEffect(() => {
+    if (loadState !== "ready" || pendingSeek == null) return;
+    seekTo(Math.max(0, pendingSeek - 5), false);
+    setPendingSeek(null);
+  }, [loadState, pendingSeek, seekTo, setPendingSeek]);
 
   const jumpToClip = useCallback((eventTime: number) => {
     clipEndRef.current = eventTime + CLIP_AFTER;

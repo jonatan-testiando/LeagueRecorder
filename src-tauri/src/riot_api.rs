@@ -446,6 +446,13 @@ impl ParticipantDto {
     }
 }
 
+/// Tope a la espera que pide `Retry-After`: por encima de esto es mejor rendirse
+/// y dejar que el que llamó decida (la caché parcial ya está guardada) que tener
+/// un comando dormido minutos con la UI esperando.
+const MAX_RETRY_AFTER_SECS: u64 = 30;
+/// Reintentos ante un 429, además de la petición original.
+const MAX_429_RETRIES: u32 = 3;
+
 impl RiotApiClient {
     pub fn new(api_key: String) -> Self {
         let client = Client::builder()
@@ -456,6 +463,39 @@ impl RiotApiClient {
             client,
             api_key,
             region: "americas".to_string(), // Para LAN (LA1) se usa "americas" en Account y Match V5
+        }
+    }
+
+    /// GET con la clave puesta y reintentos ante el rate limit de Riot.
+    ///
+    /// Un 429 no es un error: es "espera y repite". Se respeta la cabecera
+    /// `Retry-After` (con tope) y, si no viene, un backoff exponencial corto.
+    /// Tras agotar los reintentos se devuelve la última respuesta tal cual,
+    /// para que cada llamador siga informando del estado como hasta ahora.
+    async fn get_with_retry(&self, url: &str) -> Result<reqwest::Response, String> {
+        let mut intento: u32 = 0;
+        loop {
+            let resp = self
+                .client
+                .get(url)
+                .header("X-Riot-Token", &self.api_key)
+                .send()
+                .await
+                .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+            if resp.status().as_u16() != 429 || intento >= MAX_429_RETRIES {
+                return Ok(resp);
+            }
+            let espera = resp
+                .headers()
+                .get("Retry-After")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.trim().parse::<u64>().ok())
+                .unwrap_or(1u64 << intento) // sin cabecera: 1 s, 2 s, 4 s
+                .min(MAX_RETRY_AFTER_SECS)
+                .max(1);
+            log::info!("Riot 429 en {url}: reintento {} tras {espera}s", intento + 1);
+            tokio::time::sleep(Duration::from_secs(espera)).await;
+            intento += 1;
         }
     }
 
@@ -514,13 +554,7 @@ impl RiotApiClient {
             "https://{}.api.riotgames.com/lol/league/v4/entries/by-puuid/{}",
             plataforma, puuid
         );
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
-            .send()
-            .await
-            .ok()?;
+        let resp = self.get_with_retry(&url).await.ok()?;
         if !resp.status().is_success() {
             return None;
         }
@@ -546,13 +580,7 @@ impl RiotApiClient {
             urlencoding::encode(tag_line)
         );
 
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
-            .send()
-            .await
-            .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+        let resp = self.get_with_retry(&url).await?;
 
         if !resp.status().is_success() {
             return Err(format!("Riot API Error (Account): {}", resp.status()));
@@ -584,13 +612,7 @@ impl RiotApiClient {
             self.region, puuid, count, cola
         );
 
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
-            .send()
-            .await
-            .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+        let resp = self.get_with_retry(&url).await?;
 
         if !resp.status().is_success() {
             return Err(format!("Riot API Error (MatchList): {}", resp.status()));
@@ -608,13 +630,7 @@ impl RiotApiClient {
             self.region, match_id
         );
 
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
-            .send()
-            .await
-            .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+        let resp = self.get_with_retry(&url).await?;
 
         if !resp.status().is_success() {
             return Err(format!("Riot API Error (MatchDetails): {}", resp.status()));
@@ -635,13 +651,7 @@ impl RiotApiClient {
             "https://{}.api.riotgames.com/lol/match/v5/matches/{}/timeline",
             self.region, match_id
         );
-        let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
-            .send()
-            .await
-            .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+        let resp = self.get_with_retry(&url).await?;
         if !resp.status().is_success() {
             return Err(format!("Riot API Error (Timeline): {}", resp.status()));
         }
@@ -769,6 +779,13 @@ fn impacto(
                         mp.tag = dto.riotIdTagline.clone();
                         spells_repuestos = true;
                     }
+                    // El puesto tampoco existía en las partidas viejas; el DTO
+                    // cacheado lo trae, así que se repone por el mismo camino.
+                    let rol = rol_de(dto);
+                    if mp.role.is_empty() && !rol.is_empty() {
+                        mp.role = rol;
+                        spells_repuestos = true;
+                    }
                 }
             }
             if metadata.impact_rank != nuevo_rank
@@ -800,7 +817,7 @@ pub fn spawn_impact_backfill() {
             .filter(|m| {
                 (m.impact_rank.is_none()
                     || m.patch.is_none()
-                    || m.participants.iter().any(|p| p.spells.is_empty()))
+                    || m.participants.iter().any(|p| p.spells.is_empty() || p.role.is_empty()))
                     && !m.participants.is_empty()
             })
             .collect();
@@ -968,19 +985,34 @@ pub struct SeasonForm {
     pub avg_loss: Option<f64>,
 }
 
+/// Clasifica un error de la API en un código estable (`código: detalle`) que el
+/// frontend pueda distinguir sin parsear frases en castellano.
+fn clasifica_error_riot(e: &str) -> String {
+    if e.contains("429") {
+        format!("rate_limited: {e}")
+    } else if e.contains("401") || e.contains("403") {
+        format!("key_invalid: {e}")
+    } else {
+        e.to_string()
+    }
+}
+
 #[tauri::command]
 pub async fn get_season_form() -> Result<SeasonForm, String> {
     let config = crate::storage::load_config();
     if config.riot_api_key.is_empty() {
-        return Err("Configura tu Riot API Key en Ajustes".to_string());
+        return Err("no_key: Configura tu Riot API Key en Ajustes".to_string());
     }
     let todas = crate::storage::load_all_matches();
     let Some((puuid, plataforma)) = puuid_propio(&todas) else {
-        return Err("Sincroniza al menos una partida para saber tu cuenta".to_string());
+        return Err("no_account: Sincroniza al menos una partida para saber tu cuenta".to_string());
     };
 
     let api = RiotApiClient::new(config.riot_api_key);
-    let ids = api.match_ids(&puuid, 20, Some(420)).await?;
+    let ids = api
+        .match_ids(&puuid, 20, Some(420))
+        .await
+        .map_err(|e| clasifica_error_riot(&e))?;
 
     // Caché primero: cada detalle son ~200 KB de API que se resumen en 6
     // campos; repedirlos en cada apertura de Patrones quemaría la cuota.
@@ -992,8 +1024,19 @@ pub async fn get_season_form() -> Result<SeasonForm, String> {
             games.push(g.clone());
             continue;
         }
-        let Ok(details) = api.get_match_details(id).await else {
-            continue; // rate limit o red: mejor 18 de 20 que un error total
+        let details = match api.get_match_details(id).await {
+            Ok(d) => d,
+            // Rate limit que sobrevivió a los reintentos: parar de insistir.
+            // Lo ya bajado se cachea igual y la próxima apertura retoma aquí.
+            Err(e) if e.contains("429") => {
+                log::warn!(
+                    "season form: rate limit persistente tras {} de {} detalles",
+                    games.len(),
+                    ids.len()
+                );
+                break;
+            }
+            Err(_) => continue, // red o partida rara: mejor 18 de 20 que un error total
         };
         let Some(yo_idx) = details.info.participants.iter().position(|p| p.puuid == puuid) else {
             continue;
@@ -1517,6 +1560,17 @@ fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Particip
         damage: p.totalDamageDealtToChampions,
         vision_score: p.visionScore,
         wards_placed: p.wardsPlaced,
+        role: rol_de(p),
+    }
+}
+
+/// El puesto de un jugador, con el mismo criterio que el resto del análisis:
+/// `teamPosition` manda y `individualPosition` es el respaldo (ver baselines.rs).
+fn rol_de(p: &ParticipantDto) -> String {
+    if !p.teamPosition.is_empty() {
+        p.teamPosition.clone()
+    } else {
+        p.individualPosition.clone()
     }
 }
 
@@ -1705,6 +1759,31 @@ mod tests_nota {
         assert!(peor < 15.0, "el peor del lobby: {peor}");
         assert!(mejor > 85.0, "el mejor del lobby: {mejor}");
         assert!(nota_en_partida(5, &lobby, 1800) > peor);
+    }
+
+    #[test]
+    fn el_rol_prefiere_team_position_y_cae_a_individual() {
+        let mut p: ParticipantDto = serde_json::from_str("{\"puuid\":\"x\",\"kills\":0,\"deaths\":0,\"assists\":0,\"goldEarned\":0,\"totalDamageDealtToChampions\":0,\"win\":false}").unwrap();
+        p.teamPosition = "JUNGLE".to_string();
+        p.individualPosition = "TOP".to_string();
+        assert_eq!(rol_de(&p), "JUNGLE");
+        p.teamPosition.clear();
+        assert_eq!(rol_de(&p), "TOP");
+        p.individualPosition.clear();
+        assert_eq!(rol_de(&p), "");
+        // Y llega al Participant que se persiste.
+        p.teamPosition = "UTILITY".to_string();
+        assert_eq!(to_participant(&p, true).role, "UTILITY");
+    }
+
+    #[test]
+    fn los_errores_de_riot_se_clasifican_con_codigo_estable() {
+        assert!(clasifica_error_riot("Riot API Error (MatchList): 429 Too Many Requests")
+            .starts_with("rate_limited:"));
+        assert!(clasifica_error_riot("Riot API Error (MatchList): 403 Forbidden")
+            .starts_with("key_invalid:"));
+        let otro = clasifica_error_riot("Error en petición HTTP: timeout");
+        assert_eq!(otro, "Error en petición HTTP: timeout");
     }
 
     #[test]

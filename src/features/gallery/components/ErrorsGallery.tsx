@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Play } from "lucide-react";
-import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from "../../../core/tauri-ipc";
+import { ErrorClipMetadata, getAllErrorClips } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
 import { Badge } from "../../../components/ui/Badge";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -8,6 +8,7 @@ import { useT } from "../../../core/LanguageProvider";
 import { mmss } from "../../../core/time";
 
 import { streamUrl } from "../../../core/media";
+import { useMatches } from "../../../store/useAppStore";
 /**
  * Los errores marcados.
  *
@@ -37,20 +38,15 @@ interface ErrorsGalleryProps {
 
 export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) => {
   const [errors, setErrors] = useState<ErrorClipMetadata[]>([]);
-  const [matches, setMatches] = useState<MatchMetadata[]>([]);
+  // La biblioteca sale del store compartido (una sola lectura para toda la app).
+  const { matches } = useMatches();
   const [loading, setLoading] = useState(true);
   const t = useT();
 
-  // Antes había dos `useEffect` idénticos, así que la lista se pedía dos veces
-  // en cada montaje.
   useEffect(() => {
     let alive = true;
-    Promise.all([getAllErrorClips(), getRecordedMatches().catch(() => [])])
-      .then(([errs, ms]) => {
-        if (!alive) return;
-        setErrors(errs);
-        setMatches(ms);
-      })
+    getAllErrorClips()
+      .then((errs) => alive && setErrors(errs))
       .catch(console.error)
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };

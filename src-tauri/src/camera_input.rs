@@ -31,11 +31,23 @@ use crate::storage::{MatchMetadata, MouseEventData};
 /// franja de 120 px pegada al borde izquierdo del rectángulo**. Un borde así de
 /// limpio dice que la geometría es la buena.
 ///
-/// Ojo: asume el minimapa en su sitio y a escala normal, y la partida a pantalla
-/// completa (las coordenadas del ratón son de ESCRITORIO). Con la interfaz
-/// reescalada el rectángulo se queda corto; se notaría como clics de menos, no
-/// como clics inventados, porque el minimapa sólo puede crecer hacia dentro.
+/// Ojo: asume el minimapa en su sitio y la partida a pantalla completa (las
+/// coordenadas del ratón son de ESCRITORIO). Esta es la geometría a escala
+/// ESTÁNDAR (factor 1.0); con la interfaz de League reescalada, el rectángulo
+/// real se obtiene con `minimapa_rect`, que lo escala desde su ancla.
 const MINIMAPA: (f64, f64, f64, f64) = (0.787, 0.995, 0.622, 0.972);
+
+/// El rectángulo del minimapa para una escala dada (config `minimap_scale`).
+///
+/// El minimapa se ancla a la esquina inferior derecha y crece HACIA DENTRO, así
+/// que la esquina (x1, y1) es fija y son x0/y0 los que se mueven con la escala.
+/// Se acota a [0.5, 2.0]: fuera de ahí no hay ajuste de League que lo produzca
+/// y un valor corrupto en la config inventaría un rectángulo absurdo.
+pub fn minimapa_rect(escala: f64) -> (f64, f64, f64, f64) {
+    let s = if escala.is_finite() { escala.clamp(0.5, 2.0) } else { 1.0 };
+    let (bx0, bx1, by0, by1) = MINIMAPA;
+    (bx1 - (bx1 - bx0) * s, bx1, by1 - (by1 - by0) * s, by1)
+}
 
 /// Lado del mapa, en unidades de juego. La misma escala que usa el detector de
 /// minimapa.
@@ -57,8 +69,8 @@ pub const RADIO_CARRIL: f64 = 2500.0;
 const MISMA_MIRADA: f64 = 0.35;
 
 /// ¿Cae el clic dentro del minimapa?
-fn en_minimapa(e: &MouseEventData, w: f64, h: f64) -> bool {
-    let (fx0, fx1, fy0, fy1) = MINIMAPA;
+fn en_minimapa(e: &MouseEventData, w: f64, h: f64, rect: (f64, f64, f64, f64)) -> bool {
+    let (fx0, fx1, fy0, fy1) = rect;
     e.x >= fx0 * w && e.x <= fx1 * w && e.y >= fy0 * h && e.y <= fy1 * h
 }
 
@@ -78,8 +90,8 @@ pub struct Look {
 /// El eje Y del juego crece hacia arriba y el de la pantalla hacia abajo, de ahí
 /// el `1 -`. Es la misma conversión que hace `minimap_positions.py` con los
 /// iconos que detecta en el vídeo.
-fn punto_del_mapa(e: &MouseEventData, w: f64, h: f64) -> (f64, f64) {
-    let (fx0, fx1, fy0, fy1) = MINIMAPA;
+fn punto_del_mapa(e: &MouseEventData, w: f64, h: f64, rect: (f64, f64, f64, f64)) -> (f64, f64) {
+    let (fx0, fx1, fy0, fy1) = rect;
     let fx = (e.x - fx0 * w) / ((fx1 - fx0) * w);
     let fy = (e.y - fy0 * h) / ((fy1 - fy0) * h);
     (fx * MAPA, (1.0 - fy) * MAPA)
@@ -91,15 +103,16 @@ fn punto_del_mapa(e: &MouseEventData, w: f64, h: f64) -> (f64, f64) {
 /// botón derecho NO cuenta: sobre el minimapa es una orden de movimiento, no una
 /// mirada — en la partida medida eran 380 clics derechos dentro del rectángulo
 /// que no había que contar.
-pub fn looks_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<Look> {
+pub fn looks_from_input(m: &MatchMetadata, teclas: &[f64], escala: f64) -> Vec<Look> {
     let (w, h) = (m.mouse_space_w as f64, m.mouse_space_h as f64);
+    let rect = minimapa_rect(escala);
     let mut v: Vec<Look> = teclas.iter().map(|t| Look { t: *t, pos: None }).collect();
     if w > 0.0 && h > 0.0 {
         v.extend(
             m.mouse_events
                 .iter()
-                .filter(|e| e.evt == "left_click" && en_minimapa(e, w, h))
-                .map(|e| Look { t: e.t, pos: Some(punto_del_mapa(e, w, h)) }),
+                .filter(|e| e.evt == "left_click" && en_minimapa(e, w, h, rect))
+                .map(|e| Look { t: e.t, pos: Some(punto_del_mapa(e, w, h, rect)) }),
         );
     }
     v.retain(|l| l.t.is_finite() && l.t >= 0.0);
@@ -114,7 +127,7 @@ pub fn looks_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<Look> {
 /// tests, que es donde se comprueba el filtrado sin ruido de coordenadas.
 #[cfg(test)]
 pub fn snaps_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<f64> {
-    looks_from_input(m, teclas).into_iter().map(|l| l.t).collect()
+    looks_from_input(m, teclas, 1.0).into_iter().map(|l| l.t).collect()
 }
 
 /// Carril al que va un clic de minimapa, o `None` si el clic no está en el
@@ -122,12 +135,13 @@ pub fn snaps_from_input(m: &MatchMetadata, teclas: &[f64]) -> Vec<f64> {
 ///
 /// Lo usa el metrónomo en vivo, que trabaja con clics sueltos según llegan y no
 /// tiene todavía metadata de la partida donde mirar la resolución.
-pub fn lane_of_click(x: f64, y: f64, w: f64, h: f64) -> Option<&'static str> {
+pub fn lane_of_click(x: f64, y: f64, w: f64, h: f64, escala: f64) -> Option<&'static str> {
     let e = MouseEventData { t: 0.0, x, y, evt: String::new() };
-    if w <= 0.0 || h <= 0.0 || !en_minimapa(&e, w, h) {
+    let rect = minimapa_rect(escala);
+    if w <= 0.0 || h <= 0.0 || !en_minimapa(&e, w, h, rect) {
         return None;
     }
-    let (mx, my) = punto_del_mapa(&e, w, h);
+    let (mx, my) = punto_del_mapa(&e, w, h, rect);
     crate::gank::Lane::nearest_within(mx, my, RADIO_CARRIL).map(|l| l.key())
 }
 
@@ -171,6 +185,7 @@ pub fn write_report(m: &MatchMetadata, looks: &[Look]) {
 /// vídeo) ni las partidas cuyo informe ya existe.
 pub fn spawn_backfill() {
     std::thread::spawn(|| {
+        let escala = crate::storage::load_config().minimap_scale;
         let mut hechas = 0;
         for m in crate::storage::load_all_matches() {
             if m.is_vod {
@@ -200,7 +215,7 @@ pub fn spawn_backfill() {
             // fundiera con su propio duplicado sin posición y las perdiera
             // todas otra vez. Las teclas reales eran 0-1 por partida.
             let teclas: &[f64] = if viejo_sin_pos { &[] } else { &full.camera_snaps };
-            let looks = looks_from_input(&full, teclas);
+            let looks = looks_from_input(&full, teclas, escala);
             if looks.is_empty() {
                 continue;
             }
@@ -280,7 +295,7 @@ mod tests {
             clic(1.0, 2015.0, 1399.0, "left_click"), // esquina inferior izquierda
             clic(9.0, 2547.0, 896.0, "left_click"),  // esquina superior derecha
         ]);
-        let l = looks_from_input(&m, &[]);
+        let l = looks_from_input(&m, &[], 1.0);
         let (x0, y0) = l[0].pos.unwrap();
         let (x1, y1) = l[1].pos.unwrap();
         assert!(x0 < 60.0 && y0 < 60.0, "abajo-izquierda dio ({x0:.0}, {y0:.0})");
@@ -297,6 +312,24 @@ mod tests {
         assert_eq!(Lane::nearest_within(1512.0, 6699.0, RADIO_CARRIL), Some(Lane::Top));
         // Base azul: lejos de los tres ejes.
         assert_eq!(Lane::nearest_within(700.0, 700.0, RADIO_CARRIL), None);
+    }
+
+    /// Con el minimapa agrandado en League, el rectángulo estándar pierde los
+    /// clics del borde interior; calibrar la escala los recupera, y la esquina
+    /// anclada (abajo-derecha) no se mueve.
+    #[test]
+    fn la_escala_agranda_el_rectangulo_hacia_dentro() {
+        // 14 px a la izquierda del borde estándar en 2560×1440: fuera a 1.0.
+        let m = meta(vec![clic(10.0, 2000.0, 1100.0, "left_click")]);
+        assert!(looks_from_input(&m, &[], 1.0).is_empty());
+        assert_eq!(looks_from_input(&m, &[], 1.1).len(), 1);
+
+        // El ancla no se mueve: la esquina inferior derecha sigue dentro con
+        // cualquier escala, y un valor corrupto cae al rectángulo estándar.
+        let (_, x1, _, y1) = minimapa_rect(0.7);
+        assert_eq!((x1, y1), (0.995, 0.972));
+        assert_eq!(minimapa_rect(f64::NAN), minimapa_rect(1.0));
+        assert_eq!(minimapa_rect(99.0), minimapa_rect(2.0));
     }
 
     /// Sin resolución de escritorio no se puede situar el minimapa; entonces se

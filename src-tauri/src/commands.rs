@@ -610,6 +610,9 @@ pub fn spawn_background_monitor(
                             // sumarlo lleva un instante del vídeo al reloj de la partida,
                             // que es en el que trabaja el metrónomo.
                             let desfase = active_match.game_time_offset.lock().await.unwrap_or(0.0);
+                            // La escala del minimapa se lee UNA vez por tanda,
+                            // no por clic: es un fichero de config en disco.
+                            let escala_minimapa = crate::storage::load_config().minimap_scale;
                             for (inst, x, y, evt_str) in raw_mouse_events {
                                 // Usamos el instante relativo al momento en que empezó el video
                                 let gt = inst.saturating_duration_since(rec_start).as_secs_f64();
@@ -619,6 +622,7 @@ pub fn spawn_background_monitor(
                                         y,
                                         espacio_raton.0 as f64,
                                         espacio_raton.1 as f64,
+                                        escala_minimapa,
                                     ) {
                                         cam_looks.push((gt + desfase, carril));
                                     }
@@ -886,7 +890,11 @@ async fn finalize_match(
     // clics de minimapa de la estela, que hasta ahora nadie leía. Con esto una
     // grabación local no necesita el detector por vídeo. Ver `camera_input`.
     let mut metadata = metadata;
-    let miradas = crate::camera_input::looks_from_input(&metadata, &metadata.camera_snaps);
+    let miradas = crate::camera_input::looks_from_input(
+        &metadata,
+        &metadata.camera_snaps,
+        crate::storage::load_config().minimap_scale,
+    );
     crate::camera_input::write_report(&metadata, &miradas);
     metadata.camera_snaps = miradas.iter().map(|l| l.t).collect();
 
@@ -1674,7 +1682,7 @@ pub fn get_app_config() -> crate::storage::AppConfig {
 }
 
 #[tauri::command]
-pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool, max_storage_gb: u64, auto_prune_days: u32, language: String) -> Result<(), String> {
+pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset_generator: bool, max_storage_gb: u64, auto_prune_days: u32, language: String, minimap_scale: Option<f64>) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     config.save_directory = save_directory;
     // Se recorta: pegar la clave desde una web o una captura arrastra espacios y
@@ -1689,6 +1697,13 @@ pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset
     // Cualquier valor desconocido cae a ingles: mejor eso que una UI a medio
     // traducir si algun dia llega un idioma que no existe.
     config.language = if language == "es" { "es".to_string() } else { "en".to_string() };
+    // La misma cota que aplica la geometría (`camera_input::minimapa_rect`):
+    // fuera de [0.5, 2.0] no hay ajuste de League que lo produzca.
+    if let Some(s) = minimap_scale {
+        if s.is_finite() {
+            config.minimap_scale = s.clamp(0.5, 2.0);
+        }
+    }
     crate::storage::save_config(&config);
     Ok(())
 }

@@ -221,6 +221,10 @@
 
   window.__MOCK_MATCHES = matches;
 
+  // El arnés corre en un navegador de verdad: los protocolos de Tauri
+  // (stream://, ddragon://) no existen y los helpers deben irse al CDN.
+  window.__DEV_HARNESS__ = true;
+
   /**
    * Dispara un evento del backend a mano, como si lo hubiera emitido Rust.
    *
@@ -272,6 +276,7 @@
       max_storage_gb: 200,
       auto_prune_days: 30,
       language: "es",
+      minimap_scale: 1,
     }),
     get_video_settings: () => ({ fps: 60, quality: "high" }),
     get_audio_status: () => ({

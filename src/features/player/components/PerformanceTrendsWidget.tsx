@@ -1,37 +1,25 @@
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import { MatchMetadata } from "../../../types";
-import { getRecordedMatches } from "../../../core/tauri-ipc";
 import { TrendingUp, TrendingDown, Minus, ShieldCheck } from "lucide-react";
 import { champIcon } from "../../../core/ddragon";
+import { useMatches } from "../../../store/useAppStore";
 
 interface PerformanceTrendsWidgetProps {
   currentMatch: MatchMetadata;
 }
 
 export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = ({ currentMatch }) => {
-  const [championMatches, setChampionMatches] = useState<MatchMetadata[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    getRecordedMatches()
-      .then((matches) => {
-        if (!isMounted) return;
-        // Filtrar partidas registradas del mismo campeón (excluyendo la partida actual si ya está guardada)
-        const sameChamp = (matches || []).filter(
-          (m) => m.champion?.toLowerCase() === currentMatch.champion?.toLowerCase() && m.id !== currentMatch.id
-        );
-        setChampionMatches(sameChamp);
-      })
-      .catch((err) => console.error("Error loading match history for trends:", err))
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentMatch.champion, currentMatch.id]);
+  // La biblioteca sale del store compartido: nada de releer todos los JSON
+  // solo para filtrar las partidas de este campeón.
+  const { matches, loaded } = useMatches();
+  const loading = !loaded;
+  const championMatches = useMemo(
+    () =>
+      matches.filter(
+        (m) => m.champion?.toLowerCase() === currentMatch.champion?.toLowerCase() && m.id !== currentMatch.id
+      ),
+    [matches, currentMatch.champion, currentMatch.id]
+  );
 
   if (loading) {
     return (

@@ -18,6 +18,7 @@ mod proc;
 mod recorder;
 pub mod riot_api;
 mod storage;
+mod ddragon_cache;
 mod streamer;
 mod training;
 mod ultimate;
@@ -194,6 +195,16 @@ pub fn run() {
         // HTTP Range (seek instantáneo y archivos grandes). En Windows se sirve en
         // http://stream.localhost/<ruta>
         .register_uri_scheme_protocol("stream", |_ctx, request| streamer::handle(request))
+        // Caché local de Data Dragon: los iconos se sirven de disco y solo se
+        // descargan la primera vez, así que la interfaz funciona sin conexión.
+        // En Windows se sirve en http://ddragon.localhost/<ruta-del-cdn>.
+        // Asíncrono porque el primer acceso descarga y no puede bloquear el
+        // hilo del webview.
+        .register_asynchronous_uri_scheme_protocol("ddragon", |_ctx, request, responder| {
+            tauri::async_runtime::spawn(async move {
+                responder.respond(ddragon_cache::handle(request).await);
+            });
+        })
         .manage(recorder_state)
         .manage(active_match_state)
         .manage(ult_state)

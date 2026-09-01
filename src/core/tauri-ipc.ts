@@ -93,14 +93,17 @@ export interface AppConfig {
   auto_prune_days: number;
   /** Idioma de la interfaz: "en" o "es". Se guarda en disco. */
   language: string;
+  /** Tamaño del minimapa respecto al estándar (1.0). Calibra la detección de
+   *  clics de minimapa cuando League corre con la interfaz reescalada. */
+  minimap_scale: number;
 }
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number, language: string = "en"): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays, language });
+export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number, language: string = "en", minimapScale: number = 1): Promise<void> => {
+  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays, language, minimapScale });
 };
 
 export interface ProcessVodResponse {

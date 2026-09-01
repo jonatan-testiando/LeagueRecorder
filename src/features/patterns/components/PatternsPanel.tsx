@@ -12,14 +12,13 @@ import {
   type RoleFilter,
   type Confidence,
 } from "../../../core/patterns";
-import { rankIcon, rankLabel } from "../../../core/ddragon";
+import { ddragonUrl, rankIcon, rankLabel } from "../../../core/ddragon";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import {
   ErrorClipMetadata,
   getAllErrorClips,
   getCameraZoneHistory,
   getPressureSummary,
-  getRecordedMatches,
   getSeasonForm,
   type SeasonForm,
   type PressureSummary,
@@ -31,7 +30,7 @@ import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { BarChart3 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
-import { useAppStore } from "../../../store/useAppStore";
+import { useAppStore, useMatches } from "../../../store/useAppStore";
 
 /**
  * Patrones: la única pantalla que mira más de una partida a la vez.
@@ -106,7 +105,9 @@ const killerOf = (ev: MatchEvent): string | null => {
 };
 
 export const PatternsPanel: React.FC = () => {
-  const [matches, setMatches] = useState<MatchMetadata[]>([]);
+  // La biblioteca sale del store compartido: si la galería ya la cargó, aquí
+  // no hay segunda lectura de disco.
+  const { matches, loaded: matchesLoaded } = useMatches();
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
   const [zonas, setZonas] = useState<ZoneHistoryRow[]>([]);
   const [presion, setPresion] = useState<PressureSummary | null>(null);
@@ -124,14 +125,12 @@ export const PatternsPanel: React.FC = () => {
   useEffect(() => {
     let alive = true;
     Promise.all([
-      getRecordedMatches(),
       getAllErrorClips().catch(() => []),
       getCameraZoneHistory().catch(() => []),
       getPressureSummary().catch(() => null),
     ])
-      .then(([ms, cs, zs, pr]) => {
+      .then(([cs, zs, pr]) => {
         if (!alive) return;
-        setMatches(ms);
         setClips(cs);
         setZonas(zs);
         setPresion(pr);
@@ -309,7 +308,7 @@ export const PatternsPanel: React.FC = () => {
     return { vic: Math.round(vic), der: Math.round(der), n: con.length };
   }, [propias]);
 
-  if (loading) {
+  if (loading || !matchesLoaded) {
     return (
       <div style={styles.container} className="panel-enter">
         <div style={styles.center}><div className="spinner" /></div>
@@ -399,7 +398,7 @@ export const PatternsPanel: React.FC = () => {
               </div>
               <div style={styles.mapWrap}>
                 <img
-                  src="https://ddragon.leagueoflegends.com/cdn/14.1.1/img/map/map11.png"
+                  src={ddragonUrl("/cdn/14.1.1/img/map/map11.png")}
                   alt=""
                   style={styles.mapImg}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}

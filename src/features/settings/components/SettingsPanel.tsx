@@ -29,6 +29,13 @@ const clampPruneDays = (raw: string): number => {
   return Math.min(Math.max(n, 0), MAX_PRUNE_DAYS);
 };
 
+/** Escala del minimapa en % (100 = estándar). Misma cota que el backend. */
+const clampMinimapPct = (raw: string): number => {
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n)) return 100;
+  return Math.min(Math.max(n, 50), 200);
+};
+
 export const SettingsPanel: React.FC = () => {
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [manualId, setManualId] = useState<string>("");
@@ -37,11 +44,12 @@ export const SettingsPanel: React.FC = () => {
   const [audio, setAudio] = useState<AudioStatus | null>(null);
   const [audioLoading, setAudioLoading] = useState<boolean>(false);
   const [video, setVideo] = useState<VideoSettings>({ fps: 60, quality: "High" });
-  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false, max_storage_gb: 100, auto_prune_days: 0, language: "en" });
+  const [config, setConfig] = useState<AppConfig>({ save_directory: "", riot_api_key: "", auto_dataset_generator: false, max_storage_gb: 100, auto_prune_days: 0, language: "en", minimap_scale: 1 });
   // Los dos campos numéricos se editan como texto: si se guardara el `Number()` de
   // cada pulsación, vaciar el campo enviaría un 0 al backend. Se acotan al salir.
   const [storageDraft, setStorageDraft] = useState<string>("100");
   const [pruneDraft, setPruneDraft] = useState<string>("0");
+  const [minimapDraft, setMinimapDraft] = useState<string>("100");
   // El disco es lo primero que se mira al entrar aqui y no se estaba pidiendo:
   // la cuota se ajustaba a ciegas, sin saber cuanto se lleva usado.
   const [disk, setDisk] = useState<{ used_bytes: number; total_bytes: number } | null>(null);
@@ -99,6 +107,7 @@ export const SettingsPanel: React.FC = () => {
         setConfig(c);
         setStorageDraft(String(c.max_storage_gb));
         setPruneDraft(String(c.auto_prune_days));
+        setMinimapDraft(String(Math.round((c.minimap_scale ?? 1) * 100)));
       })
       .catch(console.error);
     // La descarga la arranca el backend por su cuenta: si ocurre mientras estás
@@ -139,6 +148,7 @@ export const SettingsPanel: React.FC = () => {
         c.max_storage_gb,
         c.auto_prune_days,
         c.language,
+        c.minimap_scale ?? 1,
       );
     } catch (e) {
       // Antes esto era un console.error: el fallo no salia de la consola.
@@ -480,6 +490,27 @@ export const SettingsPanel: React.FC = () => {
       {/* -------------------------------------------------------- avanzado */}
       <section>
         <div className="sect__head"><span className="u-label">{t("Advanced")}</span><i className="sect__rule" /></div>
+
+        <Row
+          label={t("Minimap scale")}
+          desc={t("Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Applies to new games.")}
+        >
+          <input
+            type="number"
+            min={50}
+            max={200}
+            step={5}
+            className="field field--num"
+            value={minimapDraft}
+            onChange={(e) => setMinimapDraft(e.target.value)}
+            onBlur={() => {
+              const pct = clampMinimapPct(minimapDraft);
+              setMinimapDraft(String(pct));
+              handleSaveConfig({ ...config, minimap_scale: pct / 100 });
+            }}
+          />
+          <span className="u-meta">%</span>
+        </Row>
 
         <Row label={t("AI dataset generator")} desc={t("Extracts frames at the moment of each click to train the detector. Off unless you are working on the model.")}>
           <input

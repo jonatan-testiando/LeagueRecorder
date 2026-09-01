@@ -526,6 +526,9 @@ const ES: Record<string, string> = {
   "Language": "Idioma",
   "Interface language. Saved with your settings.":
     "Idioma de la interfaz. Se guarda con tus ajustes.",
+  "Minimap scale": "Escala del minimapa",
+  "Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Applies to new games.":
+    "Tamaño de tu minimapa en el juego respecto al estándar, en porcentaje. Calibra la detección de clics de minimapa (miradas, puntos ciegos) si juegas con la interfaz reescalada. Aplica a las partidas nuevas.",
 
   // ---------------------------------------------------------------- entrenamiento
   "Loading…": "Cargando…",

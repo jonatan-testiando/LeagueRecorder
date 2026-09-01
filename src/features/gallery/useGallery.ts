@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { MatchMetadata } from "../../types";
 import { useDialog } from "../../components/ui/DialogProvider";
-import { getRecordedMatches, deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
+import { deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
 import { useAppStore } from "../../store/useAppStore";
 import { useT } from "../../core/LanguageProvider";
 
 export const useGallery = () => {
-  const [matches, setMatches] = useState<MatchMetadata[]>([]);
+  // La lista vive en el store (una sola para toda la app); este hook es quien
+  // la mantiene fresca: carga inicial, refresco periódico y fin de grabación.
+  const matches = useAppStore(state => state.matches);
+  const refreshMatches = useAppStore(state => state.refreshMatches);
   const selectedMatch = useAppStore(state => state.selectedMatch);
   const setSelectedMatch = useAppStore(state => state.setSelectedMatch);
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -20,24 +22,19 @@ export const useGallery = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await getRecordedMatches();
-      setMatches(data);
-      
+      await refreshMatches();
+
       // Si la partida seleccionada ya no existe (por ejemplo, tras borrarse), deseleccionarla
-      if (selectedMatch) {
-        if (!selectedMatch.id.startsWith("vod_")) {
-          const stillExists = data.some(m => m.id === selectedMatch.id);
-          if (!stillExists) {
-            setSelectedMatch(null);
-          }
-        }
+      const { matches: data, selectedMatch: sel } = useAppStore.getState();
+      if (sel && !sel.id.startsWith("vod_") && !data.some(m => m.id === sel.id)) {
+        setSelectedMatch(null);
       }
     } catch (err) {
       setError(err as string);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedMatch]);
+  }, [refreshMatches, setSelectedMatch]);
 
   const checkStatus = useCallback(async () => {
     try {
@@ -117,7 +114,7 @@ export const useGallery = () => {
     // Además, la refrescamos al instante cuando termina una grabación (efecto de
     // abajo), así que no perdemos la utilidad de ver la partida nueva enseguida.
     const listInterval = setInterval(() => {
-      getRecordedMatches().then(setMatches).catch(() => {});
+      refreshMatches().catch(() => {});
     }, 5 * 60 * 1000);
 
     return () => {
@@ -132,10 +129,10 @@ export const useGallery = () => {
   const prevRecording = useRef(false);
   useEffect(() => {
     if (prevRecording.current && !isRecording) {
-      getRecordedMatches().then(setMatches).catch(() => {});
+      refreshMatches().catch(() => {});
     }
     prevRecording.current = isRecording;
-  }, [isRecording]);
+  }, [isRecording, refreshMatches]);
 
   return {
     matches,

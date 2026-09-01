@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { outcome } from "../../../core/matchStats";
 import {
@@ -10,7 +9,7 @@ import {
   Trash2, Send, RefreshCw, Check, MinusCircle,
   SkipBack, SkipForward, MoreHorizontal
 } from "lucide-react";
-import { cancelMatchMinimap, exportErrorClip, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
+import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
@@ -21,12 +20,14 @@ import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { useDialog } from "../../../components/ui/DialogProvider";
-import { useAppStore } from "../../../store/useAppStore";
+import { useVideoPlayback } from "../hooks/useVideoPlayback";
+import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
+import { useClipExporter } from "../hooks/useClipExporter";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
 import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
 import { individualEvents } from "../../../core/matchEvents";
-import { champIcon } from "../../../core/ddragon";
+import { champIcon, ddragonUrl } from "../../../core/ddragon";
 import { useT } from "../../../core/LanguageProvider";
 import { styles } from "./videoPlayerStyles";
 import { mix } from "../../../core/color";
@@ -34,13 +35,10 @@ import {
   itemIcon,
   DDRAGON_VER,
   streamUrl,
-  mouseSpace,
   smoothLinePath,
   CLIP_BEFORE,
   CLIP_AFTER,
 } from "./videoPlayerUtils";
-
-type LoadState = "loading" | "ready" | "error";
 
 // Geometría de los marcadores de la línea de tiempo. Dos filas: con una sola,
 // cualquier pelea de equipo obligaba a desplazar media docena de marcas.
@@ -85,45 +83,57 @@ const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const diffTone = (n: number): string => (n >= 0 ? "var(--win)" : "var(--loss)");
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
+  // El componente pasaba de 2100 líneas con todo dentro; ahora compone tres
+  // responsabilidades extraídas a hooks: el transporte (useVideoPlayback), la
+  // estela del ratón (useMouseTrailCanvas, más abajo, cuando ya existen los
+  // mouse_events) y el recortador (useClipExporter).
+  const {
+    videoRef,
+    containerRef,
+    clipEndRef,
+    currentTime,
+    duration,
+    isPlaying,
+    setIsPlaying,
+    loadState,
+    volume,
+    muted,
+    setMuted,
+    playbackRate,
+    setPlaybackRate,
+    activeEventTime,
+    setActiveEventTime,
+    isFullscreen,
+    isSeeking,
+    seekTo,
+    jumpToClip: jumpToClipAt,
+    handlePlayPause,
+    toggleMute,
+    handleVolumeChange,
+    handleTimeUpdate,
+    handleLoadedMetadata,
+    toggleFullscreen,
+  } = useVideoPlayback(match);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const clipEndRef = useRef<number | null>(null);
 
-  const [mouseSync, setMouseSync] = useState<number>(() => {
-    return parseFloat(localStorage.getItem("mouseSyncOffset") || "1.0");
-  });
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  // La duración de la partida, hasta que el vídeo diga la suya (que es la buena).
-  //
-  // El valor inicial de `useState` solo se usa al montar, así que al pasar de una
-  // partida a otra SIN desmontar el reproductor se quedaba la duración de la
-  // anterior: los marcadores, las marcas del eje y el reloj se calculaban contra
-  // una longitud que no era la de ese vídeo. Se ve enseguida cuando las dos
-  // partidas duran distinto.
-  const [duration, setDuration] = useState<number>(match.game_duration || 0);
-  useEffect(() => {
-    setDuration(match.game_duration || 0);
-  }, [match.id, match.game_duration]);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [volume, setVolume] = useState<number>(0.5);
-  const [muted, setMuted] = useState<boolean>(false);
-  const [playbackRate, setPlaybackRate] = useState<number>(1);
-  const [activeEventTime, setActiveEventTime] = useState<number | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
   const [showTracker, setShowTracker] = useState<boolean>(true);
-  const [isClippingMode, setIsClippingMode] = useState<boolean>(false);
-  const [clipDragThumb, setClipDragThumb] = useState<"start" | "end" | null>(null);
-  const [clipStart, setClipStart] = useState<number>(0);
-  const [clipEnd, setClipEnd] = useState<number>(0);
-  const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [exportType, setExportType] = useState<"clip" | "error">("clip");
-  const [errorNote, setErrorNote] = useState<string>("");
+  const {
+    isClippingMode,
+    setIsClippingMode,
+    clipDragThumb,
+    setClipDragThumb,
+    clipStart,
+    clipEnd,
+    isExporting,
+    exportType,
+    errorNote,
+    setErrorNote,
+    toggleClipMode,
+    dragThumbTo,
+    doExport,
+  } = useClipExporter(match);
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
@@ -176,13 +186,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad">("all");
   const [showEsportsHud, setShowEsportsHud] = useState<boolean>(true);
 
-  const { showSuccess, showError } = useDialog();
-
-  useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
+  const { showError } = useDialog();
 
   const videoSrc = streamUrl(match.video_path);
 
@@ -220,7 +224,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   // Última versión de Data Dragon (para los iconos de items).
   useEffect(() => {
-    fetch("https://ddragon.leagueoflegends.com/api/versions.json")
+    fetch(ddragonUrl("/api/versions.json"))
       .then((r) => r.json())
       .then((v: string[]) => { if (Array.isArray(v) && v[0]) setDdragonVer(v[0]); })
       .catch(() => {});
@@ -232,83 +236,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     setItemPurchases(match.item_purchases ?? []);
   }, [match.id, match.participants, match.objectives, match.item_purchases]);
 
-  useEffect(() => {
-    setCurrentTime(0);
-    setIsPlaying(false);
-    setLoadState("loading");
-    setActiveEventTime(null);
-    clipEndRef.current = null;
-    if (videoRef.current) videoRef.current.load();
-  }, [match]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.volume = volume;
-      videoRef.current.muted = muted;
-    }
-  }, [volume, muted]);
-
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.playbackRate = playbackRate;
-    }
-  }, [playbackRate]);
-
-  const handlePlayPause = useCallback(() => {
-    const v = videoRef.current;
-    if (!v || loadState === "error") return;
-    clipEndRef.current = null;
-    if (v.paused) v.play().catch(() => {});
-    else v.pause();
-  }, [loadState]);
-
-  const toggleMute = () => setMuted(m => !m);
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVolume(parseFloat(e.target.value));
-    setMuted(false);
-  };
-
-  // Un salto grande anima el cursor; avanzar reproduciendo, no. La regla del
-  // sistema: si el movimiento lo causa el sistema, curva; si lo causa la mano
-  // del usuario o el propio vídeo, latencia cero.
-  const [isSeeking, setIsSeeking] = useState(false);
-  const seekAnimRef = useRef<number | null>(null);
-
-  const seekTo = useCallback((seconds: number, play: boolean) => {
-    const v = videoRef.current;
-    if (!v) return;
-    const target = Math.max(0, Math.min(seconds, duration || seconds));
-    const jumped = Math.abs(target - v.currentTime) > 1.5;
-    v.currentTime = target;
-    setCurrentTime(target);
-    if (jumped) {
-      setIsSeeking(true);
-      if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
-      // 240ms = --t-base con un margen, para no cortar la transición a medias.
-      seekAnimRef.current = window.setTimeout(() => setIsSeeking(false), 240);
-    }
-    if (play && v.paused) v.play().catch(() => {});
-  }, [duration]);
-
-  useEffect(() => () => {
-    if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
-  }, []);
-
-  // Salto pedido desde fuera (el mapa de muertes de Patrones): se consume una
-  // sola vez, cuando el vídeo ya sabe su duración — antes, seekTo lo recortaría.
-  const pendingSeek = useAppStore((s) => s.pendingSeek);
-  const setPendingSeek = useAppStore((s) => s.setPendingSeek);
-  useEffect(() => {
-    if (loadState !== "ready" || pendingSeek == null) return;
-    seekTo(Math.max(0, pendingSeek - 5), false);
-    setPendingSeek(null);
-  }, [loadState, pendingSeek, seekTo, setPendingSeek]);
-
   const jumpToClip = useCallback((eventTime: number) => {
-    clipEndRef.current = eventTime + CLIP_AFTER;
-    setActiveEventTime(eventTime);
-    seekTo(Math.max(0, eventTime - CLIP_BEFORE), true);
-  }, [seekTo]);
+    jumpToClipAt(eventTime, CLIP_BEFORE, CLIP_AFTER);
+  }, [jumpToClipAt]);
 
   const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
     const times = match.events
@@ -323,23 +253,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     if (target === undefined) target = dir === 1 ? times[0] : times[times.length - 1];
     jumpToClip(target);
   }, [match.events, activeEventTime, currentTime, jumpToClip]);
-
-  const handleTimeUpdate = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    setCurrentTime(v.currentTime);
-    if (clipEndRef.current !== null && v.currentTime >= clipEndRef.current) {
-      v.pause();
-      clipEndRef.current = null;
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (isFinite(v.duration) && v.duration > 0) setDuration(v.duration);
-    setLoadState("ready");
-  };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -362,9 +275,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setHoverClientX(e.clientX);
       
       if (clipDragThumb) {
-        const newTime = pct * duration;
-        if (clipDragThumb === "start") setClipStart(Math.min(newTime, clipEnd - 1));
-        else setClipEnd(Math.max(newTime, clipStart + 1));
+        dragThumbTo(pct * duration);
       } else if (isDragging) {
         updateScrub(e.clientX, false);
       }
@@ -401,13 +312,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setActiveEventTime(null);
       seekTo(pct * duration, playAfter);
     }
-  };
-
-  const toggleFullscreen = () => {
-    const el = containerRef.current;
-    if (!el) return;
-    if (!document.fullscreenElement) el.requestFullscreen?.().catch(() => {});
-    else document.exitFullscreen?.().catch(() => {});
   };
 
   useEffect(() => {
@@ -766,117 +670,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const teamDamage = myTeam.reduce((s, p) => s + (p.damage ?? 0), 0);
   const durMin = duration > 0 ? duration / 60 : 0;
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const resizeObserver = new ResizeObserver(() => {
-      // En pixeles de dispositivo, no CSS: en una pantalla HiDPI el trazo salia
-      // borroso porque el buffer tenia menos resolucion que la pantalla.
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(canvas.clientHeight * dpr);
-    });
-    resizeObserver.observe(canvas);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const render = () => {
-      rafRef.current = requestAnimationFrame(render);
-      const v = videoRef.current;
-      if (!v) return;
-      
-      const ct = v.currentTime;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (mouseEvents.length === 0) return;
-      
-      // Las coordenadas del ratón vienen de rdev y están en el espacio del
-      // ESCRITORIO, no del vídeo. Escalar por las dimensiones del vídeo desplazaba
-      // toda la estela cuando se grababa a una resolución distinta a la del monitor
-      // (1080p en un monitor 1440p = todo dibujado un 33% más lejos del origen).
-      const videoW = v.videoWidth || 1920;
-      const videoH = v.videoHeight || 1080;
-      const [spaceW, spaceH] = mouseSpace(match, videoW, videoH);
-
-      // El <video> se pinta con `object-fit: contain`, asi que cuando la
-      // proporcion del contenedor no coincide con la del video quedan barras y
-      // la imagen ocupa solo una parte. El canvas, en cambio, cubre el
-      // contenedor entero. Mapear sobre `canvas.width/height` estiraba la estela
-      // sobre las barras y la dejaba desplazada; solo cuadraba en pantalla
-      // completa, que es justo cuando las proporciones coinciden y no hay barras.
-      //
-      // Hay que mapear sobre el rectangulo donde el video se pinta de verdad.
-      const fit = Math.min(canvas.width / videoW, canvas.height / videoH);
-      const paintedW = videoW * fit;
-      const paintedH = videoH * fit;
-      const offX = (canvas.width - paintedW) / 2;
-      const offY = (canvas.height - paintedH) / 2;
-      const scaleX = paintedW / spaceW;
-      const scaleY = paintedH / spaceH;
-      const px = (x: number) => offX + x * scaleX;
-      const py = (y: number) => offY + y * scaleY;
-      
-      const TRAIL_DURATION = 1.0;
-      const adjustedCt = ct - mouseSync;
-      const recentEvents = mouseEvents.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
-      if (recentEvents.length === 0) return;
-      const moves = recentEvents.filter(e => e.evt === "move");
-      if (moves.length > 1) {
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-        for (let i = 0; i < moves.length - 1; i++) {
-          const p1 = moves[i];
-          const p2 = moves[i+1];
-          const ageRatio = Math.max(0, 1 - (adjustedCt - p2.t) / TRAIL_DURATION);
-          ctx.beginPath();
-          ctx.moveTo(px(p1.x), py(p1.y));
-          ctx.lineTo(px(p2.x), py(p2.y));
-          ctx.lineWidth = 2.5 + ageRatio * 4;
-          // Rampa oro -> turquesa: lo viejo se apaga hacia el oro, lo reciente
-          // llega en turquesa. Va en números porque es canvas y `fillStyle` no
-          // entiende var(); son los mismos dos tintes del sistema.
-          const r = Math.floor(200 + ageRatio * (10 - 200));
-          const g = Math.floor(170 + ageRatio * (200 - 170));
-          const b = Math.floor(110 + ageRatio * (185 - 110));
-          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ageRatio})`;
-          ctx.stroke();
-        }
-      }
-      const clicks = recentEvents.filter(e => e.evt === "left_click" || e.evt === "right_click");
-      for (const click of clicks) {
-        const age = adjustedCt - click.t;
-        if (age > 0.6) continue;
-        const ageRatio = Math.max(0, 1 - (age / 0.6));
-        const radius = 8 + (1 - ageRatio) * 15;
-        const opacity = ageRatio;
-
-        const r = Math.floor(255 + ageRatio * (0 - 255));
-        const g = Math.floor(200 + ageRatio * (150 - 200));
-        const b = Math.floor(50 + ageRatio * (255 - 50));
-        
-        ctx.save();
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
-        
-        // Anillo exterior
-        ctx.beginPath();
-        ctx.arc(px(click.x), py(click.y), radius, 0, Math.PI * 2);
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity * 0.8})`;
-        ctx.stroke();
-
-        // Núcleo interior brillante
-        ctx.beginPath();
-        ctx.arc(px(click.x), py(click.y), radius * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-        ctx.fill();
-        ctx.restore();
-      }
-    };
-    rafRef.current = requestAnimationFrame(render);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      resizeObserver.disconnect();
-    };
-  }, [mouseEvents, mouseSync]);
+  // La estela del ratón vive en su hook: canvas, rAF y sincronía.
+  const { canvasRef, mouseSync, updateMouseSync } = useMouseTrailCanvas(videoRef, match, mouseEvents);
 
   // Transporte. Lo que se hace en esta pantalla es saltar entre momentos, así que
   // eso manda en el centro; los ajustes crípticos (sincronía del rastro del ratón,
@@ -1171,11 +966,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <input
                     type="range" min="-3" max="3" step="0.1" value={mouseSync}
                     aria-label={t("Mouse trail sync")}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      setMouseSync(val);
-                      localStorage.setItem("mouseSyncOffset", val.toString());
-                    }}
+                    onChange={(e) => updateMouseSync(parseFloat(e.target.value))}
                   />
                   <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
                 </div>
@@ -1265,28 +1056,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </button>
             )}
             <div style={styles.timelineHeaderRight}>
-              <button 
-                onClick={() => {
-                  setExportType("clip");
-                  if (!isClippingMode) {
-                    setClipStart(Math.max(0, currentTime - 10));
-                    setClipEnd(Math.min(duration, currentTime + 10));
-                  }
-                  setIsClippingMode(!isClippingMode);
-                }} 
+              <button
+                onClick={() => toggleClipMode("clip", currentTime, duration)}
                 style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
               >
                 <Scissors size={14} /> {t("Clip")}
               </button>
-              <button 
-                onClick={() => {
-                  setExportType("error");
-                  if (!isClippingMode) {
-                    setClipStart(Math.max(0, currentTime - 10));
-                    setClipEnd(Math.min(duration, currentTime + 10));
-                  }
-                  setIsClippingMode(!isClippingMode);
-                }} 
+              <button
+                onClick={() => toggleClipMode("error", currentTime, duration)}
                 style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
               >
                 <AlertTriangle size={14} /> {t("Error")}
@@ -2138,26 +1915,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 }}
               />
             )}
-            <button 
-              onClick={async () => {
-                if (isExporting) return;
-                setIsExporting(true);
-                try {
-                  const dur = Math.max(0.1, clipEnd - clipStart);
-                  if (exportType === "clip") {
-                    await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
-                  } else {
-                    await exportErrorClip(match.id, match.video_path, clipStart, dur, errorNote);
-                    setErrorNote("");
-                  }
-                  setIsClippingMode(false);
-                  showSuccess("Exported successfully!");
-                } catch (err) {
-                  showError("Error: " + err);
-                } finally {
-                  setIsExporting(false);
-                }
-              }}
+            <button
+              onClick={doExport}
               disabled={isExporting}
               style={{
                 ...styles.ghostBtn, 

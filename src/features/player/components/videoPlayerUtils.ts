@@ -2,12 +2,14 @@
 // la estela del ratón y el suavizado de las curvas del timeline.
 
 import { MatchMetadata } from "../../../types";
+import { ddragonUrl } from "../../../core/ddragon";
 
 export { streamUrl } from "../../../core/media";
-// Los iconos de items sí se piden a Data Dragon (conjunto grande y volátil). Versión de fallback.
+// Los iconos de items sí se piden a Data Dragon (conjunto grande y volátil),
+// pasando por la caché local del backend. Versión de fallback.
 export const DDRAGON_VER = "16.13.1";
 export const itemIcon = (ver: string, id: number) =>
-  `https://ddragon.leagueoflegends.com/cdn/${ver}/img/item/${id}.png`;
+  ddragonUrl(`/cdn/${ver}/img/item/${id}.png`);
 
 /* Id de hechizo de invocador → nombre de fichero en Data Dragon. La API manda
    el id numérico; el CDN solo entiende el nombre interno. Tabla estática:
@@ -28,7 +30,7 @@ const SPELL_NAMES: Record<number, string> = {
 
 export const spellIcon = (ver: string, id: number): string | null => {
   const nombre = SPELL_NAMES[id];
-  return nombre ? `https://ddragon.leagueoflegends.com/cdn/${ver}/img/spell/${nombre}.png` : null;
+  return nombre ? ddragonUrl(`/cdn/${ver}/img/spell/${nombre}.png`) : null;
 };
 
 /** Segundos que un clip de error coge antes y después del instante marcado. */

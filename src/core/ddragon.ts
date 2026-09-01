@@ -8,6 +8,24 @@ import { useEffect, useState } from "react";
 const FALLBACK_VERSION = "15.11.1";
 
 /**
+ * URL de un asset de Data Dragon, pasando por la caché local cuando la app
+ * corre dentro de Tauri (`ddragon_cache.rs` sirve de disco y descarga solo el
+ * primer fallo: la interfaz funciona sin conexión). Fuera de Tauri —el arnés
+ * de navegador, que marca `__DEV_HARNESS__`— se va directo al CDN.
+ */
+declare global {
+  interface Window {
+    __DEV_HARNESS__?: boolean;
+    __TAURI_INTERNALS__?: unknown;
+  }
+}
+const IN_TAURI =
+  typeof window !== "undefined" && !!window.__TAURI_INTERNALS__ && !window.__DEV_HARNESS__;
+
+export const ddragonUrl = (path: string): string =>
+  IN_TAURI ? `http://ddragon.localhost${path}` : `https://ddragon.leagueoflegends.com${path}`;
+
+/**
  * Retrato local, de los 174 que se empaquetan en `public/champions`
  * (`scripts/download-champions.ps1`).
  *
@@ -36,7 +54,7 @@ const norm = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 async function getVersion(): Promise<string> {
   if (!versionPromise) {
-    versionPromise = fetch("https://ddragon.leagueoflegends.com/api/versions.json")
+    versionPromise = fetch(ddragonUrl("/api/versions.json"))
       .then((r) => r.json())
       .then((v: string[]) => (Array.isArray(v) && v[0] ? v[0] : FALLBACK_VERSION))
       .catch(() => FALLBACK_VERSION);
@@ -50,9 +68,7 @@ async function getChampMap(): Promise<{ version: string; map: Map<string, string
       const version = await getVersion();
       const map = new Map<string, string>();
       try {
-        const res = await fetch(
-          `https://ddragon.leagueoflegends.com/cdn/${version}/data/en_US/champion.json`
-        );
+        const res = await fetch(ddragonUrl(`/cdn/${version}/data/en_US/champion.json`));
         const json = await res.json();
         for (const key of Object.keys(json.data ?? {})) {
           const champ = json.data[key];
@@ -73,7 +89,7 @@ export async function resolveChampionIcon(displayName: string): Promise<string |
   const { version, map } = await getChampMap();
   const id = map.get(norm(displayName));
   if (!id) return null;
-  return `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${id}.png`;
+  return ddragonUrl(`/cdn/${version}/img/champion/${id}.png`);
 }
 
 /**

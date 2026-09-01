@@ -422,6 +422,10 @@ fn shift_apm_series(series: &[f64], duration: f64, offset: f64) -> Vec<f64> {
 pub const MIN_STORAGE_GB: u64 = 10;
 
 fn default_max_storage() -> u64 { 100 }
+/// Escala del minimapa RELATIVA a la geometría estándar validada
+/// (`camera_input::MINIMAPA`). 1.0 = tal cual; quien juegue con el minimapa
+/// agrandado o encogido en los ajustes de League lo calibra en Ajustes.
+fn default_minimap_scale() -> f64 { 1.0 }
 /// 0 = borrado por edad DESACTIVADO. Es el valor que heredan las configuraciones
 /// ya guardadas, que no traen el campo: actualizar la app nunca debe empezar a
 /// borrar grabaciones que el usuario no ha pedido borrar.
@@ -444,6 +448,11 @@ pub struct AppConfig {
     /// sobrevivir a cerrar la app del todo, no solo a recargar la ventana.
     #[serde(default = "default_language")]
     pub language: String,
+    /// Tamaño del minimapa respecto al estándar (1.0). Ver `camera_input`:
+    /// con la interfaz de League reescalada, el rectángulo estándar pierde
+    /// clics (el minimapa crece hacia dentro) o cuenta de más.
+    #[serde(default = "default_minimap_scale")]
+    pub minimap_scale: f64,
 }
 
 fn default_language() -> String {
@@ -466,6 +475,7 @@ impl Default for AppConfig {
             // Opt-in, también en instalaciones nuevas: ver `default_auto_prune`.
             auto_prune_days: 0,
             language: "en".to_string(),
+            minimap_scale: 1.0,
         }
     }
 }

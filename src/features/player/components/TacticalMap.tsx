@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { TimelineMarker } from "../../../types";
 import { Map } from "lucide-react";
 import { mmss } from "../../../core/time";
+import { ddragonUrl } from "../../../core/ddragon";
 
 interface TacticalMapProps {
   markers: TimelineMarker[];
@@ -122,7 +123,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
       }}>
         {/* Imagen Oficial de la Grieta del Invocador (Data Dragon map11.png) */}
         <img
-          src="https://ddragon.leagueoflegends.com/cdn/14.1.1/img/map/map11.png"
+          src={ddragonUrl("/cdn/14.1.1/img/map/map11.png")}
           alt="Summoner's Rift Map"
           style={{
             width: "100%",

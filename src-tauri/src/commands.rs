@@ -30,12 +30,17 @@ pub struct DiskSpaceInfo {
 
 #[tauri::command]
 pub async fn get_disk_usage() -> DiskSpaceInfo {
-    let root_dir = crate::storage::get_videos_dir();
-    let used_bytes = crate::storage::get_dir_size(&root_dir);
-    let limit: u64 = 100 * 1024 * 1024 * 1024; // 100 GB
+    // El total es la CUOTA CONFIGURADA, no un 100 fijo: la barra, el aviso de
+    // "disco ajustado" (>=85%) y la limpieza rápida de la biblioteca calculan
+    // el porcentaje contra este número, y con el límite inventado mentían.
+    let quota_gb = crate::storage::load_config()
+        .max_storage_gb
+        .max(crate::storage::MIN_STORAGE_GB);
     DiskSpaceInfo {
-        used_bytes,
-        total_bytes: limit,
+        // Cacheado (60 s): recorrer el árbol entero en cada refresco de la
+        // biblioteca era una lectura de disco periódica para pintar una barra.
+        used_bytes: crate::storage::videos_dir_size_cached(),
+        total_bytes: quota_gb * 1024 * 1024 * 1024,
     }
 }
 // Estructura para almacenar el estado de la partida actual en el worker de background
@@ -88,7 +93,25 @@ pub fn delete_match(id: String) -> Result<(), String> {
     // El registro de entrenamiento vive fuera de la carpeta de la partida: hay que
     // borrarlo aparte para no dejar huérfanos en %APPDATA%.
     awareness::delete_record(&id);
-    delete_match_files(&id)
+    let r = delete_match_files(&id);
+    crate::storage::invalidate_disk_cache();
+    r
+}
+
+/// Borrado por lotes en UNA llamada: en serie (dos borrados en paralelo pueden
+/// pisarse al mudar clips a `recortes/`) y con un solo refresco de la caché de
+/// disco al final. Devuelve los ids que no se pudieron borrar.
+#[tauri::command]
+pub fn delete_matches(ids: Vec<String>) -> Vec<String> {
+    let mut fallidos = Vec::new();
+    for id in &ids {
+        awareness::delete_record(id);
+        if delete_match_files(id).is_err() {
+            fallidos.push(id.clone());
+        }
+    }
+    crate::storage::invalidate_disk_cache();
+    fallidos
 }
 
 #[tauri::command]
@@ -1701,7 +1724,13 @@ pub fn set_app_config(save_directory: String, riot_api_key: String, auto_dataset
     // fuera de [0.5, 2.0] no hay ajuste de League que lo produzca.
     if let Some(s) = minimap_scale {
         if s.is_finite() {
-            config.minimap_scale = s.clamp(0.5, 2.0);
+            let nueva = s.clamp(0.5, 2.0);
+            // Al cambiar de verdad, las miradas ya calculadas se recalculan en
+            // segundo plano: sin esto la calibración solo valía hacia delante.
+            if (nueva - config.minimap_scale).abs() > 1e-9 {
+                config.minimap_scale = nueva;
+                crate::camera_input::spawn_regenerate_all(nueva);
+            }
         }
     }
     crate::storage::save_config(&config);

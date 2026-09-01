@@ -16,7 +16,11 @@ const isOverlay = new URLSearchParams(window.location.search).has("overlay");
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     {isOverlay ? (
-      <MetronomeOverlay />
+      // El overlay también traduce (el "missed" del metrónomo): necesita el
+      // provider, que solo lee el idioma de la config.
+      <LanguageProvider>
+        <MetronomeOverlay />
+      </LanguageProvider>
     ) : (
       <LanguageProvider>
         <DialogProvider>

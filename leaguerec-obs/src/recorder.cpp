@@ -292,6 +292,7 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
     // así grabamos solo el juego aunque esté en modo ventana. El recorte se aplica sobre la fuente
     // (monitor) y luego el bounding box escala el resultado al lienzo. (window_capture WGC no funciona
     // en este proceso headless, de ahí este enfoque monitor+crop.)
+    item_ = item;
     if (cfg.source == "window_crop") {
         obs_sceneitem_crop crop = {};
         if (compute_window_crop(cfg.window, &crop)) {
@@ -302,6 +303,10 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
             fprintf(stderr, "[leaguerec] ventana '%s' no encontrada; capturo el monitor completo\n",
                     cfg.window.c_str());
         }
+        // El crop de arriba es la foto del ARRANQUE; el hilo lo mantiene al día
+        // si la ventana se mueve o redimensiona a media partida (fase 5e).
+        crop_window_ = cfg.window;
+        start_crop_tracking();
     }
 
     obs_source_t *scene_src = obs_scene_get_source(scene_);
@@ -349,6 +354,42 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
     obs_data_release(aenc_settings);
     obs_encoder_set_audio(aenc_, obs_get_audio());
     return true;
+}
+
+void Recorder::start_crop_tracking() {
+    if (crop_run_) return;
+    crop_run_ = true;
+    crop_thread_ = std::thread([this] {
+        obs_sceneitem_crop prev = {};
+        bool have_prev = false;
+        while (crop_run_) {
+            // Cadencia de ~2 s, pero atentos al flag cada 100 ms para que stop()
+            // no espere dos segundos a que el hilo se entere.
+            for (int i = 0; i < 20 && crop_run_; ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!crop_run_) break;
+
+            HWND hwnd = FindWindowA(nullptr, crop_window_.c_str());
+            // Minimizada: GetClientRect da un rectángulo sin sentido; se deja el
+            // último crop bueno hasta que la ventana vuelva.
+            if (!hwnd || IsIconic(hwnd)) continue;
+
+            obs_sceneitem_crop c = {};
+            if (!compute_window_crop(crop_window_, &c)) continue;
+            if (have_prev && std::memcmp(&prev, &c, sizeof(c)) == 0) continue;
+            obs_sceneitem_set_crop(item_, &c);
+            if (have_prev)
+                fprintf(stderr, "[leaguerec] recorte ventana actualizado: L%d T%d R%d B%d\n",
+                        c.left, c.top, c.right, c.bottom);
+            prev = c;
+            have_prev = true;
+        }
+    });
+}
+
+void Recorder::stop_crop_tracking() {
+    crop_run_ = false;
+    if (crop_thread_.joinable()) crop_thread_.join();
 }
 
 bool Recorder::start(const RecordConfig &cfg, std::string &err) {
@@ -460,6 +501,9 @@ std::string Recorder::stop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
     };
     if (output_) file = out_path_;
+    // Antes de desmontar la escena: el hilo de crop toca item_, que muere con ella.
+    stop_crop_tracking();
+    item_ = nullptr;
     stop_and_wait(output_);
     stop_and_wait(replay_output_);
 

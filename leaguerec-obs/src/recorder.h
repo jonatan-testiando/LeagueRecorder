@@ -3,7 +3,10 @@
 #pragma once
 
 #include <obs.h>
+
+#include <atomic>
 #include <string>
+#include <thread>
 
 struct RecordConfig {
     std::string source = "game";   // "monitor" | "window" | "game"
@@ -47,10 +50,23 @@ private:
     // grabación y replay buffer comparten la misma tubería y encoders.
     bool ensure_pipeline(const RecordConfig &cfg, std::string &err);
 
+    // Seguimiento del recorte de ventana (modo "window_crop"): un hilo repasa la
+    // posición real de la ventana cada pocos segundos y actualiza el crop del
+    // scene item. Sin esto, mover o redimensionar la ventana a media partida
+    // dejaba la grabación desalineada para siempre (el crop se calculaba UNA
+    // vez al arrancar).
+    void start_crop_tracking();
+    void stop_crop_tracking();
+
     std::string rundir_;
     bool started_ = false;         // obs_startup hecho
     bool modules_loaded_ = false;
     int cur_fps_ = 0, cur_w_ = 0, cur_h_ = 0;
+
+    obs_sceneitem_t *item_ = nullptr;      // el item de la fuente (dueña: la escena)
+    std::string crop_window_;              // título que sigue el hilo de crop
+    std::thread crop_thread_;
+    std::atomic<bool> crop_run_{false};
 
     obs_scene_t *scene_ = nullptr;   // escala la fuente al lienzo (evita recorte)
     obs_source_t *video_src_ = nullptr;

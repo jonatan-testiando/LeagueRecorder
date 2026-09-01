@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useDialog } from "../../components/ui/DialogProvider";
-import { deleteMatch as deleteMatchIpc, getRecorderStatus } from "../../core/tauri-ipc";
+import { deleteMatch as deleteMatchIpc, deleteMatches as deleteMatchesIpc, getRecorderStatus } from "../../core/tauri-ipc";
 import { useAppStore } from "../../store/useAppStore";
 import { useT } from "../../core/LanguageProvider";
 
@@ -68,9 +68,9 @@ export const useGallery = () => {
    * Borrado por lotes. Devuelve true solo si el usuario confirmó y se intentó
    * borrar (para que la galería sepa si limpiar la selección).
    *
-   * En SERIE a propósito: cada borrado muda clips a `recortes/` y elimina la
-   * carpeta, y dos borrados en paralelo pueden pisarse — el mismo solape que ya
-   * hubo que arreglar en el borrado individual.
+   * Una sola llamada al backend (`delete_matches`): allí se borra en serie —
+   * dos borrados en paralelo pueden pisarse al mudar clips a `recortes/` — y se
+   * refresca la caché de disco una vez al final.
    */
   const handleDeleteBatch = useCallback(async (ids: string[]): Promise<boolean> => {
     if (ids.length === 0) return false;
@@ -87,12 +87,11 @@ export const useGallery = () => {
     if (!isConfirmed) return false;
 
     let fallos = 0;
-    for (const id of ids) {
-      try {
-        await deleteMatchIpc(id);
-      } catch {
-        fallos++;
-      }
+    try {
+      fallos = (await deleteMatchesIpc(ids)).length;
+    } catch (e) {
+      showError(String(e));
+      fallos = ids.length;
     }
     await fetchMatches();
     if (fallos > 0) {

@@ -80,9 +80,9 @@ Write-Host "[setup_runtime] Instalando dependencias de $Requirements..."
 
 # 5) Verificación rápida de que cv2 importa dentro del runtime aislado
 Write-Host "[setup_runtime] Verificando OpenCV en el runtime aislado..."
-& $PythonExe -c "import cv2, numpy; print('OK cv2', cv2.__version__, '| numpy', numpy.__version__)"
+& $PythonExe -c "import cv2, numpy, onnxruntime; print('OK cv2', cv2.__version__, '| numpy', numpy.__version__, '| ort', onnxruntime.__version__)"
 if ($LASTEXITCODE -ne 0) {
-    throw "El runtime se construyó pero cv2/numpy no importan. Revisa la versión de Python."
+    throw "El runtime se construyó pero cv2/numpy/onnxruntime no importan. Revisa la versión de Python."
 }
 
 # 6) Podar lo que no se ejecuta nunca en el runtime del usuario.
@@ -101,7 +101,7 @@ $prune += Get-ChildItem $RuntimeDir -Recurse -Directory -Filter "__pycache__" -E
 foreach ($d in $prune) { if (Test-Path $d.FullName) { Remove-Item -Recurse -Force $d.FullName } }
 
 # Con pip fuera, cv2/numpy tienen que seguir importando. Si no, es un fallo de build.
-& $PythonExe -c "import cv2, numpy" 2>&1 | Out-Null
+& $PythonExe -c "import cv2, numpy, onnxruntime" 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "La poda rompió el runtime: cv2/numpy ya no importan. Revisa la lista de directorios podados."
 }

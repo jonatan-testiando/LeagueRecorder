@@ -493,7 +493,7 @@ export const SettingsPanel: React.FC = () => {
 
         <Row
           label={t("Minimap scale")}
-          desc={t("Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Applies to new games.")}
+          desc={t("Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Changing it recalculates past games in the background.")}
         >
           <input
             type="number"

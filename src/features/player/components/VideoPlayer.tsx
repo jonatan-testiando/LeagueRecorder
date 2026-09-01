@@ -1024,7 +1024,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         <div style={styles.deck}>
           {transportBar}
           <div style={styles.timelineHeaderRow}>
-            <span style={styles.apmLabel}>Average APM: {Math.round(match.apm || 0)}</span>
+            <span style={styles.apmLabel}>{t("Average APM")}: {Math.round(match.apm || 0)}</span>
             {/* Métricas de uso de las teclas de cámara aliada. */}
             {snapSummary?.analyzed ? (
               <span
@@ -1041,7 +1041,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         : "var(--color-victory)",
                   }}
                 >
-                  {clock(snapSummary.longest_gap_secs)} blind
+                  {clock(snapSummary.longest_gap_secs)} {t("blind")}
                 </span>
               </span>
             ) : (
@@ -1052,7 +1052,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
               >
                 <Eye size={14} />
-                {snapBusy ? `Scanning ${snapPct.toFixed(0)}%` : t("Camera moves")}
+                {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
               </button>
             )}
             <div style={styles.timelineHeaderRight}>
@@ -1107,7 +1107,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             <div style={styles.commentsWrap}>
               <div style={styles.commentsList}>
                 {comments.length === 0 && (
-                  <div style={styles.emptyEvents}>Aún no hay comentarios. Escribe uno abajo y se anclará al minuto actual del vídeo.</div>
+                  <div style={styles.emptyEvents}>{t("No notes yet. Write one below and it anchors to the current minute of the video.")}</div>
                 )}
                 {comments.map((c, i) => (
                   <div key={i} style={styles.commentCard}>
@@ -1115,7 +1115,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       {clock(c.time)}
                     </button>
                     <span style={styles.commentText}>{c.text}</span>
-                    <button style={styles.commentDelete} onClick={() => deleteComment(i)} title="Eliminar comentario"><Trash2 size={14} /></button>
+                    <button style={styles.commentDelete} onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
@@ -1125,7 +1125,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
-                  placeholder="Comenta este momento…"
+                  placeholder={t("Note this moment…")}
                   style={styles.commentInput}
                 />
                 <button style={styles.commentSend} onClick={addComment} title={t("Add at current time")}><Send size={16} /></button>
@@ -1854,7 +1854,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   })}
                   {shown.length === 0 && (
                     <div style={styles.emptyEvents}>
-                      {timedEvents.length === 0 ? "No hay eventos registrados en esta partida." : t("No events match this filter.")}
+                      {timedEvents.length === 0 ? t("No events recorded in this game.") : t("No events match this filter.")}
                     </div>
                   )}
                 </div>
@@ -1887,7 +1887,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             )}
             <div>
               <div style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>
-                {exportType === "clip" ? "Exportar Clip de Video" : "Mark error"}
+                {t(exportType === "clip" ? "Export video clip" : "Mark error")}
               </div>
               <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
                 {clock(clipStart)} - {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
@@ -1899,7 +1899,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {exportType === "error" && (
               <input
                 type="text"
-                placeholder="Escribe una nota sobre este error..."
+                placeholder={t("Write a note about this mistake…")}
                 value={errorNote}
                 onChange={(e) => setErrorNote(e.target.value)}
                 onKeyDown={(e) => e.stopPropagation()}
@@ -1928,13 +1928,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 borderRadius: "5px"
               }}
             >
-              {isExporting ? "Exporting…" : "Export " + (exportType === "clip" ? "Clip" : "Error")}
+              {isExporting
+                ? t("Exporting…")
+                : t(exportType === "clip" ? "Export clip" : "Export error")}
             </button>
             <button
               onClick={() => setIsClippingMode(false)}
               style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}
             >
-              Cancel
+              {t("Cancel")}
             </button>
           </div>
         </div>

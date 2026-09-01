@@ -527,8 +527,8 @@ const ES: Record<string, string> = {
   "Interface language. Saved with your settings.":
     "Idioma de la interfaz. Se guarda con tus ajustes.",
   "Minimap scale": "Escala del minimapa",
-  "Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Applies to new games.":
-    "Tamaño de tu minimapa en el juego respecto al estándar, en porcentaje. Calibra la detección de clics de minimapa (miradas, puntos ciegos) si juegas con la interfaz reescalada. Aplica a las partidas nuevas.",
+  "Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Changing it recalculates past games in the background.":
+    "Tamaño de tu minimapa en el juego respecto al estándar, en porcentaje. Calibra la detección de clics de minimapa (miradas, puntos ciegos) si juegas con la interfaz reescalada. Al cambiarlo se recalculan las partidas pasadas en segundo plano.",
 
   // ---------------------------------------------------------------- entrenamiento
   "Loading…": "Cargando…",
@@ -642,6 +642,51 @@ const ES: Record<string, string> = {
     "Cuánto tiempo muestra cada fotograma el ejercicio de lectura. Menos es más difícil.",
   "Key \"{k}\" is assigned to more than one role.": "La tecla «{k}» está asignada a más de un rol.",
   "Saved": "Guardado",
+
+  // ------------------------------------------- reproductor (restos en duro)
+  "Average APM": "APM medio",
+  "Scanning {pct}%": "Escaneando {pct}%",
+  "blind": "sin mirar",
+  "No notes yet. Write one below and it anchors to the current minute of the video.":
+    "Aún no hay notas. Escribe una abajo y se anclará al minuto actual del vídeo.",
+  "Delete note": "Eliminar nota",
+  "Note this moment…": "Comenta este momento…",
+  "Export video clip": "Exportar clip de vídeo",
+  "Write a note about this mistake…": "Escribe una nota sobre este error…",
+  "Exporting…": "Exportando…",
+  "Export clip": "Exportar clip",
+  "Export error": "Exportar error",
+  "No events recorded in this game.": "No hay eventos registrados en esta partida.",
+
+  // ------------------------------------------- quiz de awareness y metrónomo
+  "Checks / min": "Miradas / min",
+  "Longest blind gap": "Mayor hueco sin mirar",
+  "Total": "Total",
+  "Split": "Reparto",
+  "You actually knew what your team was doing.":
+    "Sabías de verdad qué estaba haciendo tu equipo.",
+  "Half the information reached you. That is the gap to close.":
+    "Te llegó la mitad de la información. Ese es el hueco a cerrar.",
+  "You were pressing keys without reading. This is the real starting point.":
+    "Pulsabas teclas sin leer. Este es el punto de partida real.",
+  "no answer": "sin respuesta",
+  "right answer": "correcta",
+  "New questions from this game": "Preguntas nuevas de esta partida",
+  "No looking anything up. If you do not remember, guess — a wrong answer is the measurement, not a failure.":
+    "Sin mirar nada. Si no te acuerdas, adivina — una respuesta errónea es la medición, no un fracaso.",
+  "Submit": "Corregir",
+  "Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.":
+    "Juega una partida con LeagueRecorder abierto. Muestrea el estado en vivo para poder preguntarte después qué sabías de verdad.",
+  "checks/min": "miradas/min",
+  "metronome": "metrónomo",
+  "last quiz": "último quiz",
+  "Metronome prompts you answered in time": "Avisos del metrónomo respondidos a tiempo",
+  "Retake": "Repetir",
+  "Take quiz": "Hacer el quiz",
+  "missed": "fallado",
+  // Igual en ambos idiomas; la entrada existe para que la auditoría
+  // (tools/i18n_huecos.py) no lo liste como hueco.
+  "No": "No",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

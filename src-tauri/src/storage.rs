@@ -938,6 +938,34 @@ pub fn delete_match_files(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Caché del tamaño de la carpeta de vídeos.
+///
+/// `get_dir_size` recorre el árbol entero (cientos de GB en ficheros grandes) y
+/// la UI lo pedía en cada refresco de la biblioteca solo para pintar la barra
+/// de disco. Con un minuto de vida sobra: el tamaño solo cambia al ritmo de una
+/// grabación, y quien borra invalida a mano.
+static DISK_CACHE: std::sync::Mutex<Option<(std::time::Instant, u64)>> =
+    std::sync::Mutex::new(None);
+const DISK_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
+pub fn videos_dir_size_cached() -> u64 {
+    let mut guard = DISK_CACHE.lock().unwrap();
+    if let Some((t, v)) = *guard {
+        if t.elapsed() < DISK_CACHE_TTL {
+            return v;
+        }
+    }
+    let v = get_dir_size(&get_videos_dir());
+    *guard = Some((std::time::Instant::now(), v));
+    v
+}
+
+/// Tira la caché: se llama tras borrar partidas para que la barra baje al
+/// momento en vez de al minuto.
+pub fn invalidate_disk_cache() {
+    *DISK_CACHE.lock().unwrap() = None;
+}
+
 pub fn get_dir_size(path: &Path) -> u64 {
     let mut size = 0;
     if let Ok(entries) = fs::read_dir(path) {
@@ -1042,6 +1070,9 @@ pub fn check_storage_quota() {
             Ok(()) => freed += size,
             Err(e) => eprintln!("Cuota: no se pudo borrar {}: {}", m.id, e),
         }
+    }
+    if freed > 0 {
+        invalidate_disk_cache();
     }
 }
 

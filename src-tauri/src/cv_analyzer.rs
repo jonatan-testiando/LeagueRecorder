@@ -180,31 +180,77 @@ pub async fn process_vod(
     let python_exe = python_command(&app);
 
     // --- Selección de backend ---
-    // Si están el venv de entreno (con onnxruntime-gpu) + el script YOLO + el modelo,
-    // usamos el DETECTOR YOLO en GPU (mucho más rápido y más robusto). Si no, caemos
-    // al analizador clásico (template matching CPU). Ruta configurable por env.
+    // Tres escalones, del mejor al peor:
+    //  1) YOLO en GPU: exige el venv de entreno (onnxruntime-gpu + torch), que
+    //     solo existe en la máquina de desarrollo. Ruta configurable por env.
+    //  2) YOLO en CPU: script + modelo van EMPAQUETADOS como recursos y corren
+    //     con el runtime embebido (que trae onnxruntime CPU). Medido en esta
+    //     máquina: 1,5x tiempo real con VOD_RECT=1 — más rápido que el clásico
+    //     (2,7x) y con mucha mejor detección. Es lo que reciben los usuarios;
+    //     antes caían al template matching porque el modelo nunca viajaba.
+    //  3) Clásico (template matching): último recurso si faltan los recursos.
     let yolo_root = gpu_root();
-    let yolo_py = gpu_python().unwrap_or_default();
-    let yolo_script = Path::new(&yolo_root).join("python_scripts").join("yolo_backend.py");
-    let yolo_model = Path::new(&yolo_root).join("models").join("cursor_multi_fp32.onnx");
+    let dev_py = gpu_python();
+    let dev_script = Path::new(&yolo_root).join("python_scripts").join("yolo_backend.py");
+    let dev_model = Path::new(&yolo_root).join("models").join("cursor_multi_fp32.onnx");
     let torch_lib = torch_lib_dir();
-    let use_yolo = yolo_py.exists() && yolo_script.exists() && yolo_model.exists();
+
+    enum YoloMode {
+        Gpu,
+        Cpu,
+    }
+    let yolo: Option<(PathBuf, PathBuf, PathBuf, YoloMode)> = match dev_py {
+        Some(py) if dev_script.exists() && dev_model.exists() => {
+            Some((py, dev_script, dev_model, YoloMode::Gpu))
+        }
+        _ => {
+            // El runtime embebido es obligatorio para el escalón CPU: un
+            // `python` cualquiera del PATH no garantiza onnxruntime.
+            let runtime = resolve_resource(&app, "python-runtime/python.exe");
+            let script = resolve_resource(&app, "python_scripts/yolo_backend.py");
+            let model = resolve_resource(&app, "models/cursor_multi_fp32.onnx");
+            match (runtime, script, model) {
+                (Some(r), Some(s), Some(m)) => Some((r, s, m, YoloMode::Cpu)),
+                _ => None,
+            }
+        }
+    };
+    let use_yolo = yolo.is_some();
+    let yolo_py = yolo
+        .as_ref()
+        .map(|(py, ..)| py.clone())
+        .unwrap_or_default();
 
     // Lanzamos el proceso de Python AQUÍ (cuerpo async) en vez de dentro del hilo
     // bloqueante, para poder guardar su PID y permitir la cancelación.
-    let mut cmd = if use_yolo {
-        let _ = app.emit("vod_progress", "Iniciando análisis por GPU (YOLO)...");
-        let mut c = Command::new(&yolo_py);
-        c.env("PYTHONUNBUFFERED", "1")
-            // Evita importar torch solo para localizar las DLLs de CUDA/cuDNN.
-            .env("VOD_CUDA_DLL_DIR", torch_lib.to_string_lossy().to_string())
-            .arg(&yolo_script)
+    let mut cmd = if let Some((py, script, model, mode)) = yolo {
+        let (msg, batch, workers) = match mode {
+            YoloMode::Gpu => ("Iniciando análisis por GPU (YOLO)...", "48", "8"),
+            YoloMode::Cpu => ("Iniciando análisis YOLO (CPU)...", "8", "4"),
+        };
+        let _ = app.emit("vod_progress", msg);
+        let mut c = Command::new(&py);
+        c.env("PYTHONUNBUFFERED", "1");
+        match mode {
+            YoloMode::Gpu => {
+                // Evita importar torch solo para localizar las DLLs de CUDA/cuDNN.
+                c.env("VOD_CUDA_DLL_DIR", torch_lib.to_string_lossy().to_string());
+            }
+            YoloMode::Cpu => {
+                // Sin CUDA: pedirlo haría fallar la sesión con el paquete CPU.
+                c.env("VOD_EP", "cpu");
+                // Entrada rectangular: 43% del tensor cuadrado era relleno gris;
+                // medido 1,66x en CPU con paridad 99,5% de eventos.
+                c.env("VOD_RECT", "1");
+            }
+        }
+        c.arg(&script)
             .arg(&video_path)
-            .arg(yolo_model.to_string_lossy().to_string())
-            .arg("960")   // imgsz
-            .arg("0.30")  // conf
-            .arg("48")    // batch
-            .arg("8");    // workers de preproceso
+            .arg(model.to_string_lossy().to_string())
+            .arg("960") // imgsz
+            .arg("0.30") // conf
+            .arg(batch)
+            .arg(workers);
         c
     } else {
         let mut c = Command::new(&python_exe);

@@ -267,6 +267,13 @@
       if (i >= 0) matches.splice(i, 1);
       return null;
     },
+    delete_matches: ({ ids }) => {
+      for (const id of ids) {
+        const i = matches.findIndex((m) => m.id === id);
+        if (i >= 0) matches.splice(i, 1);
+      }
+      return [];
+    },
     get_recorder_status: () => true,
     get_disk_usage: () => ({ used_bytes: 159 * 1024 ** 3, total_bytes: 931 * 1024 ** 3 }),
     get_app_config: () => ({

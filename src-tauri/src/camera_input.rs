@@ -178,6 +178,41 @@ pub fn write_report(m: &MatchMetadata, looks: &[Look]) {
     }
 }
 
+/// Regenera las miradas de TODA la biblioteca con una escala nueva.
+///
+/// Se lanza al cambiar `minimap_scale` en Ajustes: los informes ya escritos se
+/// calcularon con el rectángulo viejo, y sin esto la calibración solo aplicaba
+/// a partidas nuevas. Solo partidas propias con estela (los VODs van por el
+/// detector de vídeo, que no depende de esta geometría de escritorio).
+///
+/// Las teclas de cámara van vacías a propósito: `camera_snaps` ya es la lista
+/// fusionada de pasadas anteriores, y reinyectarla fundiría cada clic con su
+/// propio duplicado sin posición (el mismo gotcha del backfill). Las teclas
+/// reales eran 0-1 por partida: pérdida asumida y documentada.
+pub fn spawn_regenerate_all(escala: f64) {
+    std::thread::spawn(move || {
+        let mut hechas = 0;
+        for m in crate::storage::load_all_matches() {
+            if m.is_vod {
+                continue;
+            }
+            let Ok(full) = crate::storage::get_match_metadata(&m.id) else {
+                continue;
+            };
+            if full.mouse_events.is_empty() {
+                continue;
+            }
+            let looks = looks_from_input(&full, &[], escala);
+            write_report(&full, &looks);
+            let mut meta = full;
+            meta.camera_snaps = looks.iter().map(|l| l.t).collect();
+            let _ = crate::storage::save_match_metadata(&meta);
+            hechas += 1;
+        }
+        log::info!("cámara: miradas regeneradas con escala {escala:.2} en {hechas} partidas");
+    });
+}
+
 /// Rellena los saltos de cámara de las partidas grabadas antes de que esto
 /// existiera. Sólo lee lo que ya hay en disco.
 ///

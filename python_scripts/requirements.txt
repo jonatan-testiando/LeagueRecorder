@@ -6,3 +6,7 @@
 # así que es más pequeño y evita DLLs innecesarias.
 numpy>=1.26,<3
 opencv-python-headless>=4.9,<5
+# Inferencia de los modelos ONNX empaquetados (minimap_icons y el detector de
+# cursor YOLO en CPU). Sin esto, ambos caían en silencio en la instalación
+# real: la máquina de desarrollo lo tenía instalado a mano en su runtime.
+onnxruntime>=1.20,<2

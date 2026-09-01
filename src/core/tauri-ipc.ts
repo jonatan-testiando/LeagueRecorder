@@ -9,6 +9,11 @@ export const deleteMatch = async (id: string): Promise<void> => {
   return await invoke<void>("delete_match", { id });
 };
 
+/** Borrado por lotes en una sola llamada. Devuelve los ids que fallaron. */
+export const deleteMatches = async (ids: string[]): Promise<string[]> => {
+  return await invoke<string[]>("delete_matches", { ids });
+};
+
 export const getRecorderStatus = async (): Promise<boolean> => {
   return await invoke<boolean>("get_recorder_status");
 };

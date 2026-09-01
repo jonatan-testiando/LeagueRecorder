@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useT } from "../../../core/LanguageProvider";
 
 interface PromptPayload {
   role: string;
@@ -27,6 +28,7 @@ type View =
  * (cuándo pedir, quién toca, si respondiste) está en Rust; aquí solo se pinta.
  */
 export const MetronomeOverlay: React.FC = () => {
+  const t = useT();
   const [view, setView] = useState<View>({ kind: "idle" });
 
   // La ventana debe ser realmente transparente: el CSS global pinta un fondo
@@ -87,7 +89,7 @@ export const MetronomeOverlay: React.FC = () => {
         ) : (
           <>
             <span style={styles.cross}>✕</span>
-            <span style={styles.latency}>missed</span>
+            <span style={styles.latency}>{t("missed")}</span>
           </>
         )}
       </div>

@@ -10,39 +10,43 @@ import {
   listAwarenessRecords,
   submitAwarenessQuiz,
 } from "../api";
+import { useT } from "../../../core/LanguageProvider";
 
 /** Tarjeta de métricas de uso de cámara de una partida. */
-const CameraStatsRow: React.FC<{ stats: CameraStats }> = ({ stats }) => (
-  <div style={styles.statsRow}>
-    <div style={styles.stat}>
-      <span style={styles.statLabel}>Checks / min</span>
-      <span style={styles.statValue}>{stats.presses_per_minute.toFixed(1)}</span>
-    </div>
-    <div style={styles.stat}>
-      <span style={styles.statLabel}>Longest blind gap</span>
-      <span
-        style={{
-          ...styles.statValue,
-          color: stats.longest_gap_secs > 120 ? "var(--color-defeat)" : "var(--color-victory)",
-        }}
-      >
-        {clock(stats.longest_gap_secs)}
-      </span>
-    </div>
-    <div style={styles.stat}>
-      <span style={styles.statLabel}>Total</span>
-      <span style={styles.statValue}>{stats.total_presses}</span>
-    </div>
-    {stats.per_role.length > 0 && (
+const CameraStatsRow: React.FC<{ stats: CameraStats }> = ({ stats }) => {
+  const t = useT();
+  return (
+    <div style={styles.statsRow}>
       <div style={styles.stat}>
-        <span style={styles.statLabel}>Split</span>
-        <span style={styles.splitText}>
-          {stats.per_role.map(([role, n]) => `${role} ${n}`).join(" · ")}
+        <span style={styles.statLabel}>{t("Checks / min")}</span>
+        <span style={styles.statValue}>{stats.presses_per_minute.toFixed(1)}</span>
+      </div>
+      <div style={styles.stat}>
+        <span style={styles.statLabel}>{t("Longest blind gap")}</span>
+        <span
+          style={{
+            ...styles.statValue,
+            color: stats.longest_gap_secs > 120 ? "var(--color-defeat)" : "var(--color-victory)",
+          }}
+        >
+          {clock(stats.longest_gap_secs)}
         </span>
       </div>
-    )}
-  </div>
-);
+      <div style={styles.stat}>
+        <span style={styles.statLabel}>{t("Total")}</span>
+        <span style={styles.statValue}>{stats.total_presses}</span>
+      </div>
+      {stats.per_role.length > 0 && (
+        <div style={styles.stat}>
+          <span style={styles.statLabel}>{t("Split")}</span>
+          <span style={styles.splitText}>
+            {stats.per_role.map(([role, n]) => `${role} ${n}`).join(" · ")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * Quiz de awareness. Las respuestas correctas viven en el backend: aquí solo se
@@ -50,6 +54,7 @@ const CameraStatsRow: React.FC<{ stats: CameraStats }> = ({ stats }) => (
  * mirando el DOM (que sería hacerse trampa al solitario, pero aun así).
  */
 export const AwarenessQuiz: React.FC = () => {
+  const t = useT();
   const [records, setRecords] = useState<AwarenessSummary[] | null>(null);
   const [quiz, setQuiz] = useState<QuizPayload | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -105,7 +110,7 @@ export const AwarenessQuiz: React.FC = () => {
     return (
       <div style={styles.panel}>
         <button className="btn-ghost" style={styles.backBtn} onClick={close}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {t("Back")}
         </button>
         <div style={styles.scoreBlock}>
           <span
@@ -117,11 +122,13 @@ export const AwarenessQuiz: React.FC = () => {
             {result.score}/{result.total}
           </span>
           <span style={styles.scoreCaption}>
-            {pct >= 80
-              ? "You actually knew what your team was doing."
-              : pct >= 40
-              ? "Half the information reached you. That is the gap to close."
-              : "You were pressing keys without reading. This is the real starting point."}
+            {t(
+              pct >= 80
+                ? "You actually knew what your team was doing."
+                : pct >= 40
+                ? "Half the information reached you. That is the gap to close."
+                : "You were pressing keys without reading. This is the real starting point."
+            )}
           </span>
         </div>
 
@@ -141,9 +148,9 @@ export const AwarenessQuiz: React.FC = () => {
                   ) : (
                     <>
                       <span style={{ color: "var(--color-defeat)" }}>
-                        {a.chosen || "no answer"}
+                        {a.chosen || t("no answer")}
                       </span>
-                      <span style={{ color: "var(--text-muted)" }}> → correct: </span>
+                      <span style={{ color: "var(--text-muted)" }}> → {t("right answer")}: </span>
                       <span style={{ color: "var(--color-victory)" }}>{a.correct}</span>
                     </>
                   )}
@@ -158,7 +165,7 @@ export const AwarenessQuiz: React.FC = () => {
           style={styles.chip}
           onClick={() => openQuiz(quiz.match_id, true)}
         >
-          <RefreshCw size={14} /> New questions from this game
+          <RefreshCw size={14} /> {t("New questions from this game")}
         </button>
       </div>
     );
@@ -170,12 +177,11 @@ export const AwarenessQuiz: React.FC = () => {
     return (
       <div style={styles.panel}>
         <button className="btn-ghost" style={styles.backBtn} onClick={close}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {t("Back")}
         </button>
         {quiz.camera && <CameraStatsRow stats={quiz.camera} />}
         <p style={styles.desc}>
-          No looking anything up. If you do not remember, guess — a wrong answer is the
-          measurement, not a failure.
+          {t("No looking anything up. If you do not remember, guess — a wrong answer is the measurement, not a failure.")}
         </p>
 
         {quiz.questions.map((q, i) => (
@@ -206,7 +212,7 @@ export const AwarenessQuiz: React.FC = () => {
           onClick={submit}
           disabled={!allAnswered || busy}
         >
-          Submit
+          {t("Submit")}
         </button>
       </div>
     );
@@ -214,7 +220,7 @@ export const AwarenessQuiz: React.FC = () => {
 
   // --- Listado de partidas ---
   if (records === null) {
-    return <div style={styles.panel}>Loading…</div>;
+    return <div style={styles.panel}>{t("Loading…")}</div>;
   }
 
   if (records.length === 0) {
@@ -223,10 +229,9 @@ export const AwarenessQuiz: React.FC = () => {
         <div className="empty-state__icon">
           <Brain size={30} color="var(--text-muted)" />
         </div>
-        <p className="empty-state__title">No games recorded yet</p>
+        <p className="empty-state__title">{t("No games recorded yet")}</p>
         <p className="empty-state__text">
-          Play a game with LeagueRecorder running. It samples the live game state so it can
-          ask you afterwards what you actually knew.
+          {t("Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.")}
         </p>
       </div>
     );
@@ -244,10 +249,10 @@ export const AwarenessQuiz: React.FC = () => {
             </div>
             <div style={styles.recordMeta}>
               <span style={styles.metaItem}>
-                <Eye size={13} /> {r.camera.presses_per_minute.toFixed(1)} checks/min
+                <Eye size={13} /> {r.camera.presses_per_minute.toFixed(1)} {t("checks/min")}
               </span>
               <span style={styles.metaItem}>
-                <Timer size={13} /> {clock(r.camera.longest_gap_secs)} blind
+                <Timer size={13} /> {clock(r.camera.longest_gap_secs)} {t("blind")}
               </span>
               {r.metronome && (
                 <span
@@ -258,9 +263,9 @@ export const AwarenessQuiz: React.FC = () => {
                         ? "var(--color-victory)"
                         : "var(--accent-gold)",
                   }}
-                  title="Metronome prompts you answered in time"
+                  title={t("Metronome prompts you answered in time")}
                 >
-                  <Timer size={13} /> metronome {r.metronome[0]}/{r.metronome[1]}
+                  <Timer size={13} /> {t("metronome")} {r.metronome[0]}/{r.metronome[1]}
                 </span>
               )}
               {r.answered && (
@@ -273,7 +278,7 @@ export const AwarenessQuiz: React.FC = () => {
                         : "var(--accent-gold)",
                   }}
                 >
-                  last quiz {r.last_score}/{r.last_total}
+                  {t("last quiz")} {r.last_score}/{r.last_total}
                 </span>
               )}
             </div>
@@ -284,7 +289,7 @@ export const AwarenessQuiz: React.FC = () => {
             onClick={() => openQuiz(r.match_id, r.answered)}
             disabled={busy}
           >
-            {r.answered ? "Retake" : "Take quiz"}
+            {t(r.answered ? "Retake" : "Take quiz")}
           </button>
         </div>
       ))}

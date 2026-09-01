@@ -169,9 +169,23 @@ export const PatternsPanel: React.FC = () => {
     for (const m of propias) {
       const offset = m.video_offset ?? 0;
       const res = outcome(m.result);
+      // Los eventos guardan el NOMBRE del asesino; su campeón está en el
+      // scoreboard. Se resuelve aquí para que el tooltip diga "Kaisa" y no un
+      // nick — y si la partida no está sincronizada, el nombre sigue valiendo.
+      // Insensible a mayúsculas: la API en vivo guarda los nombres en minúscula
+      // ("singed") y el scoreboard con su grafía real ("Singed").
+      const campeonDe = new Map(
+        (m.participants ?? []).map((p) => [p.name.trim().toLowerCase(), p.champion])
+      );
       const eventosMuerte = m.events
         .filter((ev) => ev.type === "ChampionKill" && ev.subtype === "death")
-        .map((ev) => ({ time: ev.time, killer: killerOf(ev) }));
+        .map((ev) => {
+          const nombre = killerOf(ev);
+          return {
+            time: ev.time,
+            killer: nombre ? campeonDe.get(nombre.trim().toLowerCase()) ?? nombre : null,
+          };
+        });
       for (const tm of m.timeline_markers ?? []) {
         if (tm.event_type !== "death" || tm.position_x == null || tm.position_y == null) continue;
         // El marcador y el evento en directo son la misma muerte con relojes

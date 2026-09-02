@@ -5,11 +5,51 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <thread>
 #include <vector>
 
 namespace {
+// Origen (esquina superior izquierda, en coordenadas del escritorio virtual) del monitor que
+// contiene la ventana `title`. Es la clave con la que se cruzan dos mundos: `MonitorFromWindow`
+// y la lista de monitores que publica OBS, cuyos nombres llevan el origen escrito ("... @ X,Y").
+// Devuelve false si la ventana no existe.
+bool window_monitor_origin(const std::string &title, int *x, int *y) {
+    HWND hwnd = FindWindowA(nullptr, title.c_str());
+    if (!hwnd) return false;
+    HMONITOR hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = {};
+    mi.cbSize = sizeof(mi);
+    if (!GetMonitorInfo(hmon, &mi)) return false;
+    *x = mi.rcMonitor.left;
+    *y = mi.rcMonitor.top;
+    return true;
+}
+
+// Lee el "@ X,Y" del final del nombre que OBS le pone a cada monitor
+// ("\\.\DISPLAY1: 2560x1440 @ 0,0 (Primary)"). Ver `enum_monitor_props` en
+// duplicator-monitor-capture.c: el nombre SIEMPRE lo lleva.
+// Se parsea a mano con strtol y no con sscanf: MSVC marca sscanf como inseguro
+// (C4996) y el proyecto compila con /W3, así que un aviso aquí ensucia el build.
+bool parse_monitor_origin(const char *name, int *x, int *y) {
+    if (!name) return false;
+    const char *at = std::strrchr(name, '@');
+    if (!at) return false;
+    char *fin = nullptr;
+    const long vx = std::strtol(at + 1, &fin, 10); // strtol ya se come los espacios
+    if (fin == at + 1) return false;
+    while (*fin == ' ') ++fin;
+    if (*fin != ',') return false;
+    const char *tras_coma = fin + 1;
+    char *fin2 = nullptr;
+    const long vy = std::strtol(tras_coma, &fin2, 10);
+    if (fin2 == tras_coma) return false;
+    *x = static_cast<int>(vx);
+    *y = static_cast<int>(vy);
+    return true;
+}
+
 // Calcula el recorte (en píxeles del monitor) para dejar solo el área cliente de la ventana `title`.
 // Devuelve false si no encuentra la ventana. La captura debe ser del monitor que contiene la ventana.
 bool compute_window_crop(const std::string &title, obs_sceneitem_crop *crop) {
@@ -112,7 +152,71 @@ std::string pick_av1_encoder() {
     return "";
 }
 
-obs_source_t *make_video_source(const RecordConfig &cfg) {
+// Elige el monitor a capturar para la ventana `window_title`.
+//
+// Antes se prefería el que llevara "Primary" en el nombre, pero `compute_window_crop` calcula el
+// recorte contra `MonitorFromWindow(hwnd)`: jugar en el monitor secundario significaba capturar
+// una pantalla y recortar con las coordenadas de otra — vídeo en negro o cortado. Ahora manda la
+// pantalla donde ESTÁ la ventana, y "Primary" queda solo como plan B (juego cerrado o sin
+// coincidencia). Escribe en `*ox`/`*oy` el origen del monitor elegido, o INT_MIN si no se sabe.
+std::string pick_monitor_id(obs_source_t *src, const std::string &window_title, int *ox, int *oy) {
+    *ox = INT_MIN;
+    *oy = INT_MIN;
+
+    int wx = 0, wy = 0;
+    const bool have_window = !window_title.empty() && window_monitor_origin(window_title, &wx, &wy);
+
+    obs_properties_t *props = obs_source_properties(src);
+    obs_property_t *p = obs_properties_get(props, "monitor_id");
+    std::string por_ventana, primario, primero;
+    int prim_x = INT_MIN, prim_y = INT_MIN, first_x = INT_MIN, first_y = INT_MIN;
+    if (p) {
+        size_t n = obs_property_list_item_count(p);
+        for (size_t i = 0; i < n; ++i) {
+            const char *nm = obs_property_list_item_name(p, i);
+            const char *id = obs_property_list_item_string(p, i);
+            if (!id || !*id || std::strcmp(id, "DUMMY") == 0) continue; // saltar placeholder
+            int mx = INT_MIN, my = INT_MIN;
+            const bool tiene_origen = parse_monitor_origin(nm, &mx, &my);
+            if (primero.empty()) {
+                primero = id;
+                first_x = mx;
+                first_y = my;
+            }
+            if (primario.empty() && nm && std::strstr(nm, "Primary")) {
+                primario = id;
+                prim_x = mx;
+                prim_y = my;
+            }
+            if (have_window && tiene_origen && mx == wx && my == wy && por_ventana.empty()) {
+                por_ventana = id;
+            }
+        }
+    }
+    obs_properties_destroy(props);
+
+    if (!por_ventana.empty()) {
+        *ox = wx;
+        *oy = wy;
+        fprintf(stderr, "[leaguerec] monitor de captura: el de la ventana (@ %d,%d)\n", wx, wy);
+        return por_ventana;
+    }
+    if (!primario.empty()) {
+        *ox = prim_x;
+        *oy = prim_y;
+        fprintf(stderr, "[leaguerec] monitor de captura: el primario (la ventana '%s' no se encontró)\n",
+                window_title.c_str());
+        return primario;
+    }
+    *ox = first_x;
+    *oy = first_y;
+    return primero;
+}
+
+// `origin_x`/`origin_y` salen con el origen del monitor elegido (INT_MIN si no aplica).
+obs_source_t *make_video_source(const RecordConfig &cfg, int &origin_x, int &origin_y) {
+    origin_x = INT_MIN;
+    origin_y = INT_MIN;
     // "titulo:clase:exe". OJO: para window_capture WGC la clase NO puede ir vacía
     // (ms_find_window_top_level hace `if(!class) return NULL`). Con priority=título su valor
     // no necesita matchear, pero debe existir. Si no llega clase, ponemos un placeholder.
@@ -149,27 +253,12 @@ obs_source_t *make_video_source(const RecordConfig &cfg) {
     // monitor: captura de pantalla completa vía WGC. Funciona de forma fiable en headless
     // (window_capture WGC no captura sin un preview activo). Para League en fullscreen/borderless
     // esto graba el juego. Auto-seleccionamos el monitor: el pasado en --window (monitor_id), o
-    // el primero de la lista de propiedades del source.
+    // el que CONTIENE la ventana del juego.
     obs_source_t *src = obs_source_create("monitor_capture", "display", nullptr, nullptr);
     // Para "window_crop" auto-seleccionamos el monitor (cfg.window es el título, no un monitor_id).
     std::string monitor_id = (cfg.source == "monitor") ? cfg.window : std::string();
     if (monitor_id.empty()) {
-        obs_properties_t *props = obs_source_properties(src);
-        obs_property_t *p = obs_properties_get(props, "monitor_id");
-        if (p) {
-            size_t n = obs_property_list_item_count(p);
-            std::string first_real;
-            for (size_t i = 0; i < n; ++i) {
-                const char *nm = obs_property_list_item_name(p, i);
-                const char *id = obs_property_list_item_string(p, i);
-                if (!id || !*id || std::strcmp(id, "DUMMY") == 0) continue; // saltar placeholder
-                if (first_real.empty()) first_real = id;
-                // Preferimos el monitor primario (donde corren los juegos en fullscreen).
-                if (nm && std::strstr(nm, "Primary")) { monitor_id = id; break; }
-            }
-            if (monitor_id.empty()) monitor_id = first_real;
-        }
-        obs_properties_destroy(props);
+        monitor_id = pick_monitor_id(src, cfg.window, &origin_x, &origin_y);
     }
     obs_data_t *s = obs_data_create();
     if (!monitor_id.empty()) obs_data_set_string(s, "monitor_id", monitor_id.c_str());
@@ -271,7 +360,10 @@ bool Recorder::ensure_pipeline(const RecordConfig &cfg, std::string &err) {
     if (venc_) return true; // ya montado (grabación y replay comparten tubería)
     if (!reset_video(cfg, err)) return false;
 
-    video_src_ = make_video_source(cfg);
+    int mon_x = INT_MIN, mon_y = INT_MIN;
+    video_src_ = make_video_source(cfg, mon_x, mon_y);
+    cap_mon_x_ = mon_x;
+    cap_mon_y_ = mon_y;
     if (!video_src_) {
         err = "no se pudo crear la fuente de vídeo '" + cfg.source + "'";
         return false;
@@ -374,6 +466,16 @@ void Recorder::start_crop_tracking() {
             // último crop bueno hasta que la ventana vuelva.
             if (!hwnd || IsIconic(hwnd)) continue;
 
+            // ¿Se ha llevado la ventana a OTRO monitor? Entonces hay que cambiar
+            // la fuente de captura antes de tocar el recorte: si no, se recorta
+            // con coordenadas de una pantalla sobre la imagen de otra.
+            int wx = 0, wy = 0;
+            if (window_monitor_origin(crop_window_, &wx, &wy) &&
+                (wx != cap_mon_x_.load() || wy != cap_mon_y_.load())) {
+                switch_capture_monitor(wx, wy);
+                have_prev = false; // el crop anterior era de la pantalla vieja
+            }
+
             obs_sceneitem_crop c = {};
             if (!compute_window_crop(crop_window_, &c)) continue;
             if (have_prev && std::memcmp(&prev, &c, sizeof(c)) == 0) continue;
@@ -385,6 +487,42 @@ void Recorder::start_crop_tracking() {
             have_prev = true;
         }
     });
+}
+
+void Recorder::switch_capture_monitor(int origin_x, int origin_y) {
+    if (!video_src_) return;
+
+    // Se busca en la lista de OBS el monitor cuyo nombre declara ese origen.
+    obs_properties_t *props = obs_source_properties(video_src_);
+    obs_property_t *p = obs_properties_get(props, "monitor_id");
+    std::string nuevo;
+    if (p) {
+        size_t n = obs_property_list_item_count(p);
+        for (size_t i = 0; i < n; ++i) {
+            const char *nm = obs_property_list_item_name(p, i);
+            const char *id = obs_property_list_item_string(p, i);
+            if (!id || !*id || std::strcmp(id, "DUMMY") == 0) continue;
+            int mx = INT_MIN, my = INT_MIN;
+            if (parse_monitor_origin(nm, &mx, &my) && mx == origin_x && my == origin_y) {
+                nuevo = id;
+                break;
+            }
+        }
+    }
+    obs_properties_destroy(props);
+    if (nuevo.empty()) return; // sin candidato, mejor seguir con el de siempre
+
+    obs_data_t *s = obs_data_create();
+    obs_data_set_string(s, "monitor_id", nuevo.c_str());
+    obs_data_set_int(s, "method", 2); // WGC
+    obs_data_set_bool(s, "capture_cursor", true);
+    obs_source_update(video_src_, s);
+    obs_data_release(s);
+
+    cap_mon_x_ = origin_x;
+    cap_mon_y_ = origin_y;
+    fprintf(stderr, "[leaguerec] la ventana cambió de pantalla; capturando el monitor @ %d,%d\n",
+            origin_x, origin_y);
 }
 
 void Recorder::stop_crop_tracking() {
@@ -524,13 +662,18 @@ std::string Recorder::stop() {
         video_src_ = nullptr;
     }
     if (audio_src_) { obs_source_release(audio_src_); audio_src_ = nullptr; }
+    cap_mon_x_ = INT_MIN;
+    cap_mon_y_ = INT_MIN;
     out_path_.clear();
     return file;
 }
 
 bool Recorder::active() const {
-    return (output_ && obs_output_active(output_)) ||
-           (replay_output_ && obs_output_active(replay_output_));
+    return recording() || (replay_output_ && obs_output_active(replay_output_));
+}
+
+bool Recorder::recording() const {
+    return output_ && obs_output_active(output_);
 }
 
 void Recorder::shutdown() {

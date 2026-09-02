@@ -66,6 +66,18 @@ pub struct SnapReport {
     pub duration: f64,
     pub snaps: Vec<Snap>,
     pub stills_skipped: u32,
+    /// Quién lo calculó: "input" (clics de minimapa) o el detector por vídeo.
+    #[serde(default)]
+    pub source: String,
+    /// Versión del backfill por entrada que ya pasó por esta partida.
+    ///
+    /// 0 = ninguna (informe del detector por vídeo, o de la primera hornada).
+    /// Es el marcador que hace que el barrido del arranque sea un no-op en el
+    /// segundo lanzamiento: sin él había que abrir el metadata COMPLETO de cada
+    /// partida —estela del ratón incluida, que es el campo grande— sólo para
+    /// descubrir que no había nada que hacer.
+    #[serde(default)]
+    pub from_input_v: u32,
 }
 
 pub fn report_path(match_id: &str) -> PathBuf {
@@ -240,6 +252,10 @@ pub async fn analyze_camera_snaps(
         duration,
         snaps,
         stills_skipped: parsed.stills_skipped,
+        source: "video".to_string(),
+        // Este informe lo escribe el detector por VÍDEO: el barrido por entrada
+        // (`camera_input`) no ha pasado por aquí y tiene que poder mejorarlo.
+        from_input_v: 0,
     };
     if let Ok(json) = serde_json::to_string(&report) {
         let _ = std::fs::write(report_path(&match_id), json);

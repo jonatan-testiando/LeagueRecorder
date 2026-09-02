@@ -1,18 +1,44 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import { Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useNavigate } from "react-router-dom";
+import {
+  Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart,
+  FolderOpen, PlaySquare, Trash2,
+} from "lucide-react";
 import { motion } from "framer-motion";
-import { ClipMetadata } from "../../../types";
-import { toggleClipFavorite } from "../../../core/tauri-ipc";
+import { ClipMetadata, MatchMetadata } from "../../../types";
+import { deleteClip, toggleClipFavorite, type UploadProgress } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { useToast } from "../../../components/ui/Toaster";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
+import { useAppStore, useMatches } from "../../../store/useAppStore";
 
-const CATBOX_LIMIT = 200 * 1024 * 1024; // 200 MB (límite de catbox permanente)
-const LITTERBOX_LIMIT = 1024 * 1024 * 1024; // 1 GB (límite de litterbox temporal)
+/**
+ * Límites de los servicios de subida, en un solo sitio.
+ *
+ * Estaban repartidos entre dos constantes y una frase escrita a mano ("200 MB
+ * (permanent)"), así que cambiar uno de los dos números obligaba a acordarse
+ * del tercero. Los valores son los de catbox y litterbox: el enlace permanente
+ * admite menos que el temporal, que es lo contrario de lo que se espera y por
+ * eso el aviso propone cambiar de opción en vez de solo decir que no cabe.
+ */
+const UPLOAD_LIMITS = {
+  /** catbox.moe: enlace permanente, 200 MB. */
+  permanent: 200 * 1024 * 1024,
+  /** litterbox: enlace temporal (máx. 72 h), 1 GB. */
+  temporary: 1024 * 1024 * 1024,
+} as const;
+
+const LIMIT_LABEL = {
+  permanent: "200 MB",
+  temporary: "1 GB",
+} as const;
 
 // "permanent" -> catbox.moe (enlace permanente). El resto -> litterbox (temporal, máx. 72 h).
 const EXPIRY_OPTIONS = [
@@ -46,6 +72,15 @@ const GRID_GAP = 12;
 // monitor ancho.
 const CARD_MIN_WIDTH = 540;
 
+type Sort = "newest" | "oldest" | "largest" | "smallest";
+
+const SORTS: { key: Sort; label: string }[] = [
+  { key: "newest", label: "Newest" },
+  { key: "oldest", label: "Oldest" },
+  { key: "largest", label: "Largest" },
+  { key: "smallest", label: "Smallest" },
+];
+
 const expiresAt = (l: StoredLink): number =>
   l.expiry === "permanent" ? Infinity : l.uploadedAt + (DURATION_MS[l.expiry] ?? 0);
 
@@ -73,28 +108,68 @@ const formatSize = (bytes: number): string => {
   return `${bytes} B`;
 };
 
-const formatRemaining = (ms: number): string => {
-  const h = Math.floor(ms / 3600e3);
-  if (h >= 1) return `Expires in ~${h} h`;
-  const m = Math.max(1, Math.floor(ms / 60e3));
-  return `Expires in ~${m} min`;
+/**
+ * `match_20260813_022120` → milisegundos. Es lo único que fecha un clip: el
+ * backend no guarda cuándo se recortó, solo de qué partida salió.
+ */
+const clipTime = (matchId: string): number => {
+  const m = /^match_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(matchId);
+  if (!m) return 0;
+  return new Date(
+    `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`
+  ).getTime() || 0;
 };
 
 export const ClipsGallery: React.FC = () => {
   const [clips, setClips] = useState<ClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const t = useT();
+  const navigate = useNavigate();
   const [uploading, setUploading] = useState<string | null>(null);
+  // Segundos que lleva la subida en curso. Sigue haciendo falta: el primer
+  // aviso de progreso puede tardar (el backend abre la conexión antes de
+  // empezar a mandar bytes), y hasta que llegue lo honesto es una barra
+  // indeterminada con el tiempo transcurrido debajo.
+  const [uploadElapsed, setUploadElapsed] = useState(0);
+  // Bytes ya enviados del clip en curso, según el evento `clip_upload_progress`.
+  // null = todavía no ha llegado ninguno.
+  const [uploadProg, setUploadProg] = useState<UploadProgress | null>(null);
   const [links, setLinks] = useState<Record<string, StoredLink>>(() => loadStoredLinks());
-  const { showSuccess, showError } = useDialog();
+  const { showSuccess, showError, showConfirm } = useDialog();
+  const { toast } = useToast();
   const [expiry, setExpiry] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState<string | null>(null);
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const [sort, setSort] = useState<Sort>("newest");
+
+  // La biblioteca, para poder decir de qué partida salió cada clip con algo que
+  // se pueda leer (campeón y fecha) en vez del id de la carpeta.
+  const { matches } = useMatches();
+  const setSelectedMatch = useAppStore((s) => s.setSelectedMatch);
 
   // OJO: todos los hooks van aquí arriba, antes de los `return` de "cargando" y
   // "sin clips". Declararlos después haría que el número de hooks cambiara entre
   // renders y React abortaría con "Rendered more hooks than during the previous render".
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(2);
+
+  const matchById = useMemo(() => {
+    const map = new Map<string, MatchMetadata>();
+    for (const m of matches) map.set(m.id, m);
+    return map;
+  }, [matches]);
+
+  const visible = useMemo(() => {
+    const list = onlyFavorites ? clips.filter((c) => c.favorite) : clips;
+    const out = [...list];
+    switch (sort) {
+      case "largest": out.sort((a, b) => b.size - a.size); break;
+      case "smallest": out.sort((a, b) => a.size - b.size); break;
+      case "oldest": out.sort((a, b) => clipTime(a.match_id) - clipTime(b.match_id)); break;
+      default: out.sort((a, b) => clipTime(b.match_id) - clipTime(a.match_id)); break;
+    }
+    return out;
+  }, [clips, onlyFavorites, sort]);
 
   // Cuántas tarjetas caben por fila. Replica a mano lo que hacía
   // `grid-template-columns: repeat(auto-fill, minmax(CARD_MIN_WIDTH, 1fr))`,
@@ -126,7 +201,7 @@ export const ClipsGallery: React.FC = () => {
     return () => ro.disconnect();
   }, [loading, clips.length]);
 
-  const rowCount = Math.ceil(clips.length / columns);
+  const rowCount = Math.ceil(visible.length / columns);
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => scrollRef.current,
@@ -138,15 +213,46 @@ export const ClipsGallery: React.FC = () => {
   });
 
   // Al cambiar el número de columnas, cada índice de fila pasa a contener otras
-  // tarjetas: las alturas medidas antes ya no valen.
+  // tarjetas: las alturas medidas antes ya no valen. Igual al reordenar o filtrar.
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [columns, rowVirtualizer]);
+  }, [columns, sort, onlyFavorites, rowVirtualizer]);
 
   // Persistir los enlaces cada vez que cambian para que sobrevivan a recargas.
   useEffect(() => {
     localStorage.setItem(LS_KEY, JSON.stringify(links));
   }, [links]);
+
+  /**
+   * Progreso real de la subida en curso.
+   *
+   * Se filtra por ruta porque el evento es global y puede haber más de una
+   * subida viva; `total` viaja en cada aviso, así que entrar a mitad basta
+   * para pintar el porcentaje.
+   */
+  useEffect(() => {
+    if (!uploading) { setUploadProg(null); return; }
+    let vivo = true;
+    let quitar: (() => void) | null = null;
+    listen<UploadProgress>("clip_upload_progress", (e) => {
+      if (e.payload && e.payload.path === uploading) setUploadProg(e.payload);
+    })
+      .then((f) => { if (vivo) quitar = f; else f(); })
+      .catch(console.error);
+    return () => {
+      vivo = false;
+      if (quitar) quitar();
+      setUploadProg(null);
+    };
+  }, [uploading]);
+
+  // Cronómetro de la subida en curso.
+  useEffect(() => {
+    if (!uploading) { setUploadElapsed(0); return; }
+    const t0 = Date.now();
+    const id = setInterval(() => setUploadElapsed(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [uploading]);
 
   const fetchClips = async () => {
     try {
@@ -175,11 +281,11 @@ export const ClipsGallery: React.FC = () => {
     try {
       const url = await invoke<string>("upload_clip", { path: clip.path, expiry: exp });
       setLinks(prev => ({ ...prev, [clip.path]: { url, expiry: exp, uploadedAt: Date.now() } }));
-      showSuccess("Clip subido exitosamente");
+      showSuccess(t("Clip uploaded. The link is on your clipboard."));
       await copyLink(url);
     } catch (e) {
       console.error(e);
-      showError("Upload failed: " + e);
+      showError(t("Couldn't upload the clip: {msg}", { msg: String(e) }));
     } finally {
       setUploading(null);
     }
@@ -198,8 +304,58 @@ export const ClipsGallery: React.FC = () => {
       const isFav = await toggleClipFavorite(clipPath);
       setClips(clips.map(c => c.path === clipPath ? { ...c, favorite: isFav } : c));
     } catch (err) {
-      showError("Failed to toggle favorite: " + err);
+      showError(t("Couldn't change the favourite: {msg}", { msg: String(err) }));
     }
+  };
+
+  /**
+   * Borra el recorte del disco.
+   *
+   * Se pide confirmación porque no hay papelera: el backend borra el .mp4 y su
+   * JSON de al lado. El enlace guardado se olvida a la vez — dejarlo apuntando
+   * a un fichero que ya no está era ofrecer "Re-subir" de algo inexistente.
+   */
+  const handleDelete = async (clip: ClipMetadata) => {
+    const ok = await showConfirm({
+      title: t("Delete clip"),
+      message: t("This clip is deleted for good. The game it came from is not touched."),
+      confirmText: t("Delete"),
+      cancelText: t("Cancel"),
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteClip(clip.path);
+      setClips((prev) => prev.filter((c) => c.path !== clip.path));
+      clearLink(clip.path);
+    } catch (e) {
+      toast({
+        title: t("Couldn't delete the clip"),
+        body: String(e),
+        tone: "danger",
+      });
+    }
+  };
+
+  const handleReveal = async (clip: ClipMetadata) => {
+    try {
+      await revealItemInDir(clip.path);
+    } catch (err) {
+      showError(t("Couldn't open the folder: {msg}", { msg: String(err) }));
+    }
+  };
+
+  /** Abre la partida de origen en el reproductor, igual que hace la biblioteca. */
+  const openMatch = (match: MatchMetadata) => {
+    setSelectedMatch(match);
+    navigate("/review");
+  };
+
+  const formatRemaining = (ms: number): string => {
+    const h = Math.floor(ms / 3600e3);
+    if (h >= 1) return t("Expires in ~{h} h", { h });
+    const m = Math.max(1, Math.floor(ms / 60e3));
+    return t("Expires in ~{m} min", { m });
   };
 
   if (loading) {
@@ -216,12 +372,14 @@ export const ClipsGallery: React.FC = () => {
     return (
       <div style={styles.container} className="panel-enter">
         <div style={styles.header}>
-          <h1 style={styles.title}>Clips</h1>
+          <h1 style={styles.title}>{t("Clips")}</h1>
         </div>
         <EmptyState
           icon={<Film size={30} color="var(--faint)" />}
           title={t("No clips yet")}
-          text="Use the clipping tool in the player to save your best moments."
+          // Palabra por palabra la clave del diccionario: la frase de antes se
+          // le parecía pero no era la misma, así que en español salía en inglés.
+          text={t("Use the clipping tool in the player to create clips of your best moments.")}
         />
       </div>
     );
@@ -230,19 +388,57 @@ export const ClipsGallery: React.FC = () => {
   return (
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
-        <h1 style={styles.title}>Clips</h1>
-        <div className="u-meta" style={{ marginTop: 4 }}>
-          {clips.length} {clips.length === 1 ? "clip" : "clips"}
+        <h1 style={styles.title}>{t("Clips")}</h1>
+        <div className="u-meta">
+          {clips.length} {t(clips.length === 1 ? "clip" : "clips")}
         </div>
       </div>
-      {/* El scroll vive aquí y no en el contenedor: el virtualizador posiciona los
-          items relativos a este div, así que si el elemento con scroll fuera el de
-          fuera, la cabecera desplazaría todas las filas. */}
+
+      <div style={styles.tools}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-pressed={onlyFavorites}
+          icon={<Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />}
+          onClick={() => setOnlyFavorites((v) => !v)}
+        >
+          {t("Favourites")}
+        </Button>
+        <span style={{ flex: 1 }} />
+        <span className="u-label" style={{ marginRight: 2 }}>{t("Sort")}</span>
+        {SORTS.map((s) => (
+          <Button
+            key={s.key}
+            variant="ghost"
+            size="sm"
+            aria-pressed={sort === s.key}
+            onClick={() => setSort(s.key)}
+          >
+            {t(s.label)}
+          </Button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <EmptyState
+          icon={<Heart size={30} color="var(--faint)" />}
+          title={t("No favourite clips yet")}
+          text={t("Mark a clip with the heart and it shows up here.")}
+          action={
+            <Button variant="ghost" size="sm" onClick={() => setOnlyFavorites(false)}>
+              {t("Clear filters")}
+            </Button>
+          }
+        />
+      ) : (
+      /* El scroll vive aquí y no en el contenedor: el virtualizador posiciona los
+         items relativos a este div, así que si el elemento con scroll fuera el de
+         fuera, la cabecera desplazaría todas las filas. */
       <div style={styles.scrollArea} ref={scrollRef}>
       <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const startIndex = virtualRow.index * columns;
-          const rowClips = clips.slice(startIndex, startIndex + columns);
+          const rowClips = visible.slice(startIndex, startIndex + columns);
 
           return (
             <div
@@ -268,9 +464,10 @@ export const ClipsGallery: React.FC = () => {
                 const isUploading = uploading === clip.path;
                 const exp = expiry[clip.path] ?? "72h";
                 const isPermanent = exp === "permanent";
-                const limit = isPermanent ? CATBOX_LIMIT : LITTERBOX_LIMIT;
-                const tooBig = clip.size > limit;
+                const kind = isPermanent ? "permanent" : "temporary";
+                const tooBig = clip.size > UPLOAD_LIMITS[kind];
                 const remaining = stored ? expiresAt(stored) - Date.now() : 0;
+                const match = matchById.get(clip.match_id);
 
                 return (
                   <motion.div
@@ -287,54 +484,112 @@ export const ClipsGallery: React.FC = () => {
                       />
                     </div>
                     <div style={styles.cardInfo}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
+                      <div style={styles.nameRow}>
                         <span style={styles.clipName} title={clip.name}>{clip.name}</span>
-                        <button 
+                        <button
                           onClick={() => handleToggleFavorite(clip.path)}
-                          style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--accent-violet)" : "var(--text-muted)" }}
-                          title={clip.favorite ? "Remove from favorites" : "Add to favorites"}
+                          style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--flag)" : "var(--faint)" }}
+                          title={t(clip.favorite ? "Remove from favourites" : "Add to favourites")}
+                          aria-label={t(clip.favorite ? "Remove from favourites" : "Add to favourites")}
                         >
-                          <Heart size={16} fill={clip.favorite ? "var(--accent-violet)" : "transparent"} />
+                          <Heart size={16} fill={clip.favorite ? "var(--flag)" : "transparent"} />
                         </button>
                       </div>
                       <div style={styles.metaRow}>
-                        <span style={styles.clipMatch}>De: {clip.match_id}</span>
+                        {/* Era "De: match_20260813_022120", o sea el nombre de la
+                            carpeta. Lo que ubica un clip es de qué partida salió. */}
+                        <span style={styles.clipMatch} title={clip.match_id}>
+                          {match
+                            ? t("From {champion} · {date}", { champion: match.champion, date: match.date })
+                            : t("From {id}", { id: clip.match_id })}
+                        </span>
                         <span style={styles.sizeBadge}>{formatSize(clip.size)}</span>
+                      </div>
+
+                      <div style={styles.rowActions}>
+                        {match && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<PlaySquare size={13} />}
+                            onClick={() => openMatch(match)}
+                            title={t("Open the game this clip came from")}
+                          >
+                            {t("Open match")}
+                          </Button>
+                        )}
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          icon={<FolderOpen size={14} />}
+                          title={t("Reveal in folder")}
+                          aria-label={t("Reveal in folder")}
+                          onClick={() => handleReveal(clip)}
+                        />
+                        <Button
+                          variant="icon"
+                          size="sm"
+                          icon={<Trash2 size={14} />}
+                          title={t("Delete clip")}
+                          aria-label={t("Delete clip")}
+                          onClick={() => handleDelete(clip)}
+                        />
                       </div>
 
                       <div style={styles.actions}>
                         {stored ? (
                           <>
                             <div style={styles.linkRow}>
-                              <input readOnly value={stored.url} style={styles.linkInput} onFocus={(e) => e.target.select()} />
-                              <button onClick={() => copyLink(stored.url)} style={styles.iconBtn} title="Copy link">
-                                {copied === stored.url ? <Check size={14} color="var(--color-victory)" /> : <Copy size={14} />}
+                              <input
+                                readOnly
+                                value={stored.url}
+                                style={styles.linkInput}
+                                aria-label={t("Share link")}
+                                onFocus={(e) => e.target.select()}
+                              />
+                              <button
+                                onClick={() => copyLink(stored.url)}
+                                style={styles.iconBtn}
+                                title={t("Copy link")}
+                                aria-label={t("Copy link")}
+                              >
+                                {copied === stored.url ? <Check size={14} color="var(--cool)" /> : <Copy size={14} />}
                               </button>
-                              <button onClick={() => openUrl(stored.url)} style={styles.iconBtn} title="Open in browser">
+                              <button
+                                onClick={() => openUrl(stored.url)}
+                                style={styles.iconBtn}
+                                title={t("Open in browser")}
+                                aria-label={t("Open in browser")}
+                              >
                                 <ExternalLink size={14} />
                               </button>
                             </div>
                             <div style={styles.statusRow}>
-                              <span style={styles.statusText}>
-                                {stored.expiry === "permanent" ? "Permanent link" : formatRemaining(remaining)}
+                              <span className="u-meta">
+                                {stored.expiry === "permanent" ? t("Permanent link") : formatRemaining(remaining)}
                               </span>
-                              <button onClick={() => clearLink(clip.path)} style={styles.relinkBtn} title="Generate a new link">
-                                <RotateCcw size={11} /> Re-upload
+                              <button
+                                onClick={() => clearLink(clip.path)}
+                                style={styles.relinkBtn}
+                                title={t("Generate a new link")}
+                              >
+                                <RotateCcw size={11} /> {t("Re-upload")}
                               </button>
                             </div>
                           </>
                         ) : (
                           <>
                             <div style={styles.expiryRow}>
-                              <Clock size={13} color="var(--text-muted)" />
+                              <Clock size={13} color="var(--faint)" />
                               <select
                                 value={exp}
                                 disabled={isUploading}
                                 onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
+                                aria-label={t("How long the link lasts")}
                                 style={styles.select}
                               >
                                 {EXPIRY_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                  <option key={o.value} value={o.value}>{t(o.label)}</option>
                                 ))}
                               </select>
                             </div>
@@ -348,15 +603,54 @@ export const ClipsGallery: React.FC = () => {
                               }}
                             >
                               {isUploading ? (
-                                <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Uploading…</>
+                                <>
+                                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                                  {t("Uploading…")}
+                                </>
                               ) : (
-                                <><UploadCloud size={14} /> Upload & share</>
+                                <><UploadCloud size={14} /> {t("Upload & share")}</>
                               )}
                             </button>
+                            {/* Con progreso del backend, barra de verdad con los
+                                MB. Sin él todavía (los primeros segundos son
+                                handshake), la indeterminada con el tiempo que
+                                lleva: una barra que avanza sola sería una
+                                mentira útil, pero mentira. */}
+                            {isUploading && (
+                              uploadProg && uploadProg.total > 0 ? (
+                                <div>
+                                  <div style={styles.indeterminateTrack}>
+                                    <span
+                                      style={{
+                                        ...styles.progressFill,
+                                        width: `${Math.min(100, (100 * uploadProg.sent) / uploadProg.total)}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="u-meta">
+                                    {t("{pct}% · {sent} of {total} MB", {
+                                      pct: Math.floor((100 * uploadProg.sent) / uploadProg.total),
+                                      sent: (uploadProg.sent / 1024 / 1024).toFixed(1),
+                                      total: (uploadProg.total / 1024 / 1024).toFixed(1),
+                                    })}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div>
+                                  <div style={styles.indeterminateTrack}>
+                                    <span style={styles.indeterminateFill} />
+                                  </div>
+                                  <span className="u-meta">
+                                    {t("{s}s elapsed", { s: uploadElapsed })}
+                                  </span>
+                                </div>
+                              )
+                            )}
                             {tooBig && (
                               <span style={styles.warn}>
-                                Exceeds the {isPermanent ? "200 MB (permanent)" : "1 GB (temporary)"} limit.
-                                {isPermanent ? " Choose a temporary option." : ""}
+                                {isPermanent
+                                  ? t("Over the {limit} limit of the permanent link. Pick a temporary one.", { limit: LIMIT_LABEL.permanent })
+                                  : t("Over the {limit} limit. Clip a shorter moment.", { limit: LIMIT_LABEL.temporary })}
                               </span>
                             )}
                           </>
@@ -371,6 +665,7 @@ export const ClipsGallery: React.FC = () => {
         })}
       </div>
       </div>
+      )}
     </div>
   );
 };
@@ -379,7 +674,7 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
     flexDirection: "column",
-    padding: "var(--space-8)",
+    padding: "var(--space-6) var(--space-8)",
     height: "100%",
     boxSizing: "border-box",
     background: "transparent",
@@ -393,16 +688,22 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "baseline",
     gap: "var(--space-3)",
-    margin: "0 0 var(--space-6) 0",
+    margin: "0 0 var(--space-3) 0",
   },
   title: {
     color: "var(--text)",
     margin: 0,
     fontSize: "var(--font-xl)",
   },
-  count: {
-    color: "var(--text-muted)",
-    fontSize: "var(--font-sm)",
+  tools: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    flexWrap: "wrap",
+    padding: "var(--space-3) 0",
+    borderTop: "1px solid var(--line-soft)",
+    borderBottom: "1px solid var(--line-soft)",
+    marginBottom: "var(--space-4)",
   },
   emptyState: {
     display: "flex",
@@ -414,11 +715,11 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     background: "var(--media-sheen)",
     borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--border-subtle)",
+    border: "1px solid var(--line)",
     overflow: "hidden",
     display: "grid",
     gridTemplateColumns: "224px 1fr",
-    height: 168,
+    height: 210,
   },
   thumbnailWrapper: {
     width: "100%",
@@ -442,6 +743,12 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     overflow: "hidden",
   },
+  nameRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "var(--space-2)",
+  },
   clipName: {
     color: "var(--text)",
     fontSize: "var(--font-md)",
@@ -457,23 +764,28 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
   },
   clipMatch: {
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     fontSize: "var(--font-xs)",
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
   sizeBadge: {
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
+    fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
     fontWeight: 600,
     flexShrink: 0,
+  },
+  rowActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
   },
   actions: {
     display: "flex",
     flexDirection: "column",
     gap: "var(--space-2)",
-    marginTop: "var(--space-2)",
   },
   expiryRow: {
     display: "flex",
@@ -482,9 +794,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   select: {
     flex: 1,
-    background: "var(--bg-app)",
-    color: "var(--text-primary)",
-    border: "1px solid var(--border-subtle)",
+    background: "var(--sunken)",
+    color: "var(--text)",
+    border: "1px solid var(--line)",
     borderRadius: "var(--radius-md)",
     padding: "6px 8px",
     fontSize: "var(--font-xs)",
@@ -496,7 +808,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     gap: "var(--space-2)",
-    padding: "var(--space-3)",
+    padding: "var(--space-2)",
     borderRadius: "var(--radius-md)",
     fontSize: "var(--font-xs)",
     fontWeight: 600,
@@ -504,8 +816,32 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     color: "var(--on-action)",
   },
+  indeterminateTrack: {
+    height: 3,
+    background: "var(--sunken)",
+    borderRadius: "var(--radius-full)",
+    overflow: "hidden",
+    boxShadow: "var(--inset-sunken)",
+  },
+  indeterminateFill: {
+    display: "block",
+    width: "100%",
+    height: "100%",
+    borderRadius: "var(--radius-full)",
+    background: "var(--cool)",
+    // Latido, no barrido: dice "sigue vivo", no "va por la mitad". Reutiliza el
+    // keyframe `pulse` que ya existe en index.css en vez de traerse el suyo.
+    animation: "pulse 1.4s ease-in-out infinite",
+  },
+  progressFill: {
+    display: "block",
+    height: "100%",
+    borderRadius: "var(--radius-full)",
+    background: "var(--cool)",
+    transition: "width var(--t-quick) var(--e-move)",
+  },
   warn: {
-    color: "var(--color-defeat)",
+    color: "var(--signal)",
     fontSize: "11px",
     lineHeight: 1.4,
   },
@@ -513,10 +849,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     width: "100%",
     gap: "6px",
-    background: "rgba(0,0,0,0.3)",
+    background: "var(--sunken)",
     padding: "4px",
     borderRadius: "var(--radius-md)",
     alignItems: "center",
+    boxShadow: "var(--inset-sunken)",
   },
   linkInput: {
     flex: 1,
@@ -524,6 +861,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "transparent",
     color: "var(--text)",
     border: "none",
+    fontFamily: "var(--font-mono)",
     fontSize: "11px",
     outline: "none",
     padding: "0 4px",
@@ -535,7 +873,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--surface-2)",
     border: "1px solid var(--glass-line-soft)",
     color: "var(--muted)",
-    borderRadius: "4px",
+    borderRadius: "var(--radius-sm)",
     padding: "6px",
     cursor: "pointer",
     flexShrink: 0,
@@ -546,17 +884,13 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "var(--space-2)",
   },
-  statusText: {
-    color: "var(--text-muted)",
-    fontSize: "11px",
-  },
   relinkBtn: {
     display: "flex",
     alignItems: "center",
     gap: "4px",
     background: "transparent",
     border: "none",
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
     fontSize: "11px",
     cursor: "pointer",
     padding: 0,

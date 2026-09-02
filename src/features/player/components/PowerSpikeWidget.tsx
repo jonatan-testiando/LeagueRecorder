@@ -1,123 +1,111 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { ItemPurchase, TimelineMarker } from "../../../types";
-import { Zap } from "lucide-react";
 import { mmss } from "../../../core/time";
-import { DDRAGON_VER, itemIcon } from "./videoPlayerUtils";
+import { useT } from "../../../core/LanguageProvider";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { itemIcon } from "./videoPlayerUtils";
+import { wstyles } from "./videoPlayerStyles";
 
 interface PowerSpikeWidgetProps {
   itemPurchases?: ItemPurchase[];
   markers?: TimelineMarker[];
+  /**
+   * Versión de Data Dragon YA RESUELTA por el reproductor. Antes este widget
+   * usaba la constante de respaldo mientras la pantalla de al lado pintaba los
+   * mismos objetos con la versión viva: dos iconos del mismo ítem servidos de
+   * dos parches distintos, y los de un parche viejo fallando en silencio.
+   */
+  ddragonVer: string;
   onSeek: (seconds: number) => void;
 }
+
+/** Ventana en la que una compra se considera responsable de una participación. */
+const IMPACT_WINDOW_SECS = 180;
+
+/** Compras visibles antes de pedir el resto. */
+const FIRST_PAGE = 8;
 
 export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
   itemPurchases = [],
   markers = [],
+  ddragonVer,
   onSeek,
 }) => {
-  if (itemPurchases.length === 0) return null;
+  const t = useT();
+  const [expanded, setExpanded] = useState(false);
 
   // Participación, no remates: una asistencia justo después de comprar el ítem
   // dice lo mismo del pico de poder que una kill. ('assist' es un tipo nuevo;
   // las partidas viejas guardan las asistencias como 'kill'.)
-  const kills = markers.filter((m) => m.event_type === "kill" || m.event_type === "assist");
-
-  // Calcular Kills dentro de los 3 minutos posteriores a cada compra
-  const purchasesWithImpact = itemPurchases.map((ip) => {
-    const killsAfter = kills.filter(
-      (k) => k.time >= ip.time && k.time <= ip.time + 180
-    ).length;
-    return {
+  const rows = useMemo(() => {
+    const kills = (markers ?? []).filter(
+      (m) => m.event_type === "kill" || m.event_type === "assist"
+    );
+    return itemPurchases.map((ip) => ({
       purchase: ip,
-      killsAfter,
-    };
-  });
+      after: kills.filter((k) => k.time >= ip.time && k.time <= ip.time + IMPACT_WINDOW_SECS).length,
+    }));
+  }, [itemPurchases, markers]);
+
+  if (itemPurchases.length === 0) {
+    return (
+      <EmptyState
+        title={t("No purchases recorded")}
+        text={t("Item purchases come from Riot's timeline. Sync the game with Riot to see them.")}
+      />
+    );
+  }
+
+  const visible = expanded ? rows : rows.slice(0, FIRST_PAGE);
+  const hidden = rows.length - visible.length;
 
   return (
-    <div
-      style={{
-        background: "var(--surface-1)",
-        border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid var(--color-objective)",
-        borderRadius: "var(--radius-lg)",
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-          <Zap size={16} color="var(--color-objective)" />
-          <span>Línea de Compras y Power Spikes</span>
-        </div>
-        <span
-          style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            padding: "2px 8px",
-            borderRadius: "12px",
-            background: "color-mix(in srgb, var(--color-objective) 15%, transparent)",
-            color: "var(--color-objective)",
-            border: "1px solid color-mix(in srgb, var(--color-objective) 30%, transparent)",
-          }}
-        >
-          {itemPurchases.length} Compras clave
-        </span>
-      </div>
+    <div style={wstyles.body}>
+      <p className="note" style={{ marginTop: 0 }}>
+        {t("Kills and assists you took in the {n} minutes after each purchase.", {
+          n: Math.round(IMPACT_WINDOW_SECS / 60),
+        })}
+      </p>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
-          gap: "8px",
-        }}
-      >
-        {purchasesWithImpact.slice(0, 8).map((item, idx) => (
-          <div
+      <div style={wstyles.buyGrid}>
+        {visible.map((item, idx) => (
+          <button
             key={idx}
+            type="button"
             onClick={() => onSeek(item.purchase.time)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "6px 10px",
-              borderRadius: "6px",
-              background: "var(--bg-app)",
-              border: "1px solid var(--border-subtle)",
-              cursor: "pointer",
-            }}
-            title={`Comprado en ${mmss(item.purchase.time)} · Ir a ese momento`}
+            style={wstyles.buyCell}
+            title={`${mmss(item.purchase.time)} · ${t("Jump to this moment")}`}
           >
             <img
-              src={itemIcon(DDRAGON_VER, item.purchase.item_id)}
+              src={itemIcon(ddragonVer, item.purchase.item_id)}
               alt=""
-              style={{ width: "24px", height: "24px", borderRadius: "4px" }}
+              style={wstyles.buyIconSm}
               onError={(e) => {
                 (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
               }}
             />
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
-                  fontWeight: 700,
-                  color: "var(--text-secondary)",
-                }}
-              >
-                {mmss(item.purchase.time)}
-              </span>
-              {item.killsAfter > 0 && (
-                <span style={{ fontSize: "10px", color: "var(--color-victory)", fontWeight: 800 }}>
-                  +{item.killsAfter} Kills
+            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span className="u-metric" style={{ fontSize: 11 }}>{mmss(item.purchase.time)}</span>
+              {item.after > 0 && (
+                <span style={{ fontSize: 10, color: "var(--win)" }}>
+                  {t("+{n} K/A", { n: item.after })}
                 </span>
               )}
-            </div>
-          </div>
+            </span>
+          </button>
         ))}
       </div>
+
+      {(hidden > 0 || expanded) && (
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          style={{ alignSelf: "flex-start" }}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? t("Show fewer") : t("Show {n} more", { n: hidden })}
+        </button>
+      )}
     </div>
   );
 };

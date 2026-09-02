@@ -470,4 +470,184 @@ export const styles: Record<string, React.CSSProperties> = {
   perfItem: { width: "26px", height: "26px", borderRadius: "5px", background: "var(--bg-app)" },
   perfItemEmpty: { width: "26px", height: "26px", borderRadius: "5px", background: "rgba(255,255,255,0.04)" },
   buyIcon: { width: "30px", height: "30px", borderRadius: "5px", background: "var(--bg-app)" },
+
+  // --- barra del recortador ---------------------------------------------
+  clipBar: {
+    position: "absolute",
+    bottom: "var(--space-12)",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 50,
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-4)",
+    maxWidth: "min(760px, calc(100% - var(--space-8)))",
+    padding: "var(--space-3) var(--space-4)",
+    background: "var(--surface-1)",
+    border: "1px solid var(--glass-line)",
+    borderRadius: "var(--radius-lg)",
+    boxShadow: "var(--shadow-2)",
+  },
+  clipTitle: {
+    display: "block",
+    fontSize: "13px",
+    color: "var(--text)",
+    whiteSpace: "nowrap",
+  },
+  clipRange: { display: "block", fontSize: "11px", color: "var(--faint)" },
+  clipNote: {
+    flex: 1,
+    minWidth: 160,
+    padding: "var(--space-2) var(--space-3)",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--line)",
+    background: "var(--sunken)",
+    boxShadow: "var(--inset-sunken)",
+    color: "var(--text)",
+    fontFamily: "var(--font-sans)",
+    fontSize: "13px",
+    outline: "none",
+  },
+};
+
+/**
+ * Estilos de los widgets de análisis (mapa táctico, ganks, picos de poder,
+ * tendencias, curva de oro, conciencia de mapa).
+ *
+ * Vienen de seis ficheros donde cada uno se había redibujado su propia tarjeta:
+ * borde de color arriba, sombra grande, insignia con fondo translúcido y una
+ * paleta distinta cada vez. Ahora no llevan tarjeta: viven DENTRO del
+ * inspector, que ya es la superficie, y su gramática es la de las secciones que
+ * tenían al lado (`.sect__head`, `.drow`, `.insp__press`, `.imp__row`).
+ *
+ * Sólo queda aquí lo que no tiene clase: rejillas, el mapa y las curvas.
+ */
+export const wstyles: Record<string, React.CSSProperties> = {
+  // --- armazón común ------------------------------------------------------
+  body: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
+  headRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    marginLeft: "auto",
+  },
+  toolbar: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
+  list: { display: "flex", flexDirection: "column" },
+  // Cifra suelta con su etiqueta, para las rejillas de comparación.
+  statBox: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
+    padding: "var(--space-2) var(--space-3)",
+    border: "1px solid var(--line-soft)",
+    borderRadius: "var(--radius-md)",
+    background: "var(--sunken)",
+  },
+  statGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(132px, 1fr))",
+    gap: "var(--space-2)",
+  },
+  statValue: {
+    fontFamily: "var(--font-mono)",
+    fontSize: "15px",
+    fontWeight: 600,
+    color: "var(--text)",
+    fontVariantNumeric: "tabular-nums",
+  },
+  statDelta: { fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" },
+
+  // --- mapa táctico -------------------------------------------------------
+  mapFrame: {
+    position: "relative",
+    width: "100%",
+    aspectRatio: "1 / 1",
+    background: "var(--sunken)",
+    borderRadius: "var(--radius-md)",
+    overflow: "hidden",
+    border: "1px solid var(--line-soft)",
+  },
+  mapImg: {
+    width: "100%",
+    height: "100%",
+    objectFit: "fill",
+    position: "absolute",
+    inset: 0,
+    // El mapa es el FONDO de los marcadores: bajado de brillo, los puntos se
+    // leen sin necesidad de rodearlos de un halo.
+    filter: "brightness(0.7) saturate(0.8)",
+  },
+  // Botón, no div: se llega con el tabulador y se dispara con Enter.
+  mapDot: {
+    position: "absolute",
+    transform: "translate(-50%, -50%)",
+    width: "14px",
+    height: "14px",
+    padding: 0,
+    borderRadius: "var(--radius-full)",
+    border: "1.5px solid var(--ground)",
+    cursor: "pointer",
+  },
+  mapTip: {
+    position: "absolute",
+    left: "var(--space-2)",
+    right: "var(--space-2)",
+    bottom: "var(--space-2)",
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: "var(--space-3)",
+    padding: "6px var(--space-3)",
+    borderRadius: "var(--radius-sm)",
+    background: "color-mix(in srgb, var(--ground) 88%, transparent)",
+    border: "1px solid var(--glass-line)",
+    fontSize: "11.5px",
+    color: "var(--text)",
+    pointerEvents: "none",
+  },
+
+  // --- picos de poder -----------------------------------------------------
+  buyGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+    gap: "var(--space-2)",
+  },
+  buyCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "5px var(--space-2)",
+    borderRadius: "var(--radius-sm)",
+    background: "transparent",
+    border: "1px solid var(--line-soft)",
+    cursor: "pointer",
+    textAlign: "left",
+    color: "var(--text)",
+  },
+  buyIconSm: {
+    width: "24px",
+    height: "24px",
+    borderRadius: "var(--radius-sm)",
+    background: "var(--sunken)",
+    flexShrink: 0,
+  },
+
+  // --- curva de oro / XP --------------------------------------------------
+  chartWrap: { position: "relative", width: "100%", height: "120px" },
+  chartSvg: { width: "100%", height: "100%", cursor: "pointer", overflow: "visible" },
+  chartTip: {
+    position: "absolute",
+    top: "-34px",
+    transform: "translateX(-50%)",
+    padding: "3px var(--space-2)",
+    borderRadius: "var(--radius-sm)",
+    background: "color-mix(in srgb, var(--ground) 92%, transparent)",
+    border: "1px solid var(--glass-line)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "11px",
+    color: "var(--text)",
+    pointerEvents: "none",
+    whiteSpace: "nowrap",
+    zIndex: 10,
+  },
 };

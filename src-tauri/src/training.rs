@@ -392,11 +392,37 @@ impl MetronomeRunner {
 // ---------------------------------------------------------------------------
 
 /// Traduce el nombre de una tecla escrito por el usuario a la `rdev::Key`
-/// correspondiente. Acepta letras, dígitos de la fila superior, F1–F12 y
-/// algunas teclas sueltas útiles (espacio, tab).
+/// correspondiente. Acepta letras, dígitos de la fila superior, F1–F12, el
+/// teclado numérico y algunas teclas sueltas útiles (espacio, tab).
+///
+/// **El teclado numérico es una tecla distinta**, no un alias del dígito: en
+/// Windows `Num1` y `Kp1` son códigos de barrido distintos y el listener recibe
+/// el que se pulsó. Quien configuraba "1" pensando en el 1 del numpad —que es
+/// donde cae la mano izquierda de mucha gente al jugar— tenía un atajo que no
+/// disparaba nunca y ninguna pista de por qué.
+///
+/// Los nombres canónicos son `NUM0`..`NUM9` (y `NUMPLUS`, `NUMMINUS`,
+/// `NUMMULT`, `NUMDIV`), que es lo que devuelve [`key_name`]: así una tecla
+/// leída del teclado y guardada en la config vuelve a leerse igual. Se aceptan
+/// además las formas `KP0`/`NUMPAD0` porque son las que la gente escribe.
 pub fn parse_key(s: &str) -> Option<rdev::Key> {
     use rdev::Key::*;
     let t = s.trim().to_uppercase();
+    // "NUMPAD3" / "KP3" / "NUM3" → "3", y de ahí a la tecla del numpad.
+    for prefijo in ["NUMPAD", "NUM", "KP"] {
+        if let Some(d) = t.strip_prefix(prefijo) {
+            let tecla = match d {
+                "0" => Kp0, "1" => Kp1, "2" => Kp2, "3" => Kp3, "4" => Kp4,
+                "5" => Kp5, "6" => Kp6, "7" => Kp7, "8" => Kp8, "9" => Kp9,
+                "PLUS" | "+" | "ADD" => KpPlus,
+                "MINUS" | "-" | "SUB" => KpMinus,
+                "MULT" | "*" | "MULTIPLY" => KpMultiply,
+                "DIV" | "/" | "DIVIDE" => KpDivide,
+                _ => continue,
+            };
+            return Some(tecla);
+        }
+    }
     Some(match t.as_str() {
         "A" => KeyA, "B" => KeyB, "C" => KeyC, "D" => KeyD, "E" => KeyE,
         "F" => KeyF, "G" => KeyG, "H" => KeyH, "I" => KeyI, "J" => KeyJ,
@@ -412,6 +438,42 @@ pub fn parse_key(s: &str) -> Option<rdev::Key> {
         "TAB" => Tab,
         _ => return None,
     })
+}
+
+/// El nombre canónico de una tecla: la inversa de [`parse_key`].
+///
+/// Existe para que el ciclo "pulsa una tecla → se guarda en la config → se
+/// vuelve a leer al arrancar" cierre. Sin esto, capturar una tecla del numpad
+/// obligaba a inventarse su nombre en el frontend, y bastaba escribirlo de otra
+/// manera para que `parse_key` devolviera `None` y el atajo dejara de existir
+/// en silencio.
+///
+/// `None` para una tecla que no se sabe nombrar: es lo mismo que decir que no
+/// se puede guardar, que es la verdad.
+pub fn key_name(k: rdev::Key) -> Option<String> {
+    use rdev::Key::*;
+    let s = match k {
+        KeyA => "A", KeyB => "B", KeyC => "C", KeyD => "D", KeyE => "E",
+        KeyF => "F", KeyG => "G", KeyH => "H", KeyI => "I", KeyJ => "J",
+        KeyK => "K", KeyL => "L", KeyM => "M", KeyN => "N", KeyO => "O",
+        KeyP => "P", KeyQ => "Q", KeyR => "R", KeyS => "S", KeyT => "T",
+        KeyU => "U", KeyV => "V", KeyW => "W", KeyX => "X", KeyY => "Y",
+        KeyZ => "Z",
+        Num0 => "0", Num1 => "1", Num2 => "2", Num3 => "3", Num4 => "4",
+        Num5 => "5", Num6 => "6", Num7 => "7", Num8 => "8", Num9 => "9",
+        F1 => "F1", F2 => "F2", F3 => "F3", F4 => "F4", F5 => "F5", F6 => "F6",
+        F7 => "F7", F8 => "F8", F9 => "F9", F10 => "F10", F11 => "F11", F12 => "F12",
+        Kp0 => "NUM0", Kp1 => "NUM1", Kp2 => "NUM2", Kp3 => "NUM3", Kp4 => "NUM4",
+        Kp5 => "NUM5", Kp6 => "NUM6", Kp7 => "NUM7", Kp8 => "NUM8", Kp9 => "NUM9",
+        KpPlus => "NUMPLUS",
+        KpMinus => "NUMMINUS",
+        KpMultiply => "NUMMULT",
+        KpDivide => "NUMDIV",
+        Space => "SPACE",
+        Tab => "TAB",
+        _ => return None,
+    };
+    Some(s.to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -431,12 +493,18 @@ pub async fn set_training_config(
 ) -> Result<TrainingConfig, String> {
     // Rechazamos teclas que el listener no sabría reconocer: si no, el usuario
     // configuraría algo que nunca dispara y parecería que el overlay está roto.
-    for b in &config.bindings {
-        if parse_key(&b.key).is_none() {
+    let mut config = config;
+    for b in config.bindings.iter_mut() {
+        let Some(tecla) = parse_key(&b.key) else {
             return Err(format!("Unrecognized key: \"{}\"", b.key));
-        }
+        };
         if b.role.trim().is_empty() {
             return Err("One of the roles is empty.".to_string());
+        }
+        // Al fichero va el nombre canónico: así "kp3", "numpad3" y "NUM3"
+        // quedan guardados igual y el ciclo escribir→leer cierra siempre.
+        if let Some(nombre) = key_name(tecla) {
+            b.key = nombre;
         }
     }
     save_config(&config)?;
@@ -535,6 +603,41 @@ mod tests {
         assert_eq!(parse_key("f3"), Some(rdev::Key::F3));
         assert_eq!(parse_key(" space "), Some(rdev::Key::Space));
         assert_eq!(parse_key("ñ"), None);
+    }
+
+    /// El numpad NO es el mismo código que la fila de números: quien ata un
+    /// atajo al 1 del numpad tiene que recibir `Kp1`, no `Num1`.
+    #[test]
+    fn el_teclado_numerico_es_una_tecla_aparte() {
+        use rdev::Key::*;
+        assert_eq!(parse_key("NUM1"), Some(Kp1));
+        assert_eq!(parse_key("kp0"), Some(Kp0));
+        assert_eq!(parse_key(" numpad9 "), Some(Kp9));
+        assert_ne!(parse_key("NUM1"), parse_key("1"));
+        assert_eq!(parse_key("NUMPLUS"), Some(KpPlus));
+        assert_eq!(parse_key("num-"), Some(KpMinus));
+        assert_eq!(parse_key("NUMMULT"), Some(KpMultiply));
+        assert_eq!(parse_key("kpdiv"), Some(KpDivide));
+        // Un prefijo que no completa una tecla del numpad no se traga la
+        // cadena: "NUMX" no existe, pero tampoco puede tapar a otra.
+        assert_eq!(parse_key("NUMX"), None);
+    }
+
+    /// Ida y vuelta: lo que `key_name` escribe en la config, `parse_key` lo
+    /// vuelve a leer como la MISMA tecla. Es lo que hace que un atajo capturado
+    /// del teclado sobreviva a cerrar la app.
+    #[test]
+    fn el_nombre_de_una_tecla_vuelve_a_parsearse() {
+        use rdev::Key::*;
+        for k in [
+            KeyQ, Num4, F5, Space, Tab, Kp0, Kp5, Kp9, KpPlus, KpMinus, KpMultiply, KpDivide,
+        ] {
+            let nombre = key_name(k).unwrap_or_else(|| panic!("sin nombre para {k:?}"));
+            assert_eq!(parse_key(&nombre), Some(k), "no cerró el ciclo: {nombre}");
+        }
+        // Una tecla que no se sabe nombrar es una tecla que no se puede
+        // guardar, y decirlo es mejor que inventarse un nombre que no vuelve.
+        assert_eq!(key_name(Escape), None);
     }
 
     #[test]

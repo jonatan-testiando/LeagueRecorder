@@ -6,6 +6,7 @@ import { RecallDrill } from "./RecallDrill";
 import { AwarenessQuiz } from "./AwarenessQuiz";
 import { TrainingSetup } from "./TrainingSetup";
 import { useT } from "../../../core/LanguageProvider";
+import { useDialog } from "../../../components/ui/DialogProvider";
 
 type Section = "drills" | "awareness" | "setup";
 
@@ -14,6 +15,13 @@ const SECTIONS: { key: Section; label: string; icon: React.ReactNode }[] = [
   { key: "awareness", label: "Awareness", icon: <Brain size={16} /> },
   { key: "setup", label: "Setup", icon: <Keyboard size={16} /> },
 ];
+
+/**
+ * Umbral de lectura consciente, en milisegundos. Por debajo de esto la lectura
+ * deja de pasar por la parte que se da cuenta, que es todo el objetivo del
+ * ejercicio: aparece como línea de referencia en la curva.
+ */
+const CONSCIOUS_MS = 400;
 
 /** Curva de latencia media de las últimas sesiones: la única prueba de que mejoras. */
 const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => {
@@ -27,6 +35,7 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
   const w = 100;
   const h = 34;
   const max = Math.max(...data.map((d) => d.avg_latency_ms), 600);
+  const refY = h - (CONSCIOUS_MS / max) * h;
   const pts = data
     .map((d, i) => {
       const x = (i / (data.length - 1)) * w;
@@ -52,18 +61,18 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
         <span
           style={{
             ...styles.sparkRef,
-            bottom: `${(400 / max) * 100}%`,
+            bottom: `${(CONSCIOUS_MS / max) * 100}%`,
           }}
         >
-          400 ms
+          {t("{n} ms", { n: CONSCIOUS_MS })}
         </span>
       <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={styles.spark}>
         {/* Línea de referencia de los 400 ms: el umbral en que deja de ser consciente. */}
         <line
           x1="0"
           x2={w}
-          y1={h - (400 / max) * h}
-          y2={h - (400 / max) * h}
+          y1={refY}
+          y2={refY}
           stroke="var(--line)"
           strokeWidth="0.4"
           strokeDasharray="2 2"
@@ -101,7 +110,26 @@ export const TrainingPanel: React.FC = () => {
   const [section, setSection] = useState<Section>("drills");
   const [config, setConfig] = useState<TrainingConfig | null>(null);
   const [sessions, setSessions] = useState<DrillSession[]>([]);
+  // Cambios sin guardar en Ajustes. Salir de la pestaña los tira sin decir
+  // nada, así que se pregunta antes.
+  const [setupDirty, setSetupDirty] = useState(false);
   const t = useT();
+  const { showConfirm } = useDialog();
+
+  const goTo = async (next: Section) => {
+    if (next === section) return;
+    if (section === "setup" && setupDirty) {
+      const ok = await showConfirm({
+        title: t("Discard unsaved changes?"),
+        message: t("Your camera keys and drill settings have changes that were never saved."),
+        confirmText: t("Discard"),
+        destructive: true,
+      });
+      if (!ok) return;
+      setSetupDirty(false);
+    }
+    setSection(next);
+  };
 
   const loadSessions = useCallback(() => {
     getDrillSessions(30).then(setSessions).catch(() => setSessions([]));
@@ -136,7 +164,7 @@ export const TrainingPanel: React.FC = () => {
             className="btn btn--ghost"
             aria-pressed={section === s.key}
             style={styles.tab}
-            onClick={() => setSection(s.key)}
+            onClick={() => { void goTo(s.key); }}
           >
             {s.icon}
             {t(s.label)}
@@ -146,19 +174,19 @@ export const TrainingPanel: React.FC = () => {
 
       <div style={styles.content}>
         {section === "setup" ? (
-          <TrainingSetup config={config} onSaved={setConfig} />
+          <TrainingSetup config={config} onSaved={setConfig} onDirtyChange={setSetupDirty} />
         ) : section === "awareness" ? (
           <AwarenessQuiz />
         ) : noBindings ? (
           <div className="empty-state">
             <div className="empty-state__icon">
-              <Keyboard size={30} color="var(--text-muted)" />
+              <Keyboard size={30} color="var(--faint)" />
             </div>
             <p className="empty-state__title">{t("No camera keys configured")}</p>
             <p className="empty-state__text">
               {t("Set which key you press for each ally in Setup, then come back.")}
             </p>
-            <button className="btn-primary" style={styles.tab} onClick={() => setSection("setup")}>
+            <button className="btn btn--primary" style={styles.tab} onClick={() => { void goTo("setup"); }}>
               {t("Go to Setup")}
             </button>
           </div>
@@ -189,7 +217,7 @@ const styles: Record<string, React.CSSProperties> = {
   pageSub: {
     margin: "var(--space-2) 0 0",
     fontSize: "var(--font-sm)",
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
     maxWidth: 620,
   },
   tabs: { display: "flex", gap: "var(--space-2)" },
@@ -198,7 +226,7 @@ const styles: Record<string, React.CSSProperties> = {
   drillsGrid: { display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: 820 },
   progressCard: {
     background: "var(--surface-1)",
-    border: "1px solid var(--border-subtle)",
+    border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-xl)",
     padding: "var(--space-5)",
     display: "flex",
@@ -206,7 +234,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
   },
   progressHead: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  progressTitle: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text-secondary)" },
+  progressTitle: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--muted)" },
   spark: { width: "100%", height: 60, display: "block" },
   sparkWrap: { position: "relative" },
   sparkRef: {
@@ -225,6 +253,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
+    color: "var(--faint)",
   },
 };

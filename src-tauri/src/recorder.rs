@@ -9,24 +9,34 @@
 //! falta ningún dispositivo de audio virtual (VB-CABLE / virtual-audio-capturer).
 
 use crate::commands::VideoSettings;
-use crate::obs_client::{ObsClient, StartConfig};
+use crate::obs_client::{ObsClient, ObsStatus, StartConfig};
 use crate::storage::get_match_dir;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Instant;
 
 /// Nombre del named pipe (debe coincidir con el que pasamos al server con `--pipe`).
 const PIPE_NAME: &str = "leaguerec-obs";
 /// Segundos que mantiene el replay buffer en memoria (para clipar la última jugada).
-const REPLAY_BUFFER_SECONDS: i32 = 30;
+pub const REPLAY_BUFFER_SECONDS: i32 = 30;
 /// Ventana del cliente 3D de League. Se usa el modo "window_crop": el server captura el monitor y
 /// recorta a la región de esta ventana (window_capture WGC no funciona en el proceso headless).
-const GAME_WINDOW: &str = "League of Legends (TM) Client";
+pub const GAME_WINDOW: &str = "League of Legends (TM) Client";
+/// Techo del lienzo. Por encima el archivo se dispara y el encoder empieza a ser
+/// el cuello de botella de la partida, no de la grabación.
+const MAX_CANVAS: (u32, u32) = (2560, 1440);
 
 pub struct RecorderState {
     /// Servidor libobs persistente (se lanza perezosamente y se reutiliza).
     client: Mutex<Option<ObsClient>>,
     /// match_id de la grabación en curso. Refleja la INTENCIÓN de grabar (ver `is_recording`).
     current_match: Mutex<Option<String>>,
+    /// Cuándo arrancó la grabación en curso. Sirve para nombrar los clips del
+    /// replay con el segundo de vídeo en el que caen.
+    started_at: Mutex<Option<Instant>>,
+    /// Último "¿hay loopback de audio?" que contestó el servidor. `None` = aún no
+    /// se ha preguntado nunca (no es lo mismo que "no hay").
+    audio_ok: Mutex<Option<bool>>,
 }
 
 impl Default for RecorderState {
@@ -34,6 +44,8 @@ impl Default for RecorderState {
         Self {
             client: Mutex::new(None),
             current_match: Mutex::new(None),
+            started_at: Mutex::new(None),
+            audio_ok: Mutex::new(None),
         }
     }
 }
@@ -144,6 +156,41 @@ fn cqp_for(quality: &str) -> i32 {
     }
 }
 
+/// Lienzo (base y salida) con el que se graba.
+///
+/// El valor por defecto es "native": el tamaño REAL del área cliente de League.
+/// Hasta ahora el servidor grababa siempre a 1920×1080 fijo, así que quien juega
+/// a 1440p perdía resolución sin ganar nada. Si el juego no está abierto se cae
+/// al monitor donde suele estar, y en último término a 1080p.
+pub fn canvas_size(settings: &VideoSettings) -> (i32, i32) {
+    let (w, h) = match settings.resolution.as_str() {
+        "1080p" => (1920, 1080),
+        "1440p" => (2560, 1440),
+        _ => crate::winsys::window_client_size(GAME_WINDOW)
+            .or_else(|| crate::winsys::monitor_of_window(GAME_WINDOW).map(|m| (m.width, m.height)))
+            .unwrap_or((1920, 1080)),
+    };
+    clamp_canvas(w, h)
+}
+
+/// Acota a `MAX_CANVAS` conservando la relación de aspecto y deja los dos lados
+/// PARES: NVENC rechaza dimensiones impares y el fallo sale como "no se pudo
+/// iniciar la grabación", que no señala a ningún sitio.
+fn clamp_canvas(w: u32, h: u32) -> (i32, i32) {
+    if w == 0 || h == 0 {
+        return (1920, 1080);
+    }
+    let (max_w, max_h) = MAX_CANVAS;
+    let escala = (max_w as f64 / w as f64)
+        .min(max_h as f64 / h as f64)
+        .min(1.0);
+    let mut w = (w as f64 * escala).round() as i32;
+    let mut h = (h as f64 * escala).round() as i32;
+    w -= w % 2;
+    h -= h % 2;
+    (w.max(2), h.max(2))
+}
+
 /// Inicia la grabación del juego. Lanza el servidor libobs si aún no está vivo.
 pub fn start_recording(
     match_id: &str,
@@ -172,6 +219,7 @@ pub fn start_recording(
         *guard = Some(client);
     }
 
+    let (width, height) = canvas_size(settings);
     let cfg = StartConfig {
         // "window_crop": captura el monitor y recorta a la región de la ventana de League. Así graba
         // solo el juego aunque juegue en modo ventana. Fiable en headless (a diferencia de WGC window).
@@ -180,6 +228,8 @@ pub fn start_recording(
         out: out_str.clone(),
         fps: settings.fps,
         cqp: cqp_for(&settings.quality),
+        width,
+        height,
         ..Default::default()
     };
 
@@ -197,39 +247,158 @@ pub fn start_recording(
     }
 
     *cur = Some(match_id.to_string());
-    println!("Grabadora libobs iniciada en: {}", out_str);
+    *state.started_at.lock().unwrap() = Some(Instant::now());
+    println!(
+        "Grabadora libobs iniciada en: {} ({}x{} @ {}fps)",
+        out_str, width, height, settings.fps
+    );
     Ok(out_str)
 }
 
-/// Guarda los últimos segundos del replay buffer a un clip. Devuelve la ruta del clip.
+/// Guarda los últimos segundos del replay buffer a un clip. Devuelve la ruta del clip,
+/// ya movido a la carpeta de la partida y con el nombre que espera `get_all_clips`.
 pub fn save_replay(state: &RecorderState) -> Result<String, String> {
-    let mut guard = state.client.lock().unwrap();
-    match guard.as_mut() {
-        Some(client) => client.save_replay(),
-        None => Err("No hay grabación activa para clipar".to_string()),
+    // Los datos de la sesión ANTES de tocar el cliente: los dos mutex se toman
+    // siempre en el mismo orden (current_match → client), igual que en start/stop.
+    let (match_id, elapsed) = {
+        let cur = state.current_match.lock().unwrap();
+        let Some(id) = cur.clone() else {
+            return Err("No hay grabación activa para clipar".to_string());
+        };
+        let started = *state.started_at.lock().unwrap();
+        (
+            id,
+            started.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0),
+        )
+    };
+
+    let raw = {
+        let mut guard = state.client.lock().unwrap();
+        match guard.as_mut() {
+            Some(client) => client.save_replay()?,
+            None => return Err("No hay servidor de grabación activo".to_string()),
+        }
+    };
+    if raw.is_empty() {
+        return Err("el servidor no devolvió ninguna ruta de clip".to_string());
     }
+
+    Ok(rename_replay_clip(&match_id, &raw, elapsed))
+}
+
+/// Renombra el clip que escribió OBS (`replay_2026-09-02_12-00-00.mp4`) al formato
+/// que la biblioteca sabe listar: `<match_id>_clip_<mmss>.mp4` dentro de la carpeta
+/// de la partida. `elapsed` son los segundos de vídeo que llevaba la grabación; el
+/// nombre lleva el INICIO del clip (30 s antes), que es el punto al que se salta.
+///
+/// Si el renombrado falla se devuelve la ruta original: perder el clip por no
+/// poder ponerle un nombre bonito sería el peor resultado posible.
+fn rename_replay_clip(match_id: &str, raw: &str, elapsed: f64) -> String {
+    let origen = PathBuf::from(raw);
+    let inicio = (elapsed - REPLAY_BUFFER_SECONDS as f64).max(0.0) as u64;
+    let dir = get_match_dir(match_id);
+    for intento in 0..100u32 {
+        let sufijo = if intento == 0 {
+            String::new()
+        } else {
+            format!("_{}", intento)
+        };
+        let destino = dir.join(format!(
+            "{}_clip_{:02}{:02}{}.mp4",
+            match_id,
+            inicio / 60,
+            inicio % 60,
+            sufijo
+        ));
+        if destino.exists() {
+            continue;
+        }
+        return match std::fs::rename(&origen, &destino) {
+            Ok(()) => destino.to_string_lossy().to_string(),
+            Err(e) => {
+                eprintln!(
+                    "Replay: no se pudo renombrar {} → {}: {e}",
+                    origen.display(),
+                    destino.display()
+                );
+                raw.to_string()
+            }
+        };
+    }
+    raw.to_string()
 }
 
 /// Detiene la grabación en curso. El servidor libobs se mantiene vivo para la siguiente partida.
+///
+/// Devuelve `Err` si el servidor no pudo cerrar la grabación: quien llama tiene
+/// que enterarse, porque en ese caso el mp4 puede haber quedado a medias o no
+/// existir. El estado local se limpia igualmente.
 pub fn stop_recording(state: &RecorderState) -> Result<(), String> {
     let mut cur = state.current_match.lock().unwrap();
     if cur.is_none() {
         return Err("No hay ninguna grabación activa para detener".to_string());
     }
 
-    let mut guard = state.client.lock().unwrap();
-    if let Some(client) = guard.as_mut() {
-        match client.stop() {
-            Ok(file) => println!("Grabadora libobs detenida; archivo: {}", file),
-            Err(e) => {
-                eprintln!("Aviso: stop libobs falló ({e}); se descarta el servidor.");
-                *guard = None; // forzar relanzamiento limpio la próxima vez
+    let mut fallo = None;
+    {
+        let mut guard = state.client.lock().unwrap();
+        if let Some(client) = guard.as_mut() {
+            match client.stop() {
+                Ok(file) => println!("Grabadora libobs detenida; archivo: {}", file),
+                Err(e) => {
+                    eprintln!("Aviso: stop libobs falló ({e}); se descarta el servidor.");
+                    *guard = None; // forzar relanzamiento limpio la próxima vez
+                    fallo = Some(e);
+                }
             }
         }
     }
 
     *cur = None;
-    Ok(())
+    *state.started_at.lock().unwrap() = None;
+    match fallo {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
+/// Pregunta al servidor si el output sigue emitiendo de verdad.
+///
+/// `None` = no hay servidor al que preguntar, que es "no se sabe" y nunca
+/// "se murió". Si el pipe SÍ está pero falla, eso es otra cosa: el protocolo es
+/// síncrono y bloqueante, así que un error de lectura/escritura significa que el
+/// proceso servidor ya no está. En ese caso se descarta el cliente (para que la
+/// próxima grabación lo relance limpio) y se reporta inactivo.
+pub fn probe_status(state: &RecorderState) -> Option<ObsStatus> {
+    let respuesta = {
+        let mut guard = state.client.lock().unwrap();
+        let client = guard.as_mut()?;
+        match client.status() {
+            Ok(st) => st,
+            Err(e) => {
+                eprintln!("El servidor de grabación no responde ({e}); se descarta.");
+                *guard = None;
+                ObsStatus {
+                    active: false,
+                    recording: false,
+                    audio: false,
+                }
+            }
+        }
+    };
+    // La caché de audio solo se refresca con una respuesta REAL del servidor y
+    // mientras haya algo emitiendo: con la tubería parada `audio_src_` es null
+    // de todos modos, y guardar ese false diría que no hay audio cuando lo hay.
+    if respuesta.active {
+        *state.audio_ok.lock().unwrap() = Some(respuesta.audio);
+    }
+    Some(respuesta)
+}
+
+/// Si la fuente de loopback de audio llegó a crearse en la última sesión.
+/// `None` mientras no se haya podido preguntar nunca.
+pub fn last_audio_ok(state: &RecorderState) -> Option<bool> {
+    *state.audio_ok.lock().unwrap()
 }
 
 pub fn is_recording(state: &RecorderState) -> bool {
@@ -247,10 +416,38 @@ pub fn shutdown_recorder(state: &RecorderState) {
         let _ = client.shutdown();
     }
     *state.current_match.lock().unwrap() = None;
+    *state.started_at.lock().unwrap() = None;
 }
 
 pub fn detect_system_audio_device() -> Option<String> {
     // El audio del sistema se captura con el loopback nativo de OBS (wasapi_output_capture):
-    // ya no se requiere un dispositivo de audio virtual.
-    Some("OBS wasapi_output_capture".to_string())
+    // ya no se requiere un dispositivo de audio virtual. Pero el loopback necesita
+    // que exista una salida de audio: sin ella no hay nada que capturar y decir
+    // que sí era mentira.
+    if crate::winsys::has_playback_device() {
+        Some("OBS wasapi_output_capture (loopback)".to_string())
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_canvas;
+
+    #[test]
+    fn el_lienzo_respeta_el_techo_y_la_forma() {
+        // Nativo por debajo del techo: se graba tal cual.
+        assert_eq!(clamp_canvas(1920, 1080), (1920, 1080));
+        assert_eq!(clamp_canvas(2560, 1440), (2560, 1440));
+        // 4K se baja a 1440p conservando el 16:9, no se recorta.
+        assert_eq!(clamp_canvas(3840, 2160), (2560, 1440));
+        // Ultrapanorámico: manda el lado que primero toca el techo.
+        assert_eq!(clamp_canvas(3440, 1440), (2560, 1072));
+        // Lados impares (una ventana arrastrada a mano) quedan pares: NVENC los
+        // rechaza y el fallo salía como "no se pudo iniciar la grabación".
+        assert_eq!(clamp_canvas(1601, 901), (1600, 900));
+        // Sin datos no se inventa un lienzo de 0: 1080p, como antes de esto.
+        assert_eq!(clamp_canvas(0, 0), (1920, 1080));
+    }
 }

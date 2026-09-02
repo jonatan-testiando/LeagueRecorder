@@ -49,23 +49,17 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const setLang = useCallback(
     async (next: Language) => {
       setLangState(next);
-      // Se guarda con el resto de ajustes para no perder los demás campos: el
-      // comando del backend recibe la config entera, no un parche.
+      // Solo el idioma: el backend recibe un parche y no toca nada más. Antes
+      // se le mandaba la config entera y este sitio olvidaba `minimap_scale`,
+      // así que cambiar de idioma reseteaba la calibración del minimapa.
       const base = config ?? (await getAppConfig().catch(() => null));
       if (!base) return;
-      const updated = { ...base, language: next };
-      setConfig(updated);
-      await setAppConfig(
-        updated.save_directory,
-        updated.riot_api_key,
-        updated.auto_dataset_generator,
-        updated.max_storage_gb,
-        updated.auto_prune_days,
-        next
-      ).catch((err) => {
+      setConfig({ ...base, language: next });
+      await setAppConfig({ language: next }).catch((err) => {
         console.error("No se pudo guardar el idioma:", err);
         // Si el guardado falla se revierte: mejor que la UI mienta sobre lo que
         // habrá la próxima vez que abras.
+        setConfig(base);
         setLangState(base.language === "es" ? "es" : "en");
       });
     },

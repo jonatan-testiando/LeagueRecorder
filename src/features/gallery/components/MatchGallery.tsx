@@ -1,15 +1,19 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { MatchMetadata } from "../../../types";
-import { computeKDA, kdaRatio, outcome, formatDuration, type KDA } from "../../../core/matchStats";
+import { computeKDA, kdaRatio, outcome, formatDuration, lpDeltas, queueKey, type KDA } from "../../../core/matchStats";
 import { DDRAGON_VER, itemIcon, spellIcon } from "../../player/components/videoPlayerUtils";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { rankIcon, rankLabel } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { matchRole, ROLE_FILTERS, type RoleFilter } from "../../../core/patterns";
-import { Check, HardDrive, ListChecks, Search, Trash2, Gamepad2, SearchX } from "lucide-react";
+import { isReviewed } from "../../../core/review";
+import { useAppStore, useErrorClips } from "../../../store/useAppStore";
+import { Check, HardDrive, ListChecks, Search, Trash2, Gamepad2, SearchX, TriangleAlert, RefreshCw, FolderOpen } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useDialog } from "../../../components/ui/DialogProvider";
 import { useT } from "../../../core/LanguageProvider";
 
 import { matchAge, relativeDay } from "../../../core/time";
@@ -18,28 +22,27 @@ interface DiskSpaceInfo {
   total_bytes: number;
 }
 
-// queueId de Riot → nombre legible de la cola.
-const queueLabel = (q?: number): string => {
-  switch (q) {
-    case 420: return "Ranked Solo/Duo";
-    case 440: return "Ranked Flex";
-    case 400: return "Normal Draft";
-    case 430: return "Normal Blind";
-    case 490: return "Normal";
-    case 450: return "ARAM";
-    case 700: return "Clash";
-    case 830: case 840: case 850: return "Co-op vs AI";
-    case 900: case 1010: case 1900: return "URF";
-    case 0: return "Custom";
-    default: return "Synced";
-  }
-};
-
 /**
  * Fecha relativa. Con 19 partidas repartidas en cinco dias, "2026-08-12"
  * repetido no distingue nada; "hace 2 dias" si.
  */
 type Filter = "all" | "unreviewed" | "defeats";
+
+/** Orden de la lista. "Nota" es el percentil de impacto de la partida. */
+type Sort = "newest" | "oldest" | "best" | "worst";
+
+const SORTS: { key: Sort; label: string }[] = [
+  { key: "newest", label: "Newest" },
+  { key: "oldest", label: "Oldest" },
+  { key: "best", label: "Best score" },
+  { key: "worst", label: "Worst score" },
+];
+
+/** Milisegundos de la fecha de una partida, o 0 si no se puede leer. */
+const fechaMs = (m: MatchMetadata): number => {
+  const ms = new Date(m.date.replace(" ", "T")).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
 
 interface MatchGalleryProps {
   matches: MatchMetadata[];
@@ -48,11 +51,15 @@ interface MatchGalleryProps {
   /** Borrado por lotes con confirmación. Devuelve true si se llegó a borrar. */
   onDeleteMatches: (ids: string[]) => Promise<boolean>;
   isRecording: boolean;
+  /** Motivo del último fallo al leer la biblioteca, en crudo. */
+  loadError?: string | null;
+  /** Vuelve a intentar la lectura. */
+  onRetry?: () => void;
 }
 
 /* Rejilla de la fila. La comparten la cabecera y las filas: son la misma tabla.
    avatar · quién · línea de tiempo (el resto del ancho) · 5 métricas · borrar */
-const FILA_GRID = "90px minmax(150px, 220px) 1fr 170px 84px 26px 170px 84px 1fr 50px 26px";
+const FILA_GRID = "90px minmax(150px, 220px) 1fr 170px 84px 26px 170px 84px 1fr 50px 62px";
 
 /** El KDA guardado ("9/3/12") o el contado de los eventos, como números. */
 const kdaDe = (m: MatchMetadata, contado: KDA): KDA => {
@@ -69,18 +76,62 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   onDeleteMatch,
   onDeleteMatches,
   isRecording,
+  loadError,
+  onRetry,
 }) => {
-  const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo>({ used_bytes: 0, total_bytes: 100 * 1024 * 1024 * 1024 });
+  // `null` hasta que el backend contesta. Antes arrancaba en "0 / 100 GB", que
+  // es un disco inventado: en el primer cuadro la barra decía 0% de un total
+  // que no era el del usuario.
+  const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [sort, setSort] = useState<Sort>("newest");
   // Selección por lotes: se entra con el botón o con Ctrl/Shift+clic sobre una
   // ficha, y mientras dura, el clic selecciona en vez de abrir.
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const t = useT();
+  const { showError } = useDialog();
+  // Los errores que marcaste tú también cuentan como momentos a revisar, así
+  // que hacen falta aquí para saber si una partida está revisada.
+  const { clips: errorClips } = useErrorClips();
+
+  // Filtro pedido desde otra pantalla ("Ver todas" de Hoy). Se consume una vez
+  // y se limpia: si se quedara puesto, volver a la biblioteca por el menú
+  // reaplicaría un filtro que el usuario ya había quitado.
+  const pendingFilter = useAppStore((s) => s.libraryFilter);
+  const setPendingFilter = useAppStore((s) => s.setLibraryFilter);
+  useEffect(() => {
+    if (!pendingFilter) return;
+    setFilter(pendingFilter as Filter);
+    setRoleFilter("all");
+    setQuery("");
+    setPendingFilter(null);
+  }, [pendingFilter, setPendingFilter]);
+
+  /**
+   * Las partidas ya revisadas, calculadas UNA vez.
+   *
+   * `isReviewed` monta la cola de momentos de la partida (sucesos, saltos de
+   * cámara y errores marcados), así que llamarla por fila y en cada render era
+   * rehacer ese trabajo cientos de veces por scroll.
+   */
+  const revisadas = useMemo(
+    () => new Set(matches.filter((m) => isReviewed(m, errorClips)).map((m) => m.id)),
+    [matches, errorClips]
+  );
 
   const parentRef = useRef<HTMLDivElement>(null);
+
+  /** Abre el explorador con el vídeo de la partida seleccionado. */
+  const revelar = async (m: MatchMetadata) => {
+    try {
+      await revealItemInDir(m.video_path);
+    } catch (e) {
+      showError(t("Couldn't open the folder: {msg}", { msg: String(e) }));
+    }
+  };
 
   const toggleSelected = (id: string) => {
     setSelected((prev) => {
@@ -106,31 +157,53 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   // delata un prototipo, y los datos para filtrar ya estaban aquí.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return matches.filter((m) => {
+    const filtradas = matches.filter((m) => {
       if (filter === "defeats" && outcome(m.result) !== "defeat") return false;
-      if (filter === "unreviewed" && (m.comments?.length ?? 0) > 0) return false;
+      if (filter === "unreviewed" && revisadas.has(m.id)) return false;
       if (roleFilter !== "all" && matchRole(m) !== roleFilter) return false;
       if (!q) return true;
+      const cola = queueKey(m.queue);
       return (
         m.champion.toLowerCase().includes(q) ||
-        queueLabel(m.queue).toLowerCase().includes(q) ||
+        // Se busca contra las DOS: escribir "clasificatoria" con la interfaz en
+        // español no encontraba nada porque solo se comparaba el inglés.
+        cola.toLowerCase().includes(q) ||
+        t(cola).toLowerCase().includes(q) ||
         m.date.toLowerCase().includes(q)
       );
     });
-  }, [matches, query, filter, roleFilter]);
+
+    // La lista llega ya ordenada de nueva a vieja; solo se reordena si se pide
+    // otra cosa. Las partidas sin nota van al final en los órdenes por nota:
+    // no tener nota no es tenerla baja.
+    if (sort === "newest") return filtradas;
+    const out = [...filtradas];
+    if (sort === "oldest") out.sort((a, b) => fechaMs(a) - fechaMs(b));
+    else {
+      const dir = sort === "best" ? -1 : 1;
+      out.sort((a, b) => {
+        const pa = a.impact_percentile, pb = b.impact_percentile;
+        if (pa == null && pb == null) return 0;
+        if (pa == null) return 1;
+        if (pb == null) return -1;
+        return dir * (pa - pb);
+      });
+    }
+    return out;
+  }, [matches, query, filter, roleFilter, sort, t, revisadas]);
 
   // Candidatas de la limpieza rápida: revisadas (con notas) y con más de 30
   // días. Los VODs importados no entran: los trajo el usuario a mano.
   const viejasRevisadas = useMemo(() => {
     const corte = Date.now() - 30 * 24 * 3600 * 1000;
     return matches
-      .filter((m) => !m.is_vod && (m.comments?.length ?? 0) > 0)
+      .filter((m) => !m.is_vod && revisadas.has(m.id))
       .filter((m) => {
         const ms = new Date(m.date.replace(" ", "T")).getTime();
         return Number.isFinite(ms) && ms < corte;
       })
       .map((m) => m.id);
-  }, [matches]);
+  }, [matches, revisadas]);
 
   /**
    * La lista que se pinta: cabeceras de dia intercaladas entre las partidas.
@@ -141,29 +214,21 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
    * El agrupado es por tramos consecutivos, asi que si algun dia llegara
    * desordenado se veria como dos tramos en vez de mentir juntandolos.
    */
-  // LP que dio o quitó cada partida: la resta con la clasificatoria anterior.
-  // Solo entre partidas del mismo rango y división: cruzar un ascenso o un
-  // descenso haría mentir a la resta.
-  const lpDelta = useMemo(() => {
-    const orden = matches
-      .filter((m) => m.rank_lp != null)
-      .sort((a, b) => (a.date < b.date ? -1 : 1));
-    const out = new Map<string, number>();
-    for (let i = 1; i < orden.length; i++) {
-      const ant = orden[i - 1];
-      const cur = orden[i];
-      if (ant.rank_tier === cur.rank_tier && ant.rank_division === cur.rank_division) {
-        out.set(cur.id, (cur.rank_lp as number) - (ant.rank_lp as number));
-      }
-    }
-    return out;
-  }, [matches]);
+  // LP que dio o quitó cada partida. El cálculo vive en `core/matchStats`: "Hoy"
+  // enseña el mismo número para la última partida y no puede ser otra resta.
+  const lpDelta = useMemo(() => lpDeltas(matches), [matches]);
 
   const rows = useMemo(() => {
     type Row =
       | { kind: "day"; label: string; count: number; key: string }
       | { kind: "match"; match: MatchMetadata; key: string };
     const out: Row[] = [];
+    // Agrupar por día solo tiene sentido con el orden cronológico. Ordenando por
+    // nota, cada partida caería en su propia cabecera de día y la lista se
+    // llenaría de separadores de una fila.
+    if (sort === "best" || sort === "worst") {
+      return visible.map((m) => ({ kind: "match" as const, match: m, key: m.id }));
+    }
     let i = 0;
     while (i < visible.length) {
       const label = relativeDay(visible[i].date, t);
@@ -176,7 +241,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       i = j;
     }
     return out;
-  }, [visible]);
+  }, [visible, sort, t]);
 
   // Las rutas de la app se ocultan con display:none SIN desmontarse. Si llega
   // una partida mientras la biblioteca está oculta, el virtualizador mide las
@@ -237,14 +302,19 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       .catch(console.error);
   }, [matches]);
 
-  const usedGb = (diskSpace.used_bytes / (1024 * 1024 * 1024)).toFixed(1);
-  const totalGb = (diskSpace.total_bytes / (1024 * 1024 * 1024)).toFixed(0);
-  const pct = Math.min(100, Math.round((diskSpace.used_bytes / diskSpace.total_bytes) * 100));
+  const usedGb = diskSpace ? (diskSpace.used_bytes / (1024 * 1024 * 1024)).toFixed(1) : null;
+  const totalGb = diskSpace ? (diskSpace.total_bytes / (1024 * 1024 * 1024)).toFixed(0) : null;
+  const pct = diskSpace && diskSpace.total_bytes > 0
+    ? Math.min(100, Math.round((diskSpace.used_bytes / diskSpace.total_bytes) * 100))
+    : 0;
   // El disco solo pide atención cuando queda poco. Por debajo del 85% es un
   // dato, no un aviso, y se pinta apagado.
-  const diskTight = pct >= 85;
+  const diskTight = diskSpace !== null && pct >= 85;
 
-  const reviewed = matches.filter((m) => (m.comments?.length ?? 0) > 0).length;
+  // La MISMA definición que usa el reproductor y "Hoy" (ver `core/review.ts`):
+  // la cabecera decía "revisada" con una nota suelta mientras la cola de
+  // revisión de esa partida seguía con veinte momentos sin tachar.
+  const reviewed = revisadas.size;
 
   return (
     <div style={styles.container} className="panel-enter">
@@ -292,6 +362,23 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         </div>
       </div>
 
+      {/* La biblioteca no pudo leerse. Se dice, con salida: sin esto la pantalla
+          enseñaba "Aún no hay partidas grabadas", que es una respuesta distinta
+          y hace pensar que se han perdido. */}
+      {loadError && (
+        <div style={styles.notice}>
+          <TriangleAlert size={14} color="var(--signal)" />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            {t("Couldn't load your games: {msg}", { msg: loadError })}
+          </span>
+          {onRetry && (
+            <Button variant="ghost" size="sm" icon={<RefreshCw size={13} />} onClick={onRetry}>
+              {t("Retry")}
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Filtro por rol: el puesto llega con la sincronización de Riot, así que
           las partidas sin él solo aparecen en "Todos". */}
       <div style={styles.roleRow}>
@@ -306,13 +393,29 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             {t(r.label)}
           </Button>
         ))}
+        <span style={{ flex: 1 }} />
+        {/* Orden. La nota es lo único de la fila que separa una partida buena de
+            una mala, así que ordenar por ella es lo que convierte la lista en
+            "enséñame lo peor", que es a lo que se viene. */}
+        <span className="u-label" style={{ marginRight: 2 }}>{t("Sort")}</span>
+        {SORTS.map((s) => (
+          <Button
+            key={s.key}
+            variant="ghost"
+            size="sm"
+            aria-pressed={sort === s.key}
+            onClick={() => setSort(s.key)}
+          >
+            {t(s.label)}
+          </Button>
+        ))}
       </div>
 
       <div style={styles.statusRow}>
         <div style={styles.statusItem}>
           <HardDrive size={14} color="var(--faint)" />
           <span className="u-metric" style={{ fontSize: 12 }}>
-            {usedGb} / {totalGb} GB
+            {diskSpace ? `${usedGb} / ${totalGb} GB` : "— / — GB"}
           </span>
           <span style={styles.barBg}>
             <span
@@ -323,7 +426,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               }}
             />
           </span>
-          <span className="u-meta">{pct}%</span>
+          <span className="u-meta">{diskSpace ? `${pct}%` : "—"}</span>
         </div>
 
         {/* Con el disco ajustado, la salida rápida: lo ya revisado y viejo es
@@ -341,7 +444,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
         {isRecording && (
           <div style={styles.recording}>
-            <span className="rec-dot" /> RECORDING
+            <span className="rec-dot" /> {t("RECORDING")}
           </div>
         )}
       </div>
@@ -363,7 +466,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             title={t("No games match this filter")}
             text={t("Try a different search term, or switch back to All.")}
             action={
-              <Button variant="ghost" size="sm" onClick={() => { setQuery(""); setFilter("all"); }}>
+              <Button
+                variant="ghost"
+                size="sm"
+                // El filtro de rol también es un filtro: dejarlo puesto hacía
+                // que "Quitar filtros" no quitara nada visible.
+                onClick={() => { setQuery(""); setFilter("all"); setRoleFilter("all"); }}
+              >
                 {t("Clear filters")}
               </Button>
             }
@@ -375,12 +484,12 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             <span className="u-label">{t("Summoner")}</span>
             <span />
             <span className="u-label">{t("Game")}</span>
-            <span className="u-label">Build</span>
+            <span className="u-label">{t("Build")}</span>
             <span />
             <span className="u-label">{t("Rival")}</span>
-            <span className="u-label">Build</span>
+            <span className="u-label">{t("Build")}</span>
             <span />
-            <span className="u-label" style={{ textAlign: "right" }}>Score</span>
+            <span className="u-label" style={{ textAlign: "right" }}>{t("Score")}</span>
             <span />
           </div>
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
@@ -429,7 +538,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               const res = outcome(match.result);
               const accent =
                 res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--line)";
-              const unreviewed = (match.comments?.length ?? 0) === 0;
+              const unreviewed = !revisadas.has(match.id);
               const isSelected = selected.has(match.id);
               // Ctrl/Shift+clic selecciona aunque no esté el modo activo (y lo
               // enciende); dentro del modo, el clic normal también selecciona.
@@ -480,7 +589,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   >
                     <div style={styles.rowGrid}>
                       <div style={styles.colIzq}>
-                        <span style={styles.cola}>{queueLabel(match.queue)}</span>
+                        <span style={styles.cola}>{t(queueKey(match.queue))}</span>
                         <span className="u-meta">{matchAge(match.date, t)}</span>
                         <span className="u-meta">{match.patch ? `${t("Patch")} ${match.patch}` : " "}</span>
                         <span className="u-meta">{formatDuration(match.game_duration)}</span>
@@ -542,7 +651,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             {kda.kills}/<span style={{ color: "var(--loss)" }}>{kda.deaths}</span>/{kda.assists}
                           </div>
                           <div className="u-meta" style={{ whiteSpace: "nowrap" }}>
-                            {yo ? `${yo.cs} cs${csmin ? ` (${csmin})` : ""}` : `${kdaRatio(kda)} KDA`}
+                            {yo ? `${yo.cs} cs${csmin ? ` (${csmin})` : ""}` : `${t(kdaRatio(kda))} KDA`}
                           </div>
                         </div>
                       </div>
@@ -563,7 +672,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                           : <span className="u-meta">—</span>}
                       </div>
 
-                      <div className="u-meta" style={{ textAlign: "center", letterSpacing: "0.06em" }}>VS</div>
+                      <div className="u-meta" style={{ textAlign: "center", letterSpacing: "0.06em" }}>{t("VS")}</div>
 
                       {/* El rival de tu rol, en espejo. */}
                       <div style={styles.bloque} title={rival?.champion}>
@@ -588,7 +697,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             </div>
                           </>
                         ) : (
-                          <span className="u-meta">—</span>
+                          // El rival sale de los 10 participantes, que solo
+                          // llegan con la sincronización de Riot. Un guion suelto
+                          // parecía un dato que falta por un fallo; esto dice qué
+                          // hacer. Una sola vez por fila y en voz baja: la
+                          // columna de su build se queda con el guion.
+                          <span className="u-meta" style={{ lineHeight: 1.35 }}>
+                            {t("Sync with Riot to see your lane opponent")}
+                          </span>
                         )}
                       </div>
 
@@ -622,7 +738,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                               className="u-meta"
                               style={{ color: match.impact_rank === 1 ? "var(--gold)" : undefined }}
                             >
-                              {match.impact_rank === 1 ? "MVP" : match.impact_rank ? `${match.impact_rank}º` : ""}
+                              {/* El ordinal era "º", que en inglés no existe.
+                                  "#3" se lee igual en los dos idiomas. */}
+                              {match.impact_rank === 1 ? "MVP" : match.impact_rank ? `#${match.impact_rank}` : ""}
                             </div>
                           </>
                         ) : (
@@ -642,14 +760,27 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                             {isSelected && <Check size={13} />}
                           </span>
                         ) : (
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            title={t("Delete game")}
-                            aria-label={`Delete ${match.champion} game`}
-                            onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
-                            icon={<Trash2 size={15} />}
-                          />
+                          <>
+                            {/* Abrir la carpeta del vídeo. Hasta ahora la única
+                                forma de llegar al fichero era buscarlo a mano en
+                                el disco. */}
+                            <Button
+                              variant="icon"
+                              size="sm"
+                              title={t("Reveal in folder")}
+                              aria-label={t("Reveal in folder")}
+                              onClick={(e) => { e.stopPropagation(); revelar(match); }}
+                              icon={<FolderOpen size={15} />}
+                            />
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              title={t("Delete game")}
+                              aria-label={t("Delete the {champion} game", { champion: match.champion })}
+                              onClick={(e) => { e.stopPropagation(); onDeleteMatch(match.id); }}
+                              icon={<Trash2 size={15} />}
+                            />
+                          </>
                         )}
                       </div>
                     </div>
@@ -715,9 +846,23 @@ const styles: Record<string, React.CSSProperties> = {
   },
   roleRow: {
     display: "flex",
+    alignItems: "center",
     gap: "var(--space-2)",
     flexWrap: "wrap",
     marginBottom: "var(--space-3)",
+  },
+  notice: {
+    display: "flex",
+    alignItems: "center",
+    gap: "var(--space-3)",
+    padding: "var(--space-3) var(--space-4)",
+    marginBottom: "var(--space-3)",
+    background: "color-mix(in srgb, var(--signal) 8%, var(--panel))",
+    border: "1px solid color-mix(in srgb, var(--signal) 28%, transparent)",
+    borderRadius: "var(--radius-md)",
+    color: "var(--muted)",
+    fontSize: "var(--font-xs)",
+    overflowWrap: "anywhere",
   },
   batchBar: {
     display: "flex",

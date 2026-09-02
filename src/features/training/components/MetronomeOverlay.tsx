@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useT } from "../../../core/LanguageProvider";
+import { roleLabel } from "../../../core/roles";
+
+/**
+ * Dónde se dibuja el aviso.
+ *
+ * La posición estaba escrita dentro del objeto de estilos y no había forma de
+ * moverla: para quien tenga el HUD del juego arriba en el centro, el aviso cae
+ * justo encima. Debería ser un ajuste, pero `TrainingConfig`
+ * (src-tauri/src/training.rs) no tiene campo para ello y el backend queda fuera
+ * de este trabajo; queda aquí, en un solo sitio y con nombre, que es lo que hay
+ * que cambiar el día que se añada el ajuste.
+ */
+const POSITION: React.CSSProperties = { top: 8, left: "50%", transform: "translateX(-50%)" };
 
 interface PromptPayload {
   role: string;
@@ -99,7 +112,7 @@ export const MetronomeOverlay: React.FC = () => {
   return (
     <div style={{ ...styles.pill, ...styles.pillPrompt }}>
       <span style={styles.keyCap}>{view.key}</span>
-      <span style={styles.role}>{view.role}</span>
+      <span style={styles.role}>{t(roleLabel(view.role))}</span>
     </div>
   );
 };
@@ -107,46 +120,43 @@ export const MetronomeOverlay: React.FC = () => {
 const styles: Record<string, React.CSSProperties> = {
   pill: {
     position: "fixed",
-    top: 8,
-    left: "50%",
-    transform: "translateX(-50%)",
+    ...POSITION,
     display: "inline-flex",
     alignItems: "center",
     gap: 10,
     padding: "8px 16px",
-    borderRadius: 9999,
+    borderRadius: "var(--radius-full)",
     background: "color-mix(in srgb, var(--ground) 82%, transparent)",
     backdropFilter: "blur(6px)",
-    border: "1px solid rgba(255,255,255,0.12)",
-    fontFamily:
-      "'Instrument Sans', system-ui, -apple-system, sans-serif",
-    boxShadow: "0 6px 24px rgba(0,0,0,0.45)",
+    border: "1px solid var(--glass-line)",
+    fontFamily: "var(--font-sans)",
+    boxShadow: "var(--shadow-2)",
     userSelect: "none",
     whiteSpace: "nowrap",
   },
-  pillPrompt: { borderColor: "color-mix(in srgb, var(--accent-blue) 55%, transparent)" },
-  pillOk: { borderColor: "color-mix(in srgb, var(--color-victory) 55%, transparent)" },
-  pillMiss: { borderColor: "color-mix(in srgb, var(--color-defeat) 55%, transparent)" },
+  pillPrompt: { borderColor: "color-mix(in srgb, var(--cool) 55%, transparent)" },
+  pillOk: { borderColor: "color-mix(in srgb, var(--win) 55%, transparent)" },
+  pillMiss: { borderColor: "color-mix(in srgb, var(--loss) 55%, transparent)" },
   keyCap: {
     minWidth: 26,
     height: 26,
     padding: "0 6px",
-    borderRadius: 6,
-    background: "var(--accent-blue)",
+    borderRadius: "var(--radius-md)",
+    background: "var(--cool)",
     color: "var(--text)",
     fontWeight: 800,
     fontSize: 15,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontFamily: "var(--font-mono)",
   },
   role: { color: "var(--text)", fontWeight: 700, fontSize: 14, letterSpacing: "0.06em" },
-  tick: { color: "var(--color-victory)", fontSize: 18, fontWeight: 800 },
-  cross: { color: "var(--color-defeat)", fontSize: 18, fontWeight: 800 },
+  tick: { color: "var(--win)", fontSize: 18, fontWeight: 800 },
+  cross: { color: "var(--loss)", fontSize: 18, fontWeight: 800 },
   latency: {
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
     fontSize: 13,
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontFamily: "var(--font-mono)",
   },
 };

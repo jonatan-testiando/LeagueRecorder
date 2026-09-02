@@ -5,6 +5,7 @@
 #include <obs.h>
 
 #include <atomic>
+#include <climits>
 #include <string>
 #include <thread>
 
@@ -39,7 +40,17 @@ public:
     // Detiene, espera el cierre del contenedor y libera. Devuelve la ruta grabada ("" si nada).
     std::string stop();
 
+    // ¿Hay ALGO emitiendo? (grabación continua o replay buffer).
     bool active() const;
+
+    // Solo la grabación continua. Es la que hay que vigilar para saber si la
+    // partida se está quedando sin vídeo: `active()` seguiría diciendo que sí
+    // mientras el replay buffer aguantara, aunque el .mp4 hubiera muerto.
+    bool recording() const;
+
+    // ¿Se creó la fuente de audio de escritorio (loopback)? Lo pregunta el cliente
+    // para no mentir en el estado de audio de la interfaz.
+    bool has_audio() const { return audio_src_ != nullptr; }
 
     // obs_shutdown (una vez, al cerrar el proceso).
     void shutdown();
@@ -58,6 +69,12 @@ private:
     void start_crop_tracking();
     void stop_crop_tracking();
 
+    // Repunta la captura al monitor cuyo origen es (x, y). Se llama cuando la
+    // ventana del juego se ha movido a OTRA pantalla: sin esto seguíamos
+    // capturando el monitor de siempre y recortando con coordenadas del nuevo,
+    // así que la grabación quedaba en negro o cortada.
+    void switch_capture_monitor(int origin_x, int origin_y);
+
     std::string rundir_;
     bool started_ = false;         // obs_startup hecho
     bool modules_loaded_ = false;
@@ -67,6 +84,11 @@ private:
     std::string crop_window_;              // título que sigue el hilo de crop
     std::thread crop_thread_;
     std::atomic<bool> crop_run_{false};
+    // Origen (esquina superior izquierda) del monitor que estamos capturando.
+    // Es lo que identifica de forma estable a un monitor entre la lista de
+    // propiedades de OBS y `MonitorFromWindow`. INT_MIN = aún sin fijar.
+    std::atomic<int> cap_mon_x_{INT_MIN};
+    std::atomic<int> cap_mon_y_{INT_MIN};
 
     obs_scene_t *scene_ = nullptr;   // escala la fuente al lienzo (evita recorte)
     obs_source_t *video_src_ = nullptr;

@@ -141,6 +141,8 @@ export interface MatchMetadata {
   gold_diff_15?: number;
   xp_diff_15?: number;
   jungle_cs_diff_15?: number;
+  /** CS total (súbditos + jungla) de ventaja sobre el rival de línea a min 15. */
+  cs_diff_15?: number;
   gank_impact_15?: number;
   lane_result?: 'Win' | 'Loss' | 'Even' | string;
   /** Puesto de 1 a 10 por impacto en la partida. 1 = el mejor de los diez.
@@ -156,6 +158,10 @@ export interface MatchMetadata {
   rank_division?: string | null;
   /** LP al sincronizar, justo tras la partida. */
   rank_lp?: number | null;
+  /** Tramo de rango para los baremos de población: "bajo" | "medio" | "alto".
+   *  null en las partidas sin rango conocido: entonces el baremo es sólo por
+   *  puesto. La definición de los tramos vive en `src-tauri/src/benchmarks.rs`. */
+  tier_bucket?: string | null;
   timeline_markers?: TimelineMarker[];
   minute_frames?: MinuteFrameDto[];
   comments?: Comment[]; // comentarios con marca de tiempo
@@ -193,4 +199,14 @@ export interface AudioStatus {
 export interface VideoSettings {
   fps: number;
   quality: string;
+  /**
+   * Lienzo de grabación. "native" (por defecto) usa el tamaño real del cliente
+   * de League, acotado a 1440p: quien juega a 1440p ya no graba a 1080p de
+   * balde. "1080p" y "1440p" lo fijan.
+   *
+   * Opcional en el tipo, no en el backend: el backend SIEMPRE lo manda. Se deja
+   * así para que los valores iniciales que la pantalla de ajustes se inventa
+   * antes de la primera respuesta no tengan que declararlo.
+   */
+  resolution?: "native" | "1080p" | "1440p";
 }

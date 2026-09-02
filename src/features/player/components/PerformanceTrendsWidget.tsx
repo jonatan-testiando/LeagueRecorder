@@ -1,180 +1,185 @@
 import React, { useMemo } from "react";
 import { MatchMetadata } from "../../../types";
-import { TrendingUp, TrendingDown, Minus, ShieldCheck } from "lucide-react";
-import { champIcon } from "../../../core/ddragon";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { outcome } from "../../../core/matchStats";
 import { useMatches } from "../../../store/useAppStore";
+import { useT } from "../../../core/LanguageProvider";
+import { wstyles } from "./videoPlayerStyles";
 
 interface PerformanceTrendsWidgetProps {
   currentMatch: MatchMetadata;
 }
 
+/** Colas clasificatorias de Riot: solo/dúo y flexible. */
+const RANKED_QUEUES = [420, 440];
+
+const isRanked = (m: MatchMetadata): boolean =>
+  m.queue !== undefined && RANKED_QUEUES.includes(m.queue);
+
+/** El puesto del jugador en esa partida, si el scoreboard llegó a guardarse. */
+const selfRole = (m: MatchMetadata): string | undefined =>
+  (m.participants ?? []).find((p) => p.is_self)?.role || undefined;
+
+const media = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
+/**
+ * Una comparación tuya contra tu propia media. `avg` a null = no hay historial
+ * suficiente y la fila NO se pinta: comparar contra cero fingía una media de
+ * cero, así que la primera partida con un campeón siempre salía "por encima de
+ * tu media" con cualquier número positivo.
+ */
+const Trend: React.FC<{
+  label: string;
+  value: string;
+  tone?: string;
+  avg: string | null;
+  delta: number | null;
+  deltaText: (d: number) => string;
+}> = ({ label, value, tone, avg, delta, deltaText }) => (
+  <div style={wstyles.statBox}>
+    <span className="u-label">{label}</span>
+    <span style={{ ...wstyles.statValue, ...(tone ? { color: tone } : {}) }}>{value}</span>
+    {avg !== null && <span className="u-meta">{avg}</span>}
+    {delta !== null && (
+      <span
+        style={{
+          ...wstyles.statDelta,
+          color: delta > 0 ? "var(--win)" : delta < 0 ? "var(--loss)" : "var(--faint)",
+        }}
+      >
+        {delta > 0 ? <TrendingUp size={11} /> : delta < 0 ? <TrendingDown size={11} /> : <Minus size={11} />}
+        {deltaText(delta)}
+      </span>
+    )}
+  </div>
+);
+
+/**
+ * Cómo va esta partida contra tus anteriores con el MISMO campeón.
+ *
+ * "Mismo campeón" no basta: una Nidalee de jungla en clasificatoria y una
+ * Nidalee de mid en normales no son la misma partida, y mezclarlas hacía que la
+ * media contra la que te comparas fuera de otra cosa. Se exige también la misma
+ * familia de cola (clasificatoria o no) y el mismo rol — este último sólo
+ * cuando las dos partidas lo saben, porque las guardadas antes de que existiera
+ * el campo lo traen vacío y filtrarlas dejaría el panel sin historial.
+ */
 export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = ({ currentMatch }) => {
+  const t = useT();
   // La biblioteca sale del store compartido: nada de releer todos los JSON
   // solo para filtrar las partidas de este campeón.
   const { matches, loaded } = useMatches();
-  const loading = !loaded;
-  const championMatches = useMemo(
+
+  const rol = selfRole(currentMatch);
+  const ranked = isRanked(currentMatch);
+
+  const previas = useMemo(
     () =>
-      matches.filter(
-        (m) => m.champion?.toLowerCase() === currentMatch.champion?.toLowerCase() && m.id !== currentMatch.id
-      ),
-    [matches, currentMatch.champion, currentMatch.id]
+      matches.filter((m) => {
+        if (m.id === currentMatch.id) return false;
+        if (m.champion?.toLowerCase() !== currentMatch.champion?.toLowerCase()) return false;
+        if (isRanked(m) !== ranked) return false;
+        const otro = selfRole(m);
+        // Si a alguna de las dos le falta el puesto, no se puede comparar: se
+        // deja pasar en vez de descartar media biblioteca.
+        return !rol || !otro || rol === otro;
+      }),
+    [matches, currentMatch.id, currentMatch.champion, rol, ranked]
   );
 
-  if (loading) {
-    return (
-      <div style={{ background: "var(--surface-1)", borderRadius: "var(--radius-lg)", padding: "16px", color: "var(--text-muted)", fontSize: "12px" }}>
-        Cargando historial de tendencias...
-      </div>
-    );
+  if (!loaded) {
+    return <p className="note" style={{ marginTop: 0 }}>{t("Loading…")}</p>;
   }
 
-  const hasHistory = championMatches.length > 0;
+  const hasHistory = previas.length > 0;
 
-  // Calcular promedios históricos del campeón
-  const totalGames = championMatches.length + 1;
-  const victoriesCount = championMatches.filter((m) => m.result?.toLowerCase() === "victory").length + (currentMatch.result?.toLowerCase() === "victory" ? 1 : 0);
-  const winRate = Math.round((victoriesCount / totalGames) * 100);
+  // Winrate: por el helper compartido, no por comparar la cadena con "victory".
+  // El resultado se guarda en varios idiomas y formatos según cuándo se grabó la
+  // partida, así que la comparación literal contaba victorias de menos.
+  const jugadas = previas.length + 1;
+  const victorias =
+    previas.filter((m) => outcome(m.result) === "victory").length +
+    (outcome(currentMatch.result) === "victory" ? 1 : 0);
+  const winRate = Math.round((victorias / jugadas) * 100);
 
-  // Promedio Oro @15m
-  const goldDiffs15 = championMatches.map((m) => m.gold_diff_15).filter((g): g is number => g !== undefined && g !== null);
-  const avgGoldDiff15 = goldDiffs15.length > 0 ? Math.round(goldDiffs15.reduce((a, b) => a + b, 0) / goldDiffs15.length) : 0;
-  const currGoldDiff15 = currentMatch.gold_diff_15 ?? 0;
-  const goldDelta = currGoldDiff15 - avgGoldDiff15;
+  const goldPrev = previas.map((m) => m.gold_diff_15).filter((g): g is number => g != null);
+  const apmPrev = previas.map((m) => m.apm).filter((a): a is number => a != null && a > 0);
+  const gankPrev = previas.map((m) => m.gank_impact_15).filter((g): g is number => g != null);
 
-  // Promedio APM
-  const apms = championMatches.map((m) => m.apm).filter((a): a is number => a !== undefined && a !== null && a > 0);
-  const avgApm = apms.length > 0 ? Math.round(apms.reduce((a, b) => a + b, 0) / apms.length) : 0;
-  const currApm = currentMatch.apm ? Math.round(currentMatch.apm) : 0;
-  const apmDelta = currApm - avgApm;
+  const goldNow = currentMatch.gold_diff_15;
+  const apmNow = currentMatch.apm ? Math.round(currentMatch.apm) : 0;
+  const gankNow = currentMatch.gank_impact_15;
 
-  // Promedio Gank Impact @15m
-  const gankImpacts = championMatches.map((m) => m.gank_impact_15).filter((g): g is number => g !== undefined && g !== null);
-  const avgGankImpact = gankImpacts.length > 0 ? Math.round((gankImpacts.reduce((a, b) => a + b, 0) / gankImpacts.length) * 10) / 10 : 0;
-  const currGankImpact = currentMatch.gank_impact_15 ?? 0;
-  const gankDelta = Math.round((currGankImpact - avgGankImpact) * 10) / 10;
+  const avgGold = goldPrev.length > 0 ? Math.round(media(goldPrev)) : null;
+  const avgApm = apmPrev.length > 0 ? Math.round(media(apmPrev)) : null;
+  const avgGank = gankPrev.length > 0 ? Math.round(media(gankPrev) * 10) / 10 : null;
+
+  const signo = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 
   return (
-    <div
-      style={{
-        background: "var(--surface-1)",
-        border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid var(--accent-violet)",
-        borderRadius: "var(--radius-lg)",
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "14px",
-        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-      }}
-    >
-      {/* Cabecera del Campeón y Rendimiento */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <img
-            src={champIcon(currentMatch.champion)}
-            alt={currentMatch.champion}
-            style={{ width: "32px", height: "32px", borderRadius: "50%", border: "2px solid var(--accent-violet)" }}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+    <div style={wstyles.body}>
+      <p className="note" style={{ marginTop: 0 }}>
+        {hasHistory
+          ? t("Against your {n} previous games on {champion} in the same queue and role. Win rate {pct}%.", {
+              n: previas.length,
+              champion: currentMatch.champion,
+              pct: winRate,
+            })
+          : t("First game on {champion} in this queue and role — nothing to compare against yet.", {
+              champion: currentMatch.champion,
+            })}
+      </p>
+
+      <div style={wstyles.statGrid}>
+        {goldNow != null && (
+          <Trend
+            label={t("Gold difference")}
+            value={`${signo(goldNow)}g`}
+            tone={goldNow >= 0 ? "var(--win)" : "var(--loss)"}
+            avg={avgGold !== null ? t("avg {v}", { v: `${signo(avgGold)}g` }) : null}
+            delta={avgGold !== null ? goldNow - avgGold : null}
+            deltaText={(d) =>
+              d === 0
+                ? t("same as your average")
+                : t("{v}g vs your average", { v: signo(d) })
+            }
           />
-          <div>
-            <div style={{ color: "var(--text)", fontWeight: 800, fontSize: "13px" }}>
-              Tendencias con {currentMatch.champion}
-            </div>
-            <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-              {hasHistory ? `Comparado contra ${championMatches.length} partidas anteriores` : "Primera partida registrada con este campeón"}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "color-mix(in srgb, var(--flag) 12%, transparent)", padding: "4px 10px", borderRadius: "12px", border: "1px solid color-mix(in srgb, var(--flag) 30%, transparent)" }}>
-          <ShieldCheck size={14} color="var(--accent-violet)" />
-          <span style={{ fontSize: "11px", fontWeight: 800, color: "var(--text)" }}>
-            {winRate}% Winrate
-          </span>
-        </div>
-      </div>
-
-      {/* Grid de Comparativa de Métricas */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-        {/* Oro a Minuto 15 */}
-        <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Diferencia Oro @15m</span>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: currGoldDiff15 >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-              {currGoldDiff15 >= 0 ? `+${currGoldDiff15}g` : `${currGoldDiff15}g`}
-            </span>
-            {hasHistory && (
-              <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                (Prom: {avgGoldDiff15 >= 0 ? `+${avgGoldDiff15}g` : `${avgGoldDiff15}g`})
-              </span>
-            )}
-          </div>
-          {hasHistory && (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: goldDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-              {goldDelta > 0 ? <TrendingUp size={12} /> : goldDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
-              <span>{goldDelta > 0 ? `+${goldDelta}g superior a tu media` : goldDelta < 0 ? `${goldDelta}g inferior a tu media` : "Igual a tu media"}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Presión de Ganks @15m */}
-        <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-          <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Presión de Ganks</span>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-            <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--color-objective)" }}>
-              {currGankImpact}%
-            </span>
-            {hasHistory && (
-              <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                (Prom: {avgGankImpact}%)
-              </span>
-            )}
-          </div>
-          {hasHistory && (
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: gankDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-              {gankDelta > 0 ? <TrendingUp size={12} /> : gankDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
-              <span>{gankDelta > 0 ? `+${gankDelta}% más activo` : gankDelta < 0 ? `${gankDelta}% menos activo` : "En tu media"}</span>
-            </div>
-          )}
-        </div>
-
-        {/* APM Mechanicos */}
-        {currApm > 0 && (
-          <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>Ritmo APM</span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-              <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--accent-blue)" }}>
-                {currApm} APM
-              </span>
-              {hasHistory && avgApm > 0 && (
-                <span style={{ fontSize: "10px", color: "var(--text-secondary)" }}>
-                  (Prom: {avgApm})
-                </span>
-              )}
-            </div>
-            {hasHistory && avgApm > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", fontSize: "10px", fontWeight: 700, color: apmDelta >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-                {apmDelta > 0 ? <TrendingUp size={12} /> : apmDelta < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
-                <span>{apmDelta > 0 ? `+${apmDelta} APM más veloz` : apmDelta < 0 ? `${apmDelta} APM por debajo` : "Ritmo idéntico"}</span>
-              </div>
-            )}
-          </div>
         )}
 
-        {/* KDA Actual */}
+        {gankNow != null && (
+          <Trend
+            label={t("Gank pressure")}
+            value={`${gankNow}%`}
+            tone="var(--brand)"
+            avg={avgGank !== null ? t("avg {v}", { v: `${avgGank}%` }) : null}
+            delta={avgGank !== null ? Math.round((gankNow - avgGank) * 10) / 10 : null}
+            deltaText={(d) =>
+              d === 0 ? t("same as your average") : t("{v}% vs your average", { v: signo(d) })
+            }
+          />
+        )}
+
+        {apmNow > 0 && (
+          <Trend
+            label={t("APM")}
+            value={`${apmNow}`}
+            tone="var(--cool)"
+            avg={avgApm !== null ? t("avg {v}", { v: avgApm }) : null}
+            delta={avgApm !== null ? apmNow - avgApm : null}
+            deltaText={(d) =>
+              d === 0 ? t("same as your average") : t("{v} APM vs your average", { v: signo(d) })
+            }
+          />
+        )}
+
         {currentMatch.kda && (
-          <div style={{ background: "var(--bg-app)", padding: "10px", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-            <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>KDA de la Partida</span>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-              <span style={{ fontSize: "16px", fontWeight: 800, color: "var(--text)" }}>
-                {currentMatch.kda}
-              </span>
-            </div>
-            <div style={{ fontSize: "10px", color: "var(--accent-violet)", fontWeight: 700, marginTop: "4px" }}>
-              {totalGames} partidas registradas
-            </div>
-          </div>
+          <Trend
+            label={t("KDA")}
+            value={currentMatch.kda}
+            avg={null}
+            delta={null}
+            deltaText={() => ""}
+          />
         )}
       </div>
     </div>

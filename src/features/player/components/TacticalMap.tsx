@@ -1,8 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { TimelineMarker } from "../../../types";
-import { Map } from "lucide-react";
 import { mmss } from "../../../core/time";
-import { ddragonUrl } from "../../../core/ddragon";
+import { mapImageUrl, DDRAGON_MAP_FALLBACK, useDdragonVersion } from "../../../core/ddragon";
+import { useT } from "../../../core/LanguageProvider";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { wstyles } from "./videoPlayerStyles";
 
 interface TacticalMapProps {
   markers: TimelineMarker[];
@@ -11,191 +13,150 @@ interface TacticalMapProps {
 
 type MapFilter = "all" | "kill" | "death" | "objective";
 
+/** Tamaño del mapa de la Grieta en coordenadas de Riot. */
+const RIOT_MAX_X = 14820;
+const RIOT_MAX_Y = 14881;
+
+const FILTERS: { key: MapFilter; label: string; tone: string }[] = [
+  { key: "all", label: "All", tone: "var(--text)" },
+  { key: "kill", label: "Kills", tone: "var(--win)" },
+  { key: "death", label: "Deaths", tone: "var(--loss)" },
+  { key: "objective", label: "Objectives", tone: "var(--brand)" },
+];
+
+const markerColor = (type: string): string => {
+  if (type === "kill" || type === "assist") return "var(--win)";
+  if (type === "death") return "var(--loss)";
+  if (type === "dragon" || type === "herald") return "var(--brand)";
+  if (type === "tower" || type === "plate") return "var(--cool)";
+  return "var(--flag)";
+};
+
+const matchesFilter = (type: string, filter: MapFilter): boolean => {
+  switch (filter) {
+    case "kill": return type === "kill" || type === "assist";
+    case "death": return type === "death";
+    case "objective": return type === "dragon" || type === "herald" || type === "tower" || type === "plate";
+    default: return true;
+  }
+};
+
+/**
+ * Dónde pasó cada cosa.
+ *
+ * Sólo se pintan los marcadores que traen coordenadas: son los que vienen de la
+ * Timeline de Riot. Los del directo no las tienen, y por eso el mapa puede estar
+ * vacío en una partida con eventos de sobra — que es justo lo que había que
+ * decir en vez de devolver `null` y desaparecer sin explicación.
+ */
 export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => {
+  const t = useT();
+  const version = useDdragonVersion();
   const [filter, setFilter] = useState<MapFilter>("all");
-  const [activeMarker, setActiveMarker] = useState<TimelineMarker | null>(null);
+  const [active, setActive] = useState<TimelineMarker | null>(null);
 
-  // Filtrar marcadores que tengan coordenadas (x, y) de la API de Riot
-  const validMarkers = (markers || []).filter((m) => m.position_x !== undefined && m.position_y !== undefined);
+  const valid = useMemo(
+    () => (markers || []).filter((m) => m.position_x !== undefined && m.position_y !== undefined),
+    [markers]
+  );
 
-  if (validMarkers.length === 0) return null;
+  const shown = useMemo(
+    () => valid.filter((m) => matchesFilter(m.event_type, filter)),
+    [valid, filter]
+  );
 
-  const filtered = validMarkers.filter((m) => {
-    if (filter === "all") return true;
-    if (filter === "kill") return m.event_type === "kill" || m.event_type === "assist";
-    if (filter === "death") return m.event_type === "death";
-    if (filter === "objective") return m.event_type === "dragon" || m.event_type === "herald" || m.event_type === "tower";
-    return true;
+  if (valid.length === 0) {
+    return (
+      <EmptyState
+        title={t("No positions for this game")}
+        text={t("Map positions come from Riot's timeline. Sync the game with Riot and they show up here.")}
+      />
+    );
+  }
+
+  // Riot pone el origen abajo a la izquierda (nexo azul); el SVG, arriba.
+  const toPct = (x: number, y: number) => ({
+    px: Math.max(2, Math.min(98, (x / RIOT_MAX_X) * 100)),
+    py: Math.max(2, Math.min(98, (1 - y / RIOT_MAX_Y) * 100)),
   });
 
-  // Convertir coordenadas de Riot (0..14820, 0..14881) a porcentajes precisos de mapa
-  // En Riot, y=0 es esquina inferior izquierda (Blue side nexus), SVG y=0 es arriba
-  const toPct = (x: number, y: number) => {
-    const px = Math.max(2, Math.min(98, (x / 14820) * 100));
-    const py = Math.max(2, Math.min(98, (1 - y / 14881) * 100));
-    return { px, py };
-  };
-
-  const getMarkerColor = (type: string) => {
-    if (type === "kill" || type === "assist") return "var(--color-victory)";
-    if (type === "death") return "var(--color-defeat)";
-    if (type === "dragon" || type === "herald") return "var(--color-objective)";
-    if (type === "tower" || type === "plate") return "var(--accent-blue)";
-    return "var(--flag)";
-  };
-
   return (
-    <div style={{
-      background: "var(--surface-1)",
-      border: "1px solid var(--border-subtle)",
-      borderRadius: "var(--radius-lg)",
-      padding: "16px",
-      display: "flex",
-      flexDirection: "column",
-      gap: "12px",
-      boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-          <Map size={16} color="var(--accent-violet)" />
-          <span>Mapa Táctico de la Grieta ({validMarkers.length} Eventos)</span>
-        </div>
-        <div style={{ display: "flex", gap: "4px", background: "var(--bg-app)", padding: "2px", borderRadius: "6px" }}>
-          <button
-            onClick={() => setFilter("all")}
-            style={{
-              background: filter === "all" ? "var(--accent-violet-soft)" : "transparent",
-              color: filter === "all" ? "var(--text)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Todos
-          </button>
-          <button
-            onClick={() => setFilter("kill")}
-            style={{
-              background: filter === "kill" ? "color-mix(in srgb, var(--color-victory) 20%, transparent)" : "transparent",
-              color: filter === "kill" ? "var(--color-victory)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Kills
-          </button>
-          <button
-            onClick={() => setFilter("death")}
-            style={{
-              background: filter === "death" ? "color-mix(in srgb, var(--color-defeat) 20%, transparent)" : "transparent",
-              color: filter === "death" ? "var(--color-defeat)" : "var(--text-muted)",
-              border: "none",
-              borderRadius: "4px",
-              padding: "4px 8px",
-              fontSize: "11px",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Muertes
-          </button>
-        </div>
+    <div style={wstyles.body}>
+      <div style={wstyles.toolbar}>
+        <span className="tp-seg">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              aria-pressed={filter === f.key}
+              data-on={filter === f.key ? "" : undefined}
+              style={filter === f.key ? { color: f.tone } : undefined}
+            >
+              {t(f.label)}
+            </button>
+          ))}
+        </span>
+        <span className="u-meta" style={{ marginLeft: "auto" }}>
+          {t("{n} of {total} events", { n: shown.length, total: valid.length })}
+        </span>
       </div>
 
-      <div style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "1 / 1",
-        background: "var(--sunken)",
-        borderRadius: "var(--radius-md)",
-        overflow: "hidden",
-        border: "1px solid var(--border-subtle)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}>
-        {/* Imagen Oficial de la Grieta del Invocador (Data Dragon map11.png) */}
+      <div style={wstyles.mapFrame}>
         <img
-          src={ddragonUrl("/cdn/14.1.1/img/map/map11.png")}
-          alt="Summoner's Rift Map"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "fill",
-            position: "absolute",
-            inset: 0,
-            filter: "brightness(0.85) contrast(1.1)",
+          src={mapImageUrl(version)}
+          alt=""
+          style={wstyles.mapImg}
+          onError={(e) => {
+            // Una versión recién publicada puede no tener aún el mapa en el CDN;
+            // la de respaldo lleva años ahí. Sólo se reintenta una vez.
+            const img = e.currentTarget as HTMLImageElement;
+            const respaldo = mapImageUrl(DDRAGON_MAP_FALLBACK);
+            if (img.src !== respaldo) img.src = respaldo;
+            else img.style.visibility = "hidden";
           }}
         />
 
-        {/* Renderizado de Nodos de Eventos */}
-        {filtered.map((m, idx) => {
+        {shown.map((m, idx) => {
           const { px, py } = toPct(m.position_x!, m.position_y!);
-          const color = getMarkerColor(m.event_type);
+          const color = markerColor(m.event_type);
+          const isActive = active === m;
           return (
-            <div
+            <button
               key={idx}
+              type="button"
               onClick={() => onSeek(m.time)}
-              onMouseEnter={() => setActiveMarker(m)}
-              onMouseLeave={() => setActiveMarker(null)}
+              onMouseEnter={() => setActive(m)}
+              onMouseLeave={() => setActive(null)}
+              onFocus={() => setActive(m)}
+              onBlur={() => setActive(null)}
+              title={`${mmss(m.time)} · ${t("Jump to this moment")}`}
               style={{
-                position: "absolute",
+                ...wstyles.mapDot,
                 left: `${px}%`,
                 top: `${py}%`,
-                transform: "translate(-50%, -50%)",
-                width: "18px",
-                height: "18px",
-                borderRadius: "50%",
                 background: color,
-                border: "2px solid var(--text)",
-                boxShadow: `0 0 10px ${color}`,
-                cursor: "pointer",
-                zIndex: activeMarker === m ? 20 : 10,
-                transition: "transform 0.15s ease",
+                zIndex: isActive ? 20 : 10,
+                transform: isActive
+                  ? "translate(-50%, -50%) scale(1.35)"
+                  : "translate(-50%, -50%)",
+                transition: "transform var(--t-quick) var(--e-move)",
               }}
             />
           );
         })}
 
-        {/* Tooltip de Evento Seleccionado en el Mapa */}
-        {activeMarker && (
-          <div style={{
-            position: "absolute",
-            bottom: "12px",
-            left: "12px",
-            right: "12px",
-            background: "color-mix(in srgb, var(--panel) 95%, transparent)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "6px",
-            padding: "8px 12px",
-            fontSize: "12px",
-            color: "var(--text)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
-            pointerEvents: "none",
-          }}>
-            <span style={{ fontWeight: 700 }}>
-              {mmss(activeMarker.time)} · {activeMarker.description}
-            </span>
-            <span style={{ fontSize: "10px", color: "var(--accent-violet)", fontWeight: 800 }}>
-              Clic para saltar
-            </span>
+        {active && (
+          <div style={wstyles.mapTip}>
+            <span className="u-metric">{mmss(active.time)}</span>
+            <span style={{ flex: 1, textAlign: "left" }}>{active.description}</span>
+            <span className="u-label" style={{ color: "var(--cool)" }}>{t("Click to jump")}</span>
           </div>
         )}
       </div>
 
-      <span style={{ fontSize: "10px", color: "var(--text-muted)", textAlign: "center" }}>
-        Haz clic en cualquier punto del mapa para saltar el vídeo al momento exacto de esa jugada.
-      </span>
+      <p className="note">
+        {t("Click any point on the map to jump the video to that play.")}
+      </p>
     </div>
   );
 };

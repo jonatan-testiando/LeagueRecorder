@@ -188,11 +188,36 @@ export const listRecallFrames = (): Promise<RecallFrame[]> =>
 
 /**
  * Normaliza la tecla de un evento de teclado al mismo formato que guarda la
- * configuración: "1", "F3", "SPACE". Devuelve "" si no es una tecla utilizable.
+ * configuración: "1", "F3", "SPACE", "TAB". Devuelve "" si no es utilizable.
+ *
+ * El conjunto que se acepta NO es una opinión de esta pantalla: es exactamente
+ * el que `parse_key` sabe traducir en `src-tauri/src/training.rs`. Aceptar aquí
+ * una tecla que el lector de partida no reconoce guardaría una asignación que
+ * nunca dispara, y el usuario lo descubriría en mitad de una partida.
  */
 export const normalizeKey = (e: KeyboardEvent): string => {
   if (e.key === " " || e.code === "Space") return "SPACE";
-  if (/^F\d{1,2}$/.test(e.key)) return e.key.toUpperCase();
+  if (e.key === "Tab") return "TAB";
+  if (/^F(?:[1-9]|1[0-2])$/.test(e.key)) return e.key.toUpperCase();
   if (/^[0-9a-zA-Z]$/.test(e.key)) return e.key.toUpperCase();
   return "";
+};
+
+/**
+ * Por qué no vale una tecla. El botón de captura se quedaba escuchando para
+ * siempre ante cualquier rechazo, sin distinguir "pulsaste Shift" de "esa tecla
+ * no la sabemos leer": las dos se sentían como que el teclado no funciona.
+ */
+export type KeyProblem = "modifier" | "numpad" | "unsupported";
+
+/** `null` si la tecla vale. */
+export const keyProblem = (e: KeyboardEvent): KeyProblem | null => {
+  if (normalizeKey(e)) return null;
+  if (["Shift", "Control", "Alt", "Meta", "CapsLock", "Dead", "AltGraph"].includes(e.key)) {
+    return "modifier";
+  }
+  // `code` distingue el bloque numérico de la fila de números, que `key` no.
+  // Se detecta sólo para poder DECIRLO: el lector de partida no lo entiende.
+  if (/^Numpad/.test(e.code)) return "numpad";
+  return "unsupported";
 };

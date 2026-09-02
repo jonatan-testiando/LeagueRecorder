@@ -3,7 +3,7 @@ import { ErrorClipMetadata, addErrorEvent, deleteErrorEvent, editErrorEvent } fr
 import { 
   Play, Pause, VolumeX, Volume1, Volume2, Maximize, 
   ChevronLeft, Plus, Target, Focus, BrainCircuit, Flag, Edit2, Trash2,
-  SkipBack, SkipForward
+  SkipBack, SkipForward, Clock3
 } from "lucide-react";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,6 +13,25 @@ import { useT } from "../../../core/LanguageProvider";
 import { clock } from "../../../core/time";
 
 import { streamUrl } from "../../../core/media";
+
+/**
+ * Las categorías de error, en el orden en que se ofrecen.
+ *
+ * Estos valores son IDENTIFICADORES, no texto: es lo que se guarda en el JSON
+ * del clip y lo que agrupa el gráfico de Patrones, así que no se traducen al
+ * escribirlos. Se traducen al PINTARLOS, aquí, en la galería y en Patrones —
+ * que es también por qué viven en un solo sitio.
+ */
+export const ERROR_CATEGORIES: string[] = [
+  "Positioning",
+  "Mechanics",
+  "Decision Making",
+  "Other",
+];
+
+/** Velocidades del transporte. Las mismas que el reproductor principal. */
+const RATES = [0.25, 0.5, 1, 2];
+
 interface ErrorPlayerProps {
   clip: ErrorClipMetadata;
   onUpdate: () => void;
@@ -27,19 +46,31 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [volume] = useState<number>(0.5);
+  // El volumen y la velocidad eran constantes: el deslizador y el selector no
+  // existían, así que un clip con el audio alto solo se podía silenciar entero
+  // y una mecánica no se podía ver a cámara lenta, que es justo para lo que se
+  // guarda un error.
+  const [volume, setVolume] = useState<number>(0.5);
   const [muted, setMuted] = useState<boolean>(false);
-  const playbackRate = 1;
+  const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  
+
   // Annotation state
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   const [isAddingMode, setIsAddingMode] = useState<boolean>(false);
   const [editEventId, setEditEventId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState<string>("");
   const [noteCategory, setNoteCategory] = useState<string>("Positioning");
+  /**
+   * Instante al que se anclará la nota que se está escribiendo.
+   *
+   * Antes se leía `currentTime` en el momento de guardar, así que una nota
+   * editada se re-anclaba sola al sitio donde estuviera el vídeo. Ahora es
+   * estado, y el botón "usar el instante actual" lo mueve a propósito.
+   */
+  const [noteTime, setNoteTime] = useState<number>(0);
 
-  const { showError, showSuccess } = useDialog();
+  const { showError, showSuccess, showConfirm } = useDialog();
   const t = useT();
 
   useEffect(() => {
@@ -122,43 +153,106 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
     }
   };
 
+  /** Abre el formulario en blanco, anclado al instante actual. */
+  const startAdding = useCallback(() => {
+    videoRef.current?.pause();
+    setEditEventId(null);
+    setNoteText("");
+    setNoteCategory("Positioning");
+    setNoteTime(videoRef.current?.currentTime ?? currentTime);
+    setIsAddingMode(true);
+  }, [currentTime]);
+
   const handleSaveNote = async () => {
     if (!noteText.trim()) return;
     try {
       if (editEventId) {
-        await editErrorEvent(clip.path, editEventId, noteText, noteCategory);
-        showSuccess("Note updated");
+        // `edit_error_event` ya acepta el instante, así que mover el ancla es
+        // una edición y no un borrar-y-volver-a-poner. Con lo de antes la nota
+        // cambiaba de id cada vez que se reanclaba, y quien la tuviera
+        // referenciada (la cola de revisión) se quedaba apuntando a nada.
+        await editErrorEvent(clip.path, editEventId, noteText, noteCategory, noteTime);
+        showSuccess(t("Note updated"));
       } else {
-        await addErrorEvent(clip.path, currentTime, noteText, noteCategory);
-        showSuccess("Note saved");
+        await addErrorEvent(clip.path, noteTime, noteText, noteCategory);
+        showSuccess(t("Note saved"));
       }
       setIsAddingMode(false);
       setEditEventId(null);
       setNoteText("");
       onUpdate(); // Reload clip metadata
     } catch (e) {
-      showError("Failed to save: " + e);
+      showError(t("Couldn't save the note: {msg}", { msg: String(e) }));
     }
   };
 
   const handleDeleteNote = async (id: string) => {
+    const ok = await showConfirm({
+      title: t("Delete note"),
+      message: t("This note is deleted for good. The clip stays."),
+      confirmText: t("Delete"),
+      cancelText: t("Cancel"),
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await deleteErrorEvent(clip.path, id);
-      showSuccess("Note deleted");
+      showSuccess(t("Note deleted"));
       onUpdate();
     } catch (e) {
-      showError("Failed to delete: " + e);
+      showError(t("Couldn't delete the note: {msg}", { msg: String(e) }));
     }
   };
 
   const categoryConfig: Record<string, { color: string, icon: React.ReactNode }> = {
-    "Positioning": { color: "var(--accent-teal)", icon: <Target size={14} /> },
-    "Mechanics": { color: "var(--accent-violet)", icon: <Focus size={14} /> },
-    "Decision Making": { color: "var(--accent-gold)", icon: <BrainCircuit size={14} /> },
-    "Other": { color: "var(--text-muted)", icon: <Flag size={14} /> }
+    "Positioning": { color: "var(--cool)", icon: <Target size={14} /> },
+    "Mechanics": { color: "var(--flag)", icon: <Focus size={14} /> },
+    "Decision Making": { color: "var(--brand)", icon: <BrainCircuit size={14} /> },
+    "Other": { color: "var(--faint)", icon: <Flag size={14} /> }
   };
 
   const events = clip.events || [];
+
+  /**
+   * Atajos de teclado, los mismos que el reproductor principal: Espacio y K
+   * para pausar, flechas para moverse cinco segundos, M para silenciar.
+   *
+   * No se disparan mientras se escribe una nota: en un `textarea` la barra
+   * espaciadora es una barra espaciadora.
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const escribiendo =
+        !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+      if (escribiendo) return;
+      const v = videoRef.current;
+      if (!v) return;
+      switch (e.key) {
+        case " ":
+        case "k":
+        case "K":
+          e.preventDefault();
+          handlePlayPause();
+          break;
+        case "ArrowLeft":
+          e.preventDefault();
+          seekTo(v.currentTime - 5, false);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          seekTo(v.currentTime + 5, false);
+          break;
+        case "m":
+        case "M":
+          e.preventDefault();
+          setMuted((prev) => !prev);
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handlePlayPause, seekTo]);
 
   return (
     <motion.div 
@@ -179,11 +273,11 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 y en qué minuto de la partida ocurre. */}
             <div style={styles.titleBlock}>
               <span style={styles.title}>
-                {clip.events?.[0]?.category ?? "Flagged error"}
+                {clip.events?.[0]?.category ? t(clip.events[0].category) : t("Flagged error")}
               </span>
               {clip.start_time !== undefined && clip.start_time !== null && (
                 <span className="u-meta" style={{ marginTop: 2 }}>
-                  at {clock(clip.start_time)} in the game
+                  {t("at {t} in the game", { t: clock(clip.start_time) })}
                 </span>
               )}
             </div>
@@ -241,11 +335,26 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               <span className="tp-tc__total"> / {clock(duration)}</span>
             </span>
 
+            {/* Segmentado y no desplegable, igual que en el reproductor
+                principal: en una revisión la velocidad se cambia todo el rato. */}
+            <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
+              {RATES.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setPlaybackRate(r)}
+                  aria-pressed={playbackRate === r}
+                  data-on={playbackRate === r ? "" : undefined}
+                >
+                  {r}&times;
+                </button>
+              ))}
+            </span>
+
             <span style={{ flex: 1, minWidth: 12 }} />
 
             <button
               className="btn btn--ghost btn--sm"
-              onClick={() => { videoRef.current?.pause(); setIsAddingMode(true); setEditEventId(null); setNoteText(""); }}
+              onClick={startAdding}
               title={t("Write a note at the current time")}
             >
               <Plus size={13} /> {t("Add note")}
@@ -260,6 +369,19 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               >
                 {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
               </button>
+              {/* Faltaba el deslizador entero: el botón silenciaba, y eso era
+                  todo el control de volumen que había. */}
+              <input
+                type="range" min="0" max="1" step="0.05"
+                value={muted ? 0 : volume}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setVolume(v);
+                  if (v > 0 && muted) setMuted(false);
+                }}
+                aria-label={t("Volume")}
+                style={styles.volumeSlider}
+              />
             </div>
             <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
               <Maximize size={15} />
@@ -333,18 +455,32 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                 exit={{ opacity: 0, scale: 0.95 }}
                 style={styles.addForm}
               >
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "8px" }}>
-                  {t("Note at")} {clock(currentTime)}
+                {/* El instante al que se ancla la nota, y cómo moverlo. Antes
+                    se leía el reloj al guardar, así que editar una nota vieja la
+                    arrastraba al punto donde estuviera el vídeo. */}
+                <div style={styles.noteTimeRow}>
+                  <span className="u-meta">{t("Note at")}</span>
+                  <span className="u-metric" style={{ fontSize: 12 }}>{clock(noteTime)}</span>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setNoteTime(videoRef.current?.currentTime ?? currentTime)}
+                    title={t("Anchor this note to where the video is now")}
+                  >
+                    <Clock3 size={12} /> {t("Use current time")}
+                  </button>
                 </div>
                 <select
                   value={noteCategory}
                   onChange={e => setNoteCategory(e.target.value)}
+                  aria-label={t("Error category")}
                   style={styles.select}
                 >
-                  <option value="Positioning">Positioning</option>
-                  <option value="Mechanics">Mechanics</option>
-                  <option value="Decision Making">Decision Making</option>
-                  <option value="Other">Other</option>
+                  {/* El VALOR es el identificador en inglés, que es lo que se
+                      guarda; la etiqueta va traducida. */}
+                  {ERROR_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{t(c)}</option>
+                  ))}
                 </select>
                 <textarea
                   autoFocus
@@ -385,12 +521,30 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                     </span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <div style={{...styles.toneBadge, color: conf.color, backgroundColor: mix(conf.color, 13)}}>
-                        {conf.icon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{ev.category}</span>
+                        {conf.icon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{t(ev.category)}</span>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); setEditEventId(ev.id); setNoteText(ev.text); setNoteCategory(ev.category); seekTo(ev.time, false); setIsAddingMode(true); }} style={styles.iconBtn}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditEventId(ev.id);
+                          setNoteText(ev.text);
+                          setNoteCategory(ev.category);
+                          setNoteTime(ev.time);
+                          seekTo(ev.time, false);
+                          setIsAddingMode(true);
+                        }}
+                        style={styles.iconBtn}
+                        title={t("Edit note")}
+                        aria-label={t("Edit note")}
+                      >
                         <Edit2 size={12} />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteNote(ev.id); }} style={{...styles.iconBtn, color: "var(--color-defeat)"}}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteNote(ev.id); }}
+                        style={{...styles.iconBtn, color: "var(--signal)"}}
+                        title={t("Delete note")}
+                        aria-label={t("Delete note")}
+                      >
                         <Trash2 size={12} />
                       </button>
                     </div>
@@ -441,6 +595,17 @@ const styles: Record<string, React.CSSProperties> = {
   reviewCardBody: { fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 },
   reviewCardTitle: { wordBreak: "break-word" },
   addForm: { backgroundColor: "var(--raised)", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid var(--line)" },
+  noteTimeRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" },
+  volumeSlider: {
+    width: "80px",
+    accentColor: "var(--cool)",
+    cursor: "pointer",
+    height: "4px",
+    borderRadius: "2px",
+    appearance: "none",
+    background: "var(--sunken)",
+    boxShadow: "var(--inset-sunken)",
+  },
   select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
   cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },

@@ -4,10 +4,12 @@
 //! de mensajes JSON delimitados por '\n' (ver `leaguerec-obs/src/main.cpp`):
 //!   -> {"cmd":"start", ...}   <- {"ok":true,"file":"..."}
 //!   -> {"cmd":"stop"}         <- {"ok":true,"file":"..."}
-//!   -> {"cmd":"status"}       <- {"ok":true,"active":bool}   (lo sirve el servidor; este cliente
-//!                                                              no lo usa: el estado de grabación
-//!                                                              lo lleva `RecorderState`)
+//!   -> {"cmd":"status"}       <- {"ok":true,"active":bool,"audio":bool}
 //!   -> {"cmd":"shutdown"}     <- {"ok":true}
+//!
+//! `status` es el único que dice la VERDAD sobre si el output sigue vivo:
+//! `RecorderState` solo lleva la intención de grabar, así que un output que se
+//! cae solo (disco lleno, encoder que revienta) pasaba desapercibido.
 
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
@@ -31,6 +33,11 @@ pub struct StartConfig {
     pub fps: i32,
     /// Calidad constante (CQP) del encoder: menor = más nitidez y más peso.
     pub cqp: i32,
+    /// Lienzo (base y salida) en píxeles. Lo calcula `recorder::canvas_size` a
+    /// partir del tamaño real del cliente de League: sin esto el servidor grababa
+    /// siempre a 1920×1080 y un jugador de 1440p perdía resolución de balde.
+    pub width: i32,
+    pub height: i32,
 }
 
 impl Default for StartConfig {
@@ -42,6 +49,8 @@ impl Default for StartConfig {
             out: String::new(),
             fps: 60,
             cqp: 23,
+            width: 1920,
+            height: 1080,
         }
     }
 }
@@ -53,6 +62,24 @@ struct Resp {
     error: Option<String>,
     #[serde(default)]
     file: Option<String>,
+    #[serde(default)]
+    active: bool,
+    #[serde(default)]
+    recording: bool,
+    #[serde(default)]
+    audio: bool,
+}
+
+/// Lo que responde `status`.
+#[derive(Clone, Copy, Debug)]
+pub struct ObsStatus {
+    /// Algo emitiendo: grabación continua o replay buffer.
+    pub active: bool,
+    /// Solo la grabación continua. Es la que se vigila para saber si la partida
+    /// se está quedando sin vídeo.
+    pub recording: bool,
+    /// La fuente de loopback de audio llegó a crearse.
+    pub audio: bool,
 }
 
 /// Cliente conectado al servidor de grabación.
@@ -196,6 +223,20 @@ impl ObsClient {
             Ok(r.file.unwrap_or_default())
         } else {
             Err(r.error.unwrap_or_else(|| "save_replay falló".into()))
+        }
+    }
+
+    /// Pregunta al servidor si sigue grabando de verdad (y si tiene audio).
+    pub fn status(&mut self) -> Result<ObsStatus, String> {
+        let r = self.request(r#"{"cmd":"status"}"#)?;
+        if r.ok {
+            Ok(ObsStatus {
+                active: r.active,
+                recording: r.recording,
+                audio: r.audio,
+            })
+        } else {
+            Err(r.error.unwrap_or_else(|| "status falló".into()))
         }
     }
 

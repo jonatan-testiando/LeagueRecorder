@@ -193,6 +193,10 @@
     m.rank_tier = "EMERALD";
     m.rank_division = "II";
     m.rank_lp = [64, 41, 58, 75, 52, 33, 47, 62, 40, 55, 30, 44, 60, 38][mi] ?? 50;
+    // Sincronizadas con Riot: sin `riot_match_id` el reproductor no ofrece los
+    // baremos, y sin `tier_bucket` la sección sale con el baremo solo por rol.
+    m.riot_match_id = "LA1_" + (5100000000 + mi);
+    m.tier_bucket = ["bajo", "medio", "alto"][mi % 3];
     // El puesto en que se jugó, como lo estampa la sincronización. A las
     // partidas sin scoreboard completo les basta su propia entrada is_self:
     // es lo único que mira el filtro de rol.
@@ -220,6 +224,33 @@
   });
 
   window.__MOCK_MATCHES = matches;
+
+  /**
+   * Config, vídeo y atajos: MUTABLES.
+   *
+   * El doble anterior devolvía un objeto nuevo y literal en cada llamada, así
+   * que nada de lo que se tocaba en Ajustes se quedaba puesto y el asistente de
+   * primer arranque era imposible de probar (marcar "hecho" no hacía nada).
+   *
+   * `?onboarding` fuerza el primer arranque; sin el parámetro, la app entra
+   * directa como quien ya la tiene configurada.
+   */
+  const CONFIG = {
+    save_directory: "C:/Users/dev/Videos/LeagueRecorder",
+    riot_api_key: "RGAPI-0000",
+    auto_dataset_generator: false,
+    max_storage_gb: 200,
+    auto_prune_days: 30,
+    language: "es",
+    minimap_scale: 1,
+    riot_platform: "auto",
+    riot_platform_detected: "la1",
+    riot_proxy_url: "",
+    backup_mirror_dir: "",
+    onboarding_done: !new URLSearchParams(location.search).has("onboarding"),
+  };
+  const VIDEO = { fps: 60, quality: "High", resolution: "native" };
+  const HOTKEYS = { replay: "F8" };
 
   // El arnés corre en un navegador de verdad: los protocolos de Tauri
   // (stream://, ddragon://) no existen y los helpers deben irse al CDN.
@@ -259,7 +290,10 @@
     // Copia SIEMPRE: el backend real devuelve JSON fresco en cada invoke. Si el
     // mock devuelve el mismo array mutado, los useMemo de la app no ven cambio
     // de referencia y el arnés inventa bugs que la app real no tiene.
-    get_recorded_matches: () => matches.map((m) => ({ ...m })),
+    // `?empty` devuelve la biblioteca vacía: es la única forma de mirar el
+    // primer arranque de "Hoy" sin borrar las nueve partidas a mano.
+    get_recorded_matches: () =>
+      new URLSearchParams(location.search).has("empty") ? [] : matches.map((m) => ({ ...m })),
     // Borrar borra de verdad: el bug de fichas solapadas tras eliminar solo se
     // reproduce si la lista encoge y los índices del virtualizador se corren.
     delete_match: ({ id }) => {
@@ -274,18 +308,50 @@
       }
       return [];
     },
-    get_recorder_status: () => true,
-    get_disk_usage: () => ({ used_bytes: 159 * 1024 ** 3, total_bytes: 931 * 1024 ** 3 }),
-    get_app_config: () => ({
-      save_directory: "C:/Users/dev/Videos/LeagueRecorder",
-      riot_api_key: "RGAPI-0000",
-      auto_dataset_generator: false,
-      max_storage_gb: 200,
-      auto_prune_days: 30,
-      language: "es",
-      minimap_scale: 1,
+    get_recorder_status: () => new URLSearchParams(location.search).has("rec"),
+    get_disk_usage: () => ({
+      used_bytes: 159 * 1024 ** 3,
+      total_bytes: 931 * 1024 ** 3,
+      // El hueco REAL del volumen: la cuota sola no dice si cabe otra partida.
+      free_bytes: 412 * 1024 ** 3,
+      drive_total_bytes: 1863 * 1024 ** 3,
     }),
-    get_video_settings: () => ({ fps: 60, quality: "high" }),
+    get_app_config: () => ({ ...CONFIG }),
+    // El parche del backend: solo toca lo que se le pasa. Guardarlo de verdad
+    // es lo que permite ver el asistente cambiar de idioma y de región y que
+    // los cambios sigan ahí al volver.
+    set_app_config: ({ patch }) => { Object.assign(CONFIG, patch || {}); return null; },
+    get_video_settings: () => ({ ...VIDEO }),
+    set_video_settings: ({ fps, quality, resolution }) => {
+      VIDEO.fps = fps;
+      VIDEO.quality = quality;
+      if (resolution) VIDEO.resolution = resolution;
+      return { ...VIDEO };
+    },
+    get_hotkeys: () => ({ ...HOTKEYS }),
+    set_hotkeys: ({ replay }) => { HOTKEYS.replay = replay; return { ...HOTKEYS }; },
+    // La clave: `?key=bad` (o `?key=missing`) la hace fallar, que es el caso que
+    // hay que poder mirar. Sin el parámetro, sirve.
+    check_riot_key: () => {
+      const q = new URLSearchParams(location.search).get("key");
+      if (q === "bad") throw "key_invalid: Riot rejected the key (403)";
+      if (q === "missing") throw "no_key: no API key configured";
+      return null;
+    },
+    // Sincronizar rellena el marcador de la partida, como hace el backend.
+    sync_match_now: ({ matchId }) => {
+      const m = matches.find((x) => x.id === matchId);
+      if (m && !m.participants) m.participants = matches[0].participants;
+      return m ? { ...m } : null;
+    },
+    set_event_reviewed: () => null,
+    set_error_clip_reviewed: () => null,
+    // El selector de carpeta del plugin de diálogos. Devuelve una ruta fija:
+    // en el navegador no hay explorador que abrir.
+    "plugin:dialog|open": (args) =>
+      args && args.options && args.options.filters
+        ? "C:/Users/dev/Descargas/LeagueRecorder-backup-20260902-1140.zip"
+        : "C:/Users/dev/Videos/LeagueRecorder",
     get_audio_status: () => ({
       system_audio_device: "CABLE Output (VB-Audio)",
       all_devices: ["CABLE Output (VB-Audio)", "Altavoces"],
@@ -485,6 +551,79 @@
     ],
     process_match_minimap: () => null,
     cancel_match_minimap: () => null,
+    // --- baremos de población -------------------------------------------
+    // Las 17 métricas con percentil crudo: `deaths_per_game` viene alto A
+    // PROPÓSITO (mueres más que el 82%), que es el caso que la UI tiene que
+    // saber invertir. Dos vienen con percentil nulo: no están en el baremo y
+    // el valor crudo se enseña igual.
+    get_match_benchmarks: ({ matchId }) => {
+      // El percentil se mueve partida a partida: con la tabla clavada, la
+      // chispa de veinte partidas de Patrones sale plana y no se puede ver si
+      // la linea sube o baja. El zarandeo es determinista (del id), para que
+      // dos renders del mismo arnes den lo mismo.
+      var semilla = 0;
+      for (var c = 0; c < String(matchId || "").length; c++) {
+        semilla = (semilla * 31 + String(matchId).charCodeAt(c)) % 997;
+      }
+      var mueve = function (p, k) {
+        if (p == null) return null;
+        var r = ((semilla * 7919 + k * 104729) % 61) - 30;
+        return Math.max(1, Math.min(99, p + r));
+      };
+      return [
+        ["cs_per_min", 6.4, 61, 5.9, false],
+        ["kill_participation", 0.58, 84, 0.46, false],
+        ["deaths_per_game", 8, 82, 5, true],
+        ["kda", 2.1, 44, 2.4, false],
+        ["gold_per_min", 412, 57, 398, false],
+        ["damage_per_min", 730, 71, 640, false],
+        ["damage_share", 0.29, 66, 0.24, false],
+        ["vision_score_per_min", 1.4, 91, 0.9, false],
+        ["wards_per_min", 0.62, 88, 0.41, false],
+        ["control_wards", 2, 74, 0, false],
+        ["gold_diff_15", -340, 31, 0, false],
+        ["xp_diff_15", 180, 58, 0, false],
+        ["cs_diff_15", -12, 22, 0, false],
+        ["solo_kills", 1, 68, 0, false],
+        ["turret_damage_per_min", 96, 12, 180, false],
+        ["kills_per_game", 7, null, null, false],
+        ["assists_per_game", 11, null, null, false],
+      ].map(([metric, value, percentile, median, lower_is_better], k) => ({
+        metric,
+        value: value * (1 + (((semilla + k * 13) % 21) - 10) / 100),
+        percentile: mueve(percentile, k),
+        median,
+        lower_is_better,
+      }));
+    },
+    // --- borrado -----------------------------------------------------------
+    delete_clip: () => null,
+    delete_error_clip: () => null,
+    edit_error_event: () => null,
+    add_error_event: () => "nuevo",
+    delete_error_event: () => null,
+    update_error_note: () => null,
+    toggle_clip_favorite: ({ path }) => !/clip_0/.test(path),
+    // --- subida con progreso ----------------------------------------------
+    // Emite `clip_upload_progress` como el backend: así se ve la barra pasar de
+    // indeterminada (los primeros 400 ms, antes del primer aviso) a real.
+    upload_clip: ({ path }) => {
+      const total = 48 * 1024 * 1024;
+      let sent = 0;
+      const paso = () => {
+        sent = Math.min(total, sent + total / 12);
+        window.__emit("clip_upload_progress", { path, sent, total });
+        if (sent < total) setTimeout(paso, 350);
+      };
+      setTimeout(paso, 400);
+      return new Promise((ok) =>
+        setTimeout(() => ok("https://litter.catbox.moe/abc123.mp4"), 5000)
+      );
+    },
+    // --- copia de seguridad -------------------------------------------------
+    export_backup: ({ destDir }) =>
+      (destDir || "C:/tmp") + "/LeagueRecorder-backup-20260902-1140.zip",
+    import_backup: () => ({ restored: 12, created_without_video: 3, skipped: 1 }),
     get_camera_snap_summary: () => null,
     list_awareness_records: () => [],
     list_recall_frames: () => [],

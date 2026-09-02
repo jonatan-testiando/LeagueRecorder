@@ -1,11 +1,137 @@
 use reqwest::Client;
 use serde::Deserialize;
 use std::time::Duration;
+use tauri::Emitter;
+
+/// Las plataformas de Riot, tal cual las escribe la API en el prefijo del id de
+/// partida ("EUW1_7412…"). El orden es el que ve el usuario en Ajustes.
+pub const PLATFORMS: [&str; 17] = [
+    "la1", "la2", "na1", "br1", "euw1", "eun1", "tr1", "ru", "kr", "jp1", "oc1", "ph2", "sg2",
+    "th2", "tw2", "vn2", "me1",
+];
+
+/// Las cuatro rutas regionales, en el orden en que se sondean con "auto".
+/// Americas primero porque es de donde vino la app (LAN).
+pub const ROUTES: [&str; 4] = ["americas", "europe", "asia", "sea"];
+
+/// Plataforma → ruta regional. account-v1 y match-v5 viven en la regional
+/// (`americas.api.riotgames.com`); league-v4 vive en la de plataforma
+/// (`euw1.api.riotgames.com`). Confundirlas devuelve 404 sin más explicación.
+///
+/// Una plataforma desconocida cae a "americas": es una ruta válida, así que el
+/// fallo sale como "esa cuenta no existe aquí" y no como una URL rota.
+pub fn regional_route(platform: &str) -> &'static str {
+    match platform.trim().to_ascii_lowercase().as_str() {
+        "la1" | "la2" | "na1" | "br1" => "americas",
+        "euw1" | "eun1" | "tr1" | "ru" | "me1" => "europe",
+        "kr" | "jp1" => "asia",
+        "oc1" | "ph2" | "sg2" | "th2" | "tw2" | "vn2" => "sea",
+        _ => "americas",
+    }
+}
+
+/// Plataforma sacada del id de partida ("EUW1_7412…" → "euw1"). `None` si el
+/// prefijo no es una plataforma conocida: así una cadena rara no se cuela como
+/// host y produce una URL que no existe.
+pub fn platform_from_match_id(match_id: &str) -> Option<String> {
+    let prefijo = match_id.split('_').next()?.trim().to_ascii_lowercase();
+    PLATFORMS.contains(&prefijo.as_str()).then_some(prefijo)
+}
+
+/// La plataforma si es una de las conocidas, `None` si es "auto", está vacía o
+/// no la reconocemos.
+pub fn platform_conocida(platform: &str) -> Option<String> {
+    let p = platform.trim().to_ascii_lowercase();
+    PLATFORMS.contains(&p.as_str()).then_some(p)
+}
+
+/// ¿No hay con qué llamar a Riot? Con un proxy configurado la clave la pone el
+/// servidor, así que exigirla aquí dejaría el proxy inservible: todos los
+/// caminos se cortaban antes de llegar a pedir nada.
+fn sin_credencial(cfg: &crate::storage::AppConfig) -> bool {
+    cfg.riot_api_key.trim().is_empty() && cfg.riot_proxy_url.trim().is_empty()
+}
+
+/// Estado de la clave de Riot que se le cuenta a la interfaz.
+#[derive(serde::Serialize, Clone)]
+pub struct KeyStatus {
+    /// "ok" | "invalid" | "expired" | "missing"
+    pub status: String,
+    pub message: String,
+}
+
+/// El `AppHandle` para poder emitir desde funciones que no lo reciben (el
+/// cliente HTTP se construye en sitios muy dentro). Lo pone `check_riot_key`,
+/// que la UI llama al arrancar.
+static APP: std::sync::OnceLock<tauri::AppHandle> = std::sync::OnceLock::new();
+/// Último estado emitido y cuándo, para no repetir el mismo cada segundo.
+static ULTIMO: std::sync::Mutex<Option<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(None);
+/// Ventana de silencio para un estado que ya se emitió.
+const KEY_STATUS_COOLDOWN: Duration = Duration::from_secs(60);
+
+pub fn set_app_handle(app: tauri::AppHandle) {
+    let _ = APP.set(app);
+}
+
+/// Emite `riot_key_status` si toca. Un estado distinto del último sale al
+/// momento; el mismo, como mucho una vez por minuto: una sincronización dispara
+/// decenas de peticiones y todas fallarían igual.
+pub fn emit_key_status(status: &str, message: &str) {
+    {
+        let Ok(mut ultimo) = ULTIMO.lock() else { return };
+        if let Some((prev, cuando)) = ultimo.as_ref() {
+            if prev == status && cuando.elapsed() < KEY_STATUS_COOLDOWN {
+                return;
+            }
+        }
+        *ultimo = Some((status.to_string(), std::time::Instant::now()));
+    }
+    if let Some(app) = APP.get() {
+        let _ = app.emit(
+            "riot_key_status",
+            KeyStatus { status: status.to_string(), message: message.to_string() },
+        );
+    }
+}
+
+/// Tras un fallo, el primer acierto tiene que devolver la UI a la normalidad.
+/// Si nunca se emitió un fallo no se emite nada: sin banner que quitar, avisar
+/// de que todo va bien es ruido.
+fn emit_key_ok_si_venia_de_fallo() {
+    let venia_mal = ULTIMO
+        .lock()
+        .ok()
+        .and_then(|u| u.as_ref().map(|(s, _)| s != "ok"))
+        .unwrap_or(false);
+    if venia_mal {
+        emit_key_status("ok", "");
+    }
+}
+
+/// Traduce el código HTTP de cualquier respuesta a estado de la clave.
+///
+/// 401 = la cabecera no vale (clave mal escrita o ausente); 403 = Riot la
+/// conoce y la rechaza, que en la práctica es "caducó" — es lo que devuelve una
+/// clave de desarrollo pasadas sus 24 h.
+fn avisa_del_estado_de_la_clave(codigo: u16) {
+    match codigo {
+        401 => emit_key_status("invalid", "La clave de Riot no es válida"),
+        403 => emit_key_status("expired", "La clave de Riot ha caducado"),
+        c if (200..300).contains(&c) => emit_key_ok_si_venia_de_fallo(),
+        _ => {}
+    }
+}
 
 pub struct RiotApiClient {
     client: Client,
     api_key: String,
-    region: String, // e.g. "americas"
+    /// Ruta regional para account-v1 y match-v5: "americas", "europe"…
+    region: String,
+    /// Plataforma para league-v4: "la1", "euw1"… Vacía mientras no se sepa.
+    platform: String,
+    /// Proxy propio que pone la clave por el usuario. Vacío = directo a Riot.
+    proxy: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -454,15 +580,77 @@ const MAX_RETRY_AFTER_SECS: u64 = 30;
 const MAX_429_RETRIES: u32 = 3;
 
 impl RiotApiClient {
+    /// Cliente con la región que diga la configuración guardada.
     pub fn new(api_key: String) -> Self {
+        Self::with_config(api_key, &crate::storage::load_config())
+    }
+
+    /// Igual, pero con una config ya cargada (que es lo que tienen en la mano
+    /// casi todos los llamadores).
+    pub fn with_config(api_key: String, cfg: &crate::storage::AppConfig) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(10))
             .build()
             .unwrap_or_else(|_| Client::new());
+        // La fijada a mano manda; si está en "auto" vale la ya sondeada.
+        let platform = platform_conocida(&cfg.riot_platform)
+            .or_else(|| platform_conocida(&cfg.riot_platform_detected))
+            .unwrap_or_default();
         Self {
+            region: regional_route(&platform).to_string(),
+            platform,
+            proxy: cfg.riot_proxy_url.trim().trim_end_matches('/').to_string(),
             client,
             api_key,
-            region: "americas".to_string(), // Para LAN (LA1) se usa "americas" en Account y Match V5
+        }
+    }
+
+    /// Fuerza la plataforma (y con ella la ruta regional). La usan quienes ya
+    /// saben de dónde es la partida por el prefijo de su id.
+    pub fn set_platform(&mut self, platform: &str) {
+        if let Some(p) = platform_conocida(platform) {
+            self.region = regional_route(&p).to_string();
+            self.platform = p;
+        }
+    }
+
+    /// La plataforma con la que trabaja ahora mismo (vacía si aún no se sabe).
+    pub fn platform(&self) -> &str {
+        &self.platform
+    }
+
+    /// URL final de una petición.
+    ///
+    /// Con proxy configurado se manda a `{proxy}/{host}/{ruta}` y sin cabecera
+    /// de clave: el host viaja en la ruta para que el proxy sepa a qué región
+    /// reenviar, y la clave la pone él. Ver `server/riot-proxy`.
+    fn url(&self, host: &str, path: &str) -> String {
+        let path = path.trim_start_matches('/');
+        if self.proxy.is_empty() {
+            format!("https://{}/{}", host, path)
+        } else {
+            format!("{}/{}/{}", self.proxy, host, path)
+        }
+    }
+
+    /// Host regional (account-v1, match-v5).
+    fn regional_host(&self) -> String {
+        format!("{}.api.riotgames.com", self.region)
+    }
+
+    /// Host de plataforma (league-v4).
+    fn platform_host(platform: &str) -> String {
+        format!("{}.api.riotgames.com", platform)
+    }
+
+    /// GET listo para enviar: con la clave si vamos directos, sin ella si hay
+    /// proxy (es el proxy quien la tiene).
+    fn peticion(&self, url: &str) -> reqwest::RequestBuilder {
+        let req = self.client.get(url);
+        if self.proxy.is_empty() {
+            req.header("X-Riot-Token", &self.api_key)
+        } else {
+            req
         }
     }
 
@@ -472,16 +660,18 @@ impl RiotApiClient {
     /// `Retry-After` (con tope) y, si no viene, un backoff exponencial corto.
     /// Tras agotar los reintentos se devuelve la última respuesta tal cual,
     /// para que cada llamador siga informando del estado como hasta ahora.
+    ///
+    /// De paso vigila la clave: las de desarrollo caducan cada 24 h y el 403
+    /// que llega entonces se traducía en "no hay partidas", que no dice nada.
     async fn get_with_retry(&self, url: &str) -> Result<reqwest::Response, String> {
         let mut intento: u32 = 0;
         loop {
             let resp = self
-                .client
-                .get(url)
-                .header("X-Riot-Token", &self.api_key)
+                .peticion(url)
                 .send()
                 .await
                 .map_err(|e| format!("Error en petición HTTP: {}", e))?;
+            avisa_del_estado_de_la_clave(resp.status().as_u16());
             if resp.status().as_u16() != 429 || intento >= MAX_429_RETRIES {
                 return Ok(resp);
             }
@@ -505,22 +695,60 @@ impl RiotApiClient {
     /// responde 404 (no la encuentro) y con clave inválida 401/403 (ni te
     /// contesto). Así vale para cualquier región sin pedirle nada al usuario.
     pub async fn check_key(&self) -> Result<(), String> {
-        let url = format!(
-            "https://{}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{}/{}",
-            self.region, "leaguerecorder-key-check", "0000"
+        let url = self.url(
+            &self.regional_host(),
+            "riot/account/v1/accounts/by-riot-id/leaguerecorder-key-check/0000",
         );
         let resp = self
-            .client
-            .get(&url)
-            .header("X-Riot-Token", &self.api_key)
+            .peticion(&url)
             .send()
             .await
             .map_err(|e| format!("No se pudo contactar con Riot: {}", e))?;
-        match resp.status().as_u16() {
-            401 | 403 => Err("La clave no es válida o ha caducado".to_string()),
+        let codigo = resp.status().as_u16();
+        avisa_del_estado_de_la_clave(codigo);
+        match codigo {
+            401 => Err("La clave no es válida".to_string()),
+            403 => Err("La clave ha caducado".to_string()),
             429 => Err("Riot está limitando las peticiones; inténtalo en un minuto".to_string()),
             _ => Ok(()),
         }
+    }
+
+    /// Deja el cliente apuntando a la región del jugador y devuelve su
+    /// plataforma.
+    ///
+    /// Con una plataforma fijada (o ya sondeada antes) esto no cuesta ninguna
+    /// petición. Con "auto" y sin nada guardado se prueba match-v5 en las
+    /// cuatro rutas: la que devuelva partidas es la buena, y el prefijo de la
+    /// primera dice la plataforma exacta ("EUW1_…" → euw1). Se guarda en la
+    /// config para que el sondeo pase una sola vez en la vida.
+    pub async fn resolve_platform(&mut self, puuid: &str) -> Option<String> {
+        if !self.platform.is_empty() {
+            return Some(self.platform.clone());
+        }
+        for ruta in ROUTES {
+            self.region = ruta.to_string();
+            let Ok(ids) = self.match_ids(puuid, 1, None).await else {
+                continue;
+            };
+            let Some(plataforma) = ids.first().and_then(|id| platform_from_match_id(id)) else {
+                continue;
+            };
+            self.set_platform(&plataforma);
+            let mut cfg = crate::storage::load_config();
+            if cfg.riot_platform_detected != plataforma {
+                cfg.riot_platform_detected = plataforma.clone();
+                if let Err(e) = crate::storage::save_config(&cfg) {
+                    log::warn!("región: no se pudo recordar la plataforma detectada: {e}");
+                }
+            }
+            log::info!("región: plataforma detectada {plataforma} (ruta {ruta})");
+            return Some(plataforma);
+        }
+        // Ninguna ruta contestó con partidas: se deja como estaba para que el
+        // error que dé la llamada real sea el de Riot y no una URL inventada.
+        self.region = regional_route("").to_string();
+        None
     }
 
     /// Tramo de rango de un jugador en clasificatoria solo/dúo.
@@ -529,17 +757,23 @@ impl RiotApiClient {
     /// diez rangos harían falta 50 celdas con muestra suficiente.
     pub async fn tier_bucket(&self, plataforma: &str, puuid: &str) -> Option<String> {
         let (tier, _, _) = self.rango_solo(plataforma, puuid).await?;
-        Some(Self::tramo_de(&tier))
+        Self::tramo_de(&tier)
     }
 
     /// "MASTER" → "alto", etc. El baremo de WPA agrupa en tres tramos.
-    fn tramo_de(tier: &str) -> String {
-        match tier {
-            "IRON" | "BRONZE" | "SILVER" => "bajo",
-            "GOLD" | "PLATINUM" | "EMERALD" => "medio",
-            _ => "alto",
-        }
-        .to_string()
+    ///
+    /// Delega en [`crate::benchmarks::band_for_tier`], que es la copia de la
+    /// tabla de `tools/corpus/fetch_tiers.py` con la que se etiquetó el corpus:
+    /// tener aquí una segunda tabla escrita a mano era pedir que se separaran.
+    ///
+    /// Antes esto tenía un `_ => "alto"`: un rango desconocido (o vacío, o sin
+    /// clasificar) se colaba en el tramo más alto y el jugador se comparaba
+    /// contra Diamante+ sin que nada lo dijera. Ahora un rango que no está en la
+    /// tabla devuelve `None`, que es "sin tramo": los baremos caen entonces al
+    /// del puesto sobre el corpus entero, que es la comparación honesta.
+    fn tramo_de(tier: &str) -> Option<String> {
+        let tramo = crate::benchmarks::band_for_tier(tier);
+        (!tramo.is_empty()).then(|| tramo.to_string())
     }
 
     /// La entrada de solo/dúo entera: (tier, división, LP). Pedida al
@@ -550,9 +784,10 @@ impl RiotApiClient {
         plataforma: &str,
         puuid: &str,
     ) -> Option<(String, String, i32)> {
-        let url = format!(
-            "https://{}.api.riotgames.com/lol/league/v4/entries/by-puuid/{}",
-            plataforma, puuid
+        // league-v4 vive en el host de PLATAFORMA, no en el regional.
+        let url = self.url(
+            &Self::platform_host(&platform_conocida(plataforma)?),
+            &format!("lol/league/v4/entries/by-puuid/{}", puuid),
         );
         let resp = self.get_with_retry(&url).await.ok()?;
         if !resp.status().is_success() {
@@ -573,11 +808,13 @@ impl RiotApiClient {
         game_name: &str,
         tag_line: &str,
     ) -> Result<String, String> {
-        let url = format!(
-            "https://{}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{}/{}",
-            self.region,
-            urlencoding::encode(game_name),
-            urlencoding::encode(tag_line)
+        let url = self.url(
+            &self.regional_host(),
+            &format!(
+                "riot/account/v1/accounts/by-riot-id/{}/{}",
+                urlencoding::encode(game_name),
+                urlencoding::encode(tag_line)
+            ),
         );
 
         let resp = self.get_with_retry(&url).await?;
@@ -607,9 +844,12 @@ impl RiotApiClient {
         queue: Option<i32>,
     ) -> Result<Vec<String>, String> {
         let cola = queue.map(|q| format!("&queue={}", q)).unwrap_or_default();
-        let url = format!(
-            "https://{}.api.riotgames.com/lol/match/v5/matches/by-puuid/{}/ids?start=0&count={}{}",
-            self.region, puuid, count, cola
+        let url = self.url(
+            &self.regional_host(),
+            &format!(
+                "lol/match/v5/matches/by-puuid/{}/ids?start=0&count={}{}",
+                puuid, count, cola
+            ),
         );
 
         let resp = self.get_with_retry(&url).await?;
@@ -625,9 +865,9 @@ impl RiotApiClient {
     /// Obtiene los detalles de un Match ID. Devuelve el JSON crudo para poder
     /// cachearlo (ver `details_for`).
     pub async fn get_match_details_raw(&self, match_id: &str) -> Result<String, String> {
-        let url = format!(
-            "https://{}.api.riotgames.com/lol/match/v5/matches/{}",
-            self.region, match_id
+        let url = self.url(
+            &self.regional_host(),
+            &format!("lol/match/v5/matches/{}", match_id),
         );
 
         let resp = self.get_with_retry(&url).await?;
@@ -647,9 +887,9 @@ impl RiotApiClient {
     /// Obtiene la timeline de una partida (eventos minuto a minuto, incl. compras de items).
     /// Devuelve también el JSON crudo para poder cachearlo (ver `timeline_for`).
     pub async fn get_match_timeline_raw(&self, match_id: &str) -> Result<String, String> {
-        let url = format!(
-            "https://{}.api.riotgames.com/lol/match/v5/matches/{}/timeline",
-            self.region, match_id
+        let url = self.url(
+            &self.regional_host(),
+            &format!("lol/match/v5/matches/{}/timeline", match_id),
         );
         let resp = self.get_with_retry(&url).await?;
         if !resp.status().is_success() {
@@ -716,10 +956,15 @@ pub async fn attribution_for(
         .ok_or_else(|| "Esta partida aún no está sincronizada con Riot".to_string())?;
 
     let config = crate::storage::load_config();
-    if config.riot_api_key.is_empty() {
+    if sin_credencial(&config) {
         return Err("Configura tu Riot API Key en Ajustes".to_string());
     }
-    let api = RiotApiClient::new(config.riot_api_key);
+    // La región sale del propio id de partida: "EUW1_…" solo se puede pedir en
+    // europe. Es más fiable que cualquier ajuste, así que no hace falta sondear.
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    if let Some(p) = platform_from_match_id(&rid) {
+        api.set_platform(&p);
+    }
 
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
@@ -803,6 +1048,9 @@ fn impacto(
     filas
 }
 
+/// Versión del barrido de impacto. Subirlo lo obliga a repasar la biblioteca.
+pub const IMPACT_BACKFILL_V: u32 = 1;
+
 /// Rellena el puesto de impacto de las partidas viejas, sin tocar la API.
 ///
 /// La columna de impacto de la biblioteca sólo se llenaba al abrir la pestaña de
@@ -810,82 +1058,94 @@ fn impacto(
 /// se calcula al arrancar, **sólo con lo que ya está en disco**: si a una
 /// partida le falta el `riot_match.json` o el `riot_timeline.json`, se salta —
 /// pedirlos gastaría cuota de la API sin que nadie lo haya pedido.
-pub fn spawn_impact_backfill() {
-    std::thread::spawn(|| {
-        let pendientes: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
-            .into_iter()
-            .filter(|m| {
-                (m.impact_rank.is_none()
-                    || m.patch.is_none()
-                    || m.participants.iter().any(|p| p.spells.is_empty() || p.role.is_empty()))
-                    && !m.participants.is_empty()
-            })
-            .collect();
-        let mut hechas = 0;
-        for m in pendientes {
-            let (Some(raw), Some(raw_tl)) = (
-                crate::storage::load_raw_match(&m.id),
-                crate::storage::load_raw_timeline(&m.id),
-            ) else {
-                continue;
-            };
-            let (Ok(details), Ok(tl)) = (
-                serde_json::from_str::<MatchDto>(&raw),
-                serde_json::from_str::<TimelineDto>(&raw_tl),
-            ) else {
-                continue;
-            };
-            // `impacto` guarda el metadata si el puesto cambia.
-            let mut meta = m;
-            impacto(&mut meta, &tl, &details.info);
-            hechas += 1;
-        }
-        if hechas > 0 {
-            log::info!("impacto: puesto calculado para {hechas} partidas que no lo tenían");
-        }
+///
+/// Va dentro de la tarea única de mantenimiento (`lib.rs`), la última de las
+/// tres: es la más cara (dos JSON de varios megas por partida) y la menos
+/// urgente. Cada partida repasada queda sellada con `impact_backfill_v`, así
+/// que el segundo arranque no abre ni un fichero.
+pub async fn impact_backfill(app: &tauri::AppHandle) {
+    let pendientes: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.participants.is_empty() && m.impact_backfill_v < IMPACT_BACKFILL_V)
+        .collect();
 
-        // OJO: nada de returns tempranos por encima de esta línea que no sean
-        // de verdad terminales — este estampado tiene que correr aunque el
-        // impacto no tuviera nada pendiente (así se perdió la primera vez).
-        // El rango con LP no existía cuando se guardaron las partidas viejas y
-        // league-v4 solo da el actual: se estampa el de hoy una vez (una sola
-        // llamada) para que la ficha tenga rango que enseñar, y la cuenta de LP
-        // por partida arranca de aquí — el histórico anterior no se puede
-        // recuperar de la API.
-        let config = crate::storage::load_config();
-        if config.riot_api_key.is_empty() {
-            return;
-        }
-        let sin_rango: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
-            .into_iter()
-            .filter(|m| m.rank_lp.is_none() && m.riot_match_id.is_some() && !m.participants.is_empty())
-            .collect();
-        if sin_rango.is_empty() {
-            return;
-        }
-        // El puuid propio sale del DTO cacheado: mismo orden que los
-        // participants guardados, así que el índice de is_self vale.
-        let Some((puuid, plataforma)) = puuid_propio(&sin_rango) else {
-            return;
+    let total = pendientes.len();
+    crate::commands::emit_maintenance(app, "impact", 0, total);
+    let mut hechas = 0;
+    for (i, m) in pendientes.into_iter().enumerate() {
+        crate::commands::emit_maintenance(app, "impact", i + 1, total);
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+        let (Some(raw), Some(raw_tl)) = (
+            crate::storage::load_raw_match(&m.id),
+            crate::storage::load_raw_timeline(&m.id),
+        ) else {
+            continue;
         };
-        let api = RiotApiClient::new(config.riot_api_key);
-        let Some((tier, division, lp)) =
-            tauri::async_runtime::block_on(api.rango_solo(&plataforma, &puuid))
-        else {
-            return;
+        let (Ok(details), Ok(tl)) = (
+            serde_json::from_str::<MatchDto>(&raw),
+            serde_json::from_str::<TimelineDto>(&raw_tl),
+        ) else {
+            continue;
         };
-        let cuantas = sin_rango.len();
-        for mut m in sin_rango {
-            if m.tier_bucket.is_none() {
-                m.tier_bucket = Some(RiotApiClient::tramo_de(&tier));
-            }
-            m.rank_tier = Some(tier.clone());
-            m.rank_division = Some(division.clone());
-            m.rank_lp = Some(lp);
-            let _ = crate::storage::save_match_metadata(&m);
+        // El sello va puesto ANTES para que viaje en el guardado que hace
+        // `impacto` si algo cambia; si no cambió nada, `impacto` no guarda y el
+        // sello se escribe aquí. Son una o dos escrituras la primera vez y
+        // ninguna a partir de entonces, que es lo que se quería.
+        let mut meta = m;
+        meta.impact_backfill_v = IMPACT_BACKFILL_V;
+        impacto(&mut meta, &tl, &details.info);
+        let _ = crate::storage::save_match_metadata(&meta);
+        hechas += 1;
+    }
+    if hechas > 0 {
+        log::info!("impacto: puesto calculado para {hechas} partidas que no lo tenían");
+    }
+
+    // OJO: nada de returns tempranos por encima de esta línea que no sean
+    // de verdad terminales — este estampado tiene que correr aunque el
+    // impacto no tuviera nada pendiente (así se perdió la primera vez).
+    // El rango con LP no existía cuando se guardaron las partidas viejas y
+    // league-v4 solo da el actual: se estampa el de hoy una vez (una sola
+    // llamada) para que la ficha tenga rango que enseñar, y la cuenta de LP
+    // por partida arranca de aquí — el histórico anterior no se puede
+    // recuperar de la API.
+    let config = crate::storage::load_config();
+    if sin_credencial(&config) {
+        return;
+    }
+    let sin_rango: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| m.rank_lp.is_none() && m.riot_match_id.is_some() && !m.participants.is_empty())
+        .collect();
+    if sin_rango.is_empty() {
+        return;
+    }
+    // El puuid propio sale del DTO cacheado: mismo orden que los
+    // participants guardados, así que el índice de is_self vale.
+    let Some((puuid, plataforma)) = puuid_propio(&sin_rango) else {
+        return;
+    };
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    api.set_platform(&plataforma);
+    // Antes esto era un `block_on` dentro de un `std::thread` suelto: bloquear
+    // un hilo ajeno al runtime para esperar una petición HTTP es justo lo que
+    // `async` existe para no hacer, y dependía de que hubiera un runtime que
+    // prestar. Ahora la tarea entera es asíncrona y esto es un `await`.
+    let Some((tier, division, lp)) = api.rango_solo(&plataforma, &puuid).await else {
+        return;
+    };
+    let cuantas = sin_rango.len();
+    for mut m in sin_rango {
+        if m.tier_bucket.is_none() {
+            m.tier_bucket = RiotApiClient::tramo_de(&tier);
         }
-        log::info!("rango: {tier} {division} ({lp} LP) estampado en {cuantas} partidas sin rango");
-    });
+        m.rank_tier = Some(tier.clone());
+        m.rank_division = Some(division.clone());
+        m.rank_lp = Some(lp);
+        let _ = crate::storage::save_match_metadata(&m);
+    }
+    log::info!("rango: {tier} {division} ({lp} LP) estampado en {cuantas} partidas sin rango");
 }
 
 /// Nota de rendimiento 0–100 de un jugador dentro de SU partida, estilo
@@ -958,12 +1218,7 @@ fn puuid_propio(partidas: &[crate::storage::MatchMetadata]) -> Option<(String, S
         let details = serde_json::from_str::<MatchDto>(&raw).ok()?;
         let idx = m.participants.iter().position(|p| p.is_self)?;
         let puuid = details.info.participants.get(idx)?.puuid.clone();
-        let plataforma = m
-            .riot_match_id
-            .as_deref()?
-            .split('_')
-            .next()?
-            .to_lowercase();
+        let plataforma = platform_from_match_id(m.riot_match_id.as_deref()?)?;
         Some((puuid, plataforma))
     })
 }
@@ -1000,7 +1255,7 @@ fn clasifica_error_riot(e: &str) -> String {
 #[tauri::command]
 pub async fn get_season_form() -> Result<SeasonForm, String> {
     let config = crate::storage::load_config();
-    if config.riot_api_key.is_empty() {
+    if sin_credencial(&config) {
         return Err("no_key: Configura tu Riot API Key en Ajustes".to_string());
     }
     let todas = crate::storage::load_all_matches();
@@ -1008,7 +1263,8 @@ pub async fn get_season_form() -> Result<SeasonForm, String> {
         return Err("no_account: Sincroniza al menos una partida para saber tu cuenta".to_string());
     };
 
-    let api = RiotApiClient::new(config.riot_api_key);
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    api.set_platform(&plataforma);
     let ids = api
         .match_ids(&puuid, 20, Some(420))
         .await
@@ -1114,6 +1370,113 @@ pub struct PressureSummary {
     pub gold: f64,
 }
 
+/// Formato de `pressure_v1.json`. Subir el número invalida todas las cachés de
+/// golpe, que es lo que hay que hacer cuando cambia el detector de presión: los
+/// resúmenes viejos serían de un algoritmo que ya no existe.
+const PRESSURE_CACHE_V: u32 = 1;
+
+/// Lo que aporta UNA partida al resumen de presión, ya reducido.
+///
+/// Se guarda en la carpeta de la partida porque calcularlo cuesta parsear dos
+/// JSON de varios megas y correr `pressure::detect` entero. El resumen de
+/// Patrones lo hacía **en cada apertura y para cada partida de la biblioteca**:
+/// con veinte partidas eso son ~80 MB de parseo por pulsación de pestaña, y la
+/// cuenta sube con la biblioteca. Lo que se cachea son cinco números.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct PressureCache {
+    v: u32,
+    /// Huella de las fuentes con las que se calculó. Ver `huella_de_fuentes`.
+    stamp: u64,
+    /// 1 si la partida tuvo algún tramo tuyo, 0 si no.
+    games: usize,
+    windows: usize,
+    wpa: f64,
+    towers: i64,
+    gold: f64,
+}
+
+fn pressure_cache_path(id: &str) -> std::path::PathBuf {
+    crate::storage::get_match_dir(id).join("pressure_v1.json")
+}
+
+/// Mezcla de las fechas de modificación de todo lo que entra en el cálculo.
+///
+/// Si a una partida le llega la timeline (o se reprocesa su vídeo y aparecen
+/// las posiciones del minimapa), la huella cambia y la caché se rehace sola. Un
+/// fichero que no existe cuenta como 0, así que "aún no hay minimapa" y "ya lo
+/// hay" son huellas distintas.
+fn huella_de_fuentes(id: &str) -> u64 {
+    let dir = crate::storage::get_match_dir(id);
+    let mtime = |p: std::path::PathBuf| -> u64 {
+        std::fs::metadata(&p)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
+    };
+    let mut h: u64 = 1469598103934665603; // FNV-1a de 64 bits
+    for p in [
+        dir.join("riot_timeline.json"),
+        dir.join("riot_match.json"),
+        dir.join("minimap_positions.json"),
+    ] {
+        h ^= mtime(p);
+        h = h.wrapping_mul(1099511628211);
+    }
+    h
+}
+
+/// El aporte de una partida al resumen, de la caché o recalculado y cacheado.
+fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCache> {
+    let stamp = huella_de_fuentes(&m.id);
+    let ruta = pressure_cache_path(&m.id);
+    if let Ok(c) = std::fs::read_to_string(&ruta) {
+        if let Ok(c) = serde_json::from_str::<PressureCache>(&c) {
+            if c.v == PRESSURE_CACHE_V && c.stamp == stamp {
+                return Some(c);
+            }
+        }
+    }
+
+    let (raw, raw_tl) = (
+        crate::storage::load_raw_match(&m.id)?,
+        crate::storage::load_raw_timeline(&m.id)?,
+    );
+    let (Ok(details), Ok(tl)) = (
+        serde_json::from_str::<MatchDto>(&raw),
+        serde_json::from_str::<TimelineDto>(&raw_tl),
+    ) else {
+        return None;
+    };
+    let idx = m.participants.iter().position(|p| p.is_self)?;
+    let yo = (idx + 1) as i32;
+
+    let mut c = PressureCache {
+        v: PRESSURE_CACHE_V,
+        stamp,
+        games: 0,
+        windows: 0,
+        wpa: 0.0,
+        towers: 0,
+        gold: 0.0,
+    };
+    for w in crate::pressure::detect(&tl, &details.info.participants)
+        .iter()
+        .filter(|w| w.participant_id == yo)
+    {
+        c.games = 1;
+        c.windows += 1;
+        c.wpa += w.wpa_elsewhere.max(0.0);
+        c.towers += w.towers_elsewhere as i64;
+        c.gold += w.gold_elsewhere;
+    }
+    if let Ok(s) = serde_json::to_string(&c) {
+        let _ = std::fs::write(&ruta, s);
+    }
+    Some(c)
+}
+
 #[tauri::command]
 pub async fn get_pressure_summary() -> PressureSummary {
     let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0 };
@@ -1121,33 +1484,12 @@ pub async fn get_pressure_summary() -> PressureSummary {
         if m.is_vod || m.riot_match_id.is_none() {
             continue;
         }
-        let (Some(raw), Some(raw_tl)) = (
-            crate::storage::load_raw_match(&m.id),
-            crate::storage::load_raw_timeline(&m.id),
-        ) else {
-            continue;
-        };
-        let (Ok(details), Ok(tl)) = (
-            serde_json::from_str::<MatchDto>(&raw),
-            serde_json::from_str::<TimelineDto>(&raw_tl),
-        ) else {
-            continue;
-        };
-        let Some(idx) = m.participants.iter().position(|p| p.is_self) else { continue };
-        let yo = (idx + 1) as i32;
-        let ventanas = crate::pressure::detect(&tl, &details.info.participants);
-        let mias = ventanas.iter().filter(|w| w.participant_id == yo);
-        let mut alguna = false;
-        for w in mias {
-            alguna = true;
-            sum.windows += 1;
-            sum.wpa += w.wpa_elsewhere.max(0.0);
-            sum.towers += w.towers_elsewhere as i64;
-            sum.gold += w.gold_elsewhere;
-        }
-        if alguna {
-            sum.games += 1;
-        }
+        let Some(c) = pressure_de_partida(&m) else { continue };
+        sum.games += c.games;
+        sum.windows += c.windows;
+        sum.wpa += c.wpa;
+        sum.towers += c.towers;
+        sum.gold += c.gold;
     }
     sum
 }
@@ -1167,10 +1509,13 @@ pub async fn pressure_for(
         .ok_or_else(|| "Esta partida aún no está sincronizada con Riot".to_string())?;
 
     let config = crate::storage::load_config();
-    if config.riot_api_key.is_empty() {
+    if sin_credencial(&config) {
         return Err("Configura tu Riot API Key en Ajustes".to_string());
     }
-    let api = RiotApiClient::new(config.riot_api_key);
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    if let Some(p) = platform_from_match_id(&rid) {
+        api.set_platform(&p);
+    }
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
 
@@ -1218,6 +1563,8 @@ pub struct FullTimelineAnalysis {
     pub gold_diff_15: Option<i32>,
     pub xp_diff_15: Option<i32>,
     pub jungle_cs_diff_15: Option<i32>,
+    /// CS (súbditos + jungla) propio menos el del rival de línea a minuto 15.
+    pub cs_diff_15: Option<i32>,
     pub gank_impact_15: Option<f64>,
     pub lane_result: Option<String>,
 }
@@ -1268,6 +1615,78 @@ fn marker(
     }
 }
 
+/// El rival directo: el del MISMO puesto en el otro equipo.
+///
+/// Estaba escrito dentro de `process_timeline_full`, pero es el emparejamiento
+/// del que dependen las tres métricas de minuto 15 (oro, XP y CS), y
+/// `cs_diff_15_de` tiene que resolverlo igual para las partidas viejas: dos
+/// copias del criterio acabarían dando dos rivales distintos.
+///
+/// Respaldo cuando el puesto no encaja (lobbies con roles repetidos, partidas
+/// sin `teamPosition`): el del mismo hueco en el otro equipo.
+fn rival_de_linea(participants: &[ParticipantDto], self_participant_id: i32) -> i32 {
+    let self_participant = participants.get((self_participant_id - 1) as usize);
+    let self_team_id = self_participant.map(|p| p.teamId).unwrap_or(100);
+    let self_pos = self_participant.map(rol_de).unwrap_or_default();
+    let is_jungle = self_pos == "JUNGLE"
+        || self_participant
+            .map(|p| p.neutralMinionsKilled > p.totalMinionsKilled)
+            .unwrap_or(false);
+
+    participants
+        .iter()
+        .enumerate()
+        .find(|(_i, p)| {
+            p.teamId != self_team_id
+                && ((!self_pos.is_empty()
+                    && (p.teamPosition == self_pos || p.individualPosition == self_pos))
+                    || (is_jungle && p.neutralMinionsKilled > 20))
+        })
+        .map(|(i, _)| (i + 1) as i32)
+        .unwrap_or_else(|| {
+            if self_participant_id <= 5 {
+                self_participant_id + 5
+            } else {
+                self_participant_id - 5
+            }
+        })
+}
+
+/// El fotograma de minuto 15, con el mismo criterio en toda la casa: la ventana
+/// de 870.000–930.000 ms, y si la timeline no llega hasta ahí, el que haya.
+fn frame_15(tl: &TimelineDto) -> Option<&TimelineFrame> {
+    tl.info
+        .frames
+        .iter()
+        .find(|f| f.timestamp >= 870_000 && f.timestamp <= 930_000)
+        .or_else(|| tl.info.frames.get(15))
+        .or_else(|| tl.info.frames.last())
+}
+
+/// CS propio menos el del rival de línea en el fotograma de minuto 15.
+///
+/// Es la única de las tres métricas de minuto 15 que no se guardaba: el
+/// metadata tenía `jungle_cs_diff_15`, que es sólo la parte de jungla, y
+/// `MinuteFrameDto` no lleva súbditos. El baremo de `crate::benchmarks` mide
+/// `minionsKilled + jungleMinionsKilled`, que es lo que se calcula aquí.
+///
+/// Público porque las partidas sincronizadas antes de existir el campo lo
+/// rellenan a posteriori desde su timeline cacheada.
+pub fn cs_diff_15_de(
+    tl: &TimelineDto,
+    self_participant_id: i32,
+    participants: &[ParticipantDto],
+) -> Option<i32> {
+    let opp = rival_de_linea(participants, self_participant_id);
+    let frame = frame_15(tl)?;
+    let mio = frame.participantFrames.get(&self_participant_id.to_string())?;
+    let suyo = frame.participantFrames.get(&opp.to_string())?;
+    Some(
+        (mio.minionsKilled + mio.jungleMinionsKilled)
+            - (suyo.minionsKilled + suyo.jungleMinionsKilled),
+    )
+}
+
 /// Procesa la timeline completa de Riot (v5) para extraer compras de items,
 /// marcadores de eventos (Kills, Dragones, Torres) y métricas de línea/jungla a min 15.
 ///
@@ -1300,24 +1719,7 @@ fn process_timeline_full(
             .map(|p| p.neutralMinionsKilled > p.totalMinionsKilled)
             .unwrap_or(false);
 
-    // Encuentra el rival directo (mismo rol o equipo enemigo)
-    let opp_participant_id = participants
-        .iter()
-        .enumerate()
-        .find(|(_i, p)| {
-            p.teamId != self_team_id
-                && ((!self_pos.is_empty()
-                    && (p.teamPosition == self_pos || p.individualPosition == self_pos))
-                    || (is_jungle && p.neutralMinionsKilled > 20))
-        })
-        .map(|(i, _)| (i + 1) as i32)
-        .unwrap_or_else(|| {
-            if self_participant_id <= 5 {
-                self_participant_id + 5
-            } else {
-                self_participant_id - 5
-            }
-        });
+    let opp_participant_id = rival_de_linea(participants, self_participant_id);
 
     let mut kills_at_15 = 0;
     let mut assists_at_15 = 0;
@@ -1473,29 +1875,26 @@ fn process_timeline_full(
     }
 
     // Análisis del frame a minuto 15
-    let frame_15 = tl
-        .info
-        .frames
-        .iter()
-        .find(|f| f.timestamp >= 870_000 && f.timestamp <= 930_000)
-        .or_else(|| tl.info.frames.get(15))
-        .or_else(|| tl.info.frames.last());
+    let (gold_diff_15, xp_diff_15, jungle_cs_diff_15, cs_diff_15) =
+        if let Some(frame) = frame_15(tl) {
+            let self_pf = frame.participantFrames.get(&self_pid_str);
+            let opp_pf = frame.participantFrames.get(&opp_pid_str);
 
-    let (gold_diff_15, xp_diff_15, jungle_cs_diff_15) = if let Some(frame) = frame_15 {
-        let self_pf = frame.participantFrames.get(&self_pid_str);
-        let opp_pf = frame.participantFrames.get(&opp_pid_str);
-
-        if let (Some(spf), Some(opf)) = (self_pf, opp_pf) {
-            let gdiff = spf.totalGold - opf.totalGold;
-            let xdiff = spf.xp - opf.xp;
-            let jcdiff = spf.jungleMinionsKilled - opf.jungleMinionsKilled;
-            (Some(gdiff), Some(xdiff), Some(jcdiff))
+            if let (Some(spf), Some(opf)) = (self_pf, opp_pf) {
+                let gdiff = spf.totalGold - opf.totalGold;
+                let xdiff = spf.xp - opf.xp;
+                let jcdiff = spf.jungleMinionsKilled - opf.jungleMinionsKilled;
+                // Súbditos + jungla, que es lo que mide el baremo de población
+                // (`crate::benchmarks`); `jungle_cs_diff_15` sólo cuenta la jungla.
+                let csdiff = (spf.minionsKilled + spf.jungleMinionsKilled)
+                    - (opf.minionsKilled + opf.jungleMinionsKilled);
+                (Some(gdiff), Some(xdiff), Some(jcdiff), Some(csdiff))
+            } else {
+                (None, None, None, None)
+            }
         } else {
-            (None, None, None)
-        }
-    } else {
-        (None, None, None)
-    };
+            (None, None, None, None)
+        };
 
     let gank_impact_15 = if is_jungle && total_team_kills_at_15 > 0 {
         let impact = ((kills_at_15 + assists_at_15) as f64 / total_team_kills_at_15 as f64) * 100.0;
@@ -1529,6 +1928,7 @@ fn process_timeline_full(
         gold_diff_15,
         xp_diff_15,
         jungle_cs_diff_15,
+        cs_diff_15,
         gank_impact_15,
         lane_result,
     }
@@ -1581,7 +1981,7 @@ pub async fn backfill_participants(
     match_id: &str,
 ) -> Result<crate::storage::MatchMetadata, String> {
     let config = crate::storage::load_config();
-    if config.riot_api_key.is_empty() {
+    if sin_credencial(&config) {
         return Err("Configura tu Riot API Key en Ajustes".to_string());
     }
     let mut metadata = crate::storage::get_match_metadata(match_id)
@@ -1592,7 +1992,11 @@ pub async fn backfill_participants(
     let rid = metadata.riot_match_id.clone().ok_or_else(|| {
         "Esta partida aún no está sincronizada con Riot (graba una nueva o espera la sincronización automática de ~60s tras la partida)".to_string()
     })?;
-    let api = RiotApiClient::new(config.riot_api_key);
+    // Igual que en `attribution_for`: la región la dicta el id de la partida.
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    if let Some(p) = platform_from_match_id(&rid) {
+        api.set_platform(&p);
+    }
     let details = details_for(&api, match_id, &rid).await?;
     let self_idx = details
         .info
@@ -1618,6 +2022,7 @@ pub async fn backfill_participants(
             metadata.gold_diff_15 = analysis.gold_diff_15;
             metadata.xp_diff_15 = analysis.xp_diff_15;
             metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
+            metadata.cs_diff_15 = analysis.cs_diff_15;
             metadata.gank_impact_15 = analysis.gank_impact_15;
             metadata.lane_result = analysis.lane_result;
             impacto(&mut metadata, &tl, &details.info);
@@ -1632,7 +2037,7 @@ pub async fn sync_riot_data(
     active_player: &str,
 ) -> Result<crate::storage::MatchMetadata, String> {
     let config = crate::storage::load_config();
-    if config.riot_api_key.is_empty() {
+    if sin_credencial(&config) {
         return Err("No Riot API Key configured".to_string());
     }
 
@@ -1643,13 +2048,24 @@ pub async fn sync_riot_data(
         return Ok(metadata); // Ya está sincronizado
     }
 
+    // El Riot ID SIEMPRE trae etiqueta. Antes, si faltaba, se inventaba "LAN":
+    // fuera de Latinoamérica eso resolvía a otra cuenta o a ninguna, y el error
+    // que llegaba era "no recent matches", que no señala el problema.
     let parts: Vec<&str> = active_player.split('#').collect();
     let game_name = parts[0];
-    let tag_line = if parts.len() > 1 { parts[1] } else { "LAN" };
+    let Some(tag_line) = parts.get(1).map(|t| t.trim()).filter(|t| !t.is_empty()) else {
+        return Err(format!(
+            "no_tag: el Riot ID «{active_player}» no trae etiqueta (#EUW, #LAN…)"
+        ));
+    };
 
-    let api = RiotApiClient::new(config.riot_api_key);
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
 
+    // account-v1 contesta desde cualquier ruta regional, así que el puuid se
+    // consigue antes de saber la región.
     let puuid = api.get_puuid_by_riot_id(game_name, tag_line).await?;
+    // Y con el puuid ya se puede averiguar dónde juega (una vez en la vida).
+    api.resolve_platform(&puuid).await;
 
     let recent_matches = api.get_match_ids_by_puuid(&puuid, 5).await?;
 
@@ -1682,9 +2098,13 @@ pub async fn sync_riot_data(
         // El rango se pide aquí y se guarda: después puede cambiar, y lo que
         // vale para comparar es el que tenías al jugar esta partida.
         if metadata.tier_bucket.is_none() || metadata.rank_lp.is_none() {
-            let plataforma = riot_id.split('_').next().unwrap_or("la1").to_lowercase();
+            // La plataforma sale del id de la partida ("EUW1_…"); si el prefijo
+            // no se reconoce se usa la ya resuelta, y si no hay, no se pide el
+            // rango: mejor sin rango que pidiéndoselo a la región equivocada.
+            let plataforma = platform_from_match_id(&riot_id)
+                .unwrap_or_else(|| api.platform().to_string());
             if let Some((tier, division, lp)) = api.rango_solo(&plataforma, &puuid).await {
-                metadata.tier_bucket = Some(RiotApiClient::tramo_de(&tier));
+                metadata.tier_bucket = RiotApiClient::tramo_de(&tier);
                 metadata.rank_tier = Some(tier);
                 metadata.rank_division = Some(division);
                 metadata.rank_lp = Some(lp);
@@ -1714,6 +2134,7 @@ pub async fn sync_riot_data(
                 metadata.gold_diff_15 = analysis.gold_diff_15;
                 metadata.xp_diff_15 = analysis.xp_diff_15;
                 metadata.jungle_cs_diff_15 = analysis.jungle_cs_diff_15;
+                metadata.cs_diff_15 = analysis.cs_diff_15;
                 metadata.gank_impact_15 = analysis.gank_impact_15;
                 metadata.lane_result = analysis.lane_result;
                 impacto(&mut metadata, &tl, &info);
@@ -1784,6 +2205,46 @@ mod tests_nota {
             .starts_with("key_invalid:"));
         let otro = clasifica_error_riot("Error en petición HTTP: timeout");
         assert_eq!(otro, "Error en petición HTTP: timeout");
+    }
+
+    #[test]
+    fn cada_plataforma_cae_en_su_ruta_regional() {
+        for p in ["la1", "la2", "na1", "br1"] {
+            assert_eq!(regional_route(p), "americas", "{p}");
+        }
+        for p in ["euw1", "eun1", "tr1", "ru", "me1"] {
+            assert_eq!(regional_route(p), "europe", "{p}");
+        }
+        for p in ["kr", "jp1"] {
+            assert_eq!(regional_route(p), "asia", "{p}");
+        }
+        for p in ["oc1", "ph2", "sg2", "th2", "tw2", "vn2"] {
+            assert_eq!(regional_route(p), "sea", "{p}");
+        }
+        // Mayúsculas y espacios, que es como llegan del prefijo de un id.
+        assert_eq!(regional_route(" EUW1 "), "europe");
+        // Las 17 plataformas de la lista tienen ruta y ninguna se quedó fuera.
+        assert_eq!(PLATFORMS.len(), 17);
+        for p in PLATFORMS {
+            assert!(ROUTES.contains(&regional_route(p)), "{p} sin ruta");
+        }
+        // Desconocida: ruta válida, no una URL rota.
+        assert_eq!(regional_route("pbe1"), "americas");
+    }
+
+    #[test]
+    fn la_plataforma_sale_del_prefijo_del_id_de_partida() {
+        assert_eq!(platform_from_match_id("EUW1_7412345678").as_deref(), Some("euw1"));
+        assert_eq!(platform_from_match_id("la1_1234").as_deref(), Some("la1"));
+        assert_eq!(platform_from_match_id("KR_98765").as_deref(), Some("kr"));
+        // Prefijo que no es una plataforma, o id sin prefijo: nada.
+        assert_eq!(platform_from_match_id("PBE1_1"), None);
+        assert_eq!(platform_from_match_id("1234"), None);
+        assert_eq!(platform_from_match_id(""), None);
+        // Y lo mismo para lo que llega de la config.
+        assert_eq!(platform_conocida("auto"), None);
+        assert_eq!(platform_conocida(""), None);
+        assert_eq!(platform_conocida("EUW1").as_deref(), Some("euw1"));
     }
 
     #[test]

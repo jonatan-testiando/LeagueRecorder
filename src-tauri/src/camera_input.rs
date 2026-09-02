@@ -164,6 +164,7 @@ pub fn write_report(m: &MatchMetadata, looks: &[Look]) {
         "match_id": m.id,
         "duration": duracion(m),
         "source": "input",
+        "from_input_v": BACKFILL_V,
         "snaps": looks
             .iter()
             .map(|l| match l.pos {
@@ -204,66 +205,125 @@ pub fn spawn_regenerate_all(escala: f64) {
             }
             let looks = looks_from_input(&full, &[], escala);
             write_report(&full, &looks);
-            let mut meta = full;
-            meta.camera_snaps = looks.iter().map(|l| l.t).collect();
-            let _ = crate::storage::save_match_metadata(&meta);
+            let nuevos: Vec<f64> = looks.iter().map(|l| l.t).collect();
+            // El informe sí cambia (las posiciones son otras), pero los tiempos
+            // suelen ser los mismos: no hay por qué reescribir megas de
+            // metadata para dejarlos igual.
+            if full.camera_snaps != nuevos {
+                let mut meta = full;
+                meta.camera_snaps = nuevos;
+                let _ = crate::storage::save_match_metadata(&meta);
+            }
             hechas += 1;
         }
         log::info!("cámara: miradas regeneradas con escala {escala:.2} en {hechas} partidas");
     });
 }
 
+/// Versión del barrido de miradas por entrada.
+///
+/// Se estampa en el informe (`SnapReport::from_input_v`) para saber que esa
+/// partida ya pasó por aquí. Subirlo obliga a rehacer toda la biblioteca, que
+/// es lo que hay que hacer si cambia el criterio de qué es una mirada.
+pub const BACKFILL_V: u32 = 1;
+
 /// Rellena los saltos de cámara de las partidas grabadas antes de que esto
 /// existiera. Sólo lee lo que ya hay en disco.
 ///
 /// No toca los VODs importados (no tienen estela: ahí manda el detector por
-/// vídeo) ni las partidas cuyo informe ya existe.
-pub fn spawn_backfill() {
-    std::thread::spawn(|| {
-        let escala = crate::storage::load_config().minimap_scale;
-        let mut hechas = 0;
-        for m in crate::storage::load_all_matches() {
-            if m.is_vod {
-                continue;
-            }
-            // Un informe SIN posiciones es de la primera hornada (cuando las
-            // miradas aún no llevaban x/y) y se regenera: saltarlo dejaba
-            // "Dónde miraste" y la tendencia de Patrones vacíos para siempre.
-            let viejo_sin_pos = match crate::camera_snaps::load_report(&m.id) {
-                Some(r) => {
-                    if r.snaps.iter().any(|s| s.x.is_some()) {
-                        continue; // ya está al día
-                    }
-                    true
-                }
-                None => false,
-            };
-            // `load_all_matches` no trae la estela: hay que leer la partida entera.
-            let Ok(full) = crate::storage::get_match_metadata(&m.id) else {
-                continue;
-            };
-            if full.mouse_events.is_empty() {
-                continue;
-            }
-            // OJO al regenerar: `camera_snaps` ya es la lista FUSIONADA de la
-            // hornada anterior. Pasarla como "teclas" haría que cada clic se
-            // fundiera con su propio duplicado sin posición y las perdiera
-            // todas otra vez. Las teclas reales eran 0-1 por partida.
-            let teclas: &[f64] = if viejo_sin_pos { &[] } else { &full.camera_snaps };
-            let looks = looks_from_input(&full, teclas, escala);
-            if looks.is_empty() {
-                continue;
-            }
-            write_report(&full, &looks);
-            let mut meta = full;
-            meta.camera_snaps = looks.iter().map(|l| l.t).collect();
-            let _ = crate::storage::save_match_metadata(&meta);
-            hechas += 1;
-        }
-        if hechas > 0 {
-            log::info!("cámara: miradas calculadas de la entrada en {hechas} partidas");
-        }
+/// vídeo) ni las partidas que ya pasaron por este barrido.
+///
+/// **Va dentro de la tarea única de mantenimiento** (`lib.rs`), en serie con la
+/// migración y el backfill de impacto: los tres recorrían la biblioteca entera
+/// a la vez nada más arrancar, y éste además reescribía el metadata de cada
+/// partida —con la estela dentro— hubiera cambiado algo o no.
+pub async fn backfill(app: &tauri::AppHandle) {
+    let escala = crate::storage::load_config().minimap_scale;
+
+    // Primera pasada, sólo con metadata ligera (sin estela) y el informe: deja
+    // la lista de las que de verdad hay que abrir enteras.
+    let pendientes: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.is_vod)
+        .filter(|m| {
+            crate::camera_snaps::load_report(&m.id)
+                .map(|r| r.from_input_v < BACKFILL_V)
+                .unwrap_or(true)
+        })
+        .collect();
+
+    let total = pendientes.len();
+    crate::commands::emit_maintenance(app, "camera", 0, total);
+    let mut hechas = 0;
+    for (i, m) in pendientes.into_iter().enumerate() {
+        procesar_una(&m.id, escala);
+        hechas += 1;
+        crate::commands::emit_maintenance(app, "camera", i + 1, total);
+        // Prioridad baja a propósito: esto corre mientras el usuario abre la
+        // app, y la app tiene que responder. Ceder entre partidas cuesta
+        // milisegundos y evita comerse un núcleo durante el arranque.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    if hechas > 0 {
+        log::info!("cámara: miradas calculadas de la entrada en {hechas} partidas");
+    }
+}
+
+/// Una partida: calcula sus miradas y deja el informe marcado, haya salido algo
+/// o no. Marcar siempre es lo que hace que el segundo arranque no lea nada.
+fn procesar_una(id: &str, escala: f64) {
+    let previo = crate::camera_snaps::load_report(id);
+    // Un informe SIN posiciones es de la primera hornada (cuando las miradas
+    // aún no llevaban x/y) o del detector por vídeo, y se regenera: saltarlo
+    // dejaba "Dónde miraste" y la tendencia de Patrones vacíos para siempre.
+    let sin_posiciones = previo
+        .as_ref()
+        .map(|r| !r.snaps.iter().any(|s| s.x.is_some()))
+        .unwrap_or(false);
+
+    // `load_all_matches` no trae la estela: hay que leer la partida entera.
+    let Ok(full) = crate::storage::get_match_metadata(id) else {
+        return;
+    };
+
+    // OJO al regenerar: `camera_snaps` ya es la lista FUSIONADA de la hornada
+    // anterior. Pasarla como "teclas" haría que cada clic se fundiera con su
+    // propio duplicado sin posición y las perdiera todas otra vez. Las teclas
+    // reales eran 0-1 por partida.
+    let teclas: &[f64] = if sin_posiciones { &[] } else { &full.camera_snaps };
+    let looks = looks_from_input(&full, teclas, escala);
+
+    if looks.is_empty() {
+        marcar_visto(id, previo);
+        return;
+    }
+
+    write_report(&full, &looks);
+    let nuevos: Vec<f64> = looks.iter().map(|l| l.t).collect();
+    // Nunca reescribir un fichero cuyo contenido no ha cambiado: el metadata de
+    // una partida son megas (la estela), y esto corría en cada arranque.
+    if full.camera_snaps != nuevos {
+        let mut meta = full;
+        meta.camera_snaps = nuevos;
+        let _ = crate::storage::save_match_metadata(&meta);
+    }
+}
+
+/// Deja constancia de que el barrido ya miró esta partida y no había nada.
+///
+/// Sin esto, una partida sin estela (grabada antes de que se registrara, o con
+/// la resolución del ratón sin medir) se volvía a abrir ENTERA en cada arranque
+/// para descubrir otra vez que no había nada. Si ya había informe se conserva
+/// tal cual y sólo se le pone el sello; si no, se escribe uno vacío.
+fn marcar_visto(id: &str, previo: Option<crate::camera_snaps::SnapReport>) {
+    let mut r = previo.unwrap_or_else(|| crate::camera_snaps::SnapReport {
+        match_id: id.to_string(),
+        ..Default::default()
     });
+    r.from_input_v = BACKFILL_V;
+    if let Ok(txt) = serde_json::to_string(&r) {
+        let _ = std::fs::write(crate::camera_snaps::report_path(id), txt);
+    }
 }
 
 #[cfg(test)]

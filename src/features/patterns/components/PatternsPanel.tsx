@@ -12,7 +12,7 @@ import {
   type RoleFilter,
   type Confidence,
 } from "../../../core/patterns";
-import { ddragonUrl, rankIcon, rankLabel } from "../../../core/ddragon";
+import { mapImageUrl, rankIcon, rankLabel, useDdragonVersion } from "../../../core/ddragon";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import {
   ErrorClipMetadata,
@@ -25,12 +25,14 @@ import {
   type ZoneHistoryRow,
 } from "../../../core/tauri-ipc";
 import { computeKDA, outcome } from "../../../core/matchStats";
+import { laneLabel, SIDE_LANES } from "../../../core/lanes";
 import { mmss } from "../../../core/time";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { BarChart3 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
+import { RankBenchmarkCard } from "./RankBenchmarkCard";
 
 /**
  * Patrones: la única pantalla que mira más de una partida a la vez.
@@ -83,6 +85,43 @@ const inPhase = (gameMin: number, fase: Phase): boolean => {
   return gameMin > 25;
 };
 
+/**
+ * Ventana temporal de la pantalla.
+ *
+ * Un agregado sin ventana mezcla el jugador que eres con el que eras: las
+ * cincuenta partidas de hace tres meses pesan lo mismo que las diez de esta
+ * semana y tapan cualquier cambio. "Este parche" existe porque los cambios de
+ * parche son la otra frontera real: un carril que dejó de funcionar el martes
+ * no debería seguir contando desde el lunes.
+ */
+type Range = "all" | "30d" | "last10" | "patch";
+const RANGES: { key: Range; label: string }[] = [
+  { key: "all", label: "All time" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "last10", label: "Last 10 games" },
+  { key: "patch", label: "This patch" },
+];
+
+/** Milisegundos de la fecha de una partida, o 0 si no se puede leer. */
+const fechaMs = (m: MatchMetadata): number => {
+  const ms = new Date(m.date.replace(" ", "T")).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Aplica la ventana. `parche` es el más reciente de TUS partidas, no el del
+ * juego: la app no sabe qué parche corre hoy, sabe en cuál jugaste la última.
+ */
+function inRange(matches: MatchMetadata[], rango: Range, parche: string | null): MatchMetadata[] {
+  if (rango === "all") return matches;
+  if (rango === "patch") return parche ? matches.filter((m) => m.patch === parche) : matches;
+  if (rango === "30d") {
+    const corte = Date.now() - 30 * 24 * 3600 * 1000;
+    return matches.filter((m) => fechaMs(m) >= corte);
+  }
+  return [...matches].sort((a, b) => fechaMs(b) - fechaMs(a)).slice(0, 10);
+}
+
 /** Una muerte tuya con sitio en el mapa, ya atada a su partida. */
 interface DeathPoint {
   matchId: string;
@@ -113,27 +152,44 @@ export const PatternsPanel: React.FC = () => {
   const [presion, setPresion] = useState<PressureSummary | null>(null);
   const [forma, setForma] = useState<SeasonForm | null>(null);
   const [formaError, setFormaError] = useState<string | null>(null);
+  /** Fuentes que no se pudieron leer. Se dicen en voz baja bajo la cabecera. */
+  const [fuentesRotas, setFuentesRotas] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [rol, setRol] = useState<RoleFilter>("all");
+  const [rango, setRango] = useState<Range>("all");
   const [fase, setFase] = useState<Phase>("all");
   const [hover, setHover] = useState<{ d: DeathPoint; left: number; top: number } | null>(null);
   const t = useT();
+  // La versión viva de Data Dragon. Estaba clavada a 14.1.1 aquí dentro, así
+  // que el mapa era el de hace dos años y medio.
+  const ddVersion = useDdragonVersion();
   const navigate = useNavigate();
   const setSelectedMatch = useAppStore((s) => s.setSelectedMatch);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
 
   useEffect(() => {
     let alive = true;
+    // Cada fuente falla por su cuenta y se apunta cuál. Antes las tres se
+    // tragaban en un `catch(() => [])`: un fallo de lectura salía como "no hay
+    // datos", que es lo mismo que se ve al empezar, y no había forma de
+    // distinguir "aún no has grabado nada" de "no se ha podido leer".
+    const fallos: string[] = [];
+    const fallo = (que: string) => (e: unknown) => {
+      console.error(que, e);
+      fallos.push(que);
+      return null;
+    };
     Promise.all([
-      getAllErrorClips().catch(() => []),
-      getCameraZoneHistory().catch(() => []),
-      getPressureSummary().catch(() => null),
+      getAllErrorClips().catch(fallo("Flagged errors")),
+      getCameraZoneHistory().catch(fallo("Camera history")),
+      getPressureSummary().catch(fallo("Pressure")),
     ])
       .then(([cs, zs, pr]) => {
         if (!alive) return;
-        setClips(cs);
-        setZonas(zs);
+        setClips(cs ?? []);
+        setZonas(zs ?? []);
         setPresion(pr);
+        setFuentesRotas(fallos);
       })
       .catch(console.error)
       .finally(() => alive && setLoading(false));
@@ -151,7 +207,25 @@ export const PatternsPanel: React.FC = () => {
   const own = useMemo(() => matches.filter((m) => !m.is_vod), [matches]);
   // El filtro de rol se aplica ANTES de agregar: mezclar el reloj de muertes de
   // support con el de jungla es exactamente el ruido que esta pantalla evita.
-  const propias = useMemo(() => filterByRole(own, rol), [own, rol]);
+  // El parche más reciente en el que jugaste. De la partida más nueva que lo
+  // traiga: las viejas pueden no tenerlo (el backfill va partida a partida).
+  const parcheActual = useMemo(() => {
+    const con = own.filter((m) => m.patch).sort((a, b) => fechaMs(b) - fechaMs(a));
+    return con.length ? (con[0].patch as string) : null;
+  }, [own]);
+  const propias = useMemo(
+    () => inRange(filterByRole(own, rol), rango, parcheActual),
+    [own, rol, rango, parcheActual]
+  );
+  /** Los ids de la ventana: lo que traen otras fuentes se recorta con ellos. */
+  const idsRango = useMemo(() => new Set(propias.map((m) => m.id)), [propias]);
+  // El historial de zonas llega del backend con TODAS las partidas: aquí se
+  // recorta a la misma ventana que el resto de la pantalla, o la tarjeta del
+  // punto ciego contaría partidas que ninguna otra tarjeta está contando.
+  const zonasRango = useMemo(
+    () => zonas.filter((z) => idsRango.has(z.match_id)),
+    [zonas, idsRango]
+  );
   const clock = useMemo(() => deathClock(propias), [propias]);
   const cats = useMemo(() => errorCategories(clips), [clips]);
   const conf = confidenceOf(propias.length);
@@ -333,7 +407,7 @@ export const PatternsPanel: React.FC = () => {
   // El estado vacío global solo cuando de verdad no hay nada que agregar. Con
   // un rol filtrado a cero, la página sigue en pie (y el filtro, a la vista)
   // para poder volver a "Todos".
-  if (rol === "all" && clock.total === 0) {
+  if (rol === "all" && rango === "all" && clock.total === 0) {
     return (
       <div style={styles.container} className="panel-enter">
         <div style={styles.header}>
@@ -351,22 +425,53 @@ export const PatternsPanel: React.FC = () => {
   const c = CONFIDENCE_COPY[conf];
   const codigoForma = formaError ? formaError.split(":")[0].trim() : null;
 
+  /**
+   * Una tarjeta que no llega al umbral no desaparece: dice cuánto le falta.
+   *
+   * Desaparecer es lo peor que puede hacer, porque no se distingue de un fallo
+   * ni de un dato que la app no recoge — y desde fuera parece que la pantalla
+   * cambia de contenido al azar cada vez que grabas.
+   */
+  const falta = (titulo: string, pista: string, n: number) => (
+    <div className="card" style={styles.card}>
+      <div style={styles.cardHead}>
+        <span className="u-label">{t(titulo)}</span>
+        <span className="u-meta">{t(pista)}</span>
+      </div>
+      <p style={{ ...styles.insightText, color: "var(--faint)" }}>
+        {/* Una entrada aparte para el singular: "Faltan 1 partidas" es el
+            plural sin concordancia que delata una plantilla. */}
+        {Math.max(1, n) === 1
+          ? t("Needs 1 more game")
+          : t("Needs {n} more games", { n: Math.max(1, n) })}
+      </p>
+    </div>
+  );
+
   return (
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
         <div>
           <h1 style={styles.title}>{t("Patterns")}</h1>
           <div className="u-meta" style={{ marginTop: 4 }}>
-            {propias.length} {t("games")} · {clock.total} {t("deaths")} · {clock.wins}W {clock.losses}L
+            {propias.length} {t("games")} · {clock.total} {t("deaths")} · {t("{w}W {l}L", { w: clock.wins, l: clock.losses })}
           </div>
+          {/* En voz baja, pero dicho: un panel que se queda vacío por un fallo de
+              lectura es indistinguible de uno que se queda vacío por falta de
+              datos, y esa duda contamina todo lo demás de la pantalla. */}
+          {fuentesRotas.length > 0 && (
+            <div className="u-meta" style={{ marginTop: 4, color: "var(--signal)" }}>
+              {t("Couldn't load: {what}", { what: fuentesRotas.map((f) => t(f)).join(", ") })}
+            </div>
+          )}
         </div>
         <span style={{ ...styles.confidence, color: c.color, borderColor: c.color }}>
           {t(c.label)}
         </span>
       </div>
 
-      {/* Filtro de rol: cada agregado de abajo se recalcula solo con las
-          partidas jugadas en ese puesto. */}
+      {/* Filtros: cada agregado de abajo se recalcula solo con las partidas
+          jugadas en ese puesto Y dentro de esa ventana temporal. */}
       <div style={styles.roleRow}>
         {ROLE_FILTERS.map((r) => (
           <Button
@@ -379,7 +484,29 @@ export const PatternsPanel: React.FC = () => {
             {t(r.label)}
           </Button>
         ))}
+        <span style={styles.filtroSep} />
+        {RANGES.map((r) => (
+          <Button
+            key={r.key}
+            variant="ghost"
+            size="sm"
+            aria-pressed={rango === r.key}
+            disabled={r.key === "patch" && !parcheActual}
+            title={r.key === "patch" && parcheActual ? t("Patch {v}", { v: parcheActual }) : undefined}
+            onClick={() => { setRango(r.key); setHover(null); }}
+          >
+            {t(r.label)}
+          </Button>
+        ))}
       </div>
+
+      {/* La ventana puede dejar la pantalla sin nada que agregar. Se dice, en
+          vez de enseñar doce tarjetas vacías. */}
+      {propias.length === 0 && (
+        <p style={{ ...styles.insightText, marginBottom: "var(--space-4)" }}>
+          {t("No games in this window. Widen the range or clear the role filter.")}
+        </p>
+      )}
 
       {/* ------------------------------------------------- dónde mueres */}
       {/* El hero de la página, y por eso lleva la aureola (una por pantalla):
@@ -412,7 +539,7 @@ export const PatternsPanel: React.FC = () => {
               </div>
               <div style={styles.mapWrap}>
                 <img
-                  src={ddragonUrl("/cdn/14.1.1/img/map/map11.png")}
+                  src={mapImageUrl(ddVersion)}
                   alt=""
                   style={styles.mapImg}
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
@@ -483,7 +610,7 @@ export const PatternsPanel: React.FC = () => {
                 <div
                   key={b.from}
                   style={styles.clockRow}
-                  title={`${b.total} deaths · ${b.inWins} in wins, ${b.inLosses} in losses`}
+                  title={t("{total} deaths · {w} in wins, {l} in losses", { total: b.total, w: b.inWins, l: b.inLosses })}
                 >
                   <span
                     className="u-metric"
@@ -569,19 +696,34 @@ export const PatternsPanel: React.FC = () => {
                         m.impact_rank === 1 ? "var(--gold)" : "var(--line)",
                     }}
                   >
-                    {m.impact_rank === 1 ? "MVP" : `${m.impact_rank}º`}
+                    {/* "#3" y no "3º": el ordinal español no se lee en inglés. */}
+                    {m.impact_rank === 1 ? "MVP" : `#${m.impact_rank}`}
                   </span>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Lo que compra tu presencia. */}
-          {presion !== null && presion.windows > 0 && (
+          {/* Lo que compra tu presencia.
+
+              El backend lo agrega sobre TODA la biblioteca (sale de la caché de
+              Riot, no de la metadata que hay aquí), así que es la única tarjeta
+              que la ventana temporal no puede recortar. Se dice en la cabecera
+              en vez de fingir que sigue el filtro. */}
+          {presion === null || presion.windows === 0 ? (
             <div className="card" style={{ ...styles.card, flex: 1 }}>
               <div style={styles.cardHead}>
                 <span className="u-label">{t("What your presence buys")}</span>
-                <span className="u-meta">{presion.games} {t("games")}</span>
+              </div>
+              <p style={{ ...styles.insightText, color: "var(--faint)" }}>
+                {t("Measured from the enemy positions of your synced games. It appears once a few games have synced with Riot.")}
+              </p>
+            </div>
+          ) : (
+            <div className="card" style={{ ...styles.card, flex: 1 }}>
+              <div style={styles.cardHead}>
+                <span className="u-label">{t("What your presence buys")}</span>
+                <span className="u-meta">{presion.games} {t("games")} · {t("all time")}</span>
               </div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                 <span className="u-metric" style={{ fontSize: 22, fontWeight: 700, color: "var(--win)" }}>
@@ -660,7 +802,7 @@ export const PatternsPanel: React.FC = () => {
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div className="u-metric" style={{ fontSize: 15, fontWeight: 700 }}>
-                    {prediccion.wins}V {prediccion.losses}D
+                    {t("{w}W {l}L", { w: prediccion.wins, l: prediccion.losses })}
                     {prediccion.avgScore != null && (
                       <span style={{ marginLeft: 8, color: "var(--brand)" }} title={t("Performance percentile inside each game's lobby, recent games weigh double")}>
                         {Math.round(prediccion.avgScore)} {t("score")}
@@ -713,9 +855,19 @@ export const PatternsPanel: React.FC = () => {
         </div>
       )}
 
+      {/* --------------------------------- dónde estás: contra tu propio rango.
+          Va pegada a la predicción a propósito: las dos contestan "dónde
+          estoy", una mirando a la escalera y otra a los que juegan tu puesto
+          en tu tramo. Separarlas obligaría a bajar dos veces a lo mismo. */}
+      <div style={{ marginBottom: "var(--space-4)" }}>
+        <RankBenchmarkCard matches={propias} roleFilter={rol} />
+      </div>
+
       <div style={styles.grid}>
         {/* ------------------------------------------------ tu pool y tus rivales */}
-        {pool.length >= 2 && (
+        {pool.length < 2
+          ? falta("Your pool", "who you actually win with", 2 - propias.length)
+          : (
           <div className="card" style={styles.card}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Your pool")}</span>
@@ -740,7 +892,9 @@ export const PatternsPanel: React.FC = () => {
           </div>
         )}
 
-        {rivales.length >= 2 && (
+        {rivales.length < 2
+          ? falta("Your rivals", "the lane opponents that beat you", 2 - rivales.length)
+          : (
           <div className="card" style={styles.card}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Your rivals")}</span>
@@ -762,8 +916,10 @@ export const PatternsPanel: React.FC = () => {
           </div>
         )}
       {/* --------------------------------------- el punto ciego, por partida */}
-      {zonas.length >= 3 && (() => {
-        const filas = zonas.slice(-12);
+      {zonasRango.length < 3
+        ? falta("Blind spot, game by game", "longest stretch without a look, per lane", 3 - zonasRango.length)
+        : (() => {
+        const filas = zonasRango.slice(-12);
         const peorDe = (g: [number, number, number]) => g.indexOf(Math.max(...g));
         return (
           <div className="card" style={styles.card}>
@@ -773,9 +929,11 @@ export const PatternsPanel: React.FC = () => {
             </div>
             <div style={styles.zoneGrid}>
               <span />
-              <span className="u-label" style={{ textAlign: "right" }}>Top</span>
-              <span className="u-label" style={{ textAlign: "right" }}>Mid</span>
-              <span className="u-label" style={{ textAlign: "right" }}>Bot</span>
+              {/* Los tres carriles de línea, del helper compartido: estaban
+                  clavados aquí, en "Hoy" y en la biblioteca, cada uno a su modo. */}
+              {SIDE_LANES.map((l) => (
+                <span key={l} className="u-label" style={{ textAlign: "right" }}>{laneLabel(l, t)}</span>
+              ))}
               {filas.map((z) => {
                 const peor = peorDe(z.gaps);
                 return (
@@ -817,7 +975,8 @@ export const PatternsPanel: React.FC = () => {
               {cats.map((x) => (
                 <div key={x.category} style={styles.catRow}>
                   <div style={{ minWidth: 0 }}>
-                    <div style={styles.catLabel}>{x.category}</div>
+                    {/* Se guardan en inglés (identificador del backend); se pintan traducidas. */}
+                    <div style={styles.catLabel}>{t(x.category)}</div>
                     <div style={styles.catTrack}>
                       <span
                         style={{
@@ -852,7 +1011,9 @@ export const PatternsPanel: React.FC = () => {
         </div>
 
         {/* ------------------------------------------------ cruces honestos */}
-        {(cruceMiradas !== null || cruceOro !== null) && (
+        {cruceMiradas === null && cruceOro === null
+          ? falta("Crossings", "comparisons that need a sample", 6 - propias.length)
+          : (
           <div className="card" style={{ ...styles.card, background: "var(--media-sheen)" }}>
             <div style={styles.cardHead}>
               <span className="u-label">{t("Crossings")}</span>
@@ -1006,9 +1167,17 @@ const styles: Record<string, React.CSSProperties> = {
   },
   roleRow: {
     display: "flex",
+    alignItems: "center",
     gap: "var(--space-2)",
     flexWrap: "wrap",
     marginBottom: "var(--space-4)",
+  },
+  /** Separa el puesto de la ventana temporal: son dos preguntas distintas. */
+  filtroSep: {
+    width: 1,
+    alignSelf: "stretch",
+    background: "var(--line-soft)",
+    margin: "0 var(--space-2)",
   },
   phaseRow: {
     display: "flex",

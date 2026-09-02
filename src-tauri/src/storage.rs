@@ -176,7 +176,12 @@ pub struct MatchMetadata {
     #[serde(default)]
     pub apm_series: Vec<f64>,
     /// Movimientos y clics del ratón.
-    #[serde(default)]
+    ///
+    /// Es con diferencia el campo más grande del fichero (decenas de miles de
+    /// puntos por partida) y **casi nadie lo quiere**: sólo el reproductor, que
+    /// lo pide partida a partida con `get_match_details`. Ver
+    /// [`sin_estela`] para el porqué del `deserialize_with`.
+    #[serde(default, deserialize_with = "estela")]
     pub mouse_events: Vec<MouseEventData>,
     /// Resolución del escritorio en la que se capturaron `mouse_events`.
     ///
@@ -218,6 +223,15 @@ pub struct MatchMetadata {
     pub xp_diff_15: Option<i32>,
     #[serde(default)]
     pub jungle_cs_diff_15: Option<i32>,
+    /// CS TOTAL (súbditos + jungla) de ventaja sobre el rival de línea a min 15.
+    ///
+    /// Distinto de `jungle_cs_diff_15`, que sólo cuenta campamentos. Es el que
+    /// pide el baremo de población (`crate::benchmarks`). Las partidas
+    /// sincronizadas antes de que existiera el campo lo traen a `None`: se
+    /// rellena a posteriori desde la timeline cacheada la primera vez que se
+    /// piden sus baremos.
+    #[serde(default)]
+    pub cs_diff_15: Option<i32>,
     #[serde(default)]
     pub gank_impact_15: Option<f64>,
     #[serde(default)]
@@ -226,7 +240,7 @@ pub struct MatchMetadata {
     ///
     /// Se guarda porque la lista de partidas no puede recalcularlo al vuelo:
     /// necesita la timeline completa. Lo rellenan la sincronización, la pestaña
-    /// de Impacto y `riot_api::spawn_impact_backfill` al arrancar (esta última
+    /// de Impacto y `riot_api::impact_backfill` al arrancar (esta última
     /// sólo con los `riot_*.json` ya cacheados, sin gastar cuota de la API).
     /// Antes lo escribía únicamente la pestaña, así que la columna de la
     /// biblioteca eran rayas hasta que entrabas partida por partida.
@@ -235,6 +249,14 @@ pub struct MatchMetadata {
     /// Percentil de tu WPA dentro de tu rol, de 0 a 100. Ver `crate::baselines`.
     #[serde(default)]
     pub impact_percentile: Option<f64>,
+    /// Versión del barrido de impacto que ya repasó esta partida.
+    ///
+    /// El sello es lo que hace que el barrido del arranque no vuelva a abrir
+    /// dos JSON de varios megas por partida en cada lanzamiento. Antes el
+    /// criterio era "¿le falta algún campo?", que para una partida a la que el
+    /// DTO cacheado tampoco puede completar es cierto para siempre.
+    #[serde(default)]
+    pub impact_backfill_v: u32,
     /// Parche en que se jugó ("16.13"). De `info.gameVersion` de Riot.
     #[serde(default)]
     pub patch: Option<String>,
@@ -289,6 +311,47 @@ pub struct MatchMetadata {
     /// `realign_to_video_time` lo estima y reescribe el fichero.
     #[serde(default)]
     pub video_offset: Option<f64>,
+}
+
+thread_local! {
+    /// Si la deserialización en curso debe saltarse la estela del ratón.
+    static SALTAR_ESTELA: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Deserializa `MatchMetadata` sin materializar `mouse_events`.
+///
+/// La biblioteca se relista en cada refresco (y el refresco es periódico), y
+/// listar diecinueve partidas obligaba a construir cientos de miles de
+/// `MouseEventData` que acto seguido se tiraban: `get_recorded_matches` los
+/// vaciaba **después** de haberlos parseado. Lo mismo hacían los tres barridos
+/// del arranque, `get_pressure_summary` y los agregados de Patrones.
+///
+/// Con esto el parser los recorre como `IgnoredAny` —sigue leyendo los tokens,
+/// pero no reserva ni construye nada— y el campo queda vacío, que es
+/// exactamente lo que esos caminos querían. Quien SÍ necesita la estela
+/// (`load_match_by_id`, y con él el reproductor) llama fuera de este ámbito y
+/// la recibe entera.
+///
+/// El interruptor es un `thread_local` y no un parámetro porque serde no deja
+/// pasar contexto a un `Deserialize` derivado; el ámbito se abre y se cierra en
+/// esta misma función, así que no puede quedarse encendido.
+fn sin_estela<T>(f: impl FnOnce() -> T) -> T {
+    SALTAR_ESTELA.with(|s| s.set(true));
+    let r = f();
+    SALTAR_ESTELA.with(|s| s.set(false));
+    r
+}
+
+fn estela<'de, D>(d: D) -> Result<Vec<MouseEventData>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    if SALTAR_ESTELA.with(|s| s.get()) {
+        serde::de::IgnoredAny::deserialize(d)?;
+        return Ok(Vec::new());
+    }
+    Vec::<MouseEventData>::deserialize(d)
 }
 
 /// Tope de cordura para el desfase vídeo↔partida. Cualquier estimación fuera de este
@@ -430,6 +493,10 @@ fn default_minimap_scale() -> f64 { 1.0 }
 /// ya guardadas, que no traen el campo: actualizar la app nunca debe empezar a
 /// borrar grabaciones que el usuario no ha pedido borrar.
 fn default_auto_prune() -> u32 { 0 }
+/// "auto" = la plataforma se sondea la primera vez y se recuerda en
+/// `riot_platform_detected`. Cualquier otro valor es una plataforma fijada a
+/// mano en Ajustes y manda sobre lo detectado.
+fn default_riot_platform() -> String { "auto".to_string() }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -453,6 +520,37 @@ pub struct AppConfig {
     /// clics (el minimapa crece hacia dentro) o cuenta de más.
     #[serde(default = "default_minimap_scale")]
     pub minimap_scale: f64,
+    /// Plataforma de Riot del jugador ("la1", "euw1", "kr"…) o "auto".
+    ///
+    /// La app nació clavada en LAN: quien juega fuera de América no recibía
+    /// NADA de Riot y sin un mensaje que lo explicara. Ver
+    /// `riot_api::regional_route` para el mapa plataforma → ruta regional.
+    #[serde(default = "default_riot_platform")]
+    pub riot_platform: String,
+    /// Plataforma averiguada sondeando match-v5 con "auto". Se guarda para que
+    /// el sondeo (cuatro peticiones) ocurra una sola vez.
+    #[serde(default)]
+    pub riot_platform_detected: String,
+    /// Proxy propio que pone la clave de Riot por el usuario. Vacío = cada uno
+    /// usa la suya. Ver `server/riot-proxy`.
+    #[serde(default)]
+    pub riot_proxy_url: String,
+    /// Si el asistente de primer arranque ya se completó.
+    #[serde(default)]
+    pub onboarding_done: bool,
+    /// Carpeta espejo donde se copia el metadata de cada partida al guardarlo.
+    ///
+    /// Vacío = desactivado. Apuntándolo a una carpeta de OneDrive, Google Drive
+    /// o Dropbox se obtiene sincronización en la nube gratis: lo que pesa son
+    /// los vídeos, y esos NO se copian — el espejo lleva sólo los JSON (notas,
+    /// comentarios, momentos revisados, marcas de error), que son lo
+    /// irreemplazable y ocupan kilobytes.
+    ///
+    /// La copia es síncrona y best-effort: si falla se anota en el log y el
+    /// guardado local sigue siendo un éxito. Un disco de red caído no puede
+    /// convertir "guardar un comentario" en un error.
+    #[serde(default)]
+    pub backup_mirror_dir: String,
 }
 
 fn default_language() -> String {
@@ -476,6 +574,11 @@ impl Default for AppConfig {
             auto_prune_days: 0,
             language: "en".to_string(),
             minimap_scale: 1.0,
+            riot_platform: "auto".to_string(),
+            riot_platform_detected: String::new(),
+            riot_proxy_url: String::new(),
+            onboarding_done: false,
+            backup_mirror_dir: String::new(),
         }
     }
 }
@@ -498,10 +601,14 @@ pub fn load_config() -> AppConfig {
     AppConfig::default()
 }
 
-pub fn save_config(cfg: &AppConfig) {
-    if let Ok(content) = serde_json::to_string_pretty(cfg) {
-        let _ = fs::write(get_config_path(), content);
-    }
+/// Guarda la config. Devuelve el error en vez de tragárselo: antes un disco
+/// lleno o un fichero en solo lectura dejaba a la UI diciendo "guardado" y al
+/// reabrir la app los ajustes eran los viejos, sin ninguna pista de por qué.
+pub fn save_config(cfg: &AppConfig) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(cfg)
+        .map_err(|e| format!("Could not serialize the settings: {e}"))?;
+    fs::write(get_config_path(), content)
+        .map_err(|e| format!("Could not write the settings file: {e}"))
 }
 
 pub fn get_videos_dir() -> PathBuf {
@@ -604,20 +711,104 @@ pub fn save_season_form_cache(games: &[SeasonGame]) {
     }
 }
 
+/// Sólo la estela de un fichero de partida ya escrito.
+///
+/// Los demás campos se tokenizan y se tiran; no hay que construirlos.
+fn estela_en_disco(file_path: &Path) -> Vec<MouseEventData> {
+    #[derive(Deserialize)]
+    struct Solo {
+        #[serde(default)]
+        mouse_events: Vec<MouseEventData>,
+    }
+    fs::read_to_string(file_path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<Solo>(&c).ok())
+        .map(|s| s.mouse_events)
+        .unwrap_or_default()
+}
+
+/// **El único sitio por el que se escribe el metadata de una partida.**
+///
+/// Aquí cuelgan dos cosas que tienen que pasar SIEMPRE, y por eso están aquí y
+/// no en cada llamante: la salvaguarda de la estela y la copia al espejo.
 pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
     let dir = get_match_dir(&metadata.id);
     let file_path = dir.join(format!("{}.json", metadata.id));
-    let json_content = serde_json::to_string_pretty(metadata)
-        .map_err(|e| format!("Error serializando JSON: {}", e))?;
 
-    fs::write(file_path, json_content)
-        .map_err(|e| format!("Error guardando archivo JSON: {}", e))?;
+    // Salvaguarda de la estela. `load_all_matches` ya no la parsea (ver
+    // `sin_estela`), así que un metadata que venga de ahí la trae vacía;
+    // escribirlo tal cual borraría del disco decenas de miles de puntos que
+    // nadie pidió borrar, y los backfills del arranque lo harían en TODA la
+    // biblioteca de una sentada. Si en memoria no hay estela pero en disco sí,
+    // manda la del disco: nunca se pierde por omisión, sólo por borrado
+    // explícito de la partida.
+    let mut metadata = std::borrow::Cow::Borrowed(metadata);
+    if metadata.mouse_events.is_empty() {
+        let previa = estela_en_disco(&file_path);
+        if !previa.is_empty() {
+            metadata.to_mut().mouse_events = previa;
+        }
+    }
+
+    let json_content = serde_json::to_string_pretty(metadata.as_ref())
+        .map_err(|e| format!("Could not serialize the match data: {e}"))?;
+
+    fs::write(&file_path, &json_content)
+        .map_err(|e| format!("Could not write the match file: {e}"))?;
+
+    mirror_match(&metadata.id, &json_content);
     Ok(())
+}
+
+/// Copia el metadata (y los sidecars ligeros) a `backup_mirror_dir`.
+///
+/// Best-effort y síncrono: son kilobytes, y quien apunte el espejo a una
+/// carpeta de OneDrive/Drive quiere que el fichero esté ahí *ya*. Los fallos se
+/// registran y no se propagan — un disco de red caído no puede convertir
+/// "guardar un comentario" en un error para el usuario.
+fn mirror_match(id: &str, json_content: &str) {
+    let destino = load_config().backup_mirror_dir;
+    if destino.trim().is_empty() {
+        return;
+    }
+    let dir = Path::new(destino.trim()).join(id);
+    if let Err(e) = fs::create_dir_all(&dir) {
+        log::warn!("espejo de copia: no se pudo crear {}: {e}", dir.display());
+        return;
+    }
+    if let Err(e) = fs::write(dir.join(format!("{id}.json")), json_content) {
+        log::warn!("espejo de copia: no se pudo escribir el metadata de {id}: {e}");
+        return;
+    }
+    // Los sidecars que también son trabajo del usuario o análisis caro de
+    // rehacer, y que igualmente pesan poco. Los vídeos NO se copian nunca.
+    let origen = get_match_dir(id);
+    for nombre in sidecars_de(&origen) {
+        let _ = fs::copy(origen.join(&nombre), dir.join(&nombre));
+    }
+}
+
+/// Los ficheros de una carpeta de partida que SÍ entran en una copia de
+/// seguridad: el informe de miradas y los JSON de los clips de error (la nota
+/// escrita a mano, los sucesos marcados). Ni vídeos ni DTOs crudos de Riot —
+/// los primeros pesan gigas y los segundos se vuelven a pedir.
+///
+/// La comparte `crate::backup`: el espejo y el ZIP tienen que llevar lo mismo,
+/// o restaurar desde uno daría un resultado distinto que desde el otro.
+pub fn sidecars_de(dir: &Path) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
+        .filter(|n| n == "camera_snaps.json" || (n.contains("_error_") && n.ends_with(".json")))
+        .collect()
 }
 
 /// Actualiza SOLO los comentarios de una partida (lee su JSON, reemplaza comments, reescribe).
 pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
-    let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
+    let mut m = load_match_by_id(id).ok_or_else(|| "Match not found".to_string())?;
     m.comments = comments;
     save_match_metadata(&m)
 }
@@ -628,7 +819,7 @@ pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
 /// tiene: no hay ids de evento. Se compara con tolerancia porque los tiempos son
 /// `f64` y vienen de restas en coma flotante.
 pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), String> {
-    let mut m = load_match_by_id(id).ok_or_else(|| "Partida no encontrada".to_string())?;
+    let mut m = load_match_by_id(id).ok_or_else(|| "Match not found".to_string())?;
     let same = |a: f64, b: f64| (a - b).abs() < 0.05;
     if reviewed {
         if !m.reviewed_moments.iter().any(|t| same(*t, time)) {
@@ -671,6 +862,9 @@ fn metadata_en_carpeta(dir: &Path) -> Option<MatchMetadata> {
         .find_map(|p| leer(&p))
 }
 
+/// Todas las partidas de la biblioteca, **sin la estela del ratón** (ver
+/// [`sin_estela`]). Ningún camino que liste la biblioteca la necesita; el que
+/// la quiere pide una partida concreta con [`load_match_by_id`].
 pub fn load_all_matches() -> Vec<MatchMetadata> {
     let dir = get_videos_dir();
     let mut matches = Vec::new();
@@ -681,7 +875,7 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Some(m) = metadata_en_carpeta(&path) {
+                if let Some(m) = sin_estela(|| metadata_en_carpeta(&path)) {
                     matches.push(m);
                 }
             }
@@ -699,10 +893,10 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
     let mut matches = Vec::new();
 
     let mut añadir = |metadata: Option<MatchMetadata>| {
-        let Some(mut metadata) = metadata else { return };
+        let Some(metadata) = metadata else { return };
         if metadata.id.starts_with("vod_") {
-            // El listado no necesita la estela; el reproductor la carga aparte.
-            metadata.mouse_events = Vec::new();
+            // El listado no necesita la estela; el reproductor la carga aparte
+            // (aquí ni siquiera se parsea: ver `sin_estela`).
             matches.push(metadata);
         }
     };
@@ -711,15 +905,15 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                añadir(metadata_en_carpeta(&path));
+                añadir(sin_estela(|| metadata_en_carpeta(&path)));
             } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
                 // Análisis sueltos en la raíz, de antes de que cada uno tuviera
                 // su carpeta.
-                añadir(
+                añadir(sin_estela(|| {
                     fs::read_to_string(&path)
                         .ok()
-                        .and_then(|c| serde_json::from_str(&c).ok()),
-                );
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                }));
             }
         }
     }
@@ -970,7 +1164,10 @@ pub fn get_dir_size(path: &Path) -> u64 {
     let mut size = 0;
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
-            let meta = entry.metadata().unwrap();
+            // Un fichero que desaparece a media pasada (o al que no llegamos por
+            // permisos) NO puede tumbar el cálculo: esto lo llama la barra de
+            // disco y la cuota, y antes un `unwrap()` aquí mataba el hilo entero.
+            let Ok(meta) = entry.metadata() else { continue };
             if meta.is_dir() {
                 size += get_dir_size(&entry.path());
             } else {
@@ -1404,4 +1601,73 @@ mod realineado_tests {
         assert!((movida[4] - 2.0).abs() < 1e-9); // t=40 s de vídeo = 20 s de partida
         assert!((movida[10] - 8.0).abs() < 1e-9);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Espacio físico del disco y atajos de teclado.
+//
+// Sección NUEVA al final del fichero a propósito: nada de aquí toca `AppConfig`
+// ni su fichero. El atajo del replay vive en su propio `hotkeys.json` para que
+// añadirlo no compita con quien esté reestructurando la configuración general.
+// ---------------------------------------------------------------------------
+
+/// Bytes libres en el volumen donde vive `path`. `None` si no se puede consultar.
+pub fn free_disk_bytes(path: &Path) -> Option<u64> {
+    crate::winsys::disk_space(path).map(|(free, _)| free)
+}
+
+/// (libres, capacidad total) del volumen donde vive `path`.
+pub fn disk_space_bytes(path: &Path) -> Option<(u64, u64)> {
+    crate::winsys::disk_space(path)
+}
+
+/// Umbral de aviso: por debajo de esto la grabación empieza, pero se avisa.
+pub const DISK_LOW_BYTES: u64 = 3 * 1024 * 1024 * 1024;
+/// Umbral duro: por debajo de esto NO se graba (un mp4 a medias no sirve de nada
+/// y un disco a cero se lleva por delante también los metadatos de la partida).
+pub const DISK_FULL_BYTES: u64 = 1024 * 1024 * 1024;
+
+/// Atajos globales. Fichero propio (`hotkeys.json`) y struct propio: ver la nota
+/// de la cabecera de la sección.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HotkeyConfig {
+    /// Tecla que guarda los últimos segundos del replay buffer. Formato el mismo
+    /// que entiende `training::parse_key` (letras, dígitos, F1–F12).
+    #[serde(default = "default_replay_hotkey")]
+    pub replay: String,
+}
+
+fn default_replay_hotkey() -> String {
+    "F8".to_string()
+}
+
+impl Default for HotkeyConfig {
+    fn default() -> Self {
+        Self {
+            replay: default_replay_hotkey(),
+        }
+    }
+}
+
+pub fn get_hotkeys_path() -> PathBuf {
+    let appdata = std::env::var("APPDATA").unwrap_or_else(|_| "C:".to_string());
+    let dir = Path::new(&appdata).join("LeagueRecorder");
+    if !dir.exists() {
+        let _ = fs::create_dir_all(&dir);
+    }
+    dir.join("hotkeys.json")
+}
+
+pub fn load_hotkeys() -> HotkeyConfig {
+    if let Ok(content) = fs::read_to_string(get_hotkeys_path()) {
+        if let Ok(cfg) = serde_json::from_str::<HotkeyConfig>(&content) {
+            return cfg;
+        }
+    }
+    HotkeyConfig::default()
+}
+
+pub fn save_hotkeys(cfg: &HotkeyConfig) -> Result<(), String> {
+    let content = serde_json::to_string_pretty(cfg).map_err(|e| e.to_string())?;
+    fs::write(get_hotkeys_path(), content).map_err(|e| e.to_string())
 }

@@ -1,15 +1,17 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { listen } from "@tauri-apps/api/event";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { outcome } from "../../../core/matchStats";
 import {
   Eye, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
   XCircle, ChevronLeft, ChevronRight,
   Trash2, Send, RefreshCw, Check, MinusCircle,
-  SkipBack, SkipForward, MoreHorizontal
+  SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
+  BarChart3
 } from "lucide-react";
-import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
+import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
@@ -19,6 +21,9 @@ import { PowerSpikeWidget } from "./PowerSpikeWidget";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
+import { InspSection } from "./InspSection";
+import { BenchmarkWidget } from "./BenchmarkWidget";
+import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
@@ -28,6 +33,7 @@ import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
 import { individualEvents } from "../../../core/matchEvents";
 import { champIcon, ddragonUrl } from "../../../core/ddragon";
+import { sameRole } from "../../../core/roles";
 import { useT } from "../../../core/LanguageProvider";
 import { styles } from "./videoPlayerStyles";
 import { mix } from "../../../core/color";
@@ -52,6 +58,32 @@ const MARK_PITCH = 23;       // separación mínima entre centros de una misma f
 // pegadas se leían como una sola mancha. 2 px de aire las separan sin salirse
 // del carril: 12+21 = 33, y la de arriba ocupa de 35 a 56.
 const MARK_ROWS = [12, 35];
+
+/**
+ * Salto de un "fotograma" con `,` y `.`. No se puede saber el fps real del
+ * fichero desde el elemento `<video>`, así que se usa 1/30 s: en una grabación a
+ * 60 fps avanza dos fotogramas, que sigue siendo el gesto de afinar el instante
+ * exacto de una muerte.
+ */
+const FRAME_STEP = 1 / 30;
+
+/**
+ * A qué distancia del cursor un suceso se considera "el que estás viendo", para
+ * la tarjeta destacada de la pestaña de sucesos.
+ */
+const FEATURED_NEAR = 4;
+
+/** Atajos de teclado del reproductor, en el orden en que se enseñan. */
+const SHORTCUTS: [string, string][] = [
+  ["Space / K", "Play or pause"],
+  ["← / →", "Back or forward 5 s"],
+  [", / .", "Step one frame"],
+  ["P / N", "Previous or next moment"],
+  ["[ / ]", "Set clip in or out point"],
+  ["M", "Mute"],
+  ["F", "Fullscreen"],
+  ["Esc", "Leave fullscreen"],
+];
 
 interface VideoPlayerProps {
   match: MatchMetadata;
@@ -96,6 +128,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     isPlaying,
     setIsPlaying,
     loadState,
+    setLoadState,
     volume,
     muted,
     setMuted,
@@ -141,7 +174,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // Cuatro pestanas, no cinco. "Estadisticas" y "Analitica" eran dos nombres
   // para lo mismo (cifras de esta partida) y entre las dos no cabian en la
   // columna: la quinta salia cortada.
-  const [tab, setTab] = useState<"review" | "match" | "impact" | "events">("review");
+  // Sin vídeo, la cola de revisión no lleva a ningún sitio: se abre por la
+  // ficha de la partida, que es lo único que sí hay.
+  const [tab, setTab] = useState<"review" | "match" | "impact" | "events">(
+    match.video_path ? "review" : "match"
+  );
 
   // Reparto de credito por dano real. Se pide al abrir la pestana de la partida
   // y no antes: la primera vez puede costar dos llamadas a la API, luego sale de
@@ -161,18 +198,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
   // cola que faltaba.
-  const [moments, setMoments] = useState<Moment[]>(() => buildQueue(match));
+  const [errorClips, setErrorClips] = useState<ErrorClipMetadata[]>([]);
   useEffect(() => {
     let alive = true;
-    setMoments(buildQueue(match));
+    setErrorClips([]);
     getAllErrorClips()
       .then((clips) => {
-        if (!alive) return;
-        setMoments(buildQueue(match, clips.filter((c) => c.match_id === match.id)));
+        if (alive) setErrorClips(clips.filter((c) => c.match_id === match.id));
       })
       .catch(console.error);
     return () => { alive = false; };
   }, [match.id]);
+
+  // La cola se recompone también al cambiar de idioma: los títulos llevan
+  // nombres dentro ("Te mata Ahri"), así que se escriben aquí y no se pueden
+  // traducir después.
+  const [moments, setMoments] = useState<Moment[]>(() => buildQueue(match, [], t));
+  useEffect(() => {
+    setMoments(buildQueue(match, errorClips, t));
+    // `match` entero en las deps: la cola sale de sus eventos y sus saltos de
+    // cámara, no sólo de su id.
+  }, [match, errorClips, t]);
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);
@@ -189,6 +235,25 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const { showError } = useDialog();
 
   const videoSrc = streamUrl(match.video_path);
+
+  /**
+   * Partidas seguidas pero no grabadas. El backend ya guarda la partida aunque
+   * la grabación falle, así que `video_path` puede venir vacío: sin esto la
+   * pantalla se quedaba en el spinner para siempre.
+   *
+   * El motivo, si lo hay, viaja en la metadata; se lee con cuidado porque es un
+   * campo que no todas las partidas tienen.
+   */
+  const hasVideo = !!match.video_path;
+  const noVideoReason = ((match as unknown as { recording_error?: string }).recording_error ?? "").trim();
+
+  /** Abre el explorador con el fichero seleccionado. */
+  const revealVideo = useCallback(() => {
+    if (!match.video_path) return;
+    revealItemInDir(match.video_path).catch((e) =>
+      showError(t("Couldn't open the folder: {msg}", { msg: String(e) }))
+    );
+  }, [match.video_path, showError, t]);
 
   // La estela del ratón (mouse_events) NO viene en el listado por rendimiento.
   const [currentMatch, setCurrentMatch] = useState<MatchMetadata>(match);
@@ -254,15 +319,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     jumpToClip(target);
   }, [match.events, activeEventTime, currentTime, jumpToClip]);
 
+  // Las dos ramas del if hacían lo mismo, así que no había tal decisión: en modo
+  // recorte o fuera de él, pinchar la tira busca ese punto.
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    if (!isClippingMode) {
-      setIsDragging(true);
-      updateScrub(e.clientX, true);
-    } else {
-      setIsDragging(true);
-      updateScrub(e.clientX, true);
-    }
+    setIsDragging(true);
+    updateScrub(e.clientX, true);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -314,6 +376,34 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     }
   };
 
+  /**
+   * Poner la entrada o la salida del recorte en el instante actual.
+   *
+   * El recortador sólo expone "mueve el asidero COGIDO", así que se coge, se
+   * mueve y se suelta: el valor viaja en un ref porque `dragThumbTo` lee el
+   * asidero del render, no el que acabamos de pedir. Si el recortador no está
+   * abierto, `[` y `]` lo abren — poner una entrada en un rango que no existe no
+   * significa nada.
+   */
+  const pendingBound = useRef<number | null>(null);
+  const setClipBound = useCallback(
+    (kind: "start" | "end", time: number) => {
+      if (!isClippingMode) {
+        toggleClipMode("clip", time, duration);
+        return;
+      }
+      pendingBound.current = time;
+      setClipDragThumb(kind);
+    },
+    [isClippingMode, toggleClipMode, duration, setClipDragThumb]
+  );
+  useEffect(() => {
+    if (clipDragThumb === null || pendingBound.current === null) return;
+    dragThumbTo(pendingBound.current);
+    pendingBound.current = null;
+    setClipDragThumb(null);
+  }, [clipDragThumb, dragThumbTo, setClipDragThumb]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -332,11 +422,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         case "f": toggleFullscreen(); break;
         case "n": e.preventDefault(); goToAdjacentEvent(1); break;
         case "p": e.preventDefault(); goToAdjacentEvent(-1); break;
+        // Escape salía de pantalla completa por el navegador, pero no si se
+        // había entrado desde el botón sin pasar por su gesto: se dice aquí.
+        case "Escape":
+          if (document.fullscreenElement) { e.preventDefault(); toggleFullscreen(); }
+          break;
+        // Fotograma a fotograma. A 60 fps son 16 ms; se usa 1/30 para que un
+        // toque avance algo visible en cualquier grabación.
+        case ",": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime - FRAME_STEP, false); break;
+        case ".": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime + FRAME_STEP, false); break;
+        // Entrada y salida del recorte, sin soltar el teclado.
+        case "[": e.preventDefault(); setClipBound("start", v.currentTime); break;
+        case "]": e.preventDefault(); setClipBound("end", v.currentTime); break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handlePlayPause, seekTo, goToAdjacentEvent]);
+  }, [handlePlayPause, seekTo, goToAdjacentEvent, toggleFullscreen, setMuted, setClipBound]);
 
 
   // --- Comentarios (persistidos en el JSON de la partida vía backend) ---
@@ -344,10 +446,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     (next: MatchComment[]) => {
       setCurrentMatch((prev) => ({ ...prev, comments: next }));
       saveMatchComments(match.id, next).catch((e) =>
-        showError("No se pudieron guardar los comentarios: " + e)
+        showError(t("Couldn't save the notes: {msg}", { msg: String(e) }))
       );
     },
-    [match.id, showError]
+    [match.id, showError, t]
   );
 
   const addComment = () => {
@@ -362,6 +464,31 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     persistComments(comments.filter((_, i) => i !== idx));
   };
 
+  // Editar una nota. Sólo se podía borrar y volver a escribir, que en una nota
+  // de tres líneas escritas mientras revisabas es perderlas para arreglar una
+  // palabra. El índice del que se está editando, y su texto en curso.
+  const [editingNote, setEditingNote] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState<string>("");
+
+  const startEditNote = (idx: number) => {
+    setEditingNote(idx);
+    setEditingText(comments[idx]?.text ?? "");
+  };
+
+  const commitEditNote = () => {
+    if (editingNote === null) return;
+    const text = editingText.trim();
+    // Vaciar una nota la borra: es lo que significa dejarla vacía, y evita
+    // guardar filas sin contenido que luego no se pueden distinguir.
+    persistComments(
+      text
+        ? comments.map((c, i) => (i === editingNote ? { ...c, text } : c))
+        : comments.filter((_, i) => i !== editingNote)
+    );
+    setEditingNote(null);
+    setEditingText("");
+  };
+
   // Sincroniza (backfill) el scoreboard de los 10 jugadores con Riot.
   const handleSync = async () => {
     if (syncing) return;
@@ -373,7 +500,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setObjectives(updated.objectives ?? []);
       setItemPurchases(updated.item_purchases ?? []);
     } catch (e) {
-      showError("No se pudo sincronizar con Riot: " + e);
+      showError(t("Couldn't sync with Riot: {msg}", { msg: String(e) }));
     } finally {
       setSyncing(false);
     }
@@ -389,7 +516,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // ganaba la carrera) y se rompio al cachear, cuando la atribucion paso a
   // responder primero. El "ya pedido" se lleva en un ref, que no dispara
   // re-ejecuciones.
+  //
+  // `intento` sube al pulsar Reintentar: es lo que permite volver a pedirlo sin
+  // reabrir la pestaña. Un fallo de la API dejaba el panel muerto hasta cambiar
+  // de partida y volver.
   const pedidoRef = useRef<string | null>(null);
+  const [intento, setIntento] = useState(0);
+  const reintentar = useCallback(() => {
+    pedidoRef.current = null;
+    setCredits(null);
+    setCreditsErr(null);
+    setPressure(null);
+    setPressureErr(null);
+    setIntento((n) => n + 1);
+  }, []);
   useEffect(() => {
     if (tab !== "impact" || match.is_vod) return;
     if (pedidoRef.current === match.id) return;
@@ -412,7 +552,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       .then((ws) => { if (vivo) setPressure(ws); })
       .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
     return () => { vivo = false; };
-  }, [tab, match.id, match.is_vod]);
+  }, [tab, match.id, match.is_vod, intento]);
 
   // Estado del procesado del video. Se consulta al abrir Impacto (y al cambiar
   // de partida) y se mantiene al dia con el evento de progreso del backend.
@@ -464,7 +604,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       setMmStatus(await getMinimapStatus(match.id));
     } catch (e) {
       setMmPct(null);
-      setMmErr(String(e));
+      setMmErr(t("Couldn't start the video analysis: {msg}", { msg: String(e) }));
     }
   };
 
@@ -509,7 +649,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const axisMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
     const steps = [15, 30, 60, 120, 300, 600, 900]; // 15s..15min
-    let step = steps.find(s => duration / s <= 6) ?? Math.ceil(duration / 6);
+    let step = steps.find((paso) => duration <= paso * 6) ?? Math.ceil(duration / 6);
     if (step <= 0) step = 15; // prevent infinite loop
     const marks: number[] = [];
     for (let t = 0; t < duration; t += step) marks.push(t);
@@ -661,6 +801,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
   const result = outcome(match.result);
   const isWin = result === "victory";
+
+  // Quién ve la sección de ganks: el jungla siempre (es su trabajo) y cualquiera
+  // que tenga emboscadas detectadas.
+  const isJungler = sameRole(participants.find((p) => p.is_self)?.role, "JUNGLE");
+  const hasGankMarkers = (match.timeline_markers ?? []).some((m) => m.event_type === "gank_attempt");
   const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
 
   // Rendimiento del jugador y agregados de su equipo (para el panel "Your Performance").
@@ -779,7 +924,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     boxShadow: "none",
                     zIndex: isActive ? 10 : 5,
                   }}
-                  title={[`${clock(m.ev.time)} · ${t(meta.label)}`, describeEvent(m.ev)]
+                  title={[`${clock(m.ev.time)} · ${t(meta.label)}`, describeEvent(m.ev, t)]
                     .filter(Boolean)
                     .join(" – ")}
                 >
@@ -816,37 +961,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               ))}
             </div>
 
-            {/* Hover Tooltip */}
+            {/* Etiqueta al pasar por encima.
+                Estaba en `position: fixed` con `bottom: 160px` a fuego, o sea
+                atada a la altura que tenía la baraja el día que se escribió: en
+                pantalla completa (donde la tira está abajo del todo) flotaba en
+                mitad del vídeo, y con la ventana pequeña tapaba el transporte.
+                Ahora cuelga de la propia tira, que es a lo que se refiere. */}
             {hoverPct !== null && hoverClientX !== null && (
               <div style={{
-                position: "fixed",
-                left: hoverClientX,
-                bottom: "160px",
+                position: "absolute",
+                left: `${hoverPct * 100}%`,
+                bottom: "calc(100% + var(--space-2))",
                 transform: "translateX(-50%)",
                 background: "var(--surface-1)",
-                padding: "8px 12px",
-                borderRadius: "8px",
-                border: "1px solid var(--border-subtle)",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                padding: "var(--space-2) var(--space-3)",
+                borderRadius: "var(--radius-md)",
+                border: "1px solid var(--glass-line)",
+                boxShadow: "var(--shadow-2)",
                 pointerEvents: "none",
                 zIndex: 100,
                 display: "flex",
                 flexDirection: "column",
-                gap: "4px",
-                minWidth: "120px"
+                gap: "var(--space-1)",
+                minWidth: "120px",
+                maxWidth: "260px",
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: "bold", color: "var(--text)" }}>
-                  <span>{clock(hoverPct * duration)}</span>
-                  <span style={{ color: "var(--accent-violet)" }}>
-                    {apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0} APM
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-3)", fontSize: "12px", color: "var(--text)" }}>
+                  <span className="u-metric">{clock(hoverPct * duration)}</span>
+                  <span className="u-metric" style={{ color: "var(--cool)" }}>
+                    {t("{n} APM", { n: apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0 })}
                   </span>
                 </div>
                 {timedEvents.filter(ev => Math.abs(ev.time - hoverPct * duration) < (duration * 0.01)).slice(0, 1).map(ev => {
                   const meta = eventMeta(ev);
+                  const desc = describeEvent(ev, t);
                   return (
-                    <div key={ev.time} style={{ fontSize: "11px", color: meta.color, display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}>
-                      <span style={{ transform: "scale(0.8)" }}>{meta.icon}</span>
-                      {meta.label} {`- ${describeEvent(ev)}`}
+                    <div key={ev.time} style={{ fontSize: "11px", color: meta.color, display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span style={{ transform: "scale(0.8)", display: "flex" }}>{meta.icon}</span>
+                      {t(meta.label)}{desc ? ` – ${desc}` : ""}
                     </div>
                   );
                 })}
@@ -971,6 +1123,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
                 </div>
               </div>
+              {/* Los atajos existían y no los sabía nadie: no estaban escritos
+                  en ningún sitio de la pantalla. */}
+              <div className="tp-pop__row tp-pop__row--stack">
+                <span>{t("Keyboard shortcuts")}</span>
+                <div style={{ marginTop: "var(--space-2)", display: "grid", gap: "3px" }}>
+                  {SHORTCUTS.map(([keys, what]) => (
+                    <div key={keys} style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-4)" }}>
+                      <span className="u-metric" style={{ fontSize: 11, color: "var(--muted)" }}>{keys}</span>
+                      <span style={{ fontSize: 11, color: "var(--faint)" }}>{t(what)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </details>
 
@@ -987,26 +1152,60 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           <div style={styles.topBar}>
             <div style={styles.topBarLeft}></div>
           </div>
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            style={styles.video}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onClick={handlePlayPause}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            preload="auto"
-          />
-          {loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {loadState === "error" && <div style={styles.centerOverlay}><AlertTriangle size={48} color="var(--color-defeat)" /><span style={{ color: "var(--text)", marginTop: 8 }}>{t("Couldn't load the video")}</span></div>}
-          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity 0.2s" }} />
-          
+          {/* Sin vídeo no se monta el elemento: un `<video src="">` dispara un
+              error de carga y acabaríamos enseñando "el fichero está dañado"
+              para una partida que nunca llegó a grabarse. Son dos cosas
+              distintas y se dicen distinto. */}
+          {hasVideo ? (
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              style={styles.video}
+              onTimeUpdate={handleTimeUpdate}
+              onLoadedMetadata={handleLoadedMetadata}
+              onClick={handlePlayPause}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              // El estado de error existía y era inalcanzable: nadie lo ponía.
+              // Un fichero borrado a mano dejaba un rectángulo negro eterno.
+              onError={() => setLoadState("error")}
+              preload="auto"
+            />
+          ) : (
+            <div style={styles.centerOverlay}>
+              <EmptyState
+                icon={<VideoOff size={30} color="var(--faint)" />}
+                title={t("This game was tracked but not recorded")}
+                text={
+                  noVideoReason
+                    ? t("The recording failed: {reason}. Its events, stats and impact are all still here.", { reason: noVideoReason })
+                    : t("The recording did not produce a file. Its events, stats and impact are all still here.")
+                }
+              />
+            </div>
+          )}
+          {hasVideo && loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
+          {hasVideo && loadState === "error" && (
+            <div style={styles.centerOverlay}>
+              <EmptyState
+                icon={<AlertTriangle size={30} color="var(--loss)" />}
+                title={t("The video file is missing or damaged")}
+                text={t("It was moved, deleted or written incomplete. Everything else about this game still works.")}
+                action={
+                  <button className="btn btn--ghost btn--sm" onClick={revealVideo}>
+                    <FolderOpen size={13} /> {t("Reveal in folder")}
+                  </button>
+                }
+              />
+            </div>
+          )}
+          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity var(--t-quick) var(--e-move)" }} />
+
           {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
           <EsportsPlayerOverlay
             currentTime={currentTime}
             match={currentMatch}
-            visible={showEsportsHud}
+            visible={showEsportsHud && hasVideo}
           />
 
           {isFullscreen && (
@@ -1020,7 +1219,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             barra flotando sobre el video y, separada y mas abajo, una tira con el
             APM y los eventos que ademas hacia de barra de busqueda. Por eso el
             centro del transporte estaba vacio: le faltaba su mitad. */}
-        {!isFullscreen && (
+        {!isFullscreen && hasVideo && (
         <div style={styles.deck}>
           {transportBar}
           <div style={styles.timelineHeaderRow}>
@@ -1114,8 +1313,36 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
                       {clock(c.time)}
                     </button>
-                    <span style={styles.commentText}>{c.text}</span>
-                    <button style={styles.commentDelete} onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={14} /></button>
+                    {editingNote === i ? (
+                      <>
+                        <input
+                          value={editingText}
+                          autoFocus
+                          onChange={(e) => setEditingText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitEditNote();
+                            if (e.key === "Escape") { setEditingNote(null); setEditingText(""); }
+                          }}
+                          onBlur={commitEditNote}
+                          aria-label={t("Edit note")}
+                          style={{ ...styles.commentInput, fontSize: 13 }}
+                        />
+                        <button
+                          style={styles.commentDelete}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setEditingNote(null); setEditingText(""); }}
+                          title={t("Cancel")}
+                        >
+                          <X size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={styles.commentText}>{c.text}</span>
+                        <button style={styles.commentDelete} onClick={() => startEditNote(i)} title={t("Edit note")}><Pencil size={14} /></button>
+                        <button style={styles.commentDelete} onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={14} /></button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1154,8 +1381,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 <span className="u-label">{t("Your game")}</span>
                 <i className="sect__rule" />
               </div>
-              {match.kda && <InspRow label="KDA" value={match.kda} />}
-              {!!match.apm && <InspRow label="APM" value={Math.round(match.apm)} />}
+              {match.kda && <InspRow label={t("KDA")} value={match.kda} />}
+              {!!match.apm && <InspRow label={t("APM")} value={Math.round(match.apm)} />}
               {!!match.gold_earned && (
                 <InspRow label={t("Gold")} value={`${(match.gold_earned / 1000).toFixed(1)}k`} />
               )}
@@ -1165,7 +1392,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     label={t("Kill participation")}
                     value={teamKills > 0 ? `${Math.round(((selfP.kills + selfP.assists) / teamKills) * 100)}%` : "—"}
                   />
-                  <InspRow label="CS / min" value={durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"} />
+                  <InspRow label={t("CS / min")} value={durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"} />
                   <InspRow
                     label={t("Damage to champions")}
                     value={`${((selfP.damage ?? 0) / 1000).toFixed(1)}k`}
@@ -1193,6 +1420,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 </div>
               )}
             </section>
+
+            {/* -------------------------------------- frente a tu rango
+                Va justo detrás de "Tu partida" a propósito: las cifras de
+                arriba no dicen si son buenas, y ésta es la respuesta. El
+                widget pide los baremos al MONTARSE, y `InspSection` no monta
+                sus hijos si está plegada: cerrarla no gasta nada. */}
+            <InspSection id="benchmarks" title={t("Versus your rank")}>
+              {match.is_vod || !match.riot_match_id ? (
+                <EmptyState
+                  icon={<BarChart3 size={26} color="var(--faint)" />}
+                  title={t("No benchmarks for this game yet")}
+                  text={t("Sync with Riot to compare against your rank")}
+                />
+              ) : (
+                <BenchmarkWidget
+                  matchId={match.id}
+                  role={selfP?.role}
+                  tierBucket={match.tier_bucket}
+                />
+              )}
+            </InspSection>
 
             {/* -------------------------------------------- fase temprana */}
             {(match.gold_diff_15 != null || match.xp_diff_15 != null ||
@@ -1237,17 +1485,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
 
             {/* ------------------------------------------------- la curva */}
             {match.minute_frames && match.minute_frames.length > 1 && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Lead over time")}</span>
-                  <i className="sect__rule" />
-                </div>
+              <InspSection id="lead" title={t("Lead over time")}>
                 <GoldXpChart
                   frames={match.minute_frames}
                   videoOffset={match.video_offset ?? 0}
                   onSeek={(secs) => seekTo(secs, false)}
                 />
-              </section>
+              </InspSection>
             )}
 
             {/* --------------------------------------------- el marcador */}
@@ -1260,7 +1504,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 {/* La leyenda va arriba: es la cabecera de las columnas, no un
                     pie de tabla. */}
                 <div className="insp__legend u-label">
-                  <span>{t("player")}</span><span>K/D/A</span><span>CS</span><span>{t("gold")}</span>
+                  <span>{t("player")}</span><span>{t("K/D/A")}</span><span>{t("CS")}</span><span>{t("gold")}</span>
                 </div>
                 {[100, 200].map((teamId) => {
                   const team = participants.filter((p) => p.team_id === teamId);
@@ -1291,17 +1535,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   );
                 })}
               </section>
+            ) : match.is_vod ? (
+              // Antes, en un VOD, aquí no salía nada: un hueco entre dos
+              // secciones que se leía como "esto está roto".
+              <section>
+                <div className="sect__head">
+                  <span className="u-label">{t("Scoreboard")}</span>
+                  <i className="sect__rule" />
+                </div>
+                <EmptyState
+                  title={t("No scoreboard for an imported VOD")}
+                  text={t("The 10-player scoreboard comes from your own game synced with Riot. An imported video has no match behind it.")}
+                />
+              </section>
             ) : (
-              !match.is_vod && (
-                <section>
-                  <p className="note">{t("The 10-player scoreboard is not loaded yet.")}</p>
-                  <button className="btn btn--primary btn--sm" onClick={handleSync} disabled={syncing}>
-                    <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-                    {syncing ? t("Syncing…") : t("Sync with Riot")}
-                  </button>
-                  <p className="note">{t("Needs your Riot API key set in Settings.")}</p>
-                </section>
-              )
+              <section>
+                <p className="note">{t("The 10-player scoreboard is not loaded yet.")}</p>
+                <button className="btn btn--primary btn--sm" onClick={handleSync} disabled={syncing}>
+                  <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
+                  {syncing ? t("Syncing…") : t("Sync with Riot")}
+                </button>
+                <p className="note">{t("Needs your Riot API key set in Settings.")}</p>
+              </section>
             )}
 
             {/* ------------------------------------------------ objetivos */}
@@ -1370,34 +1625,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </section>
             )}
 
-            {/* Los siete widgets de analitica vivian aqui abiertos, uno debajo
-                de otro, cada uno con su tarjeta, su borde de color y su
-                insignia. Siguen estando, pero cerrados: son una segunda
-                lectura, no lo primero que tienes que ver al abrir un video. */}
-            <details className="insp__more">
-              <summary>{t("More analysis")}</summary>
-              <div className="insp__moreBody">
-                <PerformanceTrendsWidget currentMatch={match} />
-                {match.timeline_markers && match.timeline_markers.length > 0 && (
-                  <TacticalMap markers={match.timeline_markers} onSeek={(secs) => seekTo(secs, false)} />
-                )}
-                <MapAwarenessWidget
-                  cameraSnaps={cameraSnaps}
-                  markers={match.timeline_markers}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
-                <PowerSpikeWidget
-                  itemPurchases={match.item_purchases}
-                  markers={match.timeline_markers}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
+            {/* Los cinco widgets de analítica vivían aquí dentro de un
+                desplegable cerrado llamado "Más análisis". Esconder por defecto
+                lo que ya has calculado es la forma más cara de no enseñarlo:
+                nadie abre un cajón para averiguar si dentro hay algo.
+                Ahora son secciones, abiertas, y en el orden en que se leen —
+                cómo va la partida, luego los ganks, luego lo del mapa. Se pueden
+                cerrar, y se quedan cerradas; que es distinto de nacer así. */}
+            <InspSection id="trends" title={t("Trends on {champion}", { champion: match.champion })}>
+              <PerformanceTrendsWidget currentMatch={match} />
+            </InspSection>
+
+            {/* Los ganks sólo cuando significan algo: un support al que le salen
+                cero emboscadas no necesita una sección que le diga cero. */}
+            {(isJungler || hasGankMarkers) && (
+              <InspSection id="ganks" title={t("Ganks")}>
                 <GankEfficiencyWidget
                   markers={match.timeline_markers}
                   gankImpact15={match.gank_impact_15}
                   onSeek={(secs) => seekTo(secs, false)}
                 />
-              </div>
-            </details>
+              </InspSection>
+            )}
+
+            <InspSection id="spikes" title={t("Power spikes")}>
+              <PowerSpikeWidget
+                itemPurchases={itemPurchases}
+                markers={match.timeline_markers}
+                ddragonVer={ddragonVer}
+                onSeek={(secs) => seekTo(secs, false)}
+              />
+            </InspSection>
+
+            <InspSection id="deaths-map" title={t("Deaths on the map")}>
+              <TacticalMap
+                markers={match.timeline_markers ?? []}
+                onSeek={(secs) => seekTo(secs, false)}
+              />
+            </InspSection>
+
+            <InspSection id="awareness" title={t("Map awareness before deaths")}>
+              <MapAwarenessWidget
+                cameraSnaps={cameraSnaps}
+                markers={match.timeline_markers}
+                onSeek={(secs) => seekTo(secs, false)}
+              />
+            </InspSection>
 
             {!match.is_vod && participants.length > 0 && (
               <button className="btn btn--ghost btn--sm insp__resync" onClick={handleSync} disabled={syncing}>
@@ -1411,7 +1684,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         {/* Impacto responde "que significo", frente a Partida que responde
             "que paso". Estaban mezcladas en la misma columna y lo mas
             diferencial quedaba al final de un scroll largo. */}
-        {tab === "impact" && (
+        {tab === "impact" && match.is_vod && (
+          // La pestaña entera estaba condicionada a `!match.is_vod` sin decir
+          // nada: en un VOD se abría vacía y parecía un fallo.
+          <div className="insp">
+            <EmptyState
+              title={t("No impact for an imported VOD")}
+              text={t("Impact needs a recorded game synced with Riot; imported VODs have no match data behind them.")}
+            />
+          </div>
+        )}
+
+        {tab === "impact" && !match.is_vod && (
           <div className="insp">
             {/* --------------------------------------- tu impacto
                 El puesto y el percentil ya existian, pero solo en la columna de
@@ -1447,7 +1731,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       className="imp__rank"
                       style={{ color: puesto === 1 ? "var(--win)" : puesto >= 8 ? "var(--loss)" : undefined }}
                     >
-                      {puesto === 1 ? t("MVP") : `${puesto}º`}
+                      {/* El "º" es la abreviatura ORDINAL española, y salía
+                          igual con la interfaz en inglés ("3º"). */}
+                      {puesto === 1 ? t("MVP") : t("#{n}", { n: puesto })}
                     </span>
                     <span className="u-meta">{t("of")} {credits.length}</span>
                     <span
@@ -1508,7 +1794,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   <i className="sect__rule" />
                 </div>
                 {creditsErr !== null ? (
-                  <p className="note">{creditsErr}</p>
+                  <>
+                    <p className="note">{t("Couldn't work out the credit split: {msg}", { msg: creditsErr })}</p>
+                    <button className="btn btn--ghost btn--sm" onClick={reintentar}>
+                      <RefreshCw size={13} /> {t("Retry")}
+                    </button>
+                  </>
                 ) : (
                   <>
                     <p className="note">
@@ -1599,7 +1890,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 ser "¿miraste?" y pasa a ser "¿miraste DÓNDE?". El hueco por
                 carril es lo que se corrige jugando: un número global no dice
                 hacia qué lado tienes el punto ciego. */}
-            {!match.is_vod && zonas.length > 0 && (() => {
+            {zonas.length > 0 && (() => {
               const CARRILES: Record<string, string> = { top: "Top", mid: "Mid", bot: "Bot" };
               const masMirado = Math.max(...zonas.map((z) => z.per_minute), 0.01);
               const peor = zonas.reduce((a, b) => (b.longest_gap_secs > a.longest_gap_secs ? b : a));
@@ -1619,7 +1910,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     const malo = z.key === peor.key && z.longest_gap_secs > 120;
                     return (
                       <div key={z.key} className="imp__row">
-                        <span className="imp__rowName">{CARRILES[z.key] ?? z.key}</span>
+                        <span className="imp__rowName">{t(CARRILES[z.key] ?? z.key)}</span>
                         <span className="imp__track">
                           <span
                             className="imp__bar"
@@ -1641,7 +1932,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     );
                   })}
                   <p className="note">
-                    {t("Longest blind spot")}: {CARRILES[peor.key] ?? peor.key} · {clock(peor.longest_gap_secs)}
+                    {t("Longest blind spot")}: {t(CARRILES[peor.key] ?? peor.key)} · {clock(peor.longest_gap_secs)}
                   </p>
                 </section>
               );
@@ -1690,7 +1981,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     </button>
                   </>
                 )}
-                {mmErr !== null && <p className="note">{mmErr}</p>}
+                {mmErr !== null && <p className="note" style={{ color: "var(--loss)" }}>{mmErr}</p>}
               </section>
             )}
 
@@ -1729,7 +2020,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     {t("Stretches where more enemies were on you than allies. What your team took elsewhere is what your presence bought.")}
                   </p>
                   {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
-                  {pressureErr !== null && <p className="note">{pressureErr}</p>}
+                  {pressureErr !== null && (
+                    <>
+                      <p className="note">{t("Couldn't load the pressure stretches: {msg}", { msg: pressureErr })}</p>
+                      <button className="btn btn--ghost btn--sm" onClick={reintentar}>
+                        <RefreshCw size={13} /> {t("Retry")}
+                      </button>
+                    </>
+                  )}
                   {pressureErr === null && mios.length === 0 && (
                     <p className="note">{t("No stretches detected in this game.")}</p>
                   )}
@@ -1782,11 +2080,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           const counts = { good: 0, neutral: 0, bad: 0 };
           timedEvents.forEach((e) => { counts[bucket(eventMeta(e).tone)]++; });
           const shown = timedEvents.filter((e) => eventFilter === "all" || bucket(eventMeta(e).tone) === eventFilter);
-          const featured = timedEvents.find((e) => e.time === activeEventTime) ?? timedEvents[0];
+          // La tarjeta destacada caía en `timedEvents[0]` cuando no había nada
+          // seleccionado: al abrir cualquier partida presidía la pestaña el
+          // primer suceso del minuto 2, presentado como si fuera EL momento.
+          // Ahora sólo aparece si hay algo elegido o si el cursor está encima de
+          // un suceso — es decir, cuando de verdad se refiere a algo.
+          const featured =
+            timedEvents.find((e) => e.time === activeEventTime) ??
+            timedEvents.find((e) => Math.abs(e.time - currentTime) <= FEATURED_NEAR);
           const chips: [("good" | "neutral" | "bad"), number, string, React.ReactNode][] = [
-            ["good", counts.good, "var(--color-victory)", <Check size={13} />],
-            ["neutral", counts.neutral, "var(--text-muted)", <MinusCircle size={13} />],
-            ["bad", counts.bad, "var(--color-death)", <XCircle size={13} />],
+            ["good", counts.good, "var(--win)", <Check size={13} />],
+            ["neutral", counts.neutral, "var(--faint)", <MinusCircle size={13} />],
+            ["bad", counts.bad, "var(--loss)", <XCircle size={13} />],
           ];
           return (
             <>
@@ -1802,9 +2107,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                       </button>
                     </div>
                     <div className="evfeat__name">
-                      <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {meta.label}
+                      <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {t(meta.label)}
                     </div>
-                    <p className="evfeat__desc">{describeEvent(featured)}</p>
+                    <p className="evfeat__desc">{describeEvent(featured, t)}</p>
                   </div>
                 );
               })()}
@@ -1826,6 +2131,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {shown.map((ev, i) => {
                     const meta = eventMeta(ev);
                     const tl = toneLabelAndIcon(meta.tone);
+                    const desc = describeEvent(ev, t);
                     const isActive = activeEventTime === ev.time;
                     return (
                       <div
@@ -1844,10 +2150,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                         <span className="evrow__sev" style={{ background: meta.color }} />
                         <span className="u-metric evrow__time">{clock(ev.time)}</span>
                         <span className="evrow__icon" style={{ color: meta.color }}>{meta.icon}</span>
-                        <span className="evrow__label">{meta.label}</span>
-                        {describeEvent(ev) && (
-                          <span className="evrow__desc">{describeEvent(ev)}</span>
-                        )}
+                        <span className="evrow__label">{t(meta.label)}</span>
+                        {desc && <span className="evrow__desc">{desc}</span>}
                         <span className="evrow__tone" style={{ color: tl.color }}>{t(tl.text)}</span>
                       </div>
                     );
@@ -1872,73 +2176,52 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
       </div>
       )}
 
-      {/* Clipping Actions Bar */}
+      {/* Barra de acciones del recortador.
+          Iba con estilos inline sobre alias heredados y colores escritos a mano
+          (un `color: "white"`, un radio de 5px que no es ningún radio del
+          sistema, una sombra propia). Ahora son tokens y los botones de verdad. */}
       {isClippingMode && (
-        <div style={{
-          position: "absolute", bottom: "80px", left: "50%", transform: "translateX(-50%)",
-          background: "var(--surface-1)", padding: "12px 24px", borderRadius: "8px", border: "1px solid var(--border-subtle)",
-          display: "flex", alignItems: "center", gap: "20px", zIndex: 50, boxShadow: "0 4px 12px rgba(0,0,0,0.5)"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
+        <div style={styles.clipBar}>
+          <span style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
             {exportType === "clip" ? (
-              <Scissors size={20} color="var(--accent-violet)" />
+              <Scissors size={18} color="var(--cool)" />
             ) : (
-              <AlertTriangle size={20} color="var(--color-defeat)" />
+              <AlertTriangle size={18} color="var(--loss)" />
             )}
-            <div>
-              <div style={{ fontSize: "var(--font-sm)", fontWeight: 700 }}>
+            <span>
+              <span style={styles.clipTitle}>
                 {t(exportType === "clip" ? "Export video clip" : "Mark error")}
-              </div>
-              <div style={{ fontSize: "var(--font-xs)", color: "var(--text-muted)" }}>
-                {clock(clipStart)} - {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
-              </div>
-            </div>
-          </div>
-          
-          <div style={{ display: "flex", gap: "var(--space-3)", flex: 1, alignItems: "center" }}>
-            {exportType === "error" && (
-              <input
-                type="text"
-                placeholder={t("Write a note about this mistake…")}
-                value={errorNote}
-                onChange={(e) => setErrorNote(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                style={{
-                  flex: 1,
-                  padding: "var(--space-2) var(--space-3)",
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--border-strong)",
-                  background: "var(--surface-1)",
-                  color: "var(--text-primary)",
-                  fontSize: "var(--font-sm)",
-                  outline: "none"
-                }}
-              />
-            )}
-            <button
-              onClick={doExport}
-              disabled={isExporting}
-              style={{
-                ...styles.ghostBtn, 
-                backgroundColor: exportType === "clip" ? "var(--action)" : "var(--color-defeat)", 
-                color: exportType === "clip" ? "var(--on-action)" : "var(--text)", 
-                border: "none",
-                marginLeft: exportType === "clip" ? "auto" : 0,
-                padding: "6px 16px",
-                borderRadius: "5px"
-              }}
-            >
-              {isExporting
-                ? t("Exporting…")
-                : t(exportType === "clip" ? "Export clip" : "Export error")}
-            </button>
-            <button
-              onClick={() => setIsClippingMode(false)}
-              style={{ padding: "6px 12px", background: "transparent", border: "1px solid var(--text-muted)", color: "white", borderRadius: "5px", cursor: "pointer" }}
-            >
-              {t("Cancel")}
-            </button>
-          </div>
+              </span>
+              <span className="u-metric" style={styles.clipRange}>
+                {clock(clipStart)} – {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
+              </span>
+            </span>
+          </span>
+
+          {exportType === "error" && (
+            <input
+              type="text"
+              placeholder={t("Write a note about this mistake…")}
+              value={errorNote}
+              onChange={(e) => setErrorNote(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              style={styles.clipNote}
+            />
+          )}
+
+          <button
+            className={exportType === "clip" ? "btn btn--primary btn--sm" : "btn btn--danger btn--sm"}
+            onClick={doExport}
+            disabled={isExporting}
+            style={{ marginLeft: "auto" }}
+          >
+            {isExporting
+              ? t("Exporting…")
+              : t(exportType === "clip" ? "Export clip" : "Export error")}
+          </button>
+          <button className="btn btn--ghost btn--sm" onClick={() => setIsClippingMode(false)}>
+            {t("Cancel")}
+          </button>
         </div>
       )}
     </div>

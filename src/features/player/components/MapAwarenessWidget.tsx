@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { TimelineMarker } from "../../../types";
-import { EyeOff, AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { mmss } from "../../../core/time";
+import { useT } from "../../../core/LanguageProvider";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { wstyles } from "./videoPlayerStyles";
 
 interface MapAwarenessWidgetProps {
   cameraSnaps?: number[];
@@ -9,113 +12,92 @@ interface MapAwarenessWidgetProps {
   onSeek: (seconds: number) => void;
 }
 
+/**
+ * Ventana que se mira antes de cada muerte.
+ *
+ * Estaba en dos sitios y no coincidían: el código miraba 12 segundos y tanto el
+ * comentario como la frase de la pantalla decían 10. Se queda en 10 —el número
+ * que el usuario había leído— y ahora hay UNA constante, así que la frase no
+ * puede volver a mentir sobre el cálculo.
+ */
+const LOOKBACK_SECS = 10;
+
 export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
   cameraSnaps = [],
   markers = [],
   onSeek,
 }) => {
-  const deaths = markers.filter((m) => m.event_type === "death");
+  const t = useT();
 
-  if (deaths.length === 0) return null;
+  const deaths = useMemo(
+    () => (markers ?? []).filter((m) => m.event_type === "death"),
+    [markers]
+  );
 
-  // Analizar si en los 10 segundos anteriores a cada muerte hubo algún salto de cámara (camera_snaps)
-  const blindDeaths = deaths.map((d) => {
-    const snapsBefore = cameraSnaps.filter(
-      (s) => s >= d.time - 12 && s <= d.time
+  const rows = useMemo(
+    () =>
+      deaths.map((d) => {
+        const looks = cameraSnaps.filter((s) => s >= d.time - LOOKBACK_SECS && s <= d.time).length;
+        return { marker: d, looks, blind: looks === 0 };
+      }),
+    [deaths, cameraSnaps]
+  );
+
+  if (deaths.length === 0) {
+    return (
+      <EmptyState
+        title={t("No deaths in this game")}
+        text={t("This panel checks what you looked at in the {n} seconds before each death.", { n: LOOKBACK_SECS })}
+      />
     );
-    return {
-      marker: d,
-      snapsCount: snapsBefore.length,
-      isBlind: snapsBefore.length === 0,
-    };
-  });
+  }
 
-  const totalBlindCount = blindDeaths.filter((bd) => bd.isBlind).length;
+  const blindCount = rows.filter((r) => r.blind).length;
 
   return (
-    <div
-      style={{
-        background: "var(--surface-1)",
-        border: "1px solid var(--border-subtle)",
-        borderTop: "3px solid var(--color-defeat)",
-        borderRadius: "var(--radius-lg)",
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "var(--text)", fontWeight: 700, fontSize: "13px" }}>
-          <EyeOff size={16} color="var(--color-defeat)" />
-          <span>Diagnóstico de Conciencia de Mapa</span>
-        </div>
-        <span
-          style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            padding: "2px 8px",
-            borderRadius: "12px",
-            background: totalBlindCount > 0 ? "color-mix(in srgb, var(--color-defeat) 15%, transparent)" : "color-mix(in srgb, var(--color-victory) 15%, transparent)",
-            color: totalBlindCount > 0 ? "var(--color-defeat)" : "var(--color-victory)",
-            border: `1px solid ${totalBlindCount > 0 ? "color-mix(in srgb, var(--color-defeat) 30%, transparent)" : "color-mix(in srgb, var(--color-victory) 30%, transparent)"}`,
-          }}
-        >
-          {totalBlindCount > 0 ? `${totalBlindCount} Muertes a ciegas` : "Excelente visión"}
-        </span>
-      </div>
-
-      <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: 0, lineHeight: 1.4 }}>
-        Evalúa si chequeaste el minimapa o tus aliados en los 10 segundos previos a morir.
+    <div style={wstyles.body}>
+      <p className="note" style={{ marginTop: 0 }}>
+        {t("Whether you checked the minimap or an ally in the {n} seconds before dying.", { n: LOOKBACK_SECS })}
       </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-        {blindDeaths.map((item, idx) => (
-          <div
+      <div style={wstyles.list}>
+        {rows.map((r, idx) => (
+          <button
             key={idx}
-            onClick={() => onSeek(item.marker.time)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "8px 12px",
-              borderRadius: "6px",
-              background: "var(--bg-app)",
-              border: "1px solid var(--border-subtle)",
-              cursor: "pointer",
-            }}
+            className="insp__press"
+            onClick={() => onSeek(r.marker.time)}
+            title={t("Jump to this moment")}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: "var(--text-secondary)",
-                  background: "rgba(255, 255, 255, 0.06)",
-                  padding: "2px 6px",
-                  borderRadius: "4px",
-                }}
-              >
-                {mmss(item.marker.time)}
-              </span>
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--text)" }}>
-                {item.isBlind ? "Muerte sin información previa" : "Chequeo de mapa registrado"}
-              </span>
-            </div>
-            {item.isBlind ? (
-              <span style={{ fontSize: "11px", color: "var(--color-defeat)", fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
-                <AlertTriangle size={12} /> A ciegas
-              </span>
-            ) : (
-              <span style={{ fontSize: "11px", color: "var(--color-victory)", fontWeight: 700 }}>
-                {item.snapsCount} miradas
-              </span>
-            )}
-          </div>
+            <span className="u-metric">{mmss(r.marker.time)}</span>
+            <span className="insp__pressWhat">
+              {r.blind ? t("Died with no information") : t("Map check on record")}
+            </span>
+            <span
+              className="insp__pressGain"
+              style={{ color: r.blind ? "var(--loss)" : "var(--win)" }}
+            >
+              {r.blind ? (
+                <>
+                  <AlertTriangle size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+                  {t("blind")}
+                </>
+              ) : (
+                t("looks: {n}", { n: r.looks })
+              )}
+            </span>
+          </button>
         ))}
       </div>
+
+      <p className="note">
+        {blindCount > 0
+          ? t("No look in the previous {secs} s before {n} of your {total} deaths.", {
+              n: blindCount,
+              total: rows.length,
+              secs: LOOKBACK_SECS,
+            })
+          : t("Every death had a look behind it. The problem was not information.")}
+      </p>
     </div>
   );
 };

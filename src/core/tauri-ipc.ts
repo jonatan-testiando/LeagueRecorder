@@ -34,9 +34,62 @@ export const getVideoSettings = async (): Promise<VideoSettings> => {
   return await invoke<VideoSettings>("get_video_settings");
 };
 
-export const setVideoSettings = async (fps: number, quality: string): Promise<VideoSettings> => {
-  return await invoke<VideoSettings>("set_video_settings", { fps, quality });
+/** `resolution` es opcional: omitirlo deja la que ya estuviera guardada. */
+export const setVideoSettings = async (
+  fps: number,
+  quality: string,
+  resolution?: VideoSettings["resolution"]
+): Promise<VideoSettings> => {
+  return await invoke<VideoSettings>("set_video_settings", { fps, quality, resolution });
 };
+
+export interface DiskSpaceInfo {
+  /** Lo que ocupa la carpeta de grabaciones. */
+  used_bytes: number;
+  /** La CUOTA configurada en ajustes, no el tamaño del disco. */
+  total_bytes: number;
+  /** Bytes libres reales del volumen donde se graba. 0 si no se pudo consultar. */
+  free_bytes: number;
+  /** Capacidad total de ese volumen. 0 si no se pudo consultar. */
+  drive_total_bytes: number;
+}
+
+export const getDiskUsage = async (): Promise<DiskSpaceInfo> => {
+  return await invoke<DiskSpaceInfo>("get_disk_usage");
+};
+
+/** Atajos globales. Se guardan en su propio fichero (`hotkeys.json`). */
+export interface HotkeyConfig {
+  /** Tecla que guarda los últimos 30 s del replay buffer. Por defecto "F8". */
+  replay: string;
+}
+
+export const getHotkeys = async (): Promise<HotkeyConfig> => {
+  return await invoke<HotkeyConfig>("get_hotkeys");
+};
+
+/** Rechaza si la tecla no se reconoce (letras, dígitos y F1–F12). */
+export const setHotkeys = async (replay: string): Promise<HotkeyConfig> => {
+  return await invoke<HotkeyConfig>("set_hotkeys", { replay });
+};
+
+/**
+ * Aviso de la grabadora. Llega por el evento `recorder_alert`, que el backend
+ * emite cuando una grabación no arranca, se muere sola, el disco se queda sin
+ * sitio o se guarda (o falla) un clip del replay buffer.
+ */
+export interface RecorderAlert {
+  kind:
+    | "start_failed"
+    | "stopped_unexpectedly"
+    | "disk_low"
+    | "disk_full"
+    | "replay_saved"
+    | "replay_failed";
+  message: string;
+  /** Motivo técnico, o la ruta del clip en `replay_saved`. */
+  detail?: string;
+}
 
 export interface ErrorEvent {
   id: string;
@@ -82,13 +135,48 @@ export const deleteErrorEvent = async (path: string, eventId: string): Promise<v
   return await invoke<void>("delete_error_event", { path, eventId });
 };
 
-export const editErrorEvent = async (path: string, eventId: string, text: string, category: string): Promise<void> => {
-  return await invoke<void>("edit_error_event", { path, eventId, text, category });
+/**
+ * Edita una nota de un clip de error.
+ *
+ * `time` es opcional: omitirlo deja el instante como estaba. Mover una nota ya
+ * no exige borrarla y volver a crearla (lo que le cambiaba el id).
+ */
+export const editErrorEvent = async (
+  path: string,
+  eventId: string,
+  text: string,
+  category: string,
+  time?: number
+): Promise<void> => {
+  return await invoke<void>("edit_error_event", { path, eventId, text, category, time });
+};
+
+/** Borra un clip de error y su JSON (nota y sucesos marcados incluidos). */
+export const deleteErrorClip = async (path: string): Promise<void> => {
+  return await invoke<void>("delete_error_clip", { path });
 };
 
 export const toggleClipFavorite = async (path: string): Promise<boolean> => {
   return await invoke<boolean>("toggle_clip_favorite", { path });
 };
+
+/** Borra un recorte y su JSON de al lado (con él se va el estado de favorito). */
+export const deleteClip = async (path: string): Promise<void> => {
+  return await invoke<void>("delete_clip", { path });
+};
+
+/**
+ * Progreso de una subida, evento `clip_upload_progress`.
+ *
+ * `path` dice de qué clip se habla (puede haber varias subidas a la vez) y
+ * `total` viaja en cada aviso, así que entrar a mitad de subida basta para
+ * pintar el porcentaje.
+ */
+export interface UploadProgress {
+  path: string;
+  sent: number;
+  total: number;
+}
 
 export interface AppConfig {
   save_directory: string;
@@ -101,14 +189,60 @@ export interface AppConfig {
   /** Tamaño del minimapa respecto al estándar (1.0). Calibra la detección de
    *  clics de minimapa cuando League corre con la interfaz reescalada. */
   minimap_scale: number;
+  /** Plataforma de Riot ("la1", "euw1", "kr"…) o "auto" para sondearla. */
+  riot_platform: string;
+  /** La sondeada con "auto". Solo lectura desde la UI: la escribe el backend. */
+  riot_platform_detected: string;
+  /** Proxy que pone la clave de Riot por el usuario. Vacío = clave propia. */
+  riot_proxy_url: string;
+  /** Si el asistente de primer arranque ya se completó. */
+  onboarding_done: boolean;
+  /**
+   * Carpeta espejo donde se copia el JSON de cada partida al guardarlo. Vacío =
+   * desactivado. Apuntándola a OneDrive/Drive se obtiene copia en la nube: sólo
+   * viajan los metadatos (notas, comentarios, revisados), nunca los vídeos.
+   */
+  backup_mirror_dir: string;
 }
+
+/** Las plataformas que acepta el backend, con su etiqueta para la UI. */
+export const RIOT_PLATFORMS: { code: string; label: string }[] = [
+  { code: "la1", label: "LAN" },
+  { code: "la2", label: "LAS" },
+  { code: "na1", label: "NA" },
+  { code: "br1", label: "BR" },
+  { code: "euw1", label: "EUW" },
+  { code: "eun1", label: "EUNE" },
+  { code: "tr1", label: "TR" },
+  { code: "ru", label: "RU" },
+  { code: "kr", label: "KR" },
+  { code: "jp1", label: "JP" },
+  { code: "oc1", label: "OCE" },
+  { code: "ph2", label: "PH" },
+  { code: "sg2", label: "SG" },
+  { code: "th2", label: "TH" },
+  { code: "tw2", label: "TW" },
+  { code: "vn2", label: "VN" },
+  { code: "me1", label: "ME" },
+];
+
+/** "euw1" → "EUW". Devuelve el propio código si no está en la lista. */
+export const platformLabel = (code: string): string =>
+  RIOT_PLATFORMS.find((p) => p.code === code)?.label ?? code.toUpperCase();
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");
 };
 
-export const setAppConfig = async (saveDirectory: string, riotApiKey: string, autoDatasetGenerator: boolean, maxStorageGb: number, autoPruneDays: number, language: string = "en", minimapScale: number = 1): Promise<void> => {
-  return await invoke<void>("set_app_config", { saveDirectory, riotApiKey, autoDatasetGenerator, maxStorageGb, autoPruneDays, language, minimapScale });
+/**
+ * Guarda SOLO los campos que se pasen.
+ *
+ * Era posicional y con siete argumentos: quien olvidaba uno lo reseteaba sin
+ * enterarse (así se perdía la calibración del minimapa al cambiar de idioma).
+ * Con un parche, lo que no se menciona no se toca.
+ */
+export const setAppConfig = async (patch: Partial<AppConfig>): Promise<void> => {
+  return await invoke<void>("set_app_config", { patch });
 };
 
 export interface ProcessVodResponse {
@@ -370,3 +504,80 @@ export const setErrorClipReviewed = async (
 ): Promise<void> => {
   return await invoke<void>("set_error_clip_reviewed", { path, reviewed });
 };
+
+// ---------------------------------------------------------------------------
+// Baremos de población
+// ---------------------------------------------------------------------------
+
+/**
+ * Una métrica tuya al lado de la población de tu rango y tu puesto.
+ *
+ * `percentile` es SIEMPRE el crudo, también donde lo bueno es tener menos: en
+ * `deaths_per_game` un 90 significa "mueres más que el 90%". Quien lo pinte
+ * tiene que mirar `lower_is_better` e invertirlo (`100 - percentile`) o dibujar
+ * el arco al revés. Se dejó así a propósito, para que el signo se vea donde se
+ * pinta y no quede escondido en una tabla.
+ *
+ * `percentile` y `median` vienen a `null` cuando esa métrica no está en el
+ * baremo (o el puesto no se conoce): el valor crudo se enseña igualmente.
+ */
+export interface MetricComparison {
+  /** Clave del baremo: "cs_per_min", "kda", "gold_diff_15"… */
+  metric: string;
+  value: number;
+  percentile: number | null;
+  median: number | null;
+  lower_is_better: boolean;
+}
+
+/**
+ * Compara una partida contra quienes juegan tu puesto en tu rango.
+ *
+ * La lista puede venir más corta de las 17 métricas: las que salen del DTO
+ * crudo de Riot faltan si esa partida no lo tiene cacheado.
+ */
+export const getMatchBenchmarks = async (matchId: string): Promise<MetricComparison[]> => {
+  return await invoke<MetricComparison[]>("get_match_benchmarks", { matchId });
+};
+
+// ---------------------------------------------------------------------------
+// Copia de seguridad
+// ---------------------------------------------------------------------------
+
+/** Qué hizo una restauración. Ver `import_backup` en el backend. */
+export interface ImportReport {
+  /** Partidas que ya existían aquí y se les completó algo. */
+  restored: number;
+  /** Partidas que no existían y se han creado sin vídeo (notas y stats sí). */
+  created_without_video: number;
+  /** Entradas que no aportaban nada o no se pudieron leer. */
+  skipped: number;
+}
+
+/**
+ * Escribe `LeagueRecorder-backup-YYYYMMDD-HHMM.zip` en `destDir` y devuelve la
+ * ruta del fichero. Sin vídeos: sólo los JSON (notas, comentarios, momentos
+ * revisados, entrenamiento y ajustes SIN la clave de Riot).
+ */
+export const exportBackup = async (destDir: string): Promise<string> => {
+  return await invoke<string>("export_backup", { destDir });
+};
+
+/**
+ * Restaura una copia. Es aditiva: nunca pisa un dato local que ya tenga
+ * contenido, y las partidas cuyo vídeo falta se crean igual (sin `video_path`).
+ */
+export const importBackup = async (zipPath: string): Promise<ImportReport> => {
+  return await invoke<ImportReport>("import_backup", { zipPath });
+};
+
+/**
+ * Progreso del mantenimiento de la biblioteca al arrancar, evento
+ * `library_maintenance`. Se puede ignorar: el trabajo corre igual por detrás.
+ */
+export interface MaintenanceProgress {
+  /** "migration" | "camera" | "impact" | "done". */
+  phase: string;
+  done: number;
+  total: number;
+}

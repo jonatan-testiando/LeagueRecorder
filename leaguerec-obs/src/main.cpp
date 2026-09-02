@@ -5,9 +5,10 @@
 //   2) Servidor IPC (named pipe): leaguerec-obs.exe --pipe leaguerec-obs
 //
 // Protocolo IPC: mensajes JSON delimitados por '\n' sobre \\.\pipe\<nombre>.
-//   -> {"cmd":"start","source":"game","window":"...","out":"C:\\...\\clip.mp4","fps":60,"cqp":23}
+//   -> {"cmd":"start","source":"game","window":"...","out":"C:\\...\\clip.mp4","fps":60,"cqp":23,
+//                     "width":2560,"height":1440}
 //   -> {"cmd":"stop"}      <- {"ok":true,"file":"C:\\...\\clip.mp4"}
-//   -> {"cmd":"status"}    <- {"ok":true,"active":true}
+//   -> {"cmd":"status"}    <- {"ok":true,"active":true,"recording":true,"audio":true}
 //   -> {"cmd":"shutdown"}  <- {"ok":true}
 // El JSON se parsea/serializa con obs_data (ya incluido en libobs).
 
@@ -101,9 +102,15 @@ std::string handle_command(Recorder &rec, const std::string &line, bool &running
         cfg.exe = obs_data_get_string(in, "exe");
         cfg.out = obs_data_get_string(in, "out");
         obs_data_set_default_int(in, "fps", 60);
+        obs_data_set_default_int(in, "width", 1920);
+        obs_data_set_default_int(in, "height", 1080);
         obs_data_set_default_int(in, "cqp", 23);
         obs_data_set_default_int(in, "buffer_seconds", 30);
         cfg.fps = static_cast<int>(obs_data_get_int(in, "fps"));
+        // El lienzo también aquí: si el replay buffer fuese el primero en montar
+        // la tubería (o el único), sin esto se quedaba en el 1920x1080 del struct.
+        cfg.width = static_cast<int>(obs_data_get_int(in, "width"));
+        cfg.height = static_cast<int>(obs_data_get_int(in, "height"));
         cfg.cqp = static_cast<int>(obs_data_get_int(in, "cqp"));
         int buffer = static_cast<int>(obs_data_get_int(in, "buffer_seconds"));
 
@@ -134,6 +141,13 @@ std::string handle_command(Recorder &rec, const std::string &line, bool &running
     } else if (cmd == "status") {
         obs_data_set_bool(out, "ok", true);
         obs_data_set_bool(out, "active", rec.active());
+        // "recording" es solo la grabación continua: el cliente vigila ESA para
+        // avisar de que la partida se quedó sin vídeo a media pelea.
+        obs_data_set_bool(out, "recording", rec.recording());
+        // El cliente lo usa para no mentir sobre el audio: `wasapi_output_capture`
+        // puede no crearse (sin dispositivo de reproducción) y hasta ahora la
+        // interfaz decía "listo para grabar el sonido del juego" igualmente.
+        obs_data_set_bool(out, "audio", rec.has_audio());
     } else if (cmd == "shutdown") {
         obs_data_set_bool(out, "ok", true);
         running = false;
@@ -256,6 +270,8 @@ int main(int argc, char **argv) {
         else if (a == "--out")      one.cfg.out = next(i);
         else if (a == "--seconds")  one.seconds = std::atoi(next(i).c_str());
         else if (a == "--fps")      one.cfg.fps = std::atoi(next(i).c_str());
+        else if (a == "--width")    one.cfg.width = std::atoi(next(i).c_str());
+        else if (a == "--height")   one.cfg.height = std::atoi(next(i).c_str());
         else if (a == "--cqp")      one.cfg.cqp = std::atoi(next(i).c_str());
         else if (a == "--replay")   one.replay = true;
         else if (a == "--buffer")   one.buffer = std::atoi(next(i).c_str());

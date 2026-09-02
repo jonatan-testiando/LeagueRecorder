@@ -1,5 +1,8 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { MinuteFrameDto } from "../../../types";
+import { useT } from "../../../core/LanguageProvider";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { wstyles } from "./videoPlayerStyles";
 
 interface GoldXpChartProps {
   frames: MinuteFrameDto[];
@@ -11,142 +14,152 @@ interface GoldXpChartProps {
 
 type MetricMode = "team_gold" | "self_gold" | "self_xp";
 
+const MODES: { key: MetricMode; label: string }[] = [
+  { key: "team_gold", label: "Team gold" },
+  { key: "self_gold", label: "Your gold" },
+  { key: "self_xp", label: "Your XP" },
+];
+
+/**
+ * Suelo de la escala. Sin él, una partida igualada (±80 de oro) se dibujaba
+ * como una montaña rusa. Con el suelo clavado en 1000 pasaba lo contrario: una
+ * partida de ±6000 quedaba aplastada... no, quedaba bien, pero una de ±200 se
+ * pintaba como una línea muerta aunque la ventaja fuera real. El suelo ahora es
+ * relativo a los datos y sólo actúa cuando de verdad no hay nada que enseñar.
+ */
+const MIN_SCALE = 200;
+
+const HEIGHT = 120;
+const WIDTH = 600;
+
 export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, onSeek }) => {
+  const t = useT();
   const [mode, setMode] = useState<MetricMode>("team_gold");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  if (!frames || frames.length < 2) return null;
+  const values = useMemo(
+    () =>
+      (frames ?? []).map((f) => {
+        switch (mode) {
+          case "team_gold": return f.team_gold_diff;
+          case "self_gold": return f.self_gold_diff;
+          case "self_xp": return f.self_xp_diff;
+        }
+      }),
+    [frames, mode]
+  );
 
-  // Extraer valores según el modo seleccionado
-  const values = frames.map((f) => {
-    switch (mode) {
-      case "team_gold": return f.team_gold_diff;
-      case "self_gold": return f.self_gold_diff;
-      case "self_xp": return f.self_xp_diff;
-    }
-  });
+  if (!frames || frames.length < 2) {
+    return (
+      <EmptyState
+        title={t("No minute-by-minute data")}
+        text={t("The curve needs at least two minute frames from Riot's timeline.")}
+      />
+    );
+  }
 
-  const maxVal = Math.max(...values.map((v) => Math.abs(v)), 1000);
+  // La escala sale de los datos, con un mínimo para que una partida clavada no
+  // se dibuje como ruido amplificado.
+  const maxVal = Math.max(...values.map((v) => Math.abs(v)), MIN_SCALE);
   const minVal = -maxVal;
   const range = maxVal - minVal;
 
-  const height = 120;
-  const width = 600;
-
-  // Puntos para SVG
   const points = values.map((val, idx) => {
-    const x = (idx / (values.length - 1)) * width;
-    // Y: 0 arriba, height abajo. El centro es minVal + range/2
+    const x = (idx / (values.length - 1)) * WIDTH;
     const normalizedY = 1 - (val - minVal) / range;
-    const y = Math.max(10, Math.min(height - 10, normalizedY * height));
+    const y = Math.max(10, Math.min(HEIGHT - 10, normalizedY * HEIGHT));
     return { x, y, val, minute: frames[idx].minute };
   });
 
-  const zeroY = (1 - (0 - minVal) / range) * height;
-
-  // Generar path suave para la línea y el área
-  const lineD = points.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`, "");
-
-  // Áreas positiva y negativa
-  const areaPosD = `${lineD} L ${width} ${zeroY} L 0 ${zeroY} Z`;
+  const zeroY = (1 - (0 - minVal) / range) * HEIGHT;
+  const lineD = points.reduce(
+    (acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+    ""
+  );
+  const areaD = `${lineD} L ${WIDTH} ${zeroY} L 0 ${zeroY} Z`;
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    const pct = relX / rect.width;
-    const idx = Math.min(frames.length - 1, Math.floor(pct * frames.length));
+    const idx = Math.min(frames.length - 1, Math.floor((relX / rect.width) * frames.length));
     setHoverIndex(idx);
   };
 
   const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const relX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    const pct = relX / rect.width;
-    const gameSecs = pct * (frames.length - 1) * 60;
+    const gameSecs = (relX / rect.width) * (frames.length - 1) * 60;
     onSeek(Math.max(0, gameSecs + videoOffset));
   };
 
   const hoverP = hoverIndex !== null ? points[hoverIndex] : null;
+  const unit = mode === "self_xp" ? t("XP") : t("g");
 
   return (
-    // Sin tarjeta ni titulo: los pone la seccion del inspector que la contiene.
-    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+    // Sin tarjeta ni título: los pone la sección del inspector que la contiene.
+    <div style={wstyles.body}>
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <div className="tp-seg">
-          <button onClick={() => setMode("team_gold")} {...(mode === "team_gold" ? { "data-on": true } : {})}>
-            Oro Equipo
-          </button>
-          <button onClick={() => setMode("self_gold")} {...(mode === "self_gold" ? { "data-on": true } : {})}>
-            Oro Individual
-          </button>
-          <button onClick={() => setMode("self_xp")} {...(mode === "self_xp" ? { "data-on": true } : {})}>
-            XP Individual
-          </button>
+          {MODES.map((m) => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              aria-pressed={mode === m.key}
+              data-on={mode === m.key ? "" : undefined}
+            >
+              {t(m.label)}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div style={{ position: "relative", width: "100%", height: `${height}px` }}>
+      <div style={wstyles.chartWrap}>
         <svg
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           preserveAspectRatio="none"
-          style={{ width: "100%", height: "100%", cursor: "pointer", overflow: "visible" }}
+          style={wstyles.chartSvg}
           onPointerMove={handlePointerMove}
           onPointerLeave={() => setHoverIndex(null)}
           onClick={handleClick}
         >
           <defs>
             <linearGradient id="goldPosGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-victory)" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="var(--color-victory)" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="var(--cool)" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="var(--cool)" stopOpacity="0" />
             </linearGradient>
           </defs>
 
-          {/* Línea cero */}
-          <line x1="0" y1={zeroY} x2={width} y2={zeroY} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 4" strokeWidth="1" />
+          <line
+            x1="0" y1={zeroY} x2={WIDTH} y2={zeroY}
+            stroke="var(--line)" strokeDasharray="4 4" strokeWidth="1"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path d={areaD} fill="url(#goldPosGrad)" />
+          <path
+            d={lineD} fill="none" stroke="var(--cool)" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"
+          />
 
-          {/* Relleno de área */}
-          <path d={areaPosD} fill="url(#goldPosGrad)" />
-
-          {/* Línea principal */}
-          <path d={lineD} fill="none" stroke="var(--cool)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* Indicador de hover */}
           {hoverP && (
             <>
-              <line x1={hoverP.x} y1="0" x2={hoverP.x} y2={height} stroke="rgba(255,255,255,0.4)" strokeDasharray="2 2" />
-              <circle cx={hoverP.x} cy={hoverP.y} r="5" fill="var(--text)" stroke="var(--accent-violet)" strokeWidth="2" />
+              <line
+                x1={hoverP.x} y1="0" x2={hoverP.x} y2={HEIGHT}
+                stroke="var(--muted)" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"
+              />
+              <circle cx={hoverP.x} cy={hoverP.y} r="4" fill="var(--text)" stroke="var(--cool)" strokeWidth="2" />
             </>
           )}
         </svg>
 
-        {/* Tooltip en hover */}
         {hoverP && (
-          <div style={{
-            position: "absolute",
-            top: "-36px",
-            left: `${(hoverP.x / width) * 100}%`,
-            transform: "translateX(-50%)",
-            background: "color-mix(in srgb, var(--panel) 95%, transparent)",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "6px",
-            padding: "4px 8px",
-            fontSize: "11px",
-            fontWeight: 800,
-            color: "var(--text)",
-            pointerEvents: "none",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-            whiteSpace: "nowrap",
-            zIndex: 10,
-          }}>
-            Min {hoverP.minute}:00 ·{" "}
-            <span style={{ color: hoverP.val >= 0 ? "var(--color-victory)" : "var(--color-defeat)" }}>
-              {hoverP.val >= 0 ? `+${hoverP.val.toLocaleString()}` : hoverP.val.toLocaleString()} {mode.includes("gold") ? "g" : "XP"}
+          <div style={{ ...wstyles.chartTip, left: `${(hoverP.x / WIDTH) * 100}%` }}>
+            {t("min {n}", { n: hoverP.minute })} ·{" "}
+            <span style={{ color: hoverP.val >= 0 ? "var(--win)" : "var(--loss)" }}>
+              {hoverP.val >= 0 ? "+" : ""}{hoverP.val.toLocaleString()} {unit}
             </span>
           </div>
         )}
       </div>
-
-
     </div>
   );
 };

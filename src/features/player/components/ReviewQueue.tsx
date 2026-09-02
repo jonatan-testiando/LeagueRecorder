@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { MatchMetadata } from "../../../types";
-import { describeEvent } from "../../../core/eventText";
+import { describeEvent, type Translate } from "../../../core/eventText";
 import { eventMeta, type Tone } from "./eventMeta";
+import { mmss } from "../../../core/time";
 import { setEventReviewed, setErrorClipReviewed, type ErrorClipMetadata } from "../../../core/tauri-ipc";
 import { useT } from "../../../core/LanguageProvider";
 
@@ -33,9 +34,33 @@ const SEV_COLOR: Record<Severity, string> = {
 
 const SEV_ORDER: Record<Severity, number> = { high: 0, med: 1, low: 2 };
 
+/**
+ * Segmentos máximos de la barra de progreso.
+ *
+ * Era un hijo de flex por momento. Con 60 momentos —una partida normal— cada
+ * segmento medía menos de un píxel y los huecos de 2px se comían la barra
+ * entera: lo que se veía era un rayado gris, no un progreso. A partir de aquí
+ * se agrega: cada segmento representa un tramo de la cola y se pinta como hecho
+ * cuando lo está entero.
+ */
+const MAX_SEGMENTS = 24;
+
+/**
+ * Distancia a la que un momento se considera "el que estás viendo". Es la mitad
+ * de la ventana de clip: lo que se reproduce al saltar a un momento.
+ */
+const NEAR_SECS = 3;
+
 export interface Moment {
+  /**
+   * Identidad estable. Antes se identificaba por (tiempo, fuente), y dos clips
+   * de error marcados en el mismo segundo eran el mismo momento: marcar uno
+   * marcaba los dos y el guardado pisaba al otro.
+   */
+  id: string;
   time: number;
   severity: Severity;
+  /** Ya traducido: lleva nombres dentro, así que se compone, no se busca. */
   title: string;
   note?: string;
   reviewed: boolean;
@@ -49,33 +74,38 @@ export interface Moment {
   clipPath?: string;
 }
 
-const fmt = (s: number) => {
-  const m = Math.floor(s / 60);
-  const r = Math.floor(s % 60);
-  return `${m}:${r < 10 ? "0" : ""}${r}`;
-};
-
 /**
  * De todos los sucesos, los que merecen una mirada. Un volcado cronológico de
  * los 46 eventos no es una cola de trabajo: 19 de ellos son ultimates.
+ *
+ * Recibe `t` porque el título de un suceso es una frase con nombres dentro
+ * ("Te mata Ahri"): se compone en el idioma bueno o no se traduce nunca.
  */
+/** Por encima de esto los saltos de cámara son clics, no hallazgos. */
+const MAX_SNAPS_EN_COLA = 24;
+
 export function buildQueue(
   match: MatchMetadata,
-  errorClips: ErrorClipMetadata[] = []
+  errorClips: ErrorClipMetadata[] = [],
+  t: Translate
 ): Moment[] {
   const out: Moment[] = [];
   const seen = match.reviewed_moments ?? [];
-  const isReviewed = (t: number) => seen.some((r) => Math.abs(r - t) < 0.05);
+  // Igualdad exacta: el segundo que se guarda es EL MISMO número que se leyó de
+  // `events[]`, así que la tolerancia de 50 ms no arreglaba ningún redondeo y sí
+  // hacía que dos sucesos del mismo instante compartieran estado.
+  const isReviewed = (secs: number) => seen.includes(secs);
 
   for (const ev of match.events) {
     const meta = eventMeta(ev);
     const sev = SEVERITY_OF[meta.tone];
     if (!sev) continue;
     out.push({
+      id: `event:${ev.time}:${ev.type}:${ev.subtype ?? ""}`,
       time: ev.time,
       severity: sev,
-      title: describeEvent(ev),
-      note: meta.label,
+      title: describeEvent(ev, t),
+      note: t(meta.label),
       reviewed: isReviewed(ev.time),
       source: "event",
     });
@@ -91,10 +121,12 @@ export function buildQueue(
     if (clip.start_time === undefined || clip.start_time === null) continue;
     const first = clip.events && clip.events.length > 0 ? clip.events[0] : null;
     out.push({
+      // La ruta del clip es única por definición: es un fichero.
+      id: `error:${clip.path}`,
       time: clip.start_time,
       severity: "high",
-      title: (first ? first.text : clip.note) || "Flagged error",
-      note: first?.category ?? "you flagged this",
+      title: (first ? first.text : clip.note) || t("Flagged error"),
+      note: first?.category ?? t("you flagged this"),
       reviewed: clip.reviewed === true,
       source: "error",
       clipPath: clip.path,
@@ -103,14 +135,21 @@ export function buildQueue(
 
   // Los saltos de cámara no son sucesos de partida, pero sí momentos que revisar:
   // un hueco largo sin mover la cámara es exactamente lo que buscas al repasar.
-  for (const t of match.camera_snaps ?? []) {
-    if (out.some((m) => Math.abs(m.time - t) < 4)) continue;
+  //
+  // Solo cuando son pocos. Desde que las miradas salen de los clics de minimapa
+  // (`camera_input`) una partida trae cientos, y metidos aquí convertían la cola
+  // en "0 / 117 momentos": imposible de terminar y sin nada que revisar. Los del
+  // detector de vídeo antiguo (una decena) sí siguen entrando.
+  const snaps = match.camera_snaps ?? [];
+  for (const secs of snaps.length <= MAX_SNAPS_EN_COLA ? snaps : []) {
+    if (out.some((m) => Math.abs(m.time - secs) < 4)) continue;
     out.push({
-      time: t,
+      id: `snap:${secs}`,
+      time: secs,
       severity: "low",
-      title: "Camera jump",
-      note: "detected by the analyzer",
-      reviewed: isReviewed(t),
+      title: t("Camera jump"),
+      note: t("detected by the analyzer"),
+      reviewed: isReviewed(secs),
       source: "event",
     });
   }
@@ -134,6 +173,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
   onChange,
 }) => {
   const [showAll, setShowAll] = useState(false);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
   const t = useT();
 
   const done = moments.filter((m) => m.reviewed).length;
@@ -152,10 +192,28 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
     });
   }, [moments, showAll]);
 
+  /**
+   * La barra, agregada. Cada segmento cubre un tramo de la cola y sólo cuenta
+   * como hecho si están hechos todos sus momentos: media barra llena mintiendo
+   * es peor que una barra con menos resolución.
+   */
+  const segments = useMemo(() => {
+    const n = Math.min(MAX_SEGMENTS, Math.max(1, total));
+    const porSegmento = total / n;
+    return Array.from({ length: n }, (_, i) => {
+      const desde = Math.floor(i * porSegmento);
+      const hasta = Math.max(desde + 1, Math.floor((i + 1) * porSegmento));
+      const trozo = moments.slice(desde, hasta);
+      return {
+        done: trozo.length > 0 && trozo.every((m) => m.reviewed),
+        count: trozo.length,
+      };
+    });
+  }, [moments, total]);
+
   const toggle = (m: Moment) => {
-    const next = moments.map((x) =>
-      x.time === m.time && x.source === m.source ? { ...x, reviewed: !x.reviewed } : x
-    );
+    setSaveErr(null);
+    const next = moments.map((x) => (x.id === m.id ? { ...x, reviewed: !x.reviewed } : x));
     onChange(next);
 
     // Cada fuente guarda en su sitio.
@@ -165,10 +223,10 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
         : setEventReviewed(matchId, m.time, !m.reviewed);
 
     // Si el guardado falla, se revierte: mejor que la casilla mienta sobre lo
-    // que hay en disco.
+    // que hay en disco. Y se DICE: revertir en silencio parecía un clic perdido.
     save.catch((err) => {
-      console.error("No se pudo guardar el estado de revisión:", err);
       onChange(moments);
+      setSaveErr(t("Couldn't save the reviewed state: {msg}", { msg: String(err) }));
     });
   };
 
@@ -195,13 +253,13 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
           </span>
         </div>
         <div style={styles.bar}>
-          {moments.map((m, i) => (
+          {segments.map((s, i) => (
             <span
-              key={`${m.time}-${i}`}
+              key={i}
               style={{
                 flex: 1,
                 height: "100%",
-                background: m.reviewed ? "var(--cool)" : "var(--sunken)",
+                background: s.done ? "var(--cool)" : "var(--sunken)",
               }}
             />
           ))}
@@ -227,6 +285,8 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
         </button>
       </div>
 
+      {saveErr && <p style={styles.saveErr}>{saveErr}</p>}
+
       <div style={styles.list}>
         {ordered.length === 0 ? (
           <div style={styles.empty}>
@@ -238,11 +298,11 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
             </p>
           </div>
         ) : (
-          ordered.map((m, i) => {
-            const active = Math.abs(currentTime - m.time) < 3;
+          ordered.map((m) => {
+            const active = Math.abs(currentTime - m.time) < NEAR_SECS;
             return (
               <div
-                key={`${m.source}-${m.time}-${i}`}
+                key={m.id}
                 className="rq-item"
                 data-sel={active ? "" : undefined}
                 data-done={m.reviewed ? "" : undefined}
@@ -254,7 +314,7 @@ export const ReviewQueue: React.FC<ReviewQueueProps> = ({
                 }}
               >
                 <span className="rq-sev" style={{ background: SEV_COLOR[m.severity] }} />
-                <span className="rq-time">{fmt(m.time)}</span>
+                <span className="rq-time">{mmss(m.time)}</span>
                 <span style={{ minWidth: 0 }}>
                   <span className="rq-title">{m.title}</span>
                   {m.note && <span className="rq-note">{m.note}</span>}
@@ -303,6 +363,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     gap: "var(--space-2)",
     padding: "var(--space-3) var(--space-4) var(--space-2)",
+  },
+  saveErr: {
+    margin: 0,
+    padding: "0 var(--space-4) var(--space-2)",
+    fontSize: "var(--font-xs)",
+    color: "var(--loss)",
   },
   list: { flex: 1, minHeight: 0, overflowY: "auto" },
   empty: { padding: "var(--space-6) var(--space-4)", textAlign: "center" },

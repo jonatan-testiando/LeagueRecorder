@@ -1,0 +1,18 @@
+name = "leaguerecorder-riot-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# La clave NO va aquí: es un secreto (`wrangler secret put RIOT_API_KEY`).
+# Ver README.md.
+
+# Límite por IP. El binding de rate limiting de Workers no necesita
+# infraestructura extra ni cuesta escrituras: 60 peticiones cada 60 s por IP,
+# que es holgado para un cliente y corta a un bucle desbocado.
+[[unsafe.bindings]]
+name = "LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
+[observability]
+enabled = true

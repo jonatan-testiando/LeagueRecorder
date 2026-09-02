@@ -1,6 +1,6 @@
 [package]
 name = "tauri-app"
-version = "1.2.23"
+version = "1.2.24"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -23,7 +23,9 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "multipart"] }
+# `stream`: la subida de clips va por cuerpo troceado (`Body::wrap_stream`) en
+# vez de meter el fichero entero en memoria — un recorte de 200 MB lo era.
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "multipart", "stream"] }
 chrono = { version = "0.4", features = ["serde"] }
 urlencoding = "2"
 rdev = "0.5"
@@ -33,6 +35,14 @@ tauri-plugin-process = "2"
 log = "0.4.32"
 env_logger = "0.11.10"
 rand = "0.8"
+# Sólo para la subida de clips: `ReaderStream` trocea el fichero y `StreamExt`
+# deja contar lo que va saliendo para emitir el progreso.
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = { version = "0.3", default-features = false }
+# Copia de seguridad: un ZIP con los JSON de la biblioteca (notas, comentarios,
+# momentos revisados) para que sobrevivan a un formateo. Solo deflate: los
+# vídeos NO entran en la copia, así que no hace falta ningún otro compresor.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Solo para pruebas: el corpus de partidas se guarda comprimido y los ajustes
 # (percentiles por rol, pesos de objetivos) se recalculan desde ahi. No viaja en
@@ -43,5 +53,20 @@ flate2 = "1"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
+
+# Win32 a pelo para lo que no cubre ninguna crate del arbol: espacio libre del
+# disco (GetDiskFreeSpaceExW), geometria de la ventana de League y del monitor
+# que la contiene, y si hay algun dispositivo de reproduccion al que enganchar
+# el loopback de OBS. Se elige `windows-sys` y no `windows` porque ya viaja en
+# el arbol de Tauri (misma version, 0.61) y son declaraciones FFI planas: no
+# añade tiempo de compilacion apreciable ni capas COM que aqui no usamos.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_Audio",
+    "Win32_Storage_FileSystem",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 

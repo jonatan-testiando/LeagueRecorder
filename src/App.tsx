@@ -14,6 +14,9 @@ import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
 import { Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { BrandMark } from "./components/BrandMark";
+import { RiotKeyBanner } from "./components/RiotKeyBanner";
+import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
+import { useOnboarding } from "./features/onboarding/useOnboarding";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   getPendingUpdate,
@@ -62,10 +65,16 @@ export const App: React.FC = () => {
   const [installing, setInstalling] = useState(false);
   const t = useT();
 
+  // El asistente de primer arranque. Se decide arriba del todo porque tapa la
+  // app entera: mientras `done` es null (la config aún no ha llegado) NO se
+  // enseña nada, para no parpadear en cada arranque.
+  const onboarding = useOnboarding();
+
   const selectedError = useAppStore(state => state.selectedError);
   const setSelectedError = useAppStore(state => state.setSelectedError);
   const selectedVod = useAppStore(state => state.selectedVod);
   const setSelectedVod = useAppStore(state => state.setSelectedVod);
+  const refreshErrorClips = useAppStore(state => state.refreshErrorClips);
 
   React.useEffect(() => {
     getVersion().then(setAppVersion).catch(console.error);
@@ -77,8 +86,13 @@ export const App: React.FC = () => {
       setUpdProgress(null);
     });
     const stopProg = onUpdateProgress(setUpdProgress);
-    void stopProg;
-    return () => { stop.then((f) => f()).catch(() => {}); };
+    // Los dos listeners se desmontan. El de progreso se estaba tirando a `void`,
+    // así que en StrictMode (que monta, desmonta y vuelve a montar) quedaba uno
+    // huérfano por cada montaje escribiendo en un estado ya muerto.
+    return () => {
+      stop.then((f) => f()).catch(() => {});
+      stopProg.then((f) => f()).catch(() => {});
+    };
   }, []);
 
   const currentPath = location.pathname;
@@ -96,6 +110,8 @@ export const App: React.FC = () => {
     selectedMatch,
     setSelectedMatch,
     isRecording,
+    error: matchesError,
+    refreshMatches,
     deleteMatch,
     deleteMatches
   } = useGallery();
@@ -150,6 +166,18 @@ export const App: React.FC = () => {
       </div>
     );
   };
+
+  // Primer arranque: en lugar de los paneles, el asistente. La barra de título
+  // sigue puesta (hay que poder mover y cerrar la ventana), y al terminar se
+  // guarda `onboarding_done` y aparece la app ya configurada.
+  if (onboarding.done === false) {
+    return (
+      <>
+        <Titlebar />
+        <OnboardingWizard onDone={() => { onboarding.finish().catch(console.error); }} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -231,6 +259,7 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div style={styles.mainContent}>
+        <RiotKeyBanner />
         {panel("/settings", <SettingsPanel />)}
 
         {panel("/training", <TrainingPanel />)}
@@ -257,7 +286,10 @@ export const App: React.FC = () => {
                   <ArrowLeft size={20} />
                 </button>
                 <div style={styles.playerTitleBlock}>
-                  <h2 style={styles.playerTitle}>{t("AI Analysis")}</h2>
+                  {/* Un solo nombre para esta pantalla. El menú decía
+                      "Analysis", la galería "VOD Analysis (AI)" y esta cabecera
+                      "AI Analysis": tres nombres para el mismo sitio. */}
+                  <h2 style={styles.playerTitle}>{t("Analysis")}</h2>
                   <span style={styles.playerSub}>{selectedVod.date}</span>
                 </div>
               </div>
@@ -273,7 +305,11 @@ export const App: React.FC = () => {
           selectedError ? (
             <ErrorPlayer
               clip={selectedError}
-              onUpdate={() => {}}
+              // Era `() => {}`, así que guardar una nota no refrescaba nada: la
+              // nota estaba en disco y en pantalla seguía sin aparecer. Ahora
+              // relee los errores al store, que además vuelve a apuntar el clip
+              // abierto a su versión fresca.
+              onUpdate={() => { refreshErrorClips().catch(console.error); }}
               onClose={() => setSelectedError(null)}
             />
           ) : (
@@ -292,7 +328,7 @@ export const App: React.FC = () => {
                   </button>
                   <div style={styles.playerTitleBlock}>
                     <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
-                    <span style={styles.playerSub}>Recorded {selectedMatch.date}</span>
+                    <span style={styles.playerSub}>{t("Recorded {date}", { date: selectedMatch.date })}</span>
                   </div>
                 </div>
                 <VideoPlayer match={selectedMatch} />
@@ -317,6 +353,8 @@ export const App: React.FC = () => {
                 onDeleteMatch={deleteMatch}
                 onDeleteMatches={deleteMatches}
                 isRecording={isRecording}
+                loadError={matchesError}
+                onRetry={refreshMatches}
               />
             </div>
           </>

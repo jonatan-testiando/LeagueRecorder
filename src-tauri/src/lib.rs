@@ -1,7 +1,9 @@
 mod riot_live_api;
 mod attribution;
 mod awareness;
+mod backup;
 mod baselines;
+pub mod benchmarks;
 mod camera_input;
 mod camera_snaps;
 mod commands;
@@ -23,22 +25,25 @@ mod streamer;
 mod training;
 mod ultimate;
 mod winprob;
+mod winsys;
 
 use commands::{
     add_error_event, delete_error_event, delete_match, delete_matches, edit_error_event, export_clip,
     export_error_clip, get_all_clips, get_all_error_clips, get_app_config, get_audio_status,
+    get_hotkeys, set_hotkeys,
     get_recorded_matches, get_recorder_status, get_video_settings,
     save_match_comments, save_replay_clip, set_app_config, set_error_clip_reviewed, set_event_reviewed, set_video_settings,
     sync_match_now,
     get_match_attribution,
     check_riot_key,
     get_match_pressure,
+    get_match_benchmarks,
     process_match_minimap,
     get_minimap_status,
     cancel_match_minimap,
     spawn_background_monitor, start_manual_recording, stop_manual_recording, toggle_clip_favorite,
     update_error_note,
-    upload_clip, get_disk_usage, ActiveMatchState,
+    upload_clip, get_disk_usage, delete_clip, delete_error_clip, ActiveMatchState,
 };
 use recorder::RecorderState;
 use std::sync::Arc;
@@ -46,6 +51,58 @@ use training::TrainingState;
 use ultimate::{spawn_keyboard_listener, UltState};
 
 use tauri::{tray::TrayIconBuilder, menu::{Menu, MenuItem}, Manager};
+
+/// Saca la ventana principal al frente desde la bandeja.
+///
+/// Los `unwrap()` que había aquí tumbaban la app entera si la ventana ya no
+/// estaba (cerrada por el SO, o durante el apagado): pulsar el icono de la
+/// bandeja no puede ser una operación que mate el proceso.
+fn mostrar_ventana(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        eprintln!("Bandeja: no hay ventana 'main' que mostrar.");
+        return;
+    };
+    if let Err(e) = window.show() {
+        eprintln!("Bandeja: no se pudo mostrar la ventana: {e}");
+        return;
+    }
+    if let Err(e) = window.set_focus() {
+        eprintln!("Bandeja: no se pudo enfocar la ventana: {e}");
+    }
+}
+
+/// Los tres barridos del arranque, en UNA tarea y en orden.
+///
+/// Eran tres hilos sueltos lanzados a la vez, y los tres empezaban por
+/// `load_all_matches()`: al abrir la app se leía la biblioteca entera tres
+/// veces en paralelo —el de cámara, además, abría el metadata COMPLETO de cada
+/// partida (estela del ratón incluida) y lo reescribía hubiera cambiado algo o
+/// no—. Con una biblioteca grande eso es el arranque entero peleándose consigo
+/// mismo justo cuando el usuario quiere ver su lista.
+///
+/// El orden importa: la migración recoloca ficheros que los otros dos van a
+/// leer, y el de impacto va el último por ser el más caro. Cada etapa cede el
+/// hilo entre partidas y sella lo que repasa, así que el segundo lanzamiento no
+/// hace nada. El progreso sale por el evento `library_maintenance`.
+fn spawn_library_maintenance(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        // Antes de que nada lea la biblioteca: recoloca las partidas de versiones
+        // antiguas que guardaban los ficheros sueltos en la raíz. Corre una sola
+        // vez por directorio (deja su propia marca en disco).
+        commands::emit_maintenance(&app, "migration", 0, 0);
+        crate::storage::migrate_storage_layout();
+
+        // Las miradas al mapa salen de los clics ya grabados: las partidas de
+        // antes también las tienen, sólo que nadie las había leído.
+        camera_input::backfill(&app).await;
+
+        // Puesto de impacto de las partidas que se analizaron antes de que se
+        // guardara: se calcula de lo que ya hay en disco, sin pedir nada.
+        riot_api::impact_backfill(&app).await;
+
+        commands::emit_maintenance(&app, "done", 0, 0);
+    });
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -55,22 +112,24 @@ pub fn run() {
     let ult_state = Arc::new(UltState::default());
     let training_state = Arc::new(TrainingState::default());
 
-    // Listener global de teclado y ratón: APM, estela del ratón y teclas de cámara
-    // aliada. Solo lee eventos; nunca inyecta input en el juego.
-    spawn_keyboard_listener(Arc::clone(&ult_state), Arc::clone(&training_state));
-
     let video_settings = Arc::new(std::sync::Mutex::new(
         crate::commands::VideoSettings::default(),
     ));
 
-    // El monitor de fondo se lanza dentro de `setup` porque necesita un AppHandle
-    // para emitir eventos al overlay del metrónomo.
+    // El monitor de fondo y el listener global se lanzan dentro de `setup` porque
+    // necesitan un AppHandle: el monitor para el overlay del metrónomo, y el
+    // listener para avisar de que un clip de replay se guardó (o falló).
     let monitor_deps = (
         Arc::clone(&recorder_state),
         Arc::clone(&active_match_state),
         Arc::clone(&ult_state),
         Arc::clone(&video_settings),
         Arc::clone(&training_state),
+    );
+    let listener_deps = (
+        Arc::clone(&ult_state),
+        Arc::clone(&training_state),
+        Arc::clone(&recorder_state),
     );
 
     tauri::Builder::default()
@@ -97,16 +156,18 @@ pub fn run() {
         .manage(cv_analyzer::AnalyzerState::default())
         .manage(app_update::UpdateState::default())
         .setup(move |app| {
-            // Antes de que nada lea la biblioteca: recoloca las partidas de versiones antiguas
-            // que guardaban los ficheros sueltos en la raíz. Corre una sola vez por directorio.
-            crate::storage::migrate_storage_layout();
-
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
+            // Sin icono por defecto no hay bandeja, pero tampoco hay motivo para
+            // tumbar la app entera: sin `unwrap` la ventana sigue funcionando.
+            let icono = app
+                .default_window_icon()
+                .cloned()
+                .ok_or("la app no trae icono por defecto para la bandeja")?;
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(icono)
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -120,12 +181,7 @@ pub fn run() {
                         minimap::cancelar_todo();
                         std::process::exit(0);
                     }
-                    "show" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            window.show().unwrap();
-                            window.set_focus().unwrap();
-                        }
-                    }
+                    "show" => mostrar_ventana(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -135,11 +191,7 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            window.show().unwrap();
-                            window.set_focus().unwrap();
-                        }
+                        mostrar_ventana(tray.app_handle());
                     }
                 })
                 .build(app)?;
@@ -150,18 +202,18 @@ pub fn run() {
                 std::env::set_var("LEAGUEREC_OBS_RUNTIME", res.join("obs-runtime"));
             }
 
+            // Listener global de teclado y ratón: APM, estela del ratón, teclas de
+            // cámara aliada y el atajo del replay. Solo lee eventos; nunca inyecta
+            // input en el juego.
+            let (l_ult, l_training, l_rec) = listener_deps;
+            spawn_keyboard_listener(l_ult, l_training, l_rec, app.handle().clone());
+
             // Detección automática de partidas (y, con ella, el entrenamiento en vivo).
             let (rec, active, ult, video, training) = monitor_deps;
             spawn_background_monitor(rec, active, ult, video, training, app.handle().clone());
 
-            // Puesto de impacto de las partidas que se analizaron antes de que se
-            // guardara: se calcula de lo que ya hay en disco, sin pedir nada.
-            riot_api::spawn_impact_backfill();
-
-            // Y las miradas al mapa, que salen de los clics ya grabados: las
-            // partidas de antes también las tienen, sólo que nadie las había
-            // leído. Ver `camera_input`.
-            camera_input::spawn_backfill();
+            // Mantenimiento de la biblioteca: migración, miradas e impacto.
+            spawn_library_maintenance(app.handle().clone());
 
             // La actualización se descarga sola por detrás mientras usas la app, para
             // que pulsar "instalar" no sea esperar a que bajen 100 MB.
@@ -170,8 +222,12 @@ pub fn run() {
         })
         .on_window_event(|window, event| match event {
             tauri::WindowEvent::CloseRequested { api, .. } => {
-                window.hide().unwrap();
-                api.prevent_close();
+                // Si esconderla falla, se deja cerrar: mejor eso que un pánico en
+                // el hilo de eventos con la ventana a medio camino.
+                match window.hide() {
+                    Ok(()) => api.prevent_close(),
+                    Err(e) => eprintln!("No se pudo esconder la ventana en la bandeja: {e}"),
+                }
             }
             _ => {}
         })
@@ -223,6 +279,7 @@ pub fn run() {
             get_match_attribution,
             check_riot_key,
             get_match_pressure,
+            get_match_benchmarks,
             process_match_minimap,
             get_minimap_status,
             cancel_match_minimap,
@@ -238,12 +295,18 @@ pub fn run() {
             edit_error_event,
             get_all_clips,
             upload_clip,
+            delete_clip,
+            delete_error_clip,
             toggle_clip_favorite,
             get_video_settings,
             set_video_settings,
             get_app_config,
             set_app_config,
             get_disk_usage,
+            backup::export_backup,
+            backup::import_backup,
+            get_hotkeys,
+            set_hotkeys,
             storage::get_vod_reviews,
             storage::get_match_details,
             cv_analyzer::process_vod,

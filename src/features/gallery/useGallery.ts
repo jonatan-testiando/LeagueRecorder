@@ -30,7 +30,10 @@ export const useGallery = () => {
         setSelectedMatch(null);
       }
     } catch (err) {
-      setError(err as string);
+      // Se guarda el motivo en crudo: quien lo pinta (la galería) lo envuelve en
+      // una frase traducida. Aquí no hay `t` para la mitad de los casos y el
+      // mensaje del backend es lo único que ubica el fallo.
+      setError(String(err));
     } finally {
       setIsLoading(false);
     }
@@ -47,22 +50,25 @@ export const useGallery = () => {
 
   const handleDelete = useCallback(async (id: string) => {
     const isConfirmed = await showConfirm({
-      title: "Eliminar partida",
-      message: "¿Estás seguro de que quieres borrar esta grabación? Se eliminarán permanentemente el video y los eventos.",
-      confirmText: "Eliminar",
-      cancelText: "Cancelar",
-      type: "error"
+      title: t("Delete game"),
+      message: t(
+        "This permanently deletes the recording with its video and events. Favourited clips are rescued to the clips folder."
+      ),
+      confirmText: t("Delete"),
+      cancelText: t("Cancel"),
+      type: "confirm",
+      destructive: true,
     });
-    
+
     if (isConfirmed) {
       try {
         await deleteMatchIpc(id);
         await fetchMatches();
       } catch (err) {
-        showError("Error al borrar la partida: " + err);
+        showError(t("Couldn't delete the game: {msg}", { msg: String(err) }));
       }
     }
-  }, [showConfirm, showError]);
+  }, [showConfirm, showError, fetchMatches, t]);
 
   /**
    * Borrado por lotes. Devuelve true solo si el usuario confirmó y se intentó
@@ -82,7 +88,8 @@ export const useGallery = () => {
       ),
       confirmText: t("Delete"),
       cancelText: t("Cancel"),
-      type: "error",
+      type: "confirm",
+      destructive: true,
     });
     if (!isConfirmed) return false;
 
@@ -90,7 +97,7 @@ export const useGallery = () => {
     try {
       fallos = (await deleteMatchesIpc(ids)).length;
     } catch (e) {
-      showError(String(e));
+      showError(t("Couldn't delete the games: {msg}", { msg: String(e) }));
       fallos = ids.length;
     }
     await fetchMatches();

@@ -1,0 +1,16 @@
+{
+  "name": "leaguerecorder-riot-proxy",
+  "version": "1.0.0",
+  "description": "Proxy de la API de Riot para LeagueRecorder (Cloudflare Worker)",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "key": "wrangler secret put RIOT_API_KEY",
+    "login": "wrangler login",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260902.1",
+    "wrangler": "^4.128.0"
+  },
+  "private": true
+}

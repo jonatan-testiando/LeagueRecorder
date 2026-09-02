@@ -2,7 +2,9 @@ import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MatchMetadata } from "../../../types";
 import { exportErrorClip } from "../../../core/tauri-ipc";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { useT } from "../../../core/LanguageProvider";
 
 export type ExportType = "clip" | "error";
 
@@ -25,7 +27,8 @@ export function useClipExporter(match: MatchMetadata) {
   const [exportType, setExportType] = useState<ExportType>("clip");
   const [errorNote, setErrorNote] = useState<string>("");
 
-  const { showSuccess, showError } = useDialog();
+  const { showConfirm, showError } = useDialog();
+  const t = useT();
 
   /** Abre (o cierra) el recortador centrado en el instante actual. */
   const toggleClipMode = useCallback(
@@ -56,20 +59,32 @@ export function useClipExporter(match: MatchMetadata) {
     setIsExporting(true);
     try {
       const dur = Math.max(0.1, clipEnd - clipStart);
+      let destino = "";
       if (exportType === "clip") {
-        await invoke("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
+        destino = await invoke<string>("export_clip", { matchId: match.id, videoPath: match.video_path, startTime: clipStart, duration: dur });
       } else {
-        await exportErrorClip(match.id, match.video_path, clipStart, dur, errorNote);
+        destino = await exportErrorClip(match.id, match.video_path, clipStart, dur, errorNote);
         setErrorNote("");
       }
       setIsClippingMode(false);
-      showSuccess("Exported successfully!");
+      // "Exported successfully!" no decía dónde: el fichero existía y no había
+      // forma de llegar a él sin buscarlo. Ahora se enseña la ruta y se ofrece
+      // abrir la carpeta.
+      const abrir = await showConfirm({
+        title: t("Clip exported"),
+        message: destino ? t("Saved to {path}", { path: destino }) : t("Saved to your clips folder."),
+        confirmText: t("Reveal in folder"),
+        cancelText: t("Done"),
+      });
+      if (abrir && destino) {
+        await revealItemInDir(destino).catch(() => {});
+      }
     } catch (err) {
-      showError("Error: " + err);
+      showError(t("Couldn't export the clip: {msg}", { msg: String(err) }));
     } finally {
       setIsExporting(false);
     }
-  }, [isExporting, clipStart, clipEnd, exportType, errorNote, match.id, match.video_path, showSuccess, showError]);
+  }, [isExporting, clipStart, clipEnd, exportType, errorNote, match.id, match.video_path, showConfirm, showError, t]);
 
   return {
     isClippingMode,

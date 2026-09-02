@@ -90,12 +90,12 @@ const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
 
 // Un tinte por trabajo. Los objetivos (dragón, barón, heraldo) comparten el oro
 // a propósito: son la misma categoría de suceso y se distinguen por el glifo.
-const C_ALLY = "var(--color-victory)";
-const C_ENEMY = "var(--color-defeat)";
-const C_OBJECTIVE = "var(--color-objective)";
-const C_STRUCTURE = "var(--accent-blue)";
+const C_ALLY = "var(--win)";
+const C_ENEMY = "var(--loss)";
+const C_OBJECTIVE = "var(--brand)";
+const C_STRUCTURE = "var(--cool)";
 const C_ABILITY = "var(--flag)";
-const C_NEUTRAL = "var(--text-muted)";
+const C_NEUTRAL = "var(--faint)";
 
 const objTone = (s?: string): Tone => (s === "ally" ? "excellent" : s === "enemy" ? "mistake" : "neutral");
 const structTone = (s?: string): Tone => (s === "ally" ? "mistake" : s === "enemy" ? "good" : "neutral");
@@ -148,11 +148,11 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
  */
 export function toneLabelAndIcon(tone: Tone) {
   switch (tone) {
-    case "excellent": return { text: "Excellent", color: "var(--accent-gold)", icon: <Sparkles size={12} fill="currentColor" /> };
-    case "good": return { text: "Good", color: "var(--color-victory)", icon: <ThumbsUp size={12} fill="currentColor" /> };
-    case "inaccuracy": return { text: "Inaccuracy", color: "var(--accent-gold)", icon: <AlertTriangle size={12} fill="currentColor" /> };
-    case "mistake": return { text: "Mistake", color: "var(--accent-gold)", icon: <AlertTriangle size={12} fill="currentColor" /> };
-    case "throw": return { text: "Throw", color: "var(--color-death)", icon: <XCircle size={12} fill="currentColor" /> };
-    default: return { text: "Info", color: "var(--text-muted)", icon: <div style={{width:8,height:8,borderRadius:4,background:"currentColor"}}/> };
+    case "excellent": return { text: "Excellent", color: "var(--brand)", icon: <Sparkles size={12} fill="currentColor" /> };
+    case "good": return { text: "Good", color: "var(--win)", icon: <ThumbsUp size={12} fill="currentColor" /> };
+    case "inaccuracy": return { text: "Inaccuracy", color: "var(--brand)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "mistake": return { text: "Mistake", color: "var(--brand)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "throw": return { text: "Throw", color: "var(--loss)", icon: <XCircle size={12} fill="currentColor" /> };
+    default: return { text: "Info", color: "var(--faint)", icon: <div style={{width:8,height:8,borderRadius:4,background:"currentColor"}}/> };
   }
 }

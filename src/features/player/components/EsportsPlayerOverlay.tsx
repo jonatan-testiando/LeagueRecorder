@@ -1,6 +1,9 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { MatchMetadata } from "../../../types";
 import { Tv, Camera, TrendingUp, TrendingDown, Sparkles, UserCheck } from "lucide-react";
+import { clock } from "../../../core/time";
+import { roleLabel, sameRole } from "../../../core/roles";
+import { useT } from "../../../core/LanguageProvider";
 
 interface EsportsPlayerOverlayProps {
   currentTime: number;
@@ -8,235 +11,237 @@ interface EsportsPlayerOverlayProps {
   visible: boolean;
 }
 
+/** Margen para dar por activo un salto de cámara o un suceso alrededor del segundo actual. */
+const SNAP_WINDOW = 1.5;
+const EVENT_WINDOW = 3;
+
+/**
+ * HUD estilo retransmisión sobre el vídeo.
+ *
+ * Los tiempos de esta pantalla son SEGUNDOS DE VÍDEO, y los `minute_frames` de
+ * Riot son MINUTOS DE PARTIDA. El vídeo empieza antes (la pantalla de carga
+ * también se graba), así que hay que restar `video_offset` para preguntar por el
+ * minuto correcto — el resto de la app ya lo hace (core/patterns.ts). Sin eso, en
+ * una grabación con 40 s de carga el marcador de oro iba un minuto adelantado.
+ */
 export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
   currentTime,
   match,
   visible,
 }) => {
+  const t = useT();
+
+  const gameTime = Math.max(0, currentTime - (match.video_offset ?? 0));
+
+  const { teamGoldDiff, selfGoldDiff } = useMemo(() => {
+    const frames = match.minute_frames || [];
+    let team: number | null = null;
+    let self: number | null = null;
+
+    if (frames.length > 0) {
+      const min = Math.floor(gameTime / 60);
+      const prev = frames.find((f) => f.minute === min) || frames[0];
+      const next = frames.find((f) => f.minute === min + 1);
+
+      if (prev && next) {
+        const span = (next.minute - prev.minute) * 60;
+        const p = span > 0 ? Math.max(0, Math.min(1, (gameTime - prev.minute * 60) / span)) : 0;
+        team = Math.round(prev.team_gold_diff + p * (next.team_gold_diff - prev.team_gold_diff));
+        self = Math.round(prev.self_gold_diff + p * (next.self_gold_diff - prev.self_gold_diff));
+      } else if (prev) {
+        team = prev.team_gold_diff;
+        self = prev.self_gold_diff;
+      }
+    }
+
+    // Respaldos si `minute_frames` todavía no está.
+    if (team === null && match.gold_diff_15 != null) team = match.gold_diff_15;
+
+    if (team === null && match.participants && match.participants.length > 0) {
+      const oro = (id: number) =>
+        match.participants!.filter((p) => p.team_id === id).reduce((s, p) => s + (p.gold || 0), 0);
+      const azul = oro(100);
+      const rojo = oro(200);
+      const mio = match.participants.find((p) => p.is_self)?.team_id || 100;
+      if (azul > 0 || rojo > 0) team = mio === 100 ? azul - rojo : rojo - azul;
+    }
+
+    return { teamGoldDiff: team, selfGoldDiff: self };
+  }, [match, gameTime]);
+
+  /**
+   * Contra QUIÉN es la diferencia individual. Estaba escrito "Jungla rival" a
+   * fuego: un support veía que su oro se comparaba con el de la jungla enemiga,
+   * que no es lo que mide el dato.
+   */
+  const rival = useMemo(() => {
+    const ps = match.participants ?? [];
+    const yo = ps.find((p) => p.is_self);
+    if (!yo?.role) return null;
+    const otro = ps.find((p) => p.team_id !== yo.team_id && sameRole(p.role, yo.role));
+    return otro ? { role: roleLabel(otro.role), champion: otro.champion } : null;
+  }, [match.participants]);
+
+  const isCameraSnap = (match.camera_snaps || []).some(
+    (s) => Math.abs(s - currentTime) <= SNAP_WINDOW
+  );
+  const activeEvent = (match.timeline_markers || []).find(
+    (m) => Math.abs(m.time - currentTime) <= EVENT_WINDOW
+  );
+
   if (!visible) return null;
 
-  // Formato MM:SS del tiempo en vivo del vídeo
-  const mins = Math.floor(currentTime / 60);
-  const secs = Math.floor(currentTime % 60);
-  const formattedClock = `${mins < 10 ? `0${mins}` : mins}:${secs < 10 ? `0${secs}` : secs}`;
-
-  // 1. Interpolación lineal en TIEMPO REAL segundo a segundo entre los frames de minutos
-  const frames = match.minute_frames || [];
-  let teamGoldDiff: number | null = null;
-  let selfGoldDiff: number | null = null;
-
-  if (frames.length > 0) {
-    const currentMin = Math.floor(currentTime / 60);
-    const prevFrame = frames.find((f) => f.minute === currentMin) || frames[0];
-    const nextFrame = frames.find((f) => f.minute === currentMin + 1);
-
-    if (prevFrame && nextFrame) {
-      const prevSec = prevFrame.minute * 60;
-      const nextSec = nextFrame.minute * 60;
-      const progress = Math.max(0, Math.min(1, (currentTime - prevSec) / (nextSec - prevSec)));
-
-      teamGoldDiff = Math.round(prevFrame.team_gold_diff + progress * (nextFrame.team_gold_diff - prevFrame.team_gold_diff));
-      selfGoldDiff = Math.round(prevFrame.self_gold_diff + progress * (nextFrame.self_gold_diff - prevFrame.self_gold_diff));
-    } else if (prevFrame) {
-      teamGoldDiff = prevFrame.team_gold_diff;
-      selfGoldDiff = prevFrame.self_gold_diff;
-    }
-  }
-
-  // Fallbacks si minute_frames no está presente todavía
-  if (teamGoldDiff === null && match.gold_diff_15 !== undefined && match.gold_diff_15 !== null) {
-    teamGoldDiff = match.gold_diff_15;
-  }
-
-  if (teamGoldDiff === null && match.participants && match.participants.length > 0) {
-    const team100Gold = match.participants.filter((p) => p.team_id === 100).reduce((sum, p) => sum + (p.gold || 0), 0);
-    const team200Gold = match.participants.filter((p) => p.team_id === 200).reduce((sum, p) => sum + (p.gold || 0), 0);
-    const selfTeam = match.participants.find((p) => p.is_self)?.team_id || 100;
-    if (team100Gold > 0 || team200Gold > 0) {
-      teamGoldDiff = selfTeam === 100 ? team100Gold - team200Gold : team200Gold - team100Gold;
-    }
-  }
-
-  // Verificar si hay un salto de cámara detectado en el segundo actual (+/- 1.5s)
-  const isCameraSnap = (match.camera_snaps || []).some(
-    (snapSec) => Math.abs(snapSec - currentTime) <= 1.5
-  );
-
-  // Buscar si hay un marcador de evento activo alrededor de este segundo (+/- 3s)
-  const activeEvent = (match.timeline_markers || []).find(
-    (m) => Math.abs(m.time - currentTime) <= 3
-  );
-
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 6,
-        padding: "16px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        transition: "opacity 0.2s ease",
-      }}
-    >
-      {/* Barra Superior del HUD Broadcast */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        {/* Badge Superior Izquierdo: Telemetría de Oro en Tiempo Real y Reloj MM:SS */}
-        <div
-          style={{
-            background: "color-mix(in srgb, var(--ground) 90%, transparent)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(255, 255, 255, 0.15)",
-            borderRadius: "8px",
-            padding: "8px 12px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Tv size={14} color="var(--accent-violet)" />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 800, color: "var(--text)" }}>
-              {formattedClock}
-            </span>
-          </div>
+    <div style={styles.layer}>
+      <div style={styles.topRow}>
+        {/* Telemetría de oro en vivo y reloj de partida. */}
+        <div style={styles.hud}>
+          <span style={styles.clockCell}>
+            <Tv size={13} color="var(--cool)" />
+            <span className="u-metric">{clock(gameTime)}</span>
+          </span>
 
-          {/* Oro de Equipo en Tiempo Real */}
           {teamGoldDiff !== null ? (
-            <div
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                fontSize: "11px",
-                fontWeight: 800,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: teamGoldDiff >= 0 ? "color-mix(in srgb, var(--color-victory) 25%, transparent)" : "color-mix(in srgb, var(--color-defeat) 25%, transparent)",
-                color: teamGoldDiff >= 0 ? "var(--color-victory)" : "var(--color-defeat)",
-                border: `1px solid ${teamGoldDiff >= 0 ? "color-mix(in srgb, var(--color-victory) 40%, transparent)" : "color-mix(in srgb, var(--color-defeat) 40%, transparent)"}`,
-                transition: "all 0.1s linear",
+                ...styles.pill,
+                color: teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)",
+                background: `color-mix(in srgb, ${teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)"} 18%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)"} 36%, transparent)`,
               }}
-              title="Your team's total gold lead over the enemy team, updated second by second"
+              title={t("Your team's total gold lead over the enemy team, updated second by second")}
             >
-              {teamGoldDiff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              <span>{teamGoldDiff >= 0 ? `+${teamGoldDiff.toLocaleString()}g team` : `${teamGoldDiff.toLocaleString()}g team`}</span>
-            </div>
+              {teamGoldDiff >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+              {t("{v}g team", { v: teamGoldDiff >= 0 ? `+${teamGoldDiff.toLocaleString()}` : teamGoldDiff.toLocaleString() })}
+            </span>
           ) : (
-            <div
-              style={{
-                fontSize: "10px",
-                fontWeight: 700,
-                padding: "2px 6px",
-                borderRadius: "4px",
-                background: "rgba(255, 255, 255, 0.08)",
-                color: "var(--text-muted)",
-              }}
-            >
-              Sincronizando oro...
-            </div>
+            // Decía "Sincronizando oro…" para siempre en cualquier partida sin
+            // datos de Riot. No estaba sincronizando nada.
+            <span style={{ ...styles.pill, color: "var(--faint)", background: "var(--sunken)" }}>
+              {t("No gold data")}
+            </span>
           )}
 
-          {/* Oro Individual vs Rival Directo en Tiempo Real */}
           {selfGoldDiff !== null && (
-            <div
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                fontSize: "11px",
-                fontWeight: 800,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: selfGoldDiff >= 0 ? "color-mix(in srgb, var(--accent-blue) 25%, transparent)" : "color-mix(in srgb, var(--color-objective) 25%, transparent)",
-                color: selfGoldDiff >= 0 ? "var(--accent-blue)" : "var(--color-objective)",
-                border: `1px solid ${selfGoldDiff >= 0 ? "color-mix(in srgb, var(--accent-blue) 40%, transparent)" : "color-mix(in srgb, var(--color-objective) 40%, transparent)"}`,
-                transition: "all 0.1s linear",
+                ...styles.pill,
+                color: selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)",
+                background: `color-mix(in srgb, ${selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)"} 18%, transparent)`,
+                border: `1px solid color-mix(in srgb, ${selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)"} 36%, transparent)`,
               }}
-              title="Tu diferencia de Oro individual contra tu rival directo de rol (Jungla rival) en tiempo real"
+              title={
+                rival
+                  ? t("Your gold against your direct opponent ({role}, {champion}), in real time", {
+                      role: t(rival.role),
+                      champion: rival.champion,
+                    })
+                  : t("Your gold against your direct lane opponent, in real time")
+              }
             >
-              <UserCheck size={12} />
-              <span>{selfGoldDiff >= 0 ? `+${selfGoldDiff.toLocaleString()}g vs lane` : `${selfGoldDiff.toLocaleString()}g vs lane`}</span>
-            </div>
+              <UserCheck size={11} />
+              {t("{v}g vs {role}", {
+                v: selfGoldDiff >= 0 ? `+${selfGoldDiff.toLocaleString()}` : selfGoldDiff.toLocaleString(),
+                role: rival ? t(rival.role) : t("lane"),
+              })}
+            </span>
           )}
         </div>
 
-        {/* Badge Superior Derecho: Alerta de Cámara & APM Meter */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "8px" }}>
-          {/* Indicador de Salto de Cámara */}
+        <div style={styles.topRight}>
           {isCameraSnap && (
-            <div
-              style={{
-                background: "linear-gradient(135deg, color-mix(in srgb, var(--flag) 90%, transparent), color-mix(in srgb, var(--accent-blue) 90%, transparent))",
-                color: "var(--text)",
-                fontSize: "11px",
-                fontWeight: 800,
-                padding: "6px 12px",
-                borderRadius: "20px",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                boxShadow: "0 0 16px color-mix(in srgb, var(--flag) 60%, transparent)",
-                animation: "pulse 1s infinite alternate",
-              }}
-            >
-              <Camera size={14} />
-              <span>SALTO DE CÁMARA</span>
-            </div>
+            <span style={styles.snapPill}>
+              <Camera size={12} />
+              {t("Camera jump")}
+            </span>
           )}
-
-          {/* APM Meter */}
-          {match.apm && (
-            <div
-              style={{
-                background: "color-mix(in srgb, var(--ground) 90%, transparent)",
-                backdropFilter: "blur(12px)",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                borderRadius: "8px",
-                padding: "6px 10px",
-                fontSize: "11px",
-                fontWeight: 800,
-                color: "var(--accent-blue)",
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.3)",
-              }}
-            >
-              <Sparkles size={12} />
-              <span>{Math.round(match.apm)} APM</span>
-            </div>
+          {!!match.apm && (
+            <span style={{ ...styles.hud, color: "var(--cool)" }}>
+              <Sparkles size={11} />
+              <span className="u-metric">{t("{n} APM", { n: Math.round(match.apm) })}</span>
+            </span>
           )}
         </div>
       </div>
 
-      {/* Banner Inferior Central: Notificación de Evento Destacado */}
       {activeEvent && (
-        <div
-          style={{
-            alignSelf: "center",
-            marginBottom: "40px",
-            background: "color-mix(in srgb, var(--panel) 92%, transparent)",
-            backdropFilter: "blur(16px)",
-            border: "1px solid var(--accent-violet-soft)",
-            borderRadius: "30px",
-            padding: "8px 18px",
-            color: "var(--text)",
-            fontSize: "12px",
-            fontWeight: 800,
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.6)",
-          }}
-        >
-          <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--accent-violet)" }} />
+        <div style={styles.banner}>
+          <span style={styles.bannerDot} />
           <span>{activeEvent.description}</span>
         </div>
       )}
     </div>
   );
+};
+
+const styles: Record<string, React.CSSProperties> = {
+  layer: {
+    position: "absolute",
+    inset: 0,
+    pointerEvents: "none",
+    zIndex: 6,
+    padding: "var(--space-4)",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  },
+  topRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
+  topRight: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-2)" },
+  // El HUD flota sobre el vídeo, así que aquí sí hay lámina: es de las pocas
+  // superficies del sistema que se apoyan sobre algo que no controlamos.
+  hud: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "6px var(--space-3)",
+    borderRadius: "var(--radius-md)",
+    background: "color-mix(in srgb, var(--ground) 86%, transparent)",
+    backdropFilter: "blur(10px)",
+    border: "1px solid var(--glass-line)",
+    fontSize: "11px",
+  },
+  clockCell: { display: "inline-flex", alignItems: "center", gap: "5px", color: "var(--text)" },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "4px",
+    padding: "2px var(--space-2)",
+    borderRadius: "var(--radius-sm)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "11px",
+    fontVariantNumeric: "tabular-nums",
+  },
+  snapPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "5px",
+    padding: "5px var(--space-3)",
+    borderRadius: "var(--radius-full)",
+    background: "color-mix(in srgb, var(--flag) 22%, transparent)",
+    border: "1px solid color-mix(in srgb, var(--flag) 45%, transparent)",
+    color: "var(--text)",
+    fontSize: "11px",
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+  },
+  banner: {
+    alignSelf: "center",
+    marginBottom: "var(--space-8)",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    padding: "6px var(--space-4)",
+    borderRadius: "var(--radius-full)",
+    background: "color-mix(in srgb, var(--ground) 88%, transparent)",
+    backdropFilter: "blur(10px)",
+    border: "1px solid var(--glass-line)",
+    color: "var(--text)",
+    fontSize: "12px",
+  },
+  bannerDot: {
+    width: "6px",
+    height: "6px",
+    borderRadius: "var(--radius-full)",
+    background: "var(--cool)",
+  },
 };

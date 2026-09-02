@@ -10,6 +10,7 @@ import {
   saveDrillSession,
 } from "../api";
 import { useChampionIcon } from "../../../core/ddragon";
+import { roleLabel } from "../../../core/roles";
 import { useT } from "../../../core/LanguageProvider";
 
 /** Cuánto esperamos una respuesta antes de contar la ronda como fallada. */
@@ -17,6 +18,14 @@ const TIMEOUT_MS = 3000;
 /** Pausa entre rondas, con jitter para que no se pueda anticipar el ritmo. */
 const ISI_MIN_MS = 350;
 const ISI_MAX_MS = 900;
+/** Cuenta atrás antes de empezar, y lo que dura cada número. */
+const COUNTDOWN_FROM = 3;
+const COUNTDOWN_STEP_MS = 700;
+/**
+ * Latencia por debajo de la cual el mapeo ha dejado de ser consciente. Es el
+ * objetivo del ejercicio y la referencia que se pinta en el resultado.
+ */
+const CONSCIOUS_MS = 400;
 
 type Phase = "idle" | "countdown" | "running" | "done";
 type Mode = "role" | "champion";
@@ -66,11 +75,16 @@ export const ReflexDrill: React.FC<{
   const [mode, setMode] = useState<Mode>("role");
   const [withLoad, setWithLoad] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(COUNTDOWN_FROM);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [done, setDone] = useState<Round[]>([]);
   const [feedback, setFeedback] = useState<Round | null>(null);
   const [pool, setPool] = useState<RoleChampion[]>([]);
+  // `null` = todavía no ha respondido; `true` = la petición falló. Sin esto,
+  // "no tienes campeones grabados" y "la petición reventó" eran el mismo
+  // botón gris con el mismo tooltip.
+  const [poolFailed, setPoolFailed] = useState(false);
+  const [poolLoading, setPoolLoading] = useState(true);
   const [tracking, setTracking] = useState(0);
   const t = useT();
 
@@ -84,9 +98,16 @@ export const ReflexDrill: React.FC<{
 
   const bindings = config.bindings;
 
-  useEffect(() => {
-    getChampionPool().then(setPool).catch(() => setPool([]));
+  const loadPool = useCallback(() => {
+    setPoolLoading(true);
+    setPoolFailed(false);
+    getChampionPool()
+      .then((p) => setPool(p))
+      .catch(() => { setPool([]); setPoolFailed(true); })
+      .finally(() => setPoolLoading(false));
   }, []);
+
+  useEffect(loadPool, [loadPool]);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -188,7 +209,7 @@ export const ReflexDrill: React.FC<{
       nextRoundRef.current();
       return;
     }
-    const t = window.setTimeout(() => setCountdown((c) => c - 1), 700);
+    const t = window.setTimeout(() => setCountdown((c) => c - 1), COUNTDOWN_STEP_MS);
     return () => window.clearTimeout(t);
   }, [phase, countdown]);
 
@@ -233,7 +254,7 @@ export const ReflexDrill: React.FC<{
     setFeedback(null);
     setPrompt(null);
     setTracking(0);
-    setCountdown(3);
+    setCountdown(COUNTDOWN_FROM);
     setPhase("countdown");
   };
 
@@ -258,11 +279,11 @@ export const ReflexDrill: React.FC<{
     return (
       <div style={styles.panel}>
         <div style={styles.headerRow}>
-          <Zap size={18} color="var(--accent-violet)" />
+          <Zap size={18} color="var(--cool)" />
           <h3 style={styles.title}>{t("Key mapping drill")}</h3>
         </div>
         <p style={styles.desc}>
-          {t("A role appears — press its camera key. Target: under 400 ms with 95% accuracy, without looking at the keyboard.")}
+          {t("A role appears — press its camera key. Target: under {ms} ms with 95% accuracy, without looking at the keyboard.", { ms: CONSCIOUS_MS })}
         </p>
 
         <div style={styles.optionRow}>
@@ -288,19 +309,30 @@ export const ReflexDrill: React.FC<{
           >
             {t("Role")}
           </button>
+          {/* Con un fallo de la petición el modo NO se desactiva: se puede
+              reintentar sin salir de la pantalla. Antes quedaba gris con el
+              mensaje de "juega una partida primero", que era mentira. */}
           <button
             className="btn btn--ghost btn--sm" aria-pressed={mode === "champion"}
-            style={{ ...styles.chip, opacity: champModeAvailable ? 1 : 0.4 }}
-            onClick={() => champModeAvailable && setMode("champion")}
-            disabled={!champModeAvailable}
+            style={{ ...styles.chip, opacity: champModeAvailable || poolFailed ? 1 : 0.4 }}
+            onClick={() => (champModeAvailable ? setMode("champion") : poolFailed && loadPool())}
+            disabled={!champModeAvailable && !poolFailed && !poolLoading}
             title={t(
-              champModeAvailable
+              poolFailed
+                ? "Couldn't read your champion pool. Click to try again."
+                : champModeAvailable
                 ? "Uses champions seen in your recorded games"
                 : "Play a recorded game first to build your champion pool"
             )}
           >
             {t("Champion")}
           </button>
+          {poolFailed && (
+            <span style={styles.poolError}>
+              {t("Couldn't read your champion pool.")}{" "}
+              <button className="btn btn--ghost btn--sm" onClick={loadPool}>{t("Retry")}</button>
+            </span>
+          )}
         </div>
 
         <div style={styles.optionRow}>
@@ -315,7 +347,7 @@ export const ReflexDrill: React.FC<{
           </button>
         </div>
 
-        <button className="btn-primary" style={styles.bigBtn} onClick={start}>
+        <button className="btn btn--primary" style={styles.bigBtn} onClick={start}>
           <Play size={18} /> {t("Start")}
         </button>
       </div>
@@ -337,12 +369,12 @@ export const ReflexDrill: React.FC<{
     return (
       <div style={styles.panel}>
         <div style={styles.headerRow}>
-          <Zap size={18} color="var(--accent-violet)" />
+          <Zap size={18} color="var(--cool)" />
           <h3 style={styles.title}>{t("Session complete")}</h3>
         </div>
         <div style={styles.statRow}>
           <Stat label={t("Accuracy")} value={`${acc.toFixed(0)}%`} good={acc >= 95} />
-          <Stat label={t("Avg latency")} value={`${avg.toFixed(0)} ms`} good={avg > 0 && avg < 400} />
+          <Stat label={t("Avg latency")} value={`${avg.toFixed(0)} ms`} good={avg > 0 && avg < CONSCIOUS_MS} />
           <Stat
             label={t("Best")}
             value={`${hits ? Math.min(...done.filter((r) => r.ok).map((r) => r.latencyMs)).toFixed(0) : "—"} ms`}
@@ -358,13 +390,13 @@ export const ReflexDrill: React.FC<{
             const rAcc = (rh.length / rr.length) * 100;
             return (
               <div key={role} style={styles.breakdownRow}>
-                <span style={styles.breakdownRole}>{role}</span>
+                <span style={styles.breakdownRole}>{t(roleLabel(role))}</span>
                 <div style={styles.bar}>
                   <div
                     style={{
                       ...styles.barFill,
                       width: `${Math.min(100, (rAvg / 800) * 100)}%`,
-                      background: rAvg < 400 ? "var(--color-victory)" : "var(--accent-gold)",
+                      background: rAvg < CONSCIOUS_MS ? "var(--win)" : "var(--brand)",
                     }}
                   />
                 </div>
@@ -372,7 +404,7 @@ export const ReflexDrill: React.FC<{
                 <span
                   style={{
                     ...styles.breakdownAcc,
-                    color: rAcc >= 95 ? "var(--color-victory)" : "var(--color-defeat)",
+                    color: rAcc >= 95 ? "var(--win)" : "var(--loss)",
                   }}
                 >
                   {rAcc.toFixed(0)}%
@@ -383,10 +415,10 @@ export const ReflexDrill: React.FC<{
         </div>
 
         <div style={{ display: "flex", gap: "var(--space-3)" }}>
-          <button className="btn-primary" style={styles.bigBtn} onClick={start}>
+          <button className="btn btn--primary" style={styles.bigBtn} onClick={start}>
             <RotateCcw size={18} /> {t("Again")}
           </button>
-          <button className="btn-ghost" style={styles.bigBtn} onClick={reset}>
+          <button className="btn btn--ghost" style={styles.bigBtn} onClick={reset}>
             {t("Back")}
           </button>
         </div>
@@ -404,7 +436,7 @@ export const ReflexDrill: React.FC<{
         <div style={styles.progressTrack}>
           <div style={{ ...styles.progressFill, width: `${(done.length / rounds) * 100}%` }} />
         </div>
-        <button className="btn-ghost" style={styles.chip} onClick={reset}>
+        <button className="btn btn--ghost" style={styles.chip} onClick={reset}>
           {t("Stop")}
         </button>
       </div>
@@ -416,15 +448,15 @@ export const ReflexDrill: React.FC<{
           <div style={styles.feedback}>
             {feedback.ok ? (
               <>
-                <Check size={48} color="var(--color-victory)" />
-                <span style={{ ...styles.feedbackMs, color: "var(--color-victory)" }}>
+                <Check size={48} color="var(--win)" />
+                <span style={{ ...styles.feedbackMs, color: "var(--win)" }}>
                   {feedback.latencyMs.toFixed(0)} ms
                 </span>
               </>
             ) : (
               <>
-                <X size={48} color="var(--color-defeat)" />
-                <span style={{ ...styles.feedbackMs, color: "var(--color-defeat)" }}>
+                <X size={48} color="var(--loss)" />
+                <span style={{ ...styles.feedbackMs, color: "var(--loss)" }}>
                   {feedback.pressedKey
                     ? t("{pressed} — it was {expected}", {
                         pressed: feedback.pressedKey,
@@ -439,7 +471,7 @@ export const ReflexDrill: React.FC<{
           prompt.champion ? (
             <ChampionPrompt champion={prompt.champion} />
           ) : (
-            <div style={styles.roleprompt}>{prompt.binding.role}</div>
+            <div style={styles.roleprompt}>{t(roleLabel(prompt.binding.role))}</div>
           )
         ) : null}
       </div>
@@ -464,7 +496,7 @@ const Stat: React.FC<{ label: string; value: string; good?: boolean }> = ({
     <span
       style={{
         ...styles.statValue,
-        color: good === undefined ? "var(--text)" : good ? "var(--color-victory)" : "var(--accent-gold)",
+        color: good === undefined ? "var(--text)" : good ? "var(--win)" : "var(--brand)",
       }}
     >
       {value}
@@ -541,7 +573,7 @@ const TrackingTask: React.FC<{ onScore: (pct: number) => void }> = ({ onScore })
 const styles: Record<string, React.CSSProperties> = {
   panel: {
     background: "var(--surface-1)",
-    border: "1px solid var(--border-subtle)",
+    border: "1px solid var(--line-soft)",
     borderRadius: "var(--radius-xl)",
     padding: "var(--space-6)",
     display: "flex",
@@ -550,12 +582,19 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--text)" },
-  desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--text-secondary)", maxWidth: 560 },
+  desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 560 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
+  poolError: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "var(--space-2)",
+    fontSize: "var(--font-xs)",
+    color: "var(--loss)",
+  },
   optionLabel: {
     fontSize: "var(--font-xs)",
     fontWeight: 700,
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     width: 70,
@@ -581,7 +620,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     background: "var(--bg-app)",
     borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--border-subtle)",
+    border: "1px solid var(--line-soft)",
   },
   roleprompt: {
     fontSize: 56,
@@ -594,17 +633,17 @@ const styles: Record<string, React.CSSProperties> = {
     width: 112,
     height: 112,
     borderRadius: "var(--radius-full)",
-    border: "2px solid var(--border-strong)",
+    border: "2px solid var(--line)",
     objectFit: "cover",
   },
   champFallback: {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "var(--bg-elevated)",
+    background: "var(--surface-2)",
     fontWeight: 800,
     fontSize: 32,
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
   },
   champName: { fontSize: "var(--font-xl)", fontWeight: 700, color: "var(--text)" },
   feedback: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" },
@@ -613,13 +652,13 @@ const styles: Record<string, React.CSSProperties> = {
   progressText: {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     minWidth: 60,
   },
   progressTrack: {
     flex: 1,
     height: 4,
-    background: "var(--bg-elevated)",
+    background: "var(--surface-2)",
     borderRadius: "var(--radius-full)",
     overflow: "hidden",
   },
@@ -632,14 +671,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "space-between",
     fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     fontFamily: "var(--font-mono)",
   },
   statRow: { display: "flex", gap: "var(--space-6)", flexWrap: "wrap" },
   stat: { display: "flex", flexDirection: "column", gap: 2 },
   statLabel: {
     fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
     fontWeight: 700,
@@ -651,12 +690,12 @@ const styles: Record<string, React.CSSProperties> = {
     width: 90,
     fontSize: "var(--font-xs)",
     fontWeight: 700,
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
   },
   bar: {
     flex: 1,
     height: 6,
-    background: "var(--bg-elevated)",
+    background: "var(--surface-2)",
     borderRadius: "var(--radius-full)",
     overflow: "hidden",
   },
@@ -666,7 +705,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "right",
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
-    color: "var(--text-secondary)",
+    color: "var(--muted)",
   },
   breakdownAcc: {
     width: 50,
@@ -679,7 +718,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     height: 90,
     background: "var(--bg-app)",
-    border: "1px dashed var(--border-strong)",
+    border: "1px dashed var(--line)",
     borderRadius: "var(--radius-lg)",
     overflow: "hidden",
   },
@@ -691,14 +730,14 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: -13,
     borderRadius: "var(--radius-full)",
     background: "var(--accent-teal)",
-    boxShadow: "0 0 12px color-mix(in srgb, var(--accent-blue) 50%, transparent)",
+    boxShadow: "0 0 12px color-mix(in srgb, var(--cool) 50%, transparent)",
   },
   trackHint: {
     position: "absolute",
     left: "var(--space-3)",
     bottom: "var(--space-2)",
     fontSize: 10,
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
   },

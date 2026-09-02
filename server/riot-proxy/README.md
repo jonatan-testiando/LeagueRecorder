@@ -48,8 +48,7 @@ proxy no tiene que replicar ese mapa. Es la forma exacta que construye
 Un solo comando, en PowerShell, desde esta carpeta:
 
 ```powershell
-cd server
-iot-proxy
+cd server/riot-proxy
 .\deploy.ps1
 ```
 

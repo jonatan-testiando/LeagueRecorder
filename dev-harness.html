@@ -19,6 +19,78 @@
     return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())} ${p(x.getHours())}:${p(x.getMinutes())}:${p(x.getSeconds())}`;
   };
 
+
+  /** Dieta de hechizos de mentira, con los nombres crudos que manda Riot. */
+  function harnessSpells(agregado) {
+    const filas = [
+      ["Garen", "garene", 2, false, 4387, 6, 5],
+      ["Garen", "garenr", 3, false, 3794, 5, 5],
+      ["Quinn", "quinnpassive", 63, false, 5544, 22, 10],
+      ["RekSai", "reksaiq", 0, false, 2957, 5, 3],
+      ["Vayne", "vaynesilveredbolts", 1, false, 2298, 3, 2],
+      ["Chogath", "feast", 3, false, 2085, 3, 2],
+      ["Ezreal", "ezrealbasicattack", 64, true, 1770, 4, 2],
+      ["Singed", "poisontrail", 0, false, 1884, 5, 3],
+    ];
+    const mult = agregado ? 1 : 0.18;
+    const spells = filas.map(([champion, spell, slot, basic, damage, deaths, recta]) => ({
+      spell,
+      slot,
+      basic,
+      champion,
+      unit: champion,
+      times: Math.max(1, Math.round(deaths * 1.7 * mult)),
+      deaths: Math.max(1, Math.round(deaths * mult)),
+      damage: Math.round(damage * mult),
+      damage_avg: damage / Math.max(1, deaths * 1.7),
+      share: 0,
+      still_deaths: 0,
+      straight_deaths: Math.max(0, Math.round(recta * mult)),
+      last_order_secs_p50: 0.1 + (slot % 3) * 0.1,
+    }));
+    const totalDmg = spells.reduce((a, s) => a + s.damage, 0);
+    spells.forEach((s) => (s.share = s.damage / totalDmg));
+    // El backend los devuelve ordenados por dano; el arnes tiene que hacerlo
+    // igual o la barra de la fila de arriba sale mas corta que la de abajo.
+    spells.sort((a, b) => b.damage - a.damage);
+    const muertes = agregado ? 93 : 7;
+    const recta = agregado ? 35 : 3;
+    const autopsies = agregado
+      ? []
+      : Array.from({ length: muertes }, (_, i) => {
+          const f = filas[i % filas.length];
+          const enRecta = i < recta;
+          return {
+            t_game: 240 + i * 190,
+            t_video: 240 + i * 190,
+            killer: f[0],
+            damage_champions: 1400 + i * 90,
+            damage_other: 120 + i * 20,
+            top: [{ spell: f[1], slot: f[2], basic: f[3], champion: f[0], damage: 900 + i * 40 }],
+            hand: {
+              orders: 9 + (i % 8),
+              last_order_secs: 0.1 + (i % 4) * 0.08,
+              ring_px_p50: 260 + (i % 5) * 30,
+              max_turn_deg: enRecta ? 12 + i * 6 : 70 + (i % 6) * 18,
+              still: false,
+              straight: enRecta,
+            },
+          };
+        });
+    return {
+      matches: agregado ? 23 : 1,
+      deaths: muertes,
+      still_deaths: 0,
+      straight_deaths: recta,
+      deaths_with_hand: muertes,
+      damage_champions: totalDmg,
+      damage_other: Math.round(totalDmg * 0.11),
+      damage_teamfight: Math.round(totalDmg * 1.6),
+      spells,
+      autopsies,
+    };
+  }
+
   const mkEvents = (dur) => {
     const ev = [];
     for (let i = 0; i < 14; i++) {
@@ -551,6 +623,53 @@
     ],
     process_match_minimap: () => null,
     cancel_match_minimap: () => null,
+    // --- la mano y lo que te comes ---------------------------------------
+    // Los repartos imitan lo medido en 23 partidas reales: radio mediano en el
+    // 26% de la altura, clics de giro un 70% mas cortos que los de crucero, y
+    // algo mas de un tercio de las muertes sin cambio de rumbo.
+    get_hand_report: () => {
+      const h = 1440;
+      const sectores = [];
+      for (let i = 0; i < 16; i++) {
+        const deg = i * 22.5;
+        // Mas peso en las diagonales y en el eje horizontal, como sale de verdad.
+        const peso = 1 + Math.abs(Math.cos((deg * Math.PI) / 90)) + (i % 4 === 1 ? 0.6 : 0);
+        sectores.push({ deg, clicks: Math.round(peso * 240), share: 0, ring_px: 340 + (i % 5) * 22 });
+      }
+      const total = sectores.reduce((a, s) => a + s.clicks, 0);
+      sectores.forEach((s) => (s.share = s.clicks / total));
+      const rings = [0.02, 0.05, 0.09, 0.16, 0.2, 0.17, 0.13, 0.09, 0.05, 0.02, 0.02].map((share, i) => ({
+        from: i * 0.05,
+        to: i === 10 ? Infinity : (i + 1) * 0.05,
+        clicks: Math.round(share * total),
+        share,
+      }));
+      return {
+        clicks: total,
+        discarded_ui: 612,
+        left_in_play: 247,
+        ring_px_p50: 391,
+        ring_px_p90: 618,
+        ring_pct_p50: 391 / h,
+        short_ratio: 0.27,
+        sectors: sectores,
+        rings,
+        turn_deg_p50: 7,
+        reactive: { clicks: 1180, ring_px_p50: 292, ring_pct_p50: 292 / h },
+        cruise: { clicks: 3130, ring_px_p50: 408, ring_pct_p50: 408 / h },
+        correction_px_p50: 19,
+        correction_ratio: 0.11,
+        angular_cost_deg: 2.8,
+        angular_cost_reactive_deg: 3.7,
+        anchor_conf: 0.98,
+        anchor_dx_px: 9,
+        anchor_dy_px: -175,
+        screen_w: 2560,
+        screen_h: h,
+      };
+    },
+    get_spell_autopsy: () => harnessSpells(false),
+    get_spell_diet: () => harnessSpells(true),
     // --- baremos de población -------------------------------------------
     // Las 17 métricas con percentil crudo: `deaths_per_game` viene alto A
     // PROPÓSITO (mueres más que el 82%), que es el caso que la UI tiene que

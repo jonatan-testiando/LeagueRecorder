@@ -581,3 +581,133 @@ export interface MaintenanceProgress {
   done: number;
   total: number;
 }
+
+// ---------------------------------------------------------------------------
+// La mano y lo que te comes. Ver `src-tauri/src/hands.rs` y `spells.rs`.
+// ---------------------------------------------------------------------------
+
+/** Un sector de la rosa de clics. 0 grados = derecha, 90 = arriba. */
+export interface HandSector {
+  deg: number;
+  clicks: number;
+  share: number;
+  ring_px: number;
+}
+
+/** Un escalon del histograma de distancia, en fraccion de la altura. */
+export interface HandRingBin {
+  from: number;
+  to: number;
+  clicks: number;
+  share: number;
+}
+
+export interface HandTurnGroup {
+  clicks: number;
+  ring_px_p50: number;
+  ring_pct_p50: number;
+}
+
+/** Geometria de tus clics de orden en una partida. */
+export interface HandReport {
+  clicks: number;
+  discarded_ui: number;
+  left_in_play: number;
+  ring_px_p50: number;
+  ring_px_p90: number;
+  ring_pct_p50: number;
+  short_ratio: number;
+  sectors: HandSector[];
+  rings: HandRingBin[];
+  turn_deg_p50: number;
+  /** Los clics que cambian de rumbo: ahi viven las esquivas. */
+  reactive: HandTurnGroup;
+  cruise: HandTurnGroup;
+  correction_px_p50: number | null;
+  correction_ratio: number;
+  angular_cost_deg: number | null;
+  angular_cost_reactive_deg: number | null;
+  /** 1 = nube donde se espera. Solo penaliza la deriva HORIZONTAL. */
+  anchor_conf: number;
+  /** Deriva del centroide. La vertical es el HUD y es normal; la lateral no. */
+  anchor_dx_px: number;
+  anchor_dy_px: number;
+  screen_w: number;
+  screen_h: number;
+}
+
+export const getHandReport = async (matchId: string): Promise<HandReport> => {
+  return await invoke<HandReport>("get_hand_report", { matchId });
+};
+
+/** Un hechizo que te comes, agregado. */
+export interface SpellHit {
+  spell: string;
+  /** 1=Q, 2=W, 3=E, 4=R. 0 en pasivas, objetos e invocador. */
+  slot: number;
+  basic: boolean;
+  champion: string;
+  /** La unidad que pego: distinta del campeon en mascotas. */
+  unit: string;
+  times: number;
+  deaths: number;
+  damage: number;
+  damage_avg: number;
+  share: number;
+  still_deaths: number;
+  /** De esas muertes, en cuantas ibas en linea recta (giro < 45 grados). */
+  straight_deaths: number;
+  last_order_secs_p50: number | null;
+}
+
+export interface HandWindow {
+  orders: number;
+  last_order_secs: number;
+  ring_px_p50: number;
+  max_turn_deg: number;
+  /** Siempre falso en quien clica sin parar; el que discrimina es `straight`. */
+  still: boolean;
+  /** El rumbo nunca cambio 45 grados: moriste sin intentar esquivar. */
+  straight: boolean;
+}
+
+export interface TopSpell {
+  spell: string;
+  slot: number;
+  basic: boolean;
+  champion: string;
+  damage: number;
+}
+
+export interface DeathAutopsy {
+  t_game: number;
+  t_video: number;
+  killer: string;
+  damage_champions: number;
+  damage_other: number;
+  top: TopSpell[];
+  hand: HandWindow | null;
+}
+
+export interface SpellReport {
+  matches: number;
+  deaths: number;
+  still_deaths: number;
+  straight_deaths: number;
+  deaths_with_hand: number;
+  damage_champions: number;
+  damage_other: number;
+  damage_teamfight: number;
+  spells: SpellHit[];
+  autopsies: DeathAutopsy[];
+}
+
+/** Lo que te comiste en ESTA partida. Necesita la timeline ya descargada. */
+export const getSpellAutopsy = async (matchId: string): Promise<SpellReport> => {
+  return await invoke<SpellReport>("get_spell_autopsy", { matchId });
+};
+
+/** Lo mismo sobre todo el historial ya sincronizado. No gasta cuota de API. */
+export const getSpellDiet = async (): Promise<SpellReport> => {
+  return await invoke<SpellReport>("get_spell_diet");
+};

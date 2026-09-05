@@ -19,6 +19,8 @@ import { TacticalMap } from "./TacticalMap";
 import { MapAwarenessWidget } from "./MapAwarenessWidget";
 import { PowerSpikeWidget } from "./PowerSpikeWidget";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
+import { HandWidget } from "./HandWidget";
+import { SpellDietWidget } from "./SpellDietWidget";
 import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { InspSection } from "./InspSection";
@@ -1670,6 +1672,18 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 markers={match.timeline_markers}
                 onSeek={(secs) => seekTo(secs, false)}
               />
+            </InspSection>
+
+            {/* Las dos caras de la mecánica: qué te comes y cómo estabas
+                clicando cuando te lo comiste. Van juntas y en este orden porque
+                la primera plantea el problema y la segunda enseña la mano con
+                la que lo resolviste (o no). */}
+            <InspSection id="spells" title={t("Spells you ate")}>
+              <SpellDietWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
+            </InspSection>
+
+            <InspSection id="hand" title={t("Your hand")}>
+              <HandWidget matchId={match.id} />
             </InspSection>
 
             {!match.is_vod && participants.length > 0 && (

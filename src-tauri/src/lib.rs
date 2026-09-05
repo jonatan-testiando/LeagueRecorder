@@ -1,4 +1,5 @@
 mod riot_live_api;
+mod spells;
 mod attribution;
 mod awareness;
 mod backup;
@@ -11,6 +12,7 @@ mod cv_analyzer;
 mod app_update;
 mod dataset_generator;
 mod gank;
+mod hands;
 mod minimap;
 mod obs_client;
 mod occupancy;
@@ -326,6 +328,9 @@ pub fn run() {
             camera_snaps::get_camera_looks,
             camera_snaps::get_blind_spot,
             camera_snaps::get_camera_zone_history,
+            hands::get_hand_report,
+            spells::get_spell_autopsy,
+            spells::get_spell_diet,
             riot_api::get_pressure_summary,
             riot_api::get_season_form,
             overlay::preview_metronome_overlay,

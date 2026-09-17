@@ -37,10 +37,10 @@
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
      escalón, no la sombra ni el color. */
-  --ground: #171D26;     /* fondo de ventana: marino oscuro, no negro */
-  --panel: #1F2630;      /* rail, barras, tarjetas, inspector */
-  --raised: #2F3641;     /* elemento activo, hover, botón */
-  --sunken: #0F141C;     /* campos y pistas hundidas */
+  --ground: #0E141D;     /* fondo de ventana: marino oscuro, no negro */
+  --panel: #161D27;      /* rail, barras, tarjetas, inspector */
+  --raised: #262D38;     /* elemento activo, hover, botón */
+  --sunken: #080D14;     /* campos y pistas hundidas */
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
   --hair: rgba(219, 215, 208, 0.09);        /* filo de tarjeta y división */
@@ -51,9 +51,9 @@
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto */
-  --text: #DBD7D0;       /* hueso, no blanco: contraste 10,6, no 16 */
-  --muted: #B4B1AB;      /* 7,1 */
-  --faint: #888D92;      /* etiquetas y metadatos: 4,6 */
+  --text: #D4D0CA;       /* hueso, no blanco: contraste ~11,5, no 16 */
+  --muted: #ADAAA5;      /* ~7,5 */
+  --faint: #82878C;      /* etiquetas y metadatos: ~4,8 */
 
   /* Tintes */
   --brand: #C8AA6E;      /* oro hextech: acción y marca */

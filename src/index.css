@@ -25,8 +25,10 @@
        frambuesa -> grabando, derrota, destructivo. Es la alarma: la más
                     saturada y lejos del naranja (358° frente a 50°).
        azul      -> lo que ha encontrado el analizador.
-     Medido sobre el panel: naranja 8,0 · verde 10,2 · frambuesa 5,2 ·
-     azul 8,5 · texto 16,4 · etiquetas 5,4. Todo AA.
+     Suavizado el mismo día: el negro casi puro con texto casi blanco (16:1)
+     deslumbraba y cansaba la vista (halación). Ahora el fondo es gris oscuro
+     (L 0,23) y el texto marfil: 10,6:1, y el claro es papel gris con tinta
+     gris, 11:1 en vez de 16. Los tintes siguen en AA sobre el panel.
 
      Dos temas. El oscuro es el defecto (la app vive al lado de un vídeo y del
      cliente de LoL, los dos oscuros). El claro se activa con
@@ -36,27 +38,27 @@
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
      escalón, no la sombra ni el color. */
-  --ground: #05080A;     /* fondo de ventana */
-  --panel: #0B0C0F;      /* rail, barras, tarjetas, inspector */
-  --raised: #1A1C1F;     /* elemento activo, hover, botón */
-  --sunken: #030305;     /* campos y pistas hundidas */
+  --ground: #1A1D1F;     /* fondo de ventana: gris oscuro, no negro */
+  --panel: #232628;      /* rail, barras, tarjetas, inspector */
+  --raised: #333638;     /* elemento activo, hover, botón */
+  --sunken: #111416;     /* campos y pistas hundidas */
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
-  --hair: rgba(233, 235, 238, 0.08);        /* filo de tarjeta y división */
-  --hair-strong: rgba(233, 235, 238, 0.15); /* filo de control y chip activo */
+  --hair: rgba(233, 235, 238, 0.09);        /* filo de tarjeta y división */
+  --hair-strong: rgba(233, 235, 238, 0.17); /* filo de control y chip activo */
   --rim: rgba(255, 255, 255, 0.07);         /* luz de canto, 1px arriba */
   --line: var(--hair-strong);
   --line-soft: var(--hair);
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto */
-  --text: #E9EBEE;
-  --muted: #C9CACD;      /* contraste 11+ */
-  --faint: #84868A;      /* etiquetas y metadatos: 5,4 */
+  --text: #D9D7D4;       /* marfil, no blanco: contraste 10,6, no 16 */
+  --muted: #AEB1B4;      /* 7,1 */
+  --faint: #8C9195;      /* etiquetas y metadatos: 4,6 */
 
   /* Tintes */
   --brand: #FD8537;      /* naranja: acción y marca */
-  --signal: #E4488C;     /* frambuesa: grabando, derrota, destructivo */
+  --signal: #F05C9A;     /* frambuesa: grabando, derrota, destructivo */
   --flag: #75AEF5;       /* azul: hallazgo del analizador */
   --cool: #7CCD8E;       /* verde: datos, victoria, foco, enlaces */
   --cool-hover: #9ADBA6;
@@ -233,20 +235,20 @@
    ========================================================================= */
 :root[data-theme="light"] {
   color-scheme: light;
-  --ground: #EEF0F2;
-  --panel: #F5F7F9;
-  --raised: #FFFFFF;
-  --sunken: #E3E7E9;
+  --ground: #E4E7E9;
+  --panel: #EDEFF0;
+  --raised: #F6F7F8;
+  --sunken: #D9DDDF;
   --hair: rgba(23, 27, 38, 0.10);
   --hair-strong: rgba(23, 27, 38, 0.18);
   --rim: rgba(255, 255, 255, 0.85);
-  --text: #171B26;
-  --muted: #3E4656;
-  --faint: #5F6979;
-  --brand: #BE4C00;
-  --signal: #C1216E;
-  --flag: #2D6FBE;
-  --cool: #1D7D3E;
+  --text: #2E3437;
+  --muted: #50565A;
+  --faint: #666E73;
+  --brand: #B13F00;
+  --signal: #B30863;
+  --flag: #2063B0;
+  --cool: #067132;
   --cool-hover: color-mix(in srgb, #1D7D3E 80%, black);
   --action: #FD8537;
   --action-hover: #FF9A55;

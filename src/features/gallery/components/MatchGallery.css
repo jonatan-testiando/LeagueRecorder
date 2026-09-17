@@ -1,0 +1,287 @@
+/* =========================================================================
+   Biblioteca de partidas.
+
+   Una cabecera, una fila de chips y UNA tarjeta que contiene la tabla:
+   cabecera de columnas fija arriba y lista virtualizada con scroll dentro.
+   Cabecera y filas comparten la misma rejilla (.lib-grid): son la misma
+   tabla, así que cada columna cae en la misma vertical.
+
+   Solo tokens de la piel: el tema claro redefine los tokens y aquí no hay
+   ningún color fijo.
+   ========================================================================= */
+
+.lib {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-6) var(--space-8);
+  box-sizing: border-box;
+  min-height: 0;
+}
+
+/* ---- Cabecera ---------------------------------------------------------- */
+.lib-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.lib-head h1 {
+  margin: 0;
+  font-size: var(--font-xl);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.lib-head__sub { color: var(--faint); font-size: 13px; }
+.lib-head__right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.lib-disk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.lib-disk--tight { color: var(--loss); }
+.lib-recording {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--signal);
+}
+
+/* ---- Filtros: una fila de chips píldora -------------------------------- */
+.lib-filters {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.lib-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move),
+    color var(--t-instant) var(--e-move),
+    box-shadow var(--t-instant) var(--e-move);
+}
+.lib-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.lib-chip[aria-pressed="true"],
+.lib-chip--on {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+}
+.lib-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.lib-chip__count { color: var(--flag); font-variant-numeric: tabular-nums; }
+
+/* El orden es un <select> vestido de chip: el control nativo sigue debajo
+   (teclado, lector de pantalla), pero se ve como sus vecinos. */
+.lib-chip--select { position: relative; padding-right: 30px; }
+.lib-chip--select select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.lib-chip--select svg { position: absolute; right: 10px; color: var(--faint); pointer-events: none; }
+.lib-chip--select:has(select:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+.lib-sep { width: 1px; height: 20px; background: var(--hair-strong); margin: 0 4px; flex: none; }
+
+.lib-search {
+  /* .field global lleva flex:1; aquí es un control de ancho fijo a la derecha. */
+  flex: 0 0 auto;
+  /* Ancho propio y no del input: a 1280px el campo se encogía por debajo del
+     input de 190px y el texto se salía por la derecha. */
+  width: 220px;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  color: var(--faint);
+}
+.lib-search input {
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  width: 100%;
+  min-width: 0;
+}
+.lib-search input::placeholder { color: var(--faint); }
+.lib-search:focus-within { border-color: var(--cool); }
+
+/* ---- Aviso de lectura fallida ----------------------------------------- */
+.lib-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in srgb, var(--signal) 8%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: var(--font-xs);
+  overflow-wrap: anywhere;
+}
+
+/* ---- La tarjeta con la tabla ------------------------------------------ */
+.lib-card {
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.lib-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* Partida · Resultado · KDA · CS · Rival · Nota · Puesto · acciones */
+.lib-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) 160px 110px 96px minmax(0, 1.2fr) 64px 76px 56px;
+  gap: 12px;
+  align-items: center;
+}
+.lib-th {
+  padding: 12px 20px 10px;
+  box-shadow: inset 0 -1px 0 var(--hair);
+  flex: none;
+}
+.lib-right { text-align: right; }
+
+.lib-tr {
+  position: relative;
+  padding: 9px 20px;
+  min-height: 56px;
+  box-sizing: border-box;
+  color: var(--text);
+  cursor: pointer;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  transition: box-shadow var(--t-instant) var(--e-move);
+}
+.lib-tr[data-result="win"] { background: var(--tint-win); }
+.lib-tr[data-result="loss"] { background: var(--tint-loss); }
+/* El hover se pinta como lámina encima (spread interior) para no pisar el
+   tinte de resultado, que es lo que distingue la fila. */
+.lib-tr:hover,
+.lib-tr:focus-visible {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+    inset 0 0 0 999px color-mix(in srgb, var(--text) 3%, transparent);
+}
+.lib-tr:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.lib-tr[aria-selected="true"] {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent),
+    inset 2px 0 0 var(--brand),
+    inset 0 0 0 999px color-mix(in srgb, var(--brand) 6%, transparent);
+}
+
+.lib-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lib-cell > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-game { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.lib-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.lib-name > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.lib-win { color: var(--win); }
+.lib-loss { color: var(--loss); }
+
+.lib-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex: none;
+}
+.lib-badge--flag { color: var(--flag); background: color-mix(in srgb, var(--flag) 14%, transparent); }
+.lib-badge--mvp { color: var(--on-action); background: var(--brand); justify-self: end; }
+
+/* Acciones de fila: se ven al pasar el cursor o al enfocar; en modo de
+   selección la casilla ocupa su sitio y se ve siempre. */
+.lib-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--t-instant) var(--e-move);
+}
+.lib-tr:hover .lib-actions,
+.lib-tr:focus-visible .lib-actions,
+.lib-tr:focus-within .lib-actions,
+.lib-actions--always { opacity: 1; }
+
+.lib-check {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), var(--inset-sunken);
+  background: var(--sunken);
+  display: grid;
+  place-items: center;
+  color: transparent;
+}
+.lib-check--on {
+  box-shadow: inset 0 0 0 1px var(--brand);
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+}
+
+/* Cabecera de grupo por día. */
+.lib-day {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 20px 6px;
+}
+
+/* ---- Barra del lote --------------------------------------------------- */
+.lib-batch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius-md);
+}

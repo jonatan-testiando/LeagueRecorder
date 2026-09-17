@@ -10,6 +10,42 @@ import { mouseSpace } from "../components/videoPlayerUtils";
  * desfase de sincronía (`mouseSync`, persistido en localStorage); el componente
  * solo coloca el `<canvas>` devuelto encima del vídeo.
  */
+type Rgb = [number, number, number];
+
+/**
+ * Los colores del rastro salen de los tokens del sistema (--brand, --cool,
+ * --flag, --text) y no de números escritos aquí: así el tema claro y cualquier
+ * cambio de piel llegan al canvas igual que al resto. Como `strokeStyle` no
+ * entiende `var()`, se resuelven leyendo el valor computado y normalizándolo a
+ * RGB con un canvas de un píxel; se recalculan sólo cuando cambia el tema.
+ */
+function readTokens(): Record<"old" | "recent" | "click" | "core", Rgb> {
+  const root = getComputedStyle(document.documentElement);
+  const scratch = document.createElement("canvas").getContext("2d");
+  const toRgb = (token: string, fallback: Rgb): Rgb => {
+    const raw = root.getPropertyValue(token).trim();
+    if (!raw || !scratch) return fallback;
+    scratch.fillStyle = raw;
+    const norm = String(scratch.fillStyle);
+    const hex = /^#([0-9a-f]{6})$/i.exec(norm);
+    if (hex) {
+      const n = parseInt(hex[1], 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    const rgb = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(norm);
+    return rgb ? [+rgb[1], +rgb[2], +rgb[3]] : fallback;
+  };
+  return {
+    old: toRgb("--brand", [253, 133, 55]),
+    recent: toRgb("--cool", [124, 205, 142]),
+    click: toRgb("--flag", [117, 174, 245]),
+    core: toRgb("--text", [233, 235, 238]),
+  };
+}
+
+const lerp = (a: Rgb, b: Rgb, k: number): string =>
+  `${Math.round(a[0] + (b[0] - a[0]) * k)}, ${Math.round(a[1] + (b[1] - a[1]) * k)}, ${Math.round(a[2] + (b[2] - a[2]) * k)}`;
+
 export function useMouseTrailCanvas(
   videoRef: React.RefObject<HTMLVideoElement | null>,
   match: MatchMetadata,
@@ -35,10 +71,17 @@ export function useMouseTrailCanvas(
     resizeObserver.observe(canvas);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    let theme = document.documentElement.getAttribute("data-theme");
+    let tokens = readTokens();
     const render = () => {
       rafRef.current = requestAnimationFrame(render);
       const v = videoRef.current;
       if (!v) return;
+      const now = document.documentElement.getAttribute("data-theme");
+      if (now !== theme) {
+        theme = now;
+        tokens = readTokens();
+      }
 
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -86,13 +129,9 @@ export function useMouseTrailCanvas(
           ctx.moveTo(px(p1.x), py(p1.y));
           ctx.lineTo(px(p2.x), py(p2.y));
           ctx.lineWidth = 2.5 + ageRatio * 4;
-          // Rampa oro -> turquesa: lo viejo se apaga hacia el oro, lo reciente
-          // llega en turquesa. Va en números porque es canvas y `fillStyle` no
-          // entiende var(); son los mismos dos tintes del sistema.
-          const r = Math.floor(200 + ageRatio * (10 - 200));
-          const g = Math.floor(170 + ageRatio * (200 - 170));
-          const b = Math.floor(110 + ageRatio * (185 - 110));
-          ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${ageRatio})`;
+          // Rampa marca -> verde: lo viejo se apaga hacia el color de marca, lo
+          // reciente llega en verde (el tinte de datos y foco).
+          ctx.strokeStyle = `rgba(${lerp(tokens.old, tokens.recent, ageRatio)}, ${ageRatio})`;
           ctx.stroke();
         }
       }
@@ -104,25 +143,24 @@ export function useMouseTrailCanvas(
         const radius = 8 + (1 - ageRatio) * 15;
         const opacity = ageRatio;
 
-        const r = Math.floor(255 + ageRatio * (0 - 255));
-        const g = Math.floor(200 + ageRatio * (150 - 200));
-        const b = Math.floor(50 + ageRatio * (255 - 50));
+        // El clic nace en azul (hallazgo) y se apaga hacia la marca.
+        const ring = lerp(tokens.old, tokens.click, ageRatio);
 
         ctx.save();
         ctx.shadowBlur = 10;
-        ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        ctx.shadowColor = `rgba(${ring}, ${opacity})`;
 
         // Anillo exterior
         ctx.beginPath();
         ctx.arc(px(click.x), py(click.y), radius, 0, Math.PI * 2);
         ctx.lineWidth = 4;
-        ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${opacity * 0.8})`;
+        ctx.strokeStyle = `rgba(${ring}, ${opacity * 0.8})`;
         ctx.stroke();
 
-        // Núcleo interior brillante
+        // Núcleo interior, del color del texto
         ctx.beginPath();
         ctx.arc(px(click.x), py(click.y), radius * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.fillStyle = `rgba(${tokens.core.join(", ")}, ${opacity})`;
         ctx.fill();
         ctx.restore();
       }

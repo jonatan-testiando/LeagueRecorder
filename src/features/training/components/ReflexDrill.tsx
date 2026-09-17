@@ -581,7 +581,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 700, color: "var(--text)" },
+  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 500, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 560 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
   poolError: {
@@ -593,7 +593,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   optionLabel: {
     fontSize: "var(--font-xs)",
-    fontWeight: 700,
+    fontWeight: 500,
     color: "var(--faint)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
@@ -645,9 +645,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 32,
     color: "var(--muted)",
   },
-  champName: { fontSize: "var(--font-xl)", fontWeight: 700, color: "var(--text)" },
+  champName: { fontSize: "var(--font-xl)", fontWeight: 500, color: "var(--text)" },
   feedback: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" },
-  feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 700, fontFamily: "var(--font-mono)" },
+  feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 500, fontFamily: "var(--font-mono)" },
   progressRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   progressText: {
     fontFamily: "var(--font-mono)",
@@ -681,7 +681,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--faint)",
     textTransform: "uppercase",
     letterSpacing: "0.08em",
-    fontWeight: 700,
+    fontWeight: 500,
   },
   statValue: { fontSize: "var(--font-2xl)", fontWeight: 800, fontFamily: "var(--font-mono)" },
   breakdown: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
@@ -689,7 +689,7 @@ const styles: Record<string, React.CSSProperties> = {
   breakdownRole: {
     width: 90,
     fontSize: "var(--font-xs)",
-    fontWeight: 700,
+    fontWeight: 500,
     color: "var(--muted)",
   },
   bar: {
@@ -712,7 +712,7 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "right",
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
-    fontWeight: 700,
+    fontWeight: 500,
   },
   trackArea: {
     position: "relative",

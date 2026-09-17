@@ -217,7 +217,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   icon: { display: "flex", paddingTop: 1, flexShrink: 0 },
   text: { display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: 1 },
-  title: { fontSize: "var(--font-xs)", color: "var(--text)", fontWeight: 600, lineHeight: 1.4 },
+  title: { fontSize: "var(--font-xs)", color: "var(--text)", fontWeight: 500, lineHeight: 1.4 },
   body: {
     fontSize: 11.5,
     color: "var(--faint)",

@@ -1368,12 +1368,26 @@ pub struct PressureSummary {
     pub wpa: f64,
     pub towers: i64,
     pub gold: f64,
+    pub with_gains: usize,
+    pub without_gains: usize,
+    pub deaths: usize,
+    pub episodes: Vec<PressureEpisode>,
+}
+
+#[derive(serde::Serialize)]
+pub struct PressureEpisode {
+    pub match_id: String,
+    pub date: String,
+    /// Game-clock times for labels; window times below use the video clock.
+    pub game_start: f64,
+    pub game_end: f64,
+    pub window: crate::pressure::PressureWindow,
 }
 
 /// Formato de `pressure_v1.json`. Subir el número invalida todas las cachés de
 /// golpe, que es lo que hay que hacer cuando cambia el detector de presión: los
 /// resúmenes viejos serían de un algoritmo que ya no existe.
-const PRESSURE_CACHE_V: u32 = 1;
+const PRESSURE_CACHE_V: u32 = 2;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///
@@ -1387,12 +1401,9 @@ struct PressureCache {
     v: u32,
     /// Huella de las fuentes con las que se calculó. Ver `huella_de_fuentes`.
     stamp: u64,
-    /// 1 si la partida tuvo algún tramo tuyo, 0 si no.
-    games: usize,
-    windows: usize,
-    wpa: f64,
-    towers: i64,
-    gold: f64,
+    /// Canonical episodes for all players, in game seconds.
+    episodes: Vec<crate::pressure::PressureWindow>,
+    game_duration: i64,
 }
 
 fn pressure_cache_path(id: &str) -> std::path::PathBuf {
@@ -1412,7 +1423,7 @@ fn huella_de_fuentes(id: &str) -> u64 {
             .and_then(|m| m.modified())
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
+            .map(|d| d.as_nanos() as u64)
             .unwrap_or(0)
     };
     let mut h: u64 = 1469598103934665603; // FNV-1a de 64 bits
@@ -1449,28 +1460,13 @@ fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCach
     ) else {
         return None;
     };
-    let idx = m.participants.iter().position(|p| p.is_self)?;
-    let yo = (idx + 1) as i32;
-
-    let mut c = PressureCache {
+    let video = crate::minimap::Positions::load(&m.id);
+    let c = PressureCache {
         v: PRESSURE_CACHE_V,
         stamp,
-        games: 0,
-        windows: 0,
-        wpa: 0.0,
-        towers: 0,
-        gold: 0.0,
+        episodes: crate::pressure::analyse(&tl, &details.info.participants, video.as_ref()),
+        game_duration: details.info.gameDuration,
     };
-    for w in crate::pressure::detect(&tl, &details.info.participants)
-        .iter()
-        .filter(|w| w.participant_id == yo)
-    {
-        c.games = 1;
-        c.windows += 1;
-        c.wpa += w.wpa_elsewhere.max(0.0);
-        c.towers += w.towers_elsewhere as i64;
-        c.gold += w.gold_elsewhere;
-    }
     if let Ok(s) = serde_json::to_string(&c) {
         let _ = std::fs::write(&ruta, s);
     }
@@ -1479,19 +1475,37 @@ fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCach
 
 #[tauri::command]
 pub async fn get_pressure_summary() -> PressureSummary {
-    let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0 };
-    for m in crate::storage::load_all_matches() {
+    let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0,
+        with_gains: 0, without_gains: 0, deaths: 0, episodes: Vec::new() };
+    for mut m in crate::storage::load_all_matches() {
         if m.is_vod || m.riot_match_id.is_none() {
             continue;
         }
         let Some(c) = pressure_de_partida(&m) else { continue };
-        sum.games += c.games;
-        sum.windows += c.windows;
-        sum.wpa += c.wpa;
-        sum.towers += c.towers;
-        sum.gold += c.gold;
+        let offset = resolve_video_offset(&mut m, c.game_duration);
+        let Some(idx) = m.participants.iter().position(|p| p.is_self) else { continue };
+        sum.games += 1;
+        for mut w in c.episodes.into_iter().filter(|w| w.participant_id == (idx + 1) as i32) {
+            sum.windows += 1;
+            sum.towers += w.towers_elsewhere as i64;
+            sum.gold += w.gold_elsewhere;
+            sum.deaths += usize::from(w.died);
+            if w.gains.is_empty() { sum.without_gains += 1; } else { sum.with_gains += 1; }
+            let (game_start, game_end) = (w.start, w.end);
+            pressure_video_clock(&mut w, offset);
+            sum.episodes.push(PressureEpisode { match_id: m.id.clone(), date: m.date.clone(), game_start, game_end, window: w });
+        }
     }
+    sum.episodes.sort_by(|a, b| b.date.cmp(&a.date).then(a.game_start.total_cmp(&b.game_start)));
     sum
+}
+
+fn pressure_video_clock(w: &mut crate::pressure::PressureWindow, offset: f64) {
+    w.start = (w.start + offset).max(0.0);
+    w.end = (w.end + offset).max(0.0);
+    for event in w.gains.iter_mut().chain(w.losses.iter_mut()) {
+        event.time = (event.time + offset).max(0.0);
+    }
 }
 
 /// Tramos de presión absorbida de una partida ya sincronizada.
@@ -1503,6 +1517,14 @@ pub async fn pressure_for(
 ) -> Result<Vec<crate::pressure::PressureWindow>, String> {
     let mut metadata = crate::storage::get_match_metadata(match_id)
         .map_err(|e| format!("Error cargando metadata: {}", e))?;
+    // Cached source data needs no live credential. This is the exact same
+    // canonical cache read by Home, including video refinement and evidence.
+    if let Some(c) = pressure_de_partida(&metadata) {
+        let offset = resolve_video_offset(&mut metadata, c.game_duration);
+        let mut windows = c.episodes;
+        for w in &mut windows { pressure_video_clock(w, offset); }
+        return Ok(windows);
+    }
     let rid = metadata
         .riot_match_id
         .clone()
@@ -1517,25 +1539,13 @@ pub async fn pressure_for(
         api.set_platform(&p);
     }
     let details = details_for(&api, match_id, &rid).await?;
-    let tl = timeline_for(&api, match_id, &rid).await?;
+    let _tl = timeline_for(&api, match_id, &rid).await?;
 
     let offset = resolve_video_offset(&mut metadata, details.info.gameDuration);
-    let mut windows = crate::pressure::detect(&tl, &details.info.participants);
-
-    // Si el vídeo de esta partida ya se procesó, sus posiciones (dos por
-    // segundo) afinan los límites de los tramos. Sin ellas la duración es una
-    // cota inferior, porque entre fotogramas de minuto la API no dice nada.
-    if let Some(pos) = crate::minimap::Positions::load(match_id) {
-        crate::pressure::refinar_con_video(
-            &mut windows,
-            &pos,
-            &tl,
-            &details.info.participants,
-        );
-    }
+    let mut windows = pressure_de_partida(&metadata)
+        .ok_or_else(|| "No se pudieron leer las fuentes de presión".to_string())?.episodes;
     for w in windows.iter_mut() {
-        w.start = (w.start + offset).max(0.0);
-        w.end = (w.end + offset).max(0.0);
+        pressure_video_clock(w, offset);
     }
     Ok(windows)
 }

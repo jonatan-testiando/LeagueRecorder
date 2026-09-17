@@ -217,7 +217,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--text)",
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
-    fontWeight: 600,
+    fontWeight: 500,
     flexShrink: 0,
   },
   pie: {
@@ -256,7 +256,7 @@ const styles: Record<string, React.CSSProperties> = {
   percentil: {
     fontFamily: "var(--font-mono)",
     fontSize: "11px",
-    fontWeight: 600,
+    fontWeight: 500,
     flexShrink: 0,
     // Ancho fijo para que las barras queden alineadas entre filas. 92 es lo que
     // pide la cadena más larga en español ("31% más bajo") sin partirse.

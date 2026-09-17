@@ -151,7 +151,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     fontFamily: "var(--font-mono)",
   },
-  role: { color: "var(--text)", fontWeight: 700, fontSize: 14, letterSpacing: "0.06em" },
+  role: { color: "var(--text)", fontWeight: 500, fontSize: 14, letterSpacing: "0.06em" },
   tick: { color: "var(--win)", fontSize: 18, fontWeight: 800 },
   cross: { color: "var(--loss)", fontSize: 18, fontWeight: 800 },
   latency: {

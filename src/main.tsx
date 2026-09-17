@@ -5,6 +5,7 @@ import { App } from "./App";
 import { MetronomeOverlay } from "./features/training/components/MetronomeOverlay";
 import { DialogProvider } from "./components/ui/DialogProvider";
 import { LanguageProvider } from "./core/LanguageProvider";
+import { ThemeProvider } from "./core/ThemeProvider";
 import { ToastProvider } from "./components/ui/Toaster";
 import { RecorderAlerts } from "./components/RecorderAlerts";
 import "./fonts.css";
@@ -25,6 +26,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       </LanguageProvider>
     ) : (
       <LanguageProvider>
+        <ThemeProvider>
         <DialogProvider>
           {/* Los avisos del grabador (disco lleno, replay guardado…) viven fuera
               del router: llegan aunque la ruta cambie. */}
@@ -35,6 +37,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
             </HashRouter>
           </ToastProvider>
         </DialogProvider>
+        </ThemeProvider>
       </LanguageProvider>
     )}
   </React.StrictMode>,

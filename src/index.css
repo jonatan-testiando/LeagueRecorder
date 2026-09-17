@@ -1,200 +1,135 @@
 :root {
   /* =========================================================================
-     Sistema de diseño — piel "Rift"
+     Sistema de diseño — piel "Grafito y naranja" (2026-09-16)
 
-     Los valores vienen del propio cliente de League: #F0E6D2 y #A09B8C son los
-     grises cálidos de Riot, #C8AA6E su oro hextech, y el fondo marino es el
-     suyo. De ahí sale el reconocimiento, no de poner degradados por encima.
+     Tercera piel. Sustituye al marino con oro hextech: el usuario quería
+     personalidad propia y no el uniforme de Riot. Elegida en un lienzo con
+     diez oscuros medidos (OKLCH + contraste WCAG); ver la memoria
+     "rediseno-refero-2026-09".
 
-     La excepción es el cuarto tinte: el turquesa de Riot se cambió por jade
-     (2026-08-14). El reconocimiento ya lo llevan el fondo, el oro y el hueso;
-     el cuarto tinte trabaja más como semáforo que como marca, y ahí verde
-     contra rojo se lee sin aprenderlo.
+     Lo que se toma de las referencias de Refero (Linear, Better Stack,
+     AuthKit, Auros, Dimension):
+       - Color racionado: un fondo casi neutro y UN color de acción. Todo lo
+         que no es un dato es gris.
+       - Bordes como filo de luz: un filo translúcido al 8 % (--hair) y una
+         luz de canto de 1 px arriba (--rim), nunca una línea opaca.
+       - Pesos medios: títulos a 500. La jerarquía la llevan el tamaño y el
+         color, no la negrita.
+       - Dos radios y una píldora: 12 tarjetas, 6 controles, 999 chips.
+       - "Un degradado, un trabajo": aureola en el héroe de cada pantalla,
+         tinte de resultado en las filas, brillo de hallazgo, botón de acción.
 
-     Trece roles y cuatro tintes. Cada tinte tiene un trabajo y solo uno:
-       oro      -> estructura y objetivos. Solo rellena la acción principal de
-                   una pantalla, y solo una (ver --action).
-       jade     -> interacción y datos. Victoria y kills.
-       rojo     -> grabación, derrota, muerte.
-       violeta  -> lo que ha encontrado el analizador.
+     Cuatro tintes, cada uno con un trabajo y solo uno:
+       naranja   -> acción y marca. Rellena UNA acción por pantalla (--action).
+       verde     -> datos, victoria, foco, enlaces.
+       frambuesa -> grabando, derrota, destructivo. Es la alarma: la más
+                    saturada y lejos del naranja (358° frente a 50°).
+       azul      -> lo que ha encontrado el analizador.
+     Medido sobre el panel: naranja 8,0 · verde 10,2 · frambuesa 5,2 ·
+     azul 8,5 · texto 16,4 · etiquetas 5,4. Todo AA.
+
+     Dos temas. El oscuro es el defecto (la app vive al lado de un vídeo y del
+     cliente de LoL, los dos oscuros). El claro se activa con
+     [data-theme="light"] en <html> y solo redefine estos tokens: ningún
+     componente sabe qué tema hay.
      ========================================================================= */
 
-  /* =========================================================================
-     Superficies.
+  /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
+     escalón, no la sombra ni el color. */
+  --ground: #05080A;     /* fondo de ventana */
+  --panel: #0B0C0F;      /* rail, barras, tarjetas, inspector */
+  --raised: #1A1C1F;     /* elemento activo, hover, botón */
+  --sunken: #030305;     /* campos y pistas hundidas */
 
-     El croma de esta escala CRECE hacia arriba en cuanto se deja: el fondo
-     tenía 6 de croma, los paneles 9, y los bordes 14 — o sea que lo más
-     saturado de todo el cromo eran las aristas, más que el texto. En una
-     interfaz densa eso son cientos de bordes teñidos, y se lee como ruido.
-
-     Ahora el croma es plano y bajo en toda la escala, con el mismo tono, y la
-     separación entre fondo y panel sube de 4,5 a 5,7 de L*: la estructura la
-     marca el valor, no el color.
-
-     2026-08-14: la escala pasa de grafito neutro al marino del cliente de Riot.
-     El grafito era correcto y no decía nada: el oro hextech (tono ~40°) pide un
-     fondo alrededor de 260° para encenderse, que es exactamente lo que hace el
-     cliente. Los tonos siguen siendo los cuatro de siempre; lo único que cambia
-     es DÓNDE vive parte de la identidad: ahora también en el fondo, no solo en
-     --text, el oro y el turquesa.
-
-     Lo que NO cambia es la regla que costó encontrar. Al pasar a marino, la
-     tentación es teñir toda la escala por igual, y entonces el croma vuelve a
-     crecer hacia arriba: medido, la versión directa daba 2,8 en el fondo y 6,3
-     en los bordes, o sea las aristas otra vez como lo más saturado de la
-     pantalla. Esta escala (piel B, 2026-08-30) mantiene el croma entre 1,8 y
-     4,0 —un 40% menos de tinte que la anterior— con el máximo en --raised
-     (superficie) y las líneas por debajo (3,1): la estructura sigue sin ser lo
-     más saturado.
-     ========================================================================= */
-  --ground: #080D16;     /* fondo de ventana */
-  --panel: #0B1220;      /* rail, barras, tarjetas, inspector */
-  --raised: #142033;     /* elemento activo, hover, botón */
-  --sunken: #04070E;     /* campos y pistas hundidas */
-
-  --line: #16202E;       /* bordes y divisiones */
-  --line-soft: #101A29;  /* separadores tenues */
-  --hairline: rgba(200, 170, 110, 0.32); /* filete dorado, gesto del marco de Riot */
+  /* Filos. No hay bordes opacos: hay luz que pasa. */
+  --hair: rgba(233, 235, 238, 0.08);        /* filo de tarjeta y división */
+  --hair-strong: rgba(233, 235, 238, 0.15); /* filo de control y chip activo */
+  --rim: rgba(255, 255, 255, 0.07);         /* luz de canto, 1px arriba */
+  --line: var(--hair-strong);
+  --line-soft: var(--hair);
+  --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto */
-  --text: #EDEAE3;       /* hueso, un punto menos cálido que el Riot Grey 1 */
-  --muted: #C6CBD3;      /* secundario frío: contraste 11,5 (antes 6,3) */
-  /* Sobre grafito este gris era un verde-azulado apagado; sobre marino se
-     hundía en el fondo y los metadatos dejaban de leerse. Sube de luminosidad y
-     se alinea con el tono de la escala. */
-  --faint: #7A8798;      /* etiquetas y metadatos */
+  --text: #E9EBEE;
+  --muted: #C9CACD;      /* contraste 11+ */
+  --faint: #84868A;      /* etiquetas y metadatos: 5,4 */
 
   /* Tintes */
-  --brand: #C8AA6E;      /* oro hextech: marca, nav activa, filete */
-  --signal: #E84057;     /* rojo Riot: grabando y acción destructiva */
-  --flag: #9B6DFF;       /* hallazgo del analizador */
-  /* Era el turquesa hextech #0AC8B9. Se cambia por jade a petición del usuario
-     —el turquesa no le convencía en ningún uso— y de paso el sistema gana algo
-     que no tenía: rojo y verde son la pareja que el ojo lee sin aprenderla, y
-     esta es una app cuyo tema son los errores. El jade va un punto por debajo
-     de saturación (croma 12,0 frente a 13,1) para no competir con el oro, que
-     está en 8,6. El rojo sigue siendo el más saturado de los cuatro: es la
-     alarma. */
-  --cool: #3BA97D;       /* jade: interacción, datos, foco, victoria */
+  --brand: #FD8537;      /* naranja: acción y marca */
+  --signal: #E4488C;     /* frambuesa: grabando, derrota, destructivo */
+  --flag: #75AEF5;       /* azul: hallazgo del analizador */
+  --cool: #7CCD8E;       /* verde: datos, victoria, foco, enlaces */
+  --cool-hover: #9ADBA6;
 
-  /* Semánticos (se apoyan en los mismos cuatro tintes) */
-  --win: #3BA97D;
-  --loss: #E84057;
-  --gold: #C8AA6E;
+  /* Semánticos */
+  --win: var(--cool);
+  --loss: var(--signal);
+  /* "gold" es el nombre heredado del oro hextech; hoy apunta al color de
+     marca, sea el que sea. */
+  --gold: var(--brand);
 
-  /* El APM y demás series ambientales van sin tinte, para no competir con las
-     marcas de eventos. Se derivan del gris secundario. */
+  /* Relleno de acción: UNA por pantalla. Texto oscuro encima (contraste 7,9). */
+  --action: var(--brand);
+  --action-hover: #FF9A55;
+  --on-action: #160C04;
+
+  /* Series ambientales (APM) sin tinte, para no competir con los eventos. */
   --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
   --apm-line: color-mix(in srgb, var(--muted) 34%, transparent);
 
   /* =========================================================================
-     Capa de vidrio.
-
-     La escala de superficies de arriba dice a qué ALTURA está cada cosa. Esto
-     dice de qué están hechas: no son rectángulos opacos de color plano, son
-     láminas semitransparentes sobre un fondo que sí tiene color.
-
-     Van juntas y en este orden, o no funciona ninguna:
-       --canvas  el fondo deja de ser negro y pasa a tener tres lavados de color
-                 muy abiertos (oro, turquesa, violeta) puestos donde están los
-                 tintes de la app. Es lo que las láminas de encima filtran.
-       --surface-*  la lámina: un degradado DE OPACIDAD, no de color. Arriba
-                 tapa casi del todo, abajo deja pasar el fondo. Por eso dos
-                 tarjetas iguales en sitios distintos del lavado no se ven
-                 idénticas, que es justo lo que las hace parecer material.
-       --glass-line  el canto. Cálido y translúcido, nunca un gris opaco.
-       --glass-blur  solo para las superficies estructurales (rail, barras,
-                 emergentes). En una lista virtualizada de cientos de filas el
-                 desenfoque de fondo se paga por fila y no se ve.
-
-     Los porcentajes son altos (88 → 62) a propósito: la transparencia se tiene
-     que leer como profundidad, no como una ventana. Si el texto de debajo se
-     adivina, se ha ido de la mano.
+     Degradados. Cuatro, cada uno con un trabajo. Ninguno de fondo de página
+     ni en cada tarjeta.
      ========================================================================= */
-  /* Antes: tres lavados radiales oro/jade/violeta. Eran una de las cuatro
-     causas medidas de la pesadez: con color debajo de todo, ninguna
-     superficie descansa. El fondo ahora es plano; el color lo ponen los
-     datos. */
   --canvas: var(--ground);
-
-  /* La lámina parte de un panel LEVANTADO, no del panel a secas: un gris oscuro
-     translúcido sobre un fondo oscuro no se ve translúcido, se ve más oscuro.
-     Para que la transparencia se lea, la lámina tiene que aclarar. */
-  --glass-base: color-mix(in srgb, var(--text) 6%, var(--panel));
-  --glass-base-2: color-mix(in srgb, var(--text) 11%, var(--panel));
-
-  /* Escalones OPACOS. La lámina translúcida sobre fondo oscuro no se leía
-     como vidrio sino como más color; dos tarjetas iguales en sitios
-     distintos del lavado se veían distintas. Ahora una tarjeta es un
-     escalón de valor, igual en toda la pantalla. */
   --surface-1: var(--panel);
   --surface-2: var(--raised);
-
-  /* Brillo de HALLAZGO. Degradado opaco y direccional que sube hacia el
-     violeta (el tinte de los hallazgos del analizador). NO es la capa de
-     vidrio retirada (aquello era translúcido sobre lavados globales).
-
-     La regla de dónde ponerlo, para que siga significando algo:
-       - superficies que ENSEÑAN un hallazgo o una pieza de la colección del
-         usuario (clips, errores, partidas de la biblioteca, el punto ciego de
-         Hoy, el evento destacado del reproductor, los cruces de Patrones).
-     La biblioteca lo llevó un día (2026-08-31) y lo cambió por otro degradado
-     con más información: vertical y teñido por el RESULTADO de la partida
-     (jade/rojo, inline en MatchGallery, referencia op.gg del usuario). Ahí el
-     violeta genérico no vuelve: diría menos que lo que hay. */
-  /* Medido contra la referencia: al 13% el violeta era imperceptible en una
-     fila de pantalla completa (el propio usuario lo dio por ausente). Mobalytics
-     llega a un morado franco en el extremo; esto se queda un paso por debajo
-     pero ya se VE: 26% en el borde y arrancando antes. */
-  --media-sheen: linear-gradient(
-    90deg,
-    var(--panel) 0%,
-    color-mix(in srgb, var(--flag) 11%, var(--panel)) 55%,
-    color-mix(in srgb, var(--flag) 26%, var(--panel)) 100%
-  );
-
-  /* El rail es alto y va pegado al borde: su degradado es vertical y termina
-     dejando ver el fondo, para que no corte la ventana en dos bloques. */
   --rail: var(--panel);
+  --glass-base: color-mix(in srgb, var(--text) 6%, var(--panel));
+  --glass-base-2: color-mix(in srgb, var(--text) 11%, var(--panel));
+  --glass-line: var(--hair-strong);
+  --glass-line-soft: var(--hair);
+  --glass-blur: none;
 
-  --glass-line: color-mix(in srgb, var(--text) 13%, transparent);
-  --glass-line-soft: color-mix(in srgb, var(--text) 8%, transparent);
-  --glass-blur: none; /* sin láminas no hay nada que desenfocar */
-
-  /* Aureola de superficie principal: es lo que ya hacía a mano la tarjeta de
-     "Hoy". Oro arriba a la derecha, turquesa detrás y más abajo, para que el
-     color tenga una dirección y no sea una mancha centrada. */
+  /* 1. Aureola del héroe: una por pantalla, direccional (arriba a la derecha). */
   --halo: radial-gradient(
-      60% 120% at 80% 25%,
-      color-mix(in srgb, var(--brand) 7%, transparent) 0%,
+      60% 120% at 82% 20%,
+      color-mix(in srgb, var(--brand) 14%, transparent) 0%,
       transparent 60%
     ),
     radial-gradient(
-      80% 140% at 96% 75%,
-      color-mix(in srgb, var(--cool) 5%, transparent) 0%,
+      70% 140% at 100% 80%,
+      color-mix(in srgb, var(--cool) 8%, transparent) 0%,
       transparent 55%
     );
 
-  /* Sombras. Difusas y largas: separan la lámina del fondo sin dibujarle un
-     contorno negro debajo. */
+  /* 2. Brillo de hallazgo: superficies que ENSEÑAN algo que descubrió el
+     analizador (errores, clips, punto ciego, evento destacado, cruces). */
+  --media-sheen: linear-gradient(
+    90deg,
+    var(--panel) 0%,
+    color-mix(in srgb, var(--flag) 9%, var(--panel)) 55%,
+    color-mix(in srgb, var(--flag) 22%, var(--panel)) 100%
+  );
+
+  /* 3. Tinte de resultado: filas de partida, de izquierda a derecha. */
+  --tint-win: linear-gradient(90deg, color-mix(in srgb, var(--win) 16%, transparent) 0%, color-mix(in srgb, var(--win) 4%, transparent) 28%, transparent 55%);
+  --tint-loss: linear-gradient(90deg, color-mix(in srgb, var(--loss) 14%, transparent) 0%, color-mix(in srgb, var(--loss) 3.5%, transparent) 28%, transparent 55%);
+
+  /* 4. El botón de acción: caída vertical y luz de canto (ver .btn--primary). */
+
+  /* Sombras: difusas y largas, para separar sin dibujar contorno. */
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.22), 0 6px 16px -12px rgba(0, 0, 0, 0.6);
   --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.26), 0 18px 40px -22px rgba(0, 0, 0, 0.7);
   --shadow-3: 0 28px 64px -24px rgba(0, 0, 0, 0.8);
-
-  /* Lo hundido (pistas de barra, campos) no es una lámina: es un hueco. */
   --inset-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.45);
 
-  /* =========================================================================
-     Alias heredados. Los componentes todavía usan estos nombres; apuntan a los
-     roles de arriba para que la piel se cambie en un sitio. Se van borrando a
-     medida que cada pantalla pasa a los nombres nuevos.
-     ========================================================================= */
+  /* Alias heredados: los componentes aún usan estos nombres. */
   --bg-app: var(--ground);
   --bg-sidebar: var(--panel);
   --bg-card: var(--panel);
   --bg-elevated: var(--raised);
   --bg-hover: var(--raised);
-
   --border-subtle: var(--line-soft);
   --border-strong: var(--line);
   --border-focus: var(--cool);
@@ -204,7 +139,7 @@
   --text-muted: var(--faint);
 
   --accent-violet: var(--cool);          /* acento general de interacción */
-  --accent-violet-hover: #4FC08F;
+  --accent-violet-hover: var(--cool-hover);
   --accent-violet-soft: color-mix(in srgb, var(--cool) 16%, transparent);
   --accent-gold: var(--gold);
   --accent-blue: var(--cool);
@@ -246,8 +181,8 @@
   /* Radios más afilados (estilo template) */
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-full: 9999px;
 
   /* Altura de la barra de título personalizada */
@@ -289,6 +224,39 @@
   padding: 0;
   overflow: hidden;
   user-select: none;
+}
+
+/* =========================================================================
+   Tema claro. Solo tokens: los componentes no se enteran. Los tintes bajan
+   a L 0,52-0,56 para leerse como texto sobre blanco (todos ≥ 4,5); el relleno
+   de acción se queda naranja pleno con texto oscuro, que contrasta 7,9.
+   ========================================================================= */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ground: #EEF0F2;
+  --panel: #F5F7F9;
+  --raised: #FFFFFF;
+  --sunken: #E3E7E9;
+  --hair: rgba(23, 27, 38, 0.10);
+  --hair-strong: rgba(23, 27, 38, 0.18);
+  --rim: rgba(255, 255, 255, 0.85);
+  --text: #171B26;
+  --muted: #3E4656;
+  --faint: #5F6979;
+  --brand: #BE4C00;
+  --signal: #C1216E;
+  --flag: #2D6FBE;
+  --cool: #1D7D3E;
+  --cool-hover: color-mix(in srgb, #1D7D3E 80%, black);
+  --action: #FD8537;
+  --action-hover: #FF9A55;
+  --on-action: #160C04;
+  --shadow-1: 0 1px 2px rgba(16, 20, 30, 0.06), 0 6px 16px -12px rgba(16, 20, 30, 0.25);
+  --shadow-2: 0 2px 6px rgba(16, 20, 30, 0.08), 0 18px 40px -22px rgba(16, 20, 30, 0.3);
+  --shadow-3: 0 28px 64px -24px rgba(16, 20, 30, 0.35);
+  --inset-sunken: inset 0 1px 2px rgba(16, 20, 30, 0.12);
+  --halo: radial-gradient(60% 120% at 82% 20%, color-mix(in srgb, var(--brand) 10%, transparent) 0%, transparent 60%),
+    radial-gradient(70% 140% at 100% 80%, color-mix(in srgb, var(--cool) 6%, transparent) 0%, transparent 55%);
 }
 
 * {
@@ -333,7 +301,7 @@ body {
    se opera y se escanea, el serif compite con los datos en vez de ordenarlos. */
 h1 {
   font-family: var(--font-sans);
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
@@ -375,7 +343,7 @@ h1 {
    que dejaba la interfaz hablando a un solo volumen. */
 h2, h3, h4 {
   letter-spacing: -0.01em;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Transiciones suaves globales */
@@ -524,51 +492,70 @@ a:focus:not(:focus-visible) {
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
+  padding: 8px 10px;
   text-align: left;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
   box-shadow: none;
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
+.nav-btn svg { color: var(--faint); flex: none; }
 .nav-btn:hover {
-  background: var(--surface-2);
-  color: var(--text-primary);
-}
-/* La sección activa es el único sitio de la navegación donde entra el oro, y
-   entra como estructura (una barra de 2px), nunca como relleno. */
-.nav-btn--active {
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
   color: var(--text);
-  font-weight: 700;
-  box-shadow: var(--shadow-1);
 }
-.nav-btn--active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 22%;
-  bottom: 22%;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--brand);
+/* La sección activa es superficie levantada con filo y luz de canto; el color
+   de marca entra solo en el icono. Nada de negrita: el peso no es jerarquía. */
+.nav-btn--active {
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
+.nav-btn--active svg { color: var(--brand); }
+/* Grupo del rail: etiqueta mono en mayúsculas. */
+.nav-grp {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 14px 10px 6px;
+}
+/* Estado de captura, fijo abajo del rail: esperando, grabando, clave y disco. */
+.rail-status {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rail-status__st { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.rail-status__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rail-status__meta button {
+  background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--signal); cursor: pointer; box-shadow: none;
+}
+.rail-status__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.rail-status__dot--rec { background: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 18%, transparent); }
 
 /* =========================================================================
    Tarjetas y filas interactivas
    ========================================================================= */
 .card {
   background: var(--surface-1);
-  border: 1px solid var(--glass-line-soft);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
+  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-1);
   animation: card-in var(--t-base) var(--e-out) both;
 }
 
@@ -580,9 +567,9 @@ a:focus:not(:focus-visible) {
   overflow: hidden;
   background: var(--halo), var(--surface-1);
   backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-line);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-2);
+  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
 }
 /* El hover no desplaza el elemento: cambia el fondo y el borde, y punto. Mover
    la fila bajo el cursor en una lista densa produce temblor, y a 350ms con
@@ -646,7 +633,7 @@ a:focus:not(:focus-visible) {
   color: var(--on-action);
   border: none;
   border-radius: var(--radius-md);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -671,7 +658,7 @@ a:focus:not(:focus-visible) {
   color: var(--text-primary);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
   box-shadow: none;
   display: inline-flex;
   align-items: center;
@@ -733,7 +720,7 @@ a:focus:not(:focus-visible) {
 }
 .empty-state__title {
   font-size: var(--font-md);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
   margin: 0;
 }
@@ -771,26 +758,6 @@ a:focus:not(:focus-visible) {
 :root {
   --cool-fill: color-mix(in srgb, var(--cool) 55%, var(--panel));
   --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
-
-  /* =========================================================================
-     Relleno de acción.
-
-     Primero fue turquesa a pleno: un rotulador fluorescente sobre el marino, y
-     el punto más brillante de la pantalla para decir "guardar". Luego turquesa
-     rebajado, que dejó de chillar pero seguía sin encajar. El que encaja es el
-     oro, porque es el que usa el propio cliente: el botón JUGAR es un degradado
-     dorado con el texto oscuro encima.
-
-     Esto **dobla la regla del oro** que hay al principio del fichero. La regla
-     se mantiene con una excepción escrita: el oro rellena UNA acción por
-     pantalla, la principal, y nada más. En cuanto haya dos botones dorados a la
-     vez el oro deja de señalar y vuelve el problema que teníamos con el
-     turquesa. Los interruptores, los seleccionados y los estados NO son
-     acciones: esos van con la superficie levantada y el turquesa de siempre.
-     ========================================================================= */
-  --action: #C8AA6E;
-  --action-hover: #D9BE85;
-  --on-action: #0A1420;
 }
 
 /* =========================================================================
@@ -827,8 +794,8 @@ a:focus:not(:focus-visible) {
     color-mix(in srgb, var(--ground) 30%, var(--action)) 100%
   );
   color: var(--on-action);
-  font-weight: 600;
-  box-shadow: var(--shadow-1);
+  font-weight: 500;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .btn--primary:hover:not(:disabled) {
   background: linear-gradient(
@@ -841,8 +808,8 @@ a:focus:not(:focus-visible) {
 }
 
 .btn--ghost {
-  background: var(--surface-1);
-  border-color: var(--glass-line);
+  background: transparent;
+  border-color: var(--hair-strong);
   color: var(--muted);
 }
 .btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
@@ -1217,7 +1184,7 @@ a:focus:not(:focus-visible) {
    orienta y la otra no. */
 .metric__value--lead {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
@@ -1288,7 +1255,7 @@ a:focus:not(:focus-visible) {
 .insp__verdict {
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -1360,7 +1327,7 @@ a:focus:not(:focus-visible) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.insp__player--self .insp__playerName { color: var(--text); font-weight: 600; }
+.insp__player--self .insp__playerName { color: var(--text); font-weight: 500; }
 .insp__playerKda { font-size: 11.5px; color: var(--text); }
 .insp__playerNum { font-size: 11px; color: var(--faint); text-align: right; }
 /* Mismas columnas que la fila de jugador, mas la del icono, o la cabecera no
@@ -1476,7 +1443,7 @@ a:focus:not(:focus-visible) {
   gap: var(--space-2);
   margin-top: var(--space-2);
   font-size: var(--font-sm);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text);
 }
 .evfeat__desc {
@@ -1679,7 +1646,7 @@ a:focus:not(:focus-visible) {
 }
 /* Lista para instalar: pide un clic, así que habla en oro (instalar ES la
    acción de esta superficie). */
-.updpill--lista { cursor: pointer; border-color: var(--brand); color: var(--text); font-weight: 700; }
+.updpill--lista { cursor: pointer; border-color: var(--brand); color: var(--text); font-weight: 500; }
 .updpill--lista:hover { background: var(--raised); }
 .updpill__dot {
   display: inline-block;
@@ -1718,7 +1685,7 @@ a:focus:not(:focus-visible) {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-3);
 }
-.updv__title { font-weight: 700; color: var(--text); }
+.updv__title { font-weight: 500; color: var(--text); }
 .updv__note { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 
 /* --- plegables ---------------------------------------------------------- */
@@ -1763,7 +1730,7 @@ a:focus:not(:focus-visible) {
 .imp__rank {
   font-family: var(--font-mono);
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   color: var(--text);
 }

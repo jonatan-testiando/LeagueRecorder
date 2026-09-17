@@ -227,7 +227,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: 0,
     fontSize: "var(--font-md)",
     color: "var(--text)",
-    fontWeight: 600,
+    fontWeight: 500,
   },
   closeBtn: {
     background: "transparent",
@@ -267,14 +267,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "7px 15px",
     borderRadius: "var(--radius-md)",
     cursor: "pointer",
-    fontWeight: 600,
+    fontWeight: 500,
     fontSize: "var(--font-xs)",
   },
   confirmBtn: {
     padding: "7px 15px",
     borderRadius: "var(--radius-md)",
     cursor: "pointer",
-    fontWeight: 600,
+    fontWeight: 500,
     fontSize: "var(--font-xs)",
   },
 };

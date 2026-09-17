@@ -12,9 +12,10 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Settings2, Library, Film, ArrowLeft, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
+import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
 import { BrandMark } from "./components/BrandMark";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
+import { RailStatus } from "./components/RailStatus";
 import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
 import { getVersion } from "@tauri-apps/api/app";
@@ -38,19 +39,40 @@ type Panel = "/home" | "/review" | "/clips" | "/errors" | "/patterns" | "/vod" |
 // dónde estás. Trazo de 1.6 y 17px en todos, para que pesen igual entre sí.
 const NAV_ICON = { size: 17, strokeWidth: 1.6 } as const;
 
-const NAV_ITEMS: { key: Tab; path: string; label: string; icon: React.ReactNode }[] = [
-  // Lo primero al abrir deja de ser una lista de ficheros y pasa a ser en que
-  // estas trabajando. La app estaba organizada por tipo de archivo, y eso
-  // contesta "donde estan mis cosas", que no es la pregunta de nadie.
-  { key: "home", path: "/home", label: "Today", icon: <CircleDot {...NAV_ICON} /> },
-  { key: "review", path: "/review", label: "Library", icon: <Library {...NAV_ICON} /> },
-  { key: "clips", path: "/clips", label: "Clips", icon: <Film {...NAV_ICON} /> },
-  { key: "errors", path: "/errors", label: "Errors", icon: <TriangleAlert {...NAV_ICON} /> },
-  // La unica seccion que mira mas de una partida a la vez.
-  { key: "patterns", path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn {...NAV_ICON} /> },
-  { key: "vod", path: "/vod", label: "Analysis", icon: <ScanSearch {...NAV_ICON} /> },
-  { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
+type NavItem = { key: Tab; path: string; label: string; icon: React.ReactNode };
+
+// El rail va en tres grupos, por lo que haces y no por tipo de fichero:
+// revisar (lo de cada partida), mejorar (lo que agrega partidas) y
+// herramientas. Ajustes deja de estar pegado abajo: el pie del rail es ahora el
+// estado de captura, que se ve desde cualquier sección.
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Reviewing",
+    items: [
+      { key: "home", path: "/home", label: "Today", icon: <CircleDot {...NAV_ICON} /> },
+      { key: "review", path: "/review", label: "Library", icon: <Library {...NAV_ICON} /> },
+      { key: "clips", path: "/clips", label: "Clips", icon: <Film {...NAV_ICON} /> },
+      { key: "errors", path: "/errors", label: "Errors", icon: <TriangleAlert {...NAV_ICON} /> },
+    ],
+  },
+  {
+    label: "Improving",
+    items: [
+      // La unica seccion que mira mas de una partida a la vez.
+      { key: "patterns", path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn {...NAV_ICON} /> },
+      { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
+    ],
+  },
+  {
+    label: "Tools",
+    items: [
+      // "Analysis" a secas se confundia con el analisis de una partida grabada.
+      { key: "vod", path: "/vod", label: "Video analysis", icon: <ScanSearch {...NAV_ICON} /> },
+      { key: "settings", path: "/settings", label: "Settings", icon: <Settings2 {...NAV_ICON} /> },
+    ],
+  },
 ];
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
 
 export const App: React.FC = () => {
   const navigate = useNavigate();
@@ -196,24 +218,22 @@ export const App: React.FC = () => {
         </div>
 
         <div style={styles.navLinks}>
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              onClick={() => goTo(item.path)}
-              className={`nav-btn${activeTabKey === item.key ? " nav-btn--active" : ""}`}
-            >
-              {item.icon}
-              {t(item.label)}
-            </button>
+          {NAV_GROUPS.map((group) => (
+            <React.Fragment key={group.label}>
+              <div className="nav-grp">{t(group.label)}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => goTo(item.path)}
+                  className={`nav-btn${activeTabKey === item.key ? " nav-btn--active" : ""}`}
+                >
+                  {item.icon}
+                  {t(item.label)}
+                </button>
+              ))}
+            </React.Fragment>
           ))}
-          <button
-            onClick={() => goTo("/settings")}
-            className={`nav-btn${activeTabKey === "settings" ? " nav-btn--active" : ""}`}
-            style={{ marginTop: "auto" }}
-          >
-            <Settings2 {...NAV_ICON} />
-            {t("Settings")}
-          </button>
+          <RailStatus isRecording={isRecording} />
           {pendingUpdate ? (
             <button
               className="updpill updpill--lista"
@@ -281,19 +301,10 @@ export const App: React.FC = () => {
           "/vod",
           selectedVod ? (
             <div style={styles.playerWrapper}>
-              <div style={styles.playerTopBar}>
-                <button style={styles.backBtn} onClick={() => setSelectedVod(null)}>
-                  <ArrowLeft size={20} />
-                </button>
-                <div style={styles.playerTitleBlock}>
-                  {/* Un solo nombre para esta pantalla. El menú decía
-                      "Analysis", la galería "VOD Analysis (AI)" y esta cabecera
-                      "AI Analysis": tres nombres para el mismo sitio. */}
-                  <h2 style={styles.playerTitle}>{t("Analysis")}</h2>
-                  <span style={styles.playerSub}>{selectedVod.date}</span>
-                </div>
-              </div>
-              <VideoPlayer match={selectedVod} />
+              {/* La cabecera (campeón, resultado, clip y error) la pinta el
+                  propio reproductor: es quien sabe la duración real del vídeo
+                  y tiene el recortador a mano. */}
+              <VideoPlayer match={selectedVod} onBack={() => setSelectedVod(null)} />
             </div>
           ) : (
             <VodGallery onSelectMatch={setSelectedVod} />
@@ -322,16 +333,7 @@ export const App: React.FC = () => {
           <>
             {selectedMatch && (
               <div style={styles.playerWrapper}>
-                <div style={styles.playerTopBar}>
-                  <button style={styles.backBtn} onClick={() => setSelectedMatch(null)}>
-                    <ArrowLeft size={20} />
-                  </button>
-                  <div style={styles.playerTitleBlock}>
-                    <h2 style={styles.playerTitle}>{selectedMatch.champion}</h2>
-                    <span style={styles.playerSub}>{t("Recorded {date}", { date: selectedMatch.date })}</span>
-                  </div>
-                </div>
-                <VideoPlayer match={selectedMatch} />
+                <VideoPlayer match={selectedMatch} onBack={() => setSelectedMatch(null)} />
               </div>
             )}
             {/* La galería NO se desmonta al abrir una partida: se oculta, igual
@@ -368,7 +370,7 @@ export const App: React.FC = () => {
       {installing && (
         <div className="upd-veil">
           <div className="spinner" />
-          <div style={{ marginTop: 14, fontWeight: 600 }}>
+          <div style={{ marginTop: 14, fontWeight: 500 }}>
             {t("Installing v{v}…", { v: pendingUpdate?.version ?? "" })}
           </div>
           <div className="u-meta" style={{ marginTop: 6 }}>
@@ -386,7 +388,7 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "var(--bg-app)",
   },
   sidebar: {
-    width: "240px",
+    width: "224px",
     // El rail no tapa el fondo: lo filtra. Su degradado va perdiendo opacidad
     // hacia abajo, así que el lavado de color de la ventana se le ve por debajo
     // y el rail no parte la pantalla en dos bloques planos.
@@ -395,25 +397,25 @@ const styles: Record<string, React.CSSProperties> = {
     borderRight: "1px solid var(--glass-line-soft)",
     display: "flex",
     flexDirection: "column",
-    padding: "var(--space-6) var(--space-4)",
+    padding: "14px 12px 12px",
     boxSizing: "border-box",
   },
   logoArea: {
     display: "flex",
     alignItems: "center",
     gap: "var(--space-3)",
-    paddingBottom: "var(--space-8)",
+    padding: "6px 10px 10px",
   },
   logoText: {
-    fontWeight: 700,
-    fontSize: "var(--font-lg)",
-    letterSpacing: "0.02em",
+    fontWeight: 500,
+    fontSize: "14px",
+    letterSpacing: "-0.01em",
     color: "var(--text)",
   },
   navLinks: {
     display: "flex",
     flexDirection: "column",
-    gap: "var(--space-2)",
+    gap: "2px",
     flex: 1,
   },
   mainContent: {
@@ -425,41 +427,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
   },
+  // El reproductor pinta su propia cabecera (ver VideoPlayer.tsx); aquí sólo
+  // queda el marco que lo hace ocupar la pantalla entera.
   playerWrapper: {
     display: "flex",
     flexDirection: "column",
     height: "100%",
     width: "100%",
+    minHeight: 0,
   },
-  playerTopBar: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    padding: "var(--space-4) var(--space-6)",
-    background: "transparent",
-  },
-  backBtn: {
-    background: "transparent",
-    border: "none",
-    color: "var(--text-secondary)",
-    cursor: "pointer",
-    padding: "var(--space-2)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playerTitleBlock: {
-    display: "flex",
-    flexDirection: "column",
-  },
-  playerTitle: {
-    margin: 0,
-    fontSize: "var(--font-lg)",
-    color: "var(--text)",
-    fontWeight: 600,
-  },
-  playerSub: {
-    fontSize: "var(--font-xs)",
-    color: "var(--text-muted)",
-  }
 };

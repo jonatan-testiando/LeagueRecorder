@@ -1,0 +1,457 @@
+/* =========================================================================
+   Reproductor de una partida — cromo de la pantalla.
+
+   Sigue la maqueta "Reproductor": barra superior de 56 px, cuerpo en rejilla
+   (vídeo + línea de tiempo + transporte a la izquierda, inspector a la
+   derecha) y un inspector de TRES pestañas. Solo tokens de index.css: el tema
+   claro llega aquí sin que este fichero se entere.
+
+   Vive junto al componente y no en index.css porque son clases de una sola
+   pantalla; lo compartido (.card, .btn, .badge, .field, .evrow, .rq-done,
+   .tp-b) sigue en index.css y aquí solo se afina.
+   ========================================================================= */
+
+.vp {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* --- barra superior ----------------------------------------------------- */
+.vp-top {
+  height: 56px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.vp-top__back {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  justify-content: center;
+  flex: none;
+}
+.vp-top__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--hair);
+  background: var(--sunken);
+  flex: none;
+  display: block;
+}
+.vp-top__block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.vp-top__title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  color: var(--text);
+  white-space: nowrap;
+}
+.vp-top__result { font-weight: 400; }
+.vp-top__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-top__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+/* --- cuerpo --------------------------------------------------------------- */
+.vp-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* La fila no crece con el contenido: un <video> de 1080 px de alto o una
+     lista larga tienen que caber, no empujar. Las columnas las pone el
+     componente (la derecha es redimensionable). */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px 24px 22px;
+  /* La barra del recortador se ancla aquí: así también sale en pantalla
+     completa, que es este mismo nodo. */
+  position: relative;
+}
+.vp-body--fs { padding: 0; gap: 0; }
+
+.vp-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.vp-video {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  display: flex;
+  flex-direction: column;
+}
+.vp-body--fs .vp-video { border-radius: 0; box-shadow: none; }
+
+/* Línea de tiempo: cabecera (APM, miradas) y la tira con la curva y los
+   marcadores. El alto de la tira (56 px) lo fijan las dos filas de marcadores
+   en VideoPlayer.tsx; el resto es cabecera y el sitio del eje bajo la tira. */
+.vp-tl {
+  flex: none;
+  height: 112px;
+  position: relative;
+  border-radius: 8px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken), inset 0 0 0 1px var(--hair);
+  padding: 8px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vp-tl__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  min-height: 20px;
+}
+.vp-tl__strip {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.vp-transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* --- inspector ------------------------------------------------------------ */
+.vp-insp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+/* Pestañas como segmentado: un carril hundido y la activa como lámina. */
+.vp-tabs {
+  display: flex;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  flex: none;
+}
+.vp-tab {
+  flex: 1;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move);
+}
+.vp-tab:hover { color: var(--text); }
+.vp-tab:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
+.vp-tab[data-on] {
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+
+.vp-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+/* Partida e Impacto: la tarjeta ya pone el aire; el .insp no lo repite. */
+.vp-insp > .insp { padding: 0 2px 0 0; }
+
+/* --- Revisión: el suceso destacado --------------------------------------- */
+/* Superficie de hallazgo sobre lámina elevada: el mismo brillo azul de
+   --media-sheen, pero saliendo de --raised para que se lea como tarjeta
+   dentro de la tarjeta. */
+.evfeat.vp-feat {
+  flex: none;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    90deg,
+    var(--raised) 0%,
+    color-mix(in srgb, var(--flag) 9%, var(--raised)) 55%,
+    color-mix(in srgb, var(--flag) 22%, var(--raised)) 100%
+  );
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+.vp-feat__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.vp-feat__meta .u-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vp-feat__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.vp-feat__desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.vp-feat__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* --- Revisión: chips de filtro ------------------------------------------- */
+.vp-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: none;
+}
+.vp-filters__count { margin-left: auto; white-space: nowrap; }
+
+.vp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: var(--radius-full);
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move),
+    box-shadow var(--t-instant) var(--e-move);
+}
+.vp-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.vp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.vp-chip[data-on],
+.vp-chip[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+}
+.vp-chip__n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Revisión: la lista --------------------------------------------------- */
+.vp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* Fila: hora · punto del tipo · texto · tono · hecho. Sobre .evrow para heredar
+   hover y selección; sin divisor y con radio, como pide la maqueta. */
+.evrow.vp-ev {
+  grid-template-columns: 44px 10px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 0;
+  border-radius: 8px;
+  flex: none;
+}
+.evrow.vp-ev[data-on] { box-shadow: inset 0 0 0 1px var(--hair); }
+.evrow.vp-ev:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
+.vp-ev__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  justify-self: center;
+}
+.vp-ev__text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.vp-ev__text .evrow__desc { flex: 1; }
+.vp-ev__done { display: flex; align-items: center; min-width: 14px; }
+.vp-ev[data-done] .evrow__label {
+  color: var(--faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--hair-strong);
+}
+/* La casilla de "visto" es la de la cola de revisión; aquí la fila es .vp-ev. */
+.vp-ev[data-done] .rq-done { background: var(--cool); border-color: var(--cool); }
+.vp-ev[data-done] .rq-done::after {
+  content: "";
+  width: 7px;
+  height: 4px;
+  border-left: 1.5px solid var(--ground);
+  border-bottom: 1.5px solid var(--ground);
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+.vp-ev .rq-done { margin-top: 0; }
+
+.vp-saveErr {
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--loss);
+  flex: none;
+}
+
+/* --- Revisión: notas ------------------------------------------------------ */
+.vp-notes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  box-shadow: inset 0 1px 0 var(--hair);
+}
+.vp-notes__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.field.vp-notes__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  cursor: text;
+}
+.vp-notes__field input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+.vp-notes__field input::placeholder { color: var(--faint); }
+.vp-notes__list {
+  max-height: 132px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vp-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.vp-note:hover { background: var(--raised); }
+.vp-note__time {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cool);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.vp-note__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  word-break: break-word;
+}
+.vp-note__input {
+  flex: 1;
+  min-width: 0;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 8px;
+  outline: none;
+}
+.vp-note__input:focus-visible { border-color: var(--cool); }
+.vp-note__btn {
+  flex: none;
+  display: flex;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color var(--t-instant) var(--e-move);
+}
+.vp-note__btn:hover { color: var(--text); }
+.vp-note__btn:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }

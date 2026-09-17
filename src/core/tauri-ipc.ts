@@ -186,6 +186,8 @@ export interface AppConfig {
   auto_prune_days: number;
   /** Idioma de la interfaz: "en" o "es". Se guarda en disco. */
   language: string;
+  /** Tema de la interfaz: "dark", "light" o "system". Se guarda en disco. */
+  theme: string;
   /** Tamaño del minimapa respecto al estándar (1.0). Calibra la detección de
    *  clics de minimapa cuando League corre con la interfaz reescalada. */
   minimap_scale: number;
@@ -341,6 +343,7 @@ export interface PressureWindow {
   end: number;
   /** Suma de confianzas, así que puede ser 3.4: la posición no es certeza. */
   max_enemies: number;
+  enemy_count: number;
   x: number;
   y: number;
   /** Carril en el que te sujetaron: "top", "mid", "bot" — o null si fue lejos
@@ -358,6 +361,29 @@ export interface PressureWindow {
   /** Si los limites se afinaron con el video. Si es false, la duracion es una
    *  cota inferior: la API solo da una posicion por minuto. */
   from_video: boolean;
+  gains: PressureEvidence[];
+  losses: PressureEvidence[];
+  death_gold: number;
+  assessment: "no_gain" | "cost_without_gain" | "gain_without_observed_cost" | "mixed";
+  game_start: number;
+  game_end: number;
+}
+
+export interface PressureEvidence {
+  id: string;
+  time: number;
+  game_time: number;
+  kind: "kill" | "death" | "tower" | "inhibitor" | "plate" | "epic";
+  gold: number;
+  after_episode: boolean;
+}
+
+export interface PressureEpisode {
+  match_id: string;
+  date: string;
+  game_start: number;
+  game_end: number;
+  window: PressureWindow;
 }
 
 // Pide que se procese el video de la partida para sacar posiciones densas del
@@ -387,6 +413,10 @@ export interface PressureSummary {
   wpa: number;
   towers: number;
   gold: number;
+  with_gains: number;
+  without_gains: number;
+  deaths: number;
+  episodes: PressureEpisode[];
 }
 
 export const getPressureSummary = async (): Promise<PressureSummary> => {

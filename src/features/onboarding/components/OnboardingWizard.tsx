@@ -491,7 +491,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "var(--space-4) var(--space-6)",
     borderBottom: "1px solid var(--glass-line-soft)",
   },
-  headTitle: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--text)" },
+  headTitle: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" },
   dots: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" },
   dot: {
     height: 8,
@@ -508,7 +508,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "var(--space-4)",
   },
-  stepTitle: { margin: 0, fontSize: "var(--font-xl)", fontWeight: 600, letterSpacing: "-0.02em" },
+  stepTitle: { margin: 0, fontSize: "var(--font-xl)", fontWeight: 500, letterSpacing: "-0.02em" },
   lead: { margin: 0, fontSize: "var(--font-sm)", lineHeight: 1.55, color: "var(--muted)", maxWidth: "58ch" },
   row: {
     display: "grid",
@@ -533,7 +533,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--muted)",
     maxWidth: "60ch",
   },
-  stepStrong: { color: "var(--text)", fontWeight: 600 },
+  stepStrong: { color: "var(--text)", fontWeight: 500 },
   foot: {
     display: "flex",
     alignItems: "center",

@@ -2,19 +2,19 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { outcome } from "../../../core/matchStats";
+import { outcome, queueKey } from "../../../core/matchStats";
 import {
-  Eye, Maximize, Play, Pause,
+  ArrowLeft, Eye, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
-  XCircle, ChevronLeft, ChevronRight,
-  Trash2, Send, RefreshCw, Check, MinusCircle,
+  Trash2, RefreshCw,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
   BarChart3
 } from "lucide-react";
-import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
+import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
-import { clock } from "../../../core/time";
+import { clock, matchAge } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
+import { PressureEpisodeCard } from "./PressureEpisodeCard";
 import { TacticalMap } from "./TacticalMap";
 import { MapAwarenessWidget } from "./MapAwarenessWidget";
 import { PowerSpikeWidget } from "./PowerSpikeWidget";
@@ -31,13 +31,14 @@ import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
 import { useClipExporter } from "../hooks/useClipExporter";
 import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
-import { ReviewQueue, buildQueue, type Moment } from "./ReviewQueue";
+import { buildQueue, type Moment } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
 import { individualEvents } from "../../../core/matchEvents";
 import { champIcon, ddragonUrl } from "../../../core/ddragon";
 import { sameRole } from "../../../core/roles";
 import { useT } from "../../../core/LanguageProvider";
 import { styles } from "./videoPlayerStyles";
+import "./VideoPlayer.css";
 import { mix } from "../../../core/color";
 import {
   itemIcon,
@@ -89,6 +90,12 @@ const SHORTCUTS: [string, string][] = [
 
 interface VideoPlayerProps {
   match: MatchMetadata;
+  /**
+   * Volver a la lista de la que se abrió. La cabecera de la pantalla (campeón,
+   * resultado, acciones) vive aquí y no en App.tsx porque necesita lo que solo
+   * el reproductor sabe: la duración real del vídeo y el recortador.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -116,7 +123,7 @@ const InspRow: React.FC<{
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const diffTone = (n: number): string => (n >= 0 ? "var(--win)" : "var(--loss)");
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   // El componente pasaba de 2100 líneas con todo dentro; ahora compone tres
   // responsabilidades extraídas a hooks: el transporte (useVideoPlayback), la
   // estela del ratón (useMouseTrailCanvas, más abajo, cuando ya existen los
@@ -173,12 +180,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
   const t = useT();
-  // Cuatro pestanas, no cinco. "Estadisticas" y "Analitica" eran dos nombres
-  // para lo mismo (cifras de esta partida) y entre las dos no cabian en la
-  // columna: la quinta salia cortada.
-  // Sin vídeo, la cola de revisión no lleva a ningún sitio: se abre por la
-  // ficha de la partida, que es lo único que sí hay.
-  const [tab, setTab] = useState<"review" | "match" | "impact" | "events">(
+  // Tres pestañas: Revisión (los sucesos, la cola y las notas: todo lo que se
+  // hace CON el vídeo), Partida (qué pasó) e Impacto (qué significó). "Eventos"
+  // era una cuarta con la misma lista que la cola de revisión, en otro orden.
+  // Sin vídeo, la revisión no lleva a ningún sitio: se abre por la ficha de la
+  // partida, que es lo único que sí hay.
+  const [tab, setTab] = useState<"review" | "match" | "impact">(
     match.video_path ? "review" : "match"
   );
 
@@ -221,6 +228,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
     // `match` entero en las deps: la cola sale de sus eventos y sus saltos de
     // cámara, no sólo de su id.
   }, [match, errorClips, t]);
+  // Marcar un momento como visto. Cada fuente guarda en su sitio: los sucesos
+  // en el JSON de la partida y los errores marcados en el de su propio clip. Si
+  // el guardado falla se revierte y se DICE: revertir en silencio parecía un
+  // clic perdido.
+  const [reviewErr, setReviewErr] = useState<string | null>(null);
+  const toggleReviewed = useCallback(
+    (m: Moment) => {
+      setReviewErr(null);
+      const before = moments;
+      setMoments(before.map((x) => (x.id === m.id ? { ...x, reviewed: !x.reviewed } : x)));
+      const save =
+        m.source === "error" && m.clipPath
+          ? setErrorClipReviewed(m.clipPath, !m.reviewed)
+          : setEventReviewed(match.id, m.time, !m.reviewed);
+      save.catch((err) => {
+        setMoments(before);
+        setReviewErr(t("Couldn't save the reviewed state: {msg}", { msg: String(err) }));
+      });
+    },
+    [moments, match.id, t]
+  );
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);
@@ -231,7 +259,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   const [objectives, setObjectives] = useState<TeamObjectives[]>(match.objectives ?? []);
   const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
   const [syncing, setSyncing] = useState<boolean>(false);
-  const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad">("all");
+  const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad" | "pending">("all");
   const [showEsportsHud, setShowEsportsHud] = useState<boolean>(true);
 
   const { showError } = useDialog();
@@ -620,10 +648,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   };
 
   // --- Redimensionar el panel lateral arrastrando su borde izquierdo ---
+  // El ancho se mide contra el borde derecho del propio panel, no contra la
+  // ventana: entre los dos hay el margen de la rejilla.
+  const asideRef = useRef<HTMLElement>(null);
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
+    const right = asideRef.current?.getBoundingClientRect().right ?? window.innerWidth;
     const onMove = (ev: PointerEvent) => {
-      const w = Math.min(700, Math.max(300, window.innerWidth - ev.clientX));
+      const w = Math.min(700, Math.max(300, right - ev.clientX));
       setSidebarWidth(w);
       localStorage.setItem("reviewSidebarWidth", String(Math.round(w)));
     };
@@ -808,7 +840,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // que tenga emboscadas detectadas.
   const isJungler = sameRole(participants.find((p) => p.is_self)?.role, "JUNGLE");
   const hasGankMarkers = (match.timeline_markers ?? []).some((m) => m.event_type === "gank_attempt");
-  const activeIndex = timedEvents.findIndex(e => e.time === activeEventTime) + 1;
 
   // Rendimiento del jugador y agregados de su equipo (para el panel "Your Performance").
   const selfP = participants.find((p) => p.is_self);
@@ -831,9 +862,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   // pantalla completa también tiene que existir (sin ella no había forma de
   // saltar a un minuto, que fue lo que señaló el usuario).
   const timelineStrip = (
-    <div 
-            style={styles.timelineGraph} 
-            ref={progressBarRef} 
+    <div
+            className="vp-tl__strip"
+            ref={progressBarRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -957,7 +988,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
             {/* Axis marks — generados dinámicamente según la duración real */}
             <div style={styles.axisMarks}>
               {axisMarks.map(m => (
-                <span key={m} style={{position: "absolute", left: `${(m/duration)*100}%`, fontSize: "10px", color: "var(--text-muted)"}}>
+                <span key={m} className="u-meta" style={{ position: "absolute", left: `${(m/duration)*100}%`, fontSize: "10px" }}>
                   {clock(m)}
                 </span>
               ))}
@@ -975,11 +1006,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 left: `${hoverPct * 100}%`,
                 bottom: "calc(100% + var(--space-2))",
                 transform: "translateX(-50%)",
-                background: "var(--surface-1)",
+                background: "var(--panel)",
                 padding: "var(--space-2) var(--space-3)",
                 borderRadius: "var(--radius-md)",
-                border: "1px solid var(--glass-line)",
-                boxShadow: "var(--shadow-2)",
+                border: "1px solid var(--hair-strong)",
+                boxShadow: "inset 0 1px 0 var(--rim), var(--shadow-2)",
                 pointerEvents: "none",
                 zIndex: 100,
                 display: "flex",
@@ -1007,16 +1038,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
               </div>
             )}
 
-            {/* Clipping Overlay */}
+            {/* Rango del recortador. Del color de lo que va a producir: verde
+                si es un clip, frambuesa si es un error. */}
             {isClippingMode && duration > 0 && (
               <div style={{
                 position: "absolute",
                 top: 0, bottom: 0,
                 left: `${(clipStart / duration) * 100}%`,
                 width: `${((clipEnd - clipStart) / duration) * 100}%`,
-                backgroundColor: "color-mix(in srgb, var(--accent-blue) 35%, transparent)",
-                borderLeft: "2px solid var(--accent-violet)",
-                borderRight: "2px solid var(--accent-violet)",
+                backgroundColor: mix(exportType === "clip" ? "var(--cool)" : "var(--loss)", 22),
+                borderLeft: `2px solid ${exportType === "clip" ? "var(--cool)" : "var(--loss)"}`,
+                borderRight: `2px solid ${exportType === "clip" ? "var(--cool)" : "var(--loss)"}`,
                 zIndex: 10,
               }}>
                 <div 
@@ -1033,7 +1065,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
   );
 
   const transportBar = (
-        <div className="tp" style={isFullscreen ? styles.transportOverlay : styles.transportDocked}>
+        <div className={isFullscreen ? "tp" : "tp vp-transport"} style={isFullscreen ? styles.transportOverlay : undefined}>
           <button
             className="tp-b"
             onClick={() => goToAdjacentEvent(-1)}
@@ -1147,221 +1179,471 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
         </div>
   );
 
+  // Cabecera de la pantalla: quién, cómo acabó y las dos acciones que producen
+  // un fichero (clip y error). Vivía en App.tsx con el campeón y la fecha; aquí
+  // tiene a mano el resultado, la duración real del vídeo y el recortador.
+  const rankText =
+    match.impact_rank != null
+      ? t("{rank} of {total} by impact", {
+          rank: match.impact_rank === 1 ? t("MVP") : t("#{n}", { n: match.impact_rank }),
+          total: participants.length || 10,
+        })
+      : null;
+  const metaLine = [
+    match.is_vod ? null : t(queueKey(match.queue)),
+    clock(duration),
+    matchAge(match.date, t),
+    rankText,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    e.currentTarget.style.visibility = "hidden";
+  };
+
   return (
-    <div ref={containerRef} style={styles.container}>
-      <div style={styles.leftColumn}>
-        <div style={styles.videoWrapper}>
-          <div style={styles.topBar}>
-            <div style={styles.topBarLeft}></div>
-          </div>
-          {/* Sin vídeo no se monta el elemento: un `<video src="">` dispara un
-              error de carga y acabaríamos enseñando "el fichero está dañado"
-              para una partida que nunca llegó a grabarse. Son dos cosas
-              distintas y se dicen distinto. */}
-          {hasVideo ? (
-            <video
-              ref={videoRef}
-              src={videoSrc}
-              style={styles.video}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onClick={handlePlayPause}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              // El estado de error existía y era inalcanzable: nadie lo ponía.
-              // Un fichero borrado a mano dejaba un rectángulo negro eterno.
-              onError={() => setLoadState("error")}
-              preload="auto"
-            />
-          ) : (
-            <div style={styles.centerOverlay}>
-              <EmptyState
-                icon={<VideoOff size={30} color="var(--faint)" />}
-                title={t("This game was tracked but not recorded")}
-                text={
-                  noVideoReason
-                    ? t("The recording failed: {reason}. Its events, stats and impact are all still here.", { reason: noVideoReason })
-                    : t("The recording did not produce a file. Its events, stats and impact are all still here.")
-                }
-              />
-            </div>
-          )}
-          {hasVideo && loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
-          {hasVideo && loadState === "error" && (
-            <div style={styles.centerOverlay}>
-              <EmptyState
-                icon={<AlertTriangle size={30} color="var(--loss)" />}
-                title={t("The video file is missing or damaged")}
-                text={t("It was moved, deleted or written incomplete. Everything else about this game still works.")}
-                action={
-                  <button className="btn btn--ghost btn--sm" onClick={revealVideo}>
-                    <FolderOpen size={13} /> {t("Reveal in folder")}
-                  </button>
-                }
-              />
-            </div>
-          )}
-          <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity var(--t-quick) var(--e-move)" }} />
-
-          {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
-          <EsportsPlayerOverlay
-            currentTime={currentTime}
-            match={currentMatch}
-            visible={showEsportsHud && hasVideo}
-          />
-
-          {isFullscreen && (
-            <div style={styles.fsBottom}>
-              <div style={styles.fsTimeline}>{timelineStrip}</div>
-              {transportBar}
-            </div>
-          )}
-        </div>
-        {/* Transporte y linea de tiempo son la misma herramienta: antes eran una
-            barra flotando sobre el video y, separada y mas abajo, una tira con el
-            APM y los eventos que ademas hacia de barra de busqueda. Por eso el
-            centro del transporte estaba vacio: le faltaba su mitad. */}
-        {!isFullscreen && hasVideo && (
-        <div style={styles.deck}>
-          {transportBar}
-          <div style={styles.timelineHeaderRow}>
-            <span style={styles.apmLabel}>{t("Average APM")}: {Math.round(match.apm || 0)}</span>
-            {/* Métricas de uso de las teclas de cámara aliada. */}
-            {snapSummary?.analyzed ? (
-              <span
-                style={styles.snapLabel}
-                title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
-              >
-                <Eye size={13} /> {snapSummary.per_minute.toFixed(1)}/min
-                <span style={{ color: "var(--text-muted)" }}>·</span>
-                <span
-                  style={{
-                    color:
-                      snapSummary.longest_gap_secs > 120
-                        ? "var(--color-defeat)"
-                        : "var(--color-victory)",
-                  }}
-                >
-                  {clock(snapSummary.longest_gap_secs)} {t("blind")}
-                </span>
-              </span>
-            ) : (
-              <button
-                onClick={runSnapAnalysis}
-                disabled={snapBusy}
-                style={{ ...styles.ghostBtn, opacity: snapBusy ? 0.6 : 1 }}
-                title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
-              >
-                <Eye size={14} />
-                {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
-              </button>
-            )}
-            <div style={styles.timelineHeaderRight}>
-              <button
-                onClick={() => toggleClipMode("clip", currentTime, duration)}
-                style={{...styles.ghostBtn, color: isClippingMode && exportType === "clip" ? "var(--accent-violet)" : "var(--text-primary)"}}
-              >
-                <Scissors size={14} /> {t("Clip")}
-              </button>
-              <button
-                onClick={() => toggleClipMode("error", currentTime, duration)}
-                style={{...styles.ghostBtn, color: isClippingMode && exportType === "error" ? "var(--color-defeat)" : "var(--text-primary)"}}
-              >
-                <AlertTriangle size={14} /> {t("Error")}
-              </button>
-            </div>
-          </div>
-
-          {timelineStrip}
-        </div>
+    <div className="vp">
+      <header className="vp-top">
+        {onBack && (
+          <button className="btn btn--ghost vp-top__back" onClick={onBack} title={t("Back")} aria-label={t("Back")}>
+            <ArrowLeft size={16} />
+          </button>
         )}
-      </div>
+        <img className="vp-top__avatar" src={champIcon(match.champion)} alt="" onError={hideBroken} />
+        <div className="vp-top__block">
+          <h2 className="vp-top__title">
+            {match.champion}
+            {(match.is_vod || result !== "unknown") && (
+              <span
+                className="vp-top__result"
+                style={{ color: match.is_vod ? "var(--cool)" : isWin ? "var(--win)" : "var(--loss)" }}
+              >
+                {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
+              </span>
+            )}
+          </h2>
+          <span className="u-meta vp-top__meta">{metaLine}</span>
+        </div>
+        {hasVideo && (
+          <div className="vp-top__actions">
+            <button
+              className="btn btn--ghost btn--md"
+              aria-pressed={isClippingMode && exportType === "clip"}
+              onClick={() => toggleClipMode("clip", currentTime, duration)}
+              title={`${t("Export video clip")} ([ / ])`}
+            >
+              <Scissors size={14} /> {t("Clip")}
+            </button>
+            <button
+              className="btn btn--ghost btn--md"
+              aria-pressed={isClippingMode && exportType === "error"}
+              onClick={() => toggleClipMode("error", currentTime, duration)}
+            >
+              <AlertTriangle size={14} /> {t("Mark error")}
+            </button>
+          </div>
+        )}
+      </header>
 
-      {/* Right Column: Game Review */}
-      {!isFullscreen && (
-      <div style={{ ...styles.rightColumn, width: sidebarWidth }}>
-        <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
-        <div style={styles.tabBar}>
-          <button onClick={() => setTab("review")} style={{ ...styles.tab, ...(tab === "review" ? styles.tabActive : {}) }}>{t("Review")}</button>
-          <button onClick={() => setTab("match")} style={{ ...styles.tab, ...(tab === "match" ? styles.tabActive : {}) }}>{t("Match")}</button>
-          <button onClick={() => setTab("impact")} style={{ ...styles.tab, ...(tab === "impact" ? styles.tabActive : {}) }}>{t("Impact")}</button>
-          <button onClick={() => setTab("events")} style={{ ...styles.tab, ...(tab === "events" ? styles.tabActive : {}) }}>{t(match.is_vod ? "Analysis" : "Events")}</button>
+      {/* El cuerpo es lo que entra en pantalla completa: vídeo y, en la
+          rejilla normal, el inspector a su derecha. */}
+      <div
+        ref={containerRef}
+        className={isFullscreen ? "vp-body vp-body--fs" : "vp-body"}
+        style={{ gridTemplateColumns: isFullscreen ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${sidebarWidth}px` }}
+      >
+        <div className="vp-left">
+          <div className="vp-video">
+            {/* Sin vídeo no se monta el elemento: un `<video src="">` dispara un
+                error de carga y acabaríamos enseñando "el fichero está dañado"
+                para una partida que nunca llegó a grabarse. Son dos cosas
+                distintas y se dicen distinto. */}
+            {hasVideo ? (
+              <video
+                ref={videoRef}
+                src={videoSrc}
+                style={styles.video}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onClick={handlePlayPause}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                // El estado de error existía y era inalcanzable: nadie lo ponía.
+                // Un fichero borrado a mano dejaba un rectángulo negro eterno.
+                onError={() => setLoadState("error")}
+                preload="auto"
+              />
+            ) : (
+              <div style={styles.centerOverlay}>
+                <EmptyState
+                  icon={<VideoOff size={30} color="var(--faint)" />}
+                  title={t("This game was tracked but not recorded")}
+                  text={
+                    noVideoReason
+                      ? t("The recording failed: {reason}. Its events, stats and impact are all still here.", { reason: noVideoReason })
+                      : t("The recording did not produce a file. Its events, stats and impact are all still here.")
+                  }
+                />
+              </div>
+            )}
+            {hasVideo && loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
+            {hasVideo && loadState === "error" && (
+              <div style={styles.centerOverlay}>
+                <EmptyState
+                  icon={<AlertTriangle size={30} color="var(--loss)" />}
+                  title={t("The video file is missing or damaged")}
+                  text={t("It was moved, deleted or written incomplete. Everything else about this game still works.")}
+                  action={
+                    <button className="btn btn--ghost btn--sm" onClick={revealVideo}>
+                      <FolderOpen size={13} /> {t("Reveal in folder")}
+                    </button>
+                  }
+                />
+              </div>
+            )}
+            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity var(--t-quick) var(--e-move)" }} />
+
+            {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
+            <EsportsPlayerOverlay
+              currentTime={currentTime}
+              match={currentMatch}
+              visible={showEsportsHud && hasVideo}
+            />
+
+            {isFullscreen && (
+              <div style={styles.fsBottom}>
+                <div style={styles.fsTimeline}>{timelineStrip}</div>
+                {transportBar}
+              </div>
+            )}
+          </div>
+
+          {/* Línea de tiempo y transporte, debajo del vídeo. La tira ES la
+              barra de búsqueda de este reproductor (APM + sucesos); el
+              transporte va justo debajo, sin ningún botón relleno de color. */}
+          {!isFullscreen && hasVideo && (
+            <>
+              <div className="vp-tl">
+                <div className="vp-tl__head">
+                  <span className="u-meta">{t("Average APM")}: {Math.round(match.apm || 0)}</span>
+                  {/* Métricas de uso de las teclas de cámara aliada. */}
+                  {snapSummary?.analyzed ? (
+                    <span
+                      className="u-meta"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                      title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
+                    >
+                      <Eye size={12} /> {snapSummary.per_minute.toFixed(1)}/min
+                      <span>·</span>
+                      <span style={{ color: snapSummary.longest_gap_secs > 120 ? "var(--loss)" : "var(--win)" }}>
+                        {clock(snapSummary.longest_gap_secs)} {t("blind")}
+                      </span>
+                    </span>
+                  ) : (
+                    <button
+                      className="btn btn--ghost btn--sm"
+                      onClick={runSnapAnalysis}
+                      disabled={snapBusy}
+                      title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
+                    >
+                      <Eye size={13} />
+                      {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
+                    </button>
+                  )}
+                </div>
+                {timelineStrip}
+              </div>
+              {transportBar}
+            </>
+          )}
         </div>
 
-        {/* Revision reune la cola de momentos y tus notas: las dos son cosas
-            tuyas ancladas a un minuto del video, y sirven para lo mismo —
-            errores puntuales y cosas que mejorar—. Separarlas obligaba a saltar
-            de pestana para anotar lo que acababas de ver. */}
-        {tab === "review" && (
-          <>
-            <ReviewQueue
-              matchId={match.id}
-              moments={moments}
-              currentTime={currentTime}
-              onSeek={(secs) => jumpToClip(secs)}
-              onChange={setMoments}
-            />
-            <div className="sect__head" style={{ marginTop: "var(--space-4)" }}>
-              <span className="u-label">{t("Notes")}</span>
-              <i className="sect__rule" />
-            </div>
-            <div style={styles.commentsWrap}>
-              <div style={styles.commentsList}>
-                {comments.length === 0 && (
-                  <div style={styles.emptyEvents}>{t("No notes yet. Write one below and it anchors to the current minute of the video.")}</div>
-                )}
-                {comments.map((c, i) => (
-                  <div key={i} style={styles.commentCard}>
-                    <button style={styles.commentTime} onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
-                      {clock(c.time)}
+        {/* Inspector: tres pestañas. Revisión reúne los sucesos, la cola y las
+            notas —todo lo que se hace con el vídeo delante—; Partida y Impacto
+            son lectura. */}
+        {!isFullscreen && (
+        <aside ref={asideRef} className="card vp-insp">
+          <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
+          <div className="vp-tabs" role="tablist">
+            {(["review", "match", "impact"] as const).map((id) => (
+              <button
+                key={id}
+                role="tab"
+                className="vp-tab"
+                aria-selected={tab === id}
+                data-on={tab === id ? "" : undefined}
+                onClick={() => setTab(id)}
+              >
+                {t(id === "review" ? "Review" : id === "match" ? "Match" : "Impact")}
+              </button>
+            ))}
+          </div>
+
+        {tab === "review" && (() => {
+          const bucket = (tone: Tone): "good" | "neutral" | "bad" =>
+            tone === "excellent" || tone === "good" ? "good"
+              : tone === "mistake" || tone === "throw" ? "bad"
+              : "neutral";
+          // Una sola lista: los sucesos con hora (marcadores de Riot incluidos,
+          // la MISMA que pinta la tira), los errores que marcaste y los saltos
+          // de cámara cuando son pocos. La cola de revisión no es otra lista:
+          // es esta, con su casilla de "visto" en las filas que salen de
+          // buildQueue. Antes vivían en dos pestañas con el mismo contenido en
+          // distinto orden.
+          const byId = new Map(moments.map((m) => [m.id, m] as const));
+          type Row = {
+            key: string;
+            time: number;
+            color: string;
+            icon: React.ReactNode;
+            label: string;
+            desc: string;
+            tone: Tone;
+            moment?: Moment;
+          };
+          const rows: Row[] = timedEvents.map((ev) => {
+            const meta = eventMeta(ev);
+            const key = `event:${ev.time}:${ev.type}:${ev.subtype ?? ""}`;
+            return {
+              key,
+              time: ev.time,
+              color: meta.color,
+              icon: meta.icon,
+              label: t(meta.label),
+              desc: describeEvent(ev, t),
+              tone: meta.tone,
+              moment: byId.get(key),
+            };
+          });
+          for (const m of moments) {
+            if (m.source === "error") {
+              rows.push({ key: m.id, time: m.time, color: "var(--loss)", icon: <AlertTriangle size={18} />, label: m.title, desc: m.note ?? "", tone: "mistake", moment: m });
+            } else if (m.id.startsWith("snap:")) {
+              rows.push({ key: m.id, time: m.time, color: "var(--flag)", icon: <Eye size={18} />, label: m.title, desc: m.note ?? "", tone: "neutral", moment: m });
+            }
+          }
+          rows.sort((a, b) => a.time - b.time);
+
+          const counts = { good: 0, neutral: 0, bad: 0 };
+          rows.forEach((r) => { counts[bucket(r.tone)]++; });
+          const done = moments.filter((m) => m.reviewed).length;
+          const shown = rows.filter((r) =>
+            eventFilter === "all" ? true
+              : eventFilter === "pending" ? !!r.moment && !r.moment.reviewed
+              : bucket(r.tone) === eventFilter
+          );
+          // La tarjeta destacada sólo aparece si hay algo elegido o si el
+          // cursor está encima de un suceso: cuando de verdad se refiere a
+          // algo. Con `rows[0]` de defecto presidía la pestaña el primer suceso
+          // del minuto 2 como si fuera EL momento.
+          const featured =
+            rows.find((r) => r.time === activeEventTime) ??
+            rows.find((r) => Math.abs(r.time - currentTime) <= FEATURED_NEAR);
+          const chips: [typeof eventFilter, string, number][] = [
+            ["all", "All", rows.length],
+            ["good", "Good", counts.good],
+            ["neutral", "Neutral", counts.neutral],
+            ["bad", "Bad", counts.bad],
+            ["pending", "To review", moments.length - done],
+          ];
+          // `tl` son las etiquetas de tono (texto inglés + color), no `t`.
+          const toneBadge = (tone: Tone) => {
+            const tl = toneLabelAndIcon(tone);
+            return (
+              <span className="badge" style={{ color: tl.color, background: mix(tl.color, 12) }}>
+                {t(tl.text)}
+              </span>
+            );
+          };
+          return (
+            <>
+              {featured && (
+                <section className="evfeat vp-feat">
+                  <div className="vp-feat__meta">
+                    {toneBadge(featured.tone)}
+                    <span className="u-meta">
+                      {featured.desc ? `${featured.label} · ` : ""}
+                      {clock(featured.time)} · {t("minute")} {Math.floor(featured.time / 60)}
+                    </span>
+                  </div>
+                  <h3 className="vp-feat__name">
+                    <span style={{ color: featured.color, display: "flex" }}>{featured.icon}</span>
+                    {featured.desc || featured.label}
+                  </h3>
+                  <div className="vp-feat__actions">
+                    <button className="vp-chip" onClick={() => jumpToClip(featured.time)}>
+                      {t("Jump to this moment")}
                     </button>
-                    {editingNote === i ? (
-                      <>
-                        <input
-                          value={editingText}
-                          autoFocus
-                          onChange={(e) => setEditingText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitEditNote();
-                            if (e.key === "Escape") { setEditingNote(null); setEditingText(""); }
-                          }}
-                          onBlur={commitEditNote}
-                          aria-label={t("Edit note")}
-                          style={{ ...styles.commentInput, fontSize: 13 }}
-                        />
-                        <button
-                          style={styles.commentDelete}
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setEditingNote(null); setEditingText(""); }}
-                          title={t("Cancel")}
-                        >
-                          <X size={14} />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <span style={styles.commentText}>{c.text}</span>
-                        <button style={styles.commentDelete} onClick={() => startEditNote(i)} title={t("Edit note")}><Pencil size={14} /></button>
-                        <button style={styles.commentDelete} onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={14} /></button>
-                      </>
+                    {hasVideo && (
+                      <button
+                        className="vp-chip"
+                        aria-pressed={isClippingMode && exportType === "error"}
+                        onClick={() => { if (!isClippingMode) toggleClipMode("error", featured.time, duration); }}
+                      >
+                        {t("Mark error")}
+                      </button>
+                    )}
+                    {featured.moment && (
+                      <button
+                        className="vp-chip"
+                        aria-pressed={featured.moment.reviewed}
+                        onClick={() => toggleReviewed(featured.moment!)}
+                      >
+                        {t(featured.moment.reviewed ? "Mark as not reviewed" : "Mark as reviewed")}
+                      </button>
                     )}
                   </div>
+                </section>
+              )}
+
+              <div className="vp-filters">
+                {chips.map(([id, label, n]) => (
+                  <button
+                    key={id}
+                    className="vp-chip"
+                    data-on={eventFilter === id ? "" : undefined}
+                    onClick={() => setEventFilter(id)}
+                  >
+                    {t(label)} <span className="vp-chip__n">{n}</span>
+                  </button>
                 ))}
+                {moments.length > 0 && (
+                  <span className="u-meta vp-filters__count">
+                    {t("{done} of {total} reviewed", { done, total: moments.length })}
+                  </span>
+                )}
               </div>
-              <div style={styles.commentInputRow}>
-                <span style={styles.commentAtTime} title={t("Will be anchored to this moment")}>{clock(currentTime)}</span>
-                <input
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
-                  placeholder={t("Note this moment…")}
-                  style={styles.commentInput}
-                />
-                <button style={styles.commentSend} onClick={addComment} title={t("Add at current time")}><Send size={16} /></button>
+              {reviewErr && <p className="vp-saveErr">{reviewErr}</p>}
+
+              <div className="vp-list">
+                {shown.map((r) => {
+                  const isActive = activeEventTime === r.time;
+                  return (
+                    <div
+                      key={r.key}
+                      className="evrow vp-ev"
+                      data-on={isActive || undefined}
+                      data-done={r.moment?.reviewed || undefined}
+                      role="button"
+                      tabIndex={0}
+                      // Traerla a la vista si la selección vino de fuera (una
+                      // marca de la línea de tiempo, o las flechas): marcar una
+                      // fila que se ha quedado fuera de la lista es no marcar
+                      // nada. `nearest` no mueve la lista si ya se está viendo.
+                      ref={(el) => {
+                        if (isActive && el) el.scrollIntoView({ block: "nearest" });
+                      }}
+                      onClick={() => jumpToClip(r.time)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); jumpToClip(r.time); }
+                      }}
+                    >
+                      <span className="u-metric evrow__time">{clock(r.time)}</span>
+                      <span className="vp-ev__dot" style={{ background: r.color }} />
+                      <span className="vp-ev__text">
+                        <span className="evrow__label">{r.label}</span>
+                        {r.desc && <span className="evrow__desc">{r.desc}</span>}
+                      </span>
+                      {toneBadge(r.tone)}
+                      <span className="vp-ev__done">
+                        {r.moment && (
+                          <span
+                            className="rq-done"
+                            role="checkbox"
+                            aria-checked={r.moment.reviewed}
+                            aria-label={t(r.moment.reviewed ? "Mark as not reviewed" : "Mark as reviewed")}
+                            tabIndex={0}
+                            onClick={(e) => { e.stopPropagation(); toggleReviewed(r.moment!); }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault(); e.stopPropagation(); toggleReviewed(r.moment!);
+                              }
+                            }}
+                          />
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+                {shown.length === 0 && (
+                  <div style={styles.emptyEvents}>
+                    {rows.length === 0
+                      ? t("No events recorded in this game.")
+                      : eventFilter === "pending" ? t("All reviewed") : t("No events match this filter.")}
+                  </div>
+                )}
               </div>
-            </div>
-          </>
-        )}
+
+              {/* Notas ancladas al minuto. La caja escribe en el instante
+                  actual; las guardadas cuelgan debajo, con su hora, y se editan
+                  en sitio. Guardar es el único botón relleno de la pantalla. */}
+              <div className="vp-notes">
+                <div className="vp-notes__row">
+                  <label className="field vp-notes__field">
+                    <span className="u-meta" title={t("Will be anchored to this moment")}>{clock(currentTime)}</span>
+                    <input
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
+                      placeholder={t("Note this moment…")}
+                      aria-label={t("Notes")}
+                    />
+                  </label>
+                  <button
+                    className="btn btn--primary btn--md"
+                    onClick={addComment}
+                    disabled={!newComment.trim()}
+                    title={t("Add at current time")}
+                  >
+                    {t("Save")}
+                  </button>
+                </div>
+                {comments.length > 0 && (
+                  <div className="vp-notes__list">
+                    {comments.map((c, i) => (
+                      <div key={i} className="vp-note">
+                        <button className="vp-note__time" onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
+                          {clock(c.time)}
+                        </button>
+                        {editingNote === i ? (
+                          <>
+                            <input
+                              className="vp-note__input"
+                              value={editingText}
+                              autoFocus
+                              onChange={(e) => setEditingText(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitEditNote();
+                                if (e.key === "Escape") { setEditingNote(null); setEditingText(""); }
+                              }}
+                              onBlur={commitEditNote}
+                              aria-label={t("Edit note")}
+                            />
+                            <button
+                              className="vp-note__btn"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { setEditingNote(null); setEditingText(""); }}
+                              title={t("Cancel")}
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="vp-note__text">{c.text}</span>
+                            <button className="vp-note__btn" onClick={() => startEditNote(i)} title={t("Edit note")}><Pencil size={13} /></button>
+                            <button className="vp-note__btn" onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={13} /></button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
 
         {tab === "match" && (
           <div className="insp">
@@ -2008,22 +2290,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                 los demás no ayudan a revisar tu partida. */}
             {!match.is_vod && (pressure !== null || pressureErr !== null) && (() => {
               const yo = participants.findIndex((p) => p.is_self) + 1;
-              // Se ordena por lo que tu equipo sacó mientras te sujetaban, que
-              // está en probabilidad de victoria. Antes era `rivales × rato`,
-              // una aproximación que ponía arriba el tramo más aparatoso en vez
-              // del que decidió algo. El modelo de probabilidad ya existe: esto
-              // era justo el hueco que quedaba por cerrar.
-              //
-              // El desempate sigue siendo el tamaño del tramo, para los que no
-              // dieron ningún fruto medible (que también son información).
-              const mios = (pressure ?? [])
-                .filter((w) => w.participant_id === yo)
-                .sort(
-                  (a, b) =>
-                    b.wpa_elsewhere - a.wpa_elsewhere ||
-                    b.max_enemies * (b.end - b.start) - a.max_enemies * (a.end - a.start),
-                )
-                .slice(0, 6);
+              const mios = (pressure ?? []).filter(w => w.participant_id === yo).sort((a, b) => a.start - b.start);
               return (
                 <section>
                   <div className="sect__head">
@@ -2031,7 +2298,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                     <i className="sect__rule" />
                   </div>
                   <p className="note">
-                    {t("Stretches where more enemies were on you than allies. What your team took elsewhere is what your presence bought.")}
+                    {t("Pressure episodes, with and without gains. Evidence shows concurrent events, not personal credit.")}
                   </p>
                   {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
                   {pressureErr !== null && (
@@ -2045,150 +2312,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
                   {pressureErr === null && mios.length === 0 && (
                     <p className="note">{t("No stretches detected in this game.")}</p>
                   )}
-                  {mios.map((w, i) => {
-                    const botin = [
-                      w.towers_elsewhere && `${w.towers_elsewhere} ${t(w.towers_elsewhere === 1 ? "tower" : "towers")}`,
-                      w.inhibs_elsewhere && `${w.inhibs_elsewhere} ${t(w.inhibs_elsewhere === 1 ? "inhibitor" : "inhibitors")}`,
-                      w.plates_elsewhere && `${w.plates_elsewhere} ${t(w.plates_elsewhere === 1 ? "plate" : "plates")}`,
-                      w.epics_elsewhere && `${w.epics_elsewhere} ${t(w.epics_elsewhere === 1 ? "epic" : "epics")}`,
-                      w.gold_elsewhere > 0 && `${Math.round(w.gold_elsewhere)} ${t("gold")}`,
-                    ].filter(Boolean).join(" · ");
-                    return (
-                      <button
-                        key={i}
-                        className="insp__press"
-                        onClick={() => seekTo(Math.max(0, w.start - 5), true)}
-                        title={t("Jump to this moment")}
-                      >
-                        <span className="u-metric">{clock(w.start)}</span>
-                        <span className="insp__pressWhat">
-                          {w.lane && <>{t(w.lane === "top" ? "Top" : w.lane === "mid" ? "Mid" : "Bot")} · </>}
-                          {w.max_enemies.toFixed(1)} {t("enemies on you")} ·{" "}
-                          {/* El "~" marca que la duracion es una cota inferior:
-                              sin video, entre minutos la API no dice nada. */}
-                          <span title={w.from_video ? t("Confirmed frame by frame in the video") : t("Lower bound: the API only gives one position per minute")}>
-                            {w.from_video ? "" : "~"}{Math.round(w.end - w.start)}s
-                          </span>
-                          {w.died && ` · ${t("you die")}`}
-                        </span>
-                        <span className="insp__pressGain">
-                          {w.wpa_elsewhere > 0 && (
-                            <b style={{ color: "var(--win)" }}>+{(w.wpa_elsewhere * 100).toFixed(1)}% </b>
-                          )}
-                          {botin}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {mios.map(w => <PressureEpisodeCard key={w.participant_id + ":" + w.start}
+                    window={w} gameStart={w.game_start}
+                    gameEnd={w.game_end}
+                    onSeek={match.video_path ? time => seekTo(Math.max(0, time - 5), true) : undefined} />)}
+
                 </section>
               );
             })()}
           </div>
         )}
 
-        {tab === "events" && (() => {
-          const bucket = (tone: Tone): "good" | "neutral" | "bad" =>
-            tone === "excellent" || tone === "good" ? "good"
-              : tone === "mistake" || tone === "throw" ? "bad"
-              : "neutral";
-          const counts = { good: 0, neutral: 0, bad: 0 };
-          timedEvents.forEach((e) => { counts[bucket(eventMeta(e).tone)]++; });
-          const shown = timedEvents.filter((e) => eventFilter === "all" || bucket(eventMeta(e).tone) === eventFilter);
-          // La tarjeta destacada caía en `timedEvents[0]` cuando no había nada
-          // seleccionado: al abrir cualquier partida presidía la pestaña el
-          // primer suceso del minuto 2, presentado como si fuera EL momento.
-          // Ahora sólo aparece si hay algo elegido o si el cursor está encima de
-          // un suceso — es decir, cuando de verdad se refiere a algo.
-          const featured =
-            timedEvents.find((e) => e.time === activeEventTime) ??
-            timedEvents.find((e) => Math.abs(e.time - currentTime) <= FEATURED_NEAR);
-          const chips: [("good" | "neutral" | "bad"), number, string, React.ReactNode][] = [
-            ["good", counts.good, "var(--win)", <Check size={13} />],
-            ["neutral", counts.neutral, "var(--faint)", <MinusCircle size={13} />],
-            ["bad", counts.bad, "var(--loss)", <XCircle size={13} />],
-          ];
-          return (
-            <>
-              {featured && (() => {
-                const meta = eventMeta(featured);
-                const tl = toneLabelAndIcon(meta.tone);
-                return (
-                  <div className="evfeat">
-                    <div className="evfeat__top">
-                      <span className="u-label" style={{ color: tl.color }}>{t(tl.text)}</span>
-                      <button className="u-metric evfeat__time" onClick={() => jumpToClip(featured.time)}>
-                        {clock(featured.time)}
-                      </button>
-                    </div>
-                    <div className="evfeat__name">
-                      <span style={{ color: meta.color, display: "flex" }}>{meta.icon}</span> {t(meta.label)}
-                    </div>
-                    <p className="evfeat__desc">{describeEvent(featured, t)}</p>
-                  </div>
-                );
-              })()}
-
-              <div style={styles.filterChips}>
-                {chips.map(([id, count, color, icon]) => (
-                  <button
-                    key={id}
-                    onClick={() => setEventFilter(eventFilter === id ? "all" : id)}
-                    style={{ ...styles.chip, ...(eventFilter === id ? { borderColor: color, color } : {}) }}
-                  >
-                    <span style={{ color, display: "flex" }}>{icon}</span> {count}
-                  </button>
-                ))}
-              </div>
-
-              <div style={styles.reviewList}>
-                <div style={styles.eventListV2}>
-                  {shown.map((ev, i) => {
-                    const meta = eventMeta(ev);
-                    const tl = toneLabelAndIcon(meta.tone);
-                    const desc = describeEvent(ev, t);
-                    const isActive = activeEventTime === ev.time;
-                    return (
-                      <div
-                        key={i}
-                        className="evrow"
-                        data-on={isActive || undefined}
-                        // Traerla a la vista si la selección vino de fuera (una
-                        // marca de la línea de tiempo, o las flechas): marcar una
-                        // fila que se ha quedado fuera de la lista es no marcar
-                        // nada. `nearest` no mueve la lista si ya se está viendo.
-                        ref={(el) => {
-                          if (isActive && el) el.scrollIntoView({ block: "nearest" });
-                        }}
-                        onClick={() => jumpToClip(ev.time)}
-                      >
-                        <span className="evrow__sev" style={{ background: meta.color }} />
-                        <span className="u-metric evrow__time">{clock(ev.time)}</span>
-                        <span className="evrow__icon" style={{ color: meta.color }}>{meta.icon}</span>
-                        <span className="evrow__label">{t(meta.label)}</span>
-                        {desc && <span className="evrow__desc">{desc}</span>}
-                        <span className="evrow__tone" style={{ color: tl.color }}>{t(tl.text)}</span>
-                      </div>
-                    );
-                  })}
-                  {shown.length === 0 && (
-                    <div style={styles.emptyEvents}>
-                      {timedEvents.length === 0 ? t("No events recorded in this game.") : t("No events match this filter.")}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div style={styles.reviewFooter}>
-                <button onClick={() => goToAdjacentEvent(-1)} style={styles.ghostBtn} title={`${t("Previous moment")} (P)`}><ChevronLeft size={16} /> {t("Previous")}</button>
-                <span style={styles.pageInfo}>{activeIndex || "-"} {t("of")} {timedEvents.length}</span>
-                <button onClick={() => goToAdjacentEvent(1)} style={styles.ghostBtn} title={`${t("Next moment")} (N)`}>{t("Next")} <ChevronRight size={16} /></button>
-              </div>
-            </>
-          );
-        })()}
-
-      </div>
-      )}
+        </aside>
+        )}
 
       {/* Barra de acciones del recortador.
           Iba con estilos inline sobre alias heredados y colores escritos a mano
@@ -2238,6 +2374,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match }) => {
           </button>
         </div>
       )}
+      </div>
     </div>
   );
 };

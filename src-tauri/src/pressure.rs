@@ -110,7 +110,7 @@ const COLA: f64 = 20.0;
 
 /// Un tramo en el que un jugador tuvo rivales encima, con lo que su equipo sacó
 /// lejos de allí mientras tanto.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PressureWindow {
     pub participant_id: i32,
     pub champion: String,
@@ -127,6 +127,9 @@ pub struct PressureWindow {
     /// Máximo de rivales comprometidos a la vez (suma de confianzas, así que
     /// puede ser 3,4 en vez de 3: la posición no se conoce con certeza).
     pub max_enemies: f64,
+    /// Maximum count of individually located enemies passing CERTEZA.
+    #[serde(default)]
+    pub enemy_count: usize,
     /// Dónde estabas, en coordenadas de mapa.
     pub x: f64,
     pub y: f64,
@@ -157,6 +160,29 @@ pub struct PressureWindow {
     /// duración es una cota inferior: la API sólo da una posición por minuto.
     #[serde(default)]
     pub from_video: bool,
+    /// Timeline event evidence, uniquely assigned per player after refinement.
+    #[serde(default)]
+    pub gains: Vec<PressureEvidence>,
+    #[serde(default)]
+    pub losses: Vec<PressureEvidence>,
+    #[serde(default)]
+    pub death_gold: f64,
+    #[serde(default)]
+    pub assessment: String,
+    #[serde(default)]
+    pub game_start: f64,
+    #[serde(default)]
+    pub game_end: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PressureEvidence {
+    pub id: String,
+    pub time: f64,
+    pub game_time: f64,
+    pub kind: String,
+    pub gold: f64,
+    pub after_episode: bool,
 }
 
 impl PressureWindow {
@@ -585,6 +611,7 @@ pub fn detect_with(
                 match &mut abierto {
                     Some(w) => {
                         w.end = sec;
+                        w.enemy_count = w.enemy_count.max(seguros);
                         if enemigos > w.max_enemies {
                             w.max_enemies = enemigos;
                             w.x = pos.0;
@@ -598,6 +625,7 @@ pub fn detect_with(
                             start: sec,
                             end: sec,
                             max_enemies: enemigos,
+                            enemy_count: seguros,
                             // Se rellena al cerrar el tramo: `x`/`y` se mueven al
                             // punto de máxima presión mientras sigue abierto.
                             lane: None,
@@ -611,6 +639,12 @@ pub fn detect_with(
                             plates_elsewhere: 0,
                             epics_elsewhere: 0,
                             from_video: false,
+                            gains: Vec::new(),
+                            losses: Vec::new(),
+                            death_gold: 0.0,
+                            assessment: String::new(),
+                            game_start: sec,
+                            game_end: sec,
                         });
                     }
                 }
@@ -623,7 +657,7 @@ pub fn detect_with(
         }
     }
 
-    out.retain(|w| w.end - w.start >= MINIMO_SEGUNDOS && w.paid_off());
+    out.retain(|w| w.end - w.start >= MINIMO_SEGUNDOS);
     // El carril, una vez cerrado el tramo: `x`/`y` ya apuntan al punto de máxima
     // presión, que es donde te tenían sujeto. Misma geometría que los ganks y
     // que las miradas al minimapa, con el mismo radio.
@@ -685,6 +719,237 @@ fn cerrar(
     w.died = muertes
         .iter()
         .any(|(pid, sec)| *pid == w.participant_id && *sec >= w.start && *sec <= w.end + PASO);
+}
+
+/// Single production pipeline. Evidence is assigned only AFTER video has moved
+/// boundaries, so cached summaries and player details describe the same events.
+pub fn analyse(
+    tl: &TimelineDto,
+    participants: &[ParticipantDto],
+    video: Option<&crate::minimap::Positions>,
+) -> Vec<PressureWindow> {
+    let mut windows = detect(tl, participants);
+    if let Some(pos) = video {
+        refinar_con_video(&mut windows, pos, tl, participants);
+    }
+    finalize(&mut windows, tl, participants);
+    windows
+}
+
+fn finalize(windows: &mut Vec<PressureWindow>, tl: &TimelineDto, participants: &[ParticipantDto]) {
+    // Refinement can move two API candidates onto the same actual fight.
+    windows.sort_by(|a, b| a.participant_id.cmp(&b.participant_id).then(a.start.total_cmp(&b.start)));
+    let mut merged: Vec<PressureWindow> = Vec::new();
+    for w in windows.drain(..) {
+        if let Some(last) = merged.last_mut() {
+            if last.participant_id == w.participant_id && w.start <= last.end {
+                last.end = last.end.max(w.end);
+                last.enemy_count = last.enemy_count.max(w.enemy_count);
+                if w.max_enemies > last.max_enemies {
+                    last.max_enemies = w.max_enemies;
+                    last.x = w.x;
+                    last.y = w.y;
+                    last.lane = w.lane.clone();
+                }
+                last.from_video &= w.from_video;
+                continue;
+            }
+        }
+        merged.push(w);
+    }
+    *windows = merged;
+    for w in windows.iter_mut() {
+        w.game_start = w.start;
+        w.game_end = w.end;
+        w.gains.clear();
+        w.losses.clear();
+        w.death_gold = 0.0;
+        w.died = false;
+        // Legacy model credit is not spatially attributable; never expose it
+        // as a player's reward, or mix it into the observed exchange.
+        w.wpa_elsewhere = 0.0;
+        w.gold_elsewhere = 0.0;
+        w.towers_elsewhere = 0;
+        w.inhibs_elsewhere = 0;
+        w.plates_elsewhere = 0;
+        w.epics_elsewhere = 0;
+    }
+    let team_of = |pid: i32| participants.get(pid.checked_sub(1)? as usize).map(|p| p.teamId);
+    for (fi, frame) in tl.info.frames.iter().enumerate() {
+        for (ei, ev) in frame.events.iter().enumerate() {
+            let sec = ev.timestamp as f64 / 1000.0;
+            let kind = match ev.event_type.as_str() {
+                "CHAMPION_KILL" => "kill",
+                "BUILDING_KILL" if ev.buildingType.as_deref() == Some("INHIBITOR_BUILDING") => "inhibitor",
+                "BUILDING_KILL" => "tower",
+                "TURRET_PLATE_DESTROYED" => "plate",
+                "ELITE_MONSTER_KILL" => "epic",
+                _ => continue,
+            };
+            // For destroyed structures teamId is the OWNER, including kills
+            // credited to minions (killerId == 0).
+            let event_team = if matches!(kind, "tower" | "inhibitor" | "plate") && matches!(ev.teamId, 100 | 200) {
+                Some(300 - ev.teamId)
+            } else if matches!(ev.killerTeamId, 100 | 200) {
+                Some(ev.killerTeamId)
+            } else { team_of(ev.killerId) };
+            let gold = if kind == "kill" { (ev.bounty + ev.shutdownBounty).max(0) as f64 } else { 0.0 };
+            for pid in 1..=participants.len() as i32 {
+                let Some(team) = team_of(pid) else { continue };
+                let own_death = kind == "kill" && ev.victimId == pid;
+                let gain = event_team == Some(team) && !own_death;
+                let loss = own_death || event_team.is_some_and(|t| t != team);
+                if !gain && !loss { continue; }
+                if gain && (ev.killerId == pid || ev.assistingParticipantIds.contains(&pid)) { continue; }
+                // Exactly one owner per event and player. Prefer an episode
+                // still in progress, then the nearest preceding episode.
+                let owner = windows.iter().enumerate()
+                    .filter(|(_, w)| w.participant_id == pid && sec >= w.start
+                        && sec <= w.end + COLA)
+                    .filter(|(_, w)| !gain || ev.position.as_ref().is_some_and(|p|
+                        ((p.x as f64 - w.x).powi(2) + (p.y as f64 - w.y).powi(2)).sqrt() >= OTRA_ZONA))
+                    .min_by(|(_, a), (_, b)| {
+                        (sec > a.end).cmp(&(sec > b.end))
+                            .then((sec - a.end).abs().total_cmp(&(sec - b.end).abs()))
+                            .then(a.start.total_cmp(&b.start))
+                    }).map(|(i, _)| i);
+                let Some(i) = owner else { continue };
+                let w = &mut windows[i];
+                let evidence = PressureEvidence {
+                    id: format!("{fi}:{ei}"), time: sec, game_time: sec,
+                    kind: if own_death { "death".into() } else { kind.into() },
+                    gold, after_episode: sec > w.end,
+                };
+                if gain {
+                    w.gold_elsewhere += gold;
+                    match kind {
+                        "tower" => w.towers_elsewhere += 1,
+                        "inhibitor" => w.inhibs_elsewhere += 1,
+                        "plate" => w.plates_elsewhere += 1,
+                        "epic" => w.epics_elsewhere += 1,
+                        _ => (),
+                    }
+                    w.gains.push(evidence);
+                } else {
+                    if own_death { w.died = true; w.death_gold += gold; }
+                    w.losses.push(evidence);
+                }
+            }
+        }
+    }
+    for w in windows.iter_mut() {
+        w.assessment = match (w.gains.is_empty(), w.losses.is_empty()) {
+            (true, true) => "no_gain",
+            (true, false) => "cost_without_gain",
+            (false, true) => "gain_without_observed_cost",
+            (false, false) => "mixed",
+        }.into();
+    }
+    windows.sort_by(|a, b| a.start.total_cmp(&b.start).then(a.participant_id.cmp(&b.participant_id)));
+}
+
+#[cfg(test)]
+mod regression {
+    use super::*;
+    use serde_json::json;
+
+    fn players() -> Vec<ParticipantDto> {
+        [100, 200].iter().map(|team| serde_json::from_value(json!({
+            "puuid": "test", "teamId": team, "championName": "Test", "kills": 0,
+            "deaths": 0, "assists": 0, "goldEarned": 0,
+            "totalDamageDealtToChampions": 0, "win": false
+        })).unwrap()).collect()
+    }
+    fn window(start: f64, end: f64) -> PressureWindow {
+        PressureWindow { participant_id: 1, champion: "Test".into(), start, end,
+            max_enemies: 2.5, enemy_count: 2, x: 1000.0, y: 1000.0, lane: Some("top".into()),
+            died: false, gold_elsewhere: 0.0, wpa_elsewhere: 0.0, towers_elsewhere: 0,
+            inhibs_elsewhere: 0, plates_elsewhere: 0, epics_elsewhere: 0,
+            from_video: false, gains: vec![], losses: vec![], death_gold: 0.0,
+            assessment: String::new(), game_start: start, game_end: end }
+    }
+    fn timeline(events: serde_json::Value) -> TimelineDto {
+        serde_json::from_value(json!({"info": {"frames": [{"timestamp": 180000, "events": events}]}})).unwrap()
+    }
+    fn tower(time: i64) -> serde_json::Value {
+        json!({"type": "BUILDING_KILL", "timestamp": time * 1000, "killerId": 0,
+            "teamId": 200, "buildingType": "TOWER_BUILDING", "position": {"x": 10000, "y": 10000}})
+    }
+
+    #[test]
+    fn no_reward_is_retained_and_death_cost_is_not_a_positive_trade() {
+        let mut ws = vec![window(100.0, 120.0), window(150.0, 170.0)];
+        let tl = timeline(json!([{"type":"CHAMPION_KILL", "timestamp":115000,
+            "killerId":2,"victimId":1,"bounty":300,"shutdownBounty":450}]));
+        finalize(&mut ws, &tl, &players());
+        assert_eq!(ws.len(), 2);
+        assert_eq!(ws[0].death_gold, 750.0);
+        assert!(ws[0].died);
+        assert_eq!(ws[0].assessment, "cost_without_gain");
+        assert_eq!(ws[1].assessment, "no_gain");
+        assert!(!ws[1].died);
+    }
+
+    #[test]
+    fn overlapping_reward_tails_assign_each_event_once_and_prefer_active_episode() {
+        let mut ws = vec![window(100.0, 120.0), window(130.0, 150.0)];
+        finalize(&mut ws, &timeline(json!([tower(135)])), &players());
+        assert_eq!(ws.iter().map(|w| w.towers_elsewhere).sum::<i32>(), 1);
+        assert!(ws[0].gains.is_empty());
+        assert_eq!(ws[1].gains.len(), 1);
+        assert!(!ws[1].gains[0].after_episode);
+    }
+
+    #[test]
+    fn video_overlap_merges_before_evidence_and_preserves_short_confirmed_episodes() {
+        let mut a = window(100.0, 105.0);
+        a.from_video = true;
+        let mut b = window(103.0, 109.0);
+        b.from_video = true;
+        let mut ws = vec![a, b];
+        finalize(&mut ws, &timeline(json!([tower(108)])), &players());
+        assert_eq!(ws.len(), 1);
+        assert_eq!((ws[0].start, ws[0].end), (100.0, 109.0));
+        assert!(ws[0].from_video);
+        assert_eq!(ws[0].towers_elsewhere, 1);
+    }
+
+    #[test]
+    fn gains_and_death_are_mixed_even_when_tower_was_taken() {
+        let mut ws = vec![window(100.0, 120.0)];
+        finalize(&mut ws, &timeline(json!([tower(118),
+            {"type":"CHAMPION_KILL","timestamp":120000,"killerId":2,"victimId":1,"bounty":300}
+        ])), &players());
+        assert_eq!(ws[0].assessment, "mixed");
+        assert_eq!(ws[0].gains[0].kind, "tower");
+        assert_eq!(ws[0].losses[0].kind, "death");
+        assert_eq!(ws[0].wpa_elsewhere, 0.0);
+    }
+
+    #[test]
+    fn local_and_direct_gains_are_excluded_and_tail_is_bounded() {
+        let mut local = tower(110);
+        local["position"] = json!({"x":1000,"y":1000});
+        let mut direct = tower(111);
+        direct["killerId"] = json!(1);
+        let mut ws = vec![window(100.0, 120.0)];
+        finalize(&mut ws, &timeline(json!([local, direct, tower(140), tower(141)])), &players());
+        assert_eq!(ws[0].gains.len(), 1);
+        assert_eq!(ws[0].gains[0].time, 140.0);
+        assert!(ws[0].gains[0].after_episode);
+    }
+
+    #[test]
+    fn concurrent_enemy_objectives_are_costs_not_personal_blame() {
+        let mut enemy = tower(115);
+        enemy["teamId"] = json!(100);
+        let mut ws = vec![window(100.0, 120.0)];
+        finalize(&mut ws, &timeline(json!([enemy])), &players());
+        assert_eq!(ws[0].losses.len(), 1);
+        assert!(!ws[0].died);
+        assert_eq!(ws[0].death_gold, 0.0);
+        assert_eq!(ws[0].assessment, "cost_without_gain");
+    }
 }
 
 #[cfg(test)]

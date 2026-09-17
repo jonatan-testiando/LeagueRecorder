@@ -579,7 +579,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   videoPlayBtn: { background: "transparent", border: "none", color: "var(--text)", cursor: "pointer", display: "flex" },
   volumeContainer: { display: "flex", alignItems: "center", gap: "8px" },
-  videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+  videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums" },
   // Transporte y tira, una sola superficie. `--bg-panel` no existe como
   // token: se usaba en tres sitios y resolvia a nada, o sea transparente.
   deck: { background: "var(--surface-1)", borderTop: "1px solid var(--line-soft)", padding: "var(--space-3) var(--space-4) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
@@ -587,7 +587,7 @@ const styles: Record<string, React.CSSProperties> = {
   timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--sunken)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", cursor: "pointer" },
   rightColumn: { width: "340px", backgroundColor: "var(--bg-sidebar)", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" },
   reviewHeader: { padding: "20px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex" },
-  reviewTitle: { fontSize: "var(--font-md)", fontWeight: 600, color: "var(--text)" },
+  reviewTitle: { fontSize: "var(--font-md)", fontWeight: 500, color: "var(--text)" },
   reviewList: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
   reviewCard: { padding: "12px", borderRadius: "8px", border: "1px solid var(--border-subtle)", cursor: "pointer", transition: "all 0.2s" },
   reviewCardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
@@ -609,6 +609,6 @@ const styles: Record<string, React.CSSProperties> = {
   select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
   textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
   cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
-  saveBtn: { background: "var(--action)", color: "var(--on-action)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 600 },
+  saveBtn: { background: "var(--action)", color: "var(--on-action)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 500 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useT } from "../../../core/LanguageProvider";
 
 /**
- * Botón que captura la siguiente tecla pulsada y la guarda.
+ * Tecla actual como tapa de teclado y un botón "Cambiar" que captura la
+ * siguiente tecla pulsada y la guarda.
  *
  * Mismo patrón que el de Entrenamiento (`TrainingSetup`), con una diferencia: la
  * que decide si la tecla vale es el BACKEND, porque es quien tiene que
@@ -59,18 +60,32 @@ export const HotkeyCapture: React.FC<{
 
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-      <button
-        className={listening ? "btn btn--primary btn--sm" : "btn btn--ghost btn--sm"}
-        style={{ fontFamily: "var(--font-mono)", minWidth: 76, justifyContent: "center" }}
-        disabled={disabled || saving}
-        onClick={() => {
-          setListening(true);
-          setError("");
-        }}
-        title={listening ? t("Press a key, or Escape to cancel") : t("Change key")}
-      >
-        {listening ? t("press…") : saving ? t("Saving…") : value || "—"}
-      </button>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+        <span
+          className="stg-key"
+          {...(listening ? { "data-listening": true } : {})}
+          title={listening ? t("Press a key, or Escape to cancel") : undefined}
+          aria-live="polite"
+        >
+          {listening ? t("press…") : saving ? t("Saving…") : value || "—"}
+        </span>
+        <button
+          className="btn btn--ghost btn--sm"
+          disabled={disabled || saving}
+          aria-pressed={listening}
+          onClick={() => {
+            if (listening) {
+              setListening(false);
+              return;
+            }
+            setListening(true);
+            setError("");
+          }}
+          title={listening ? t("Press a key, or Escape to cancel") : t("Change key")}
+        >
+          {listening ? t("Cancel") : t("Change")}
+        </button>
+      </span>
       {error && (
         <span className="u-meta" style={{ color: "var(--loss)", maxWidth: "32ch", textAlign: "right" }}>
           {error}

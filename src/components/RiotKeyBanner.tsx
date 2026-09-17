@@ -101,7 +101,7 @@ export const RiotKeyBanner: React.FC = () => {
       <button className="btn btn--ghost btn--sm" onClick={() => openUrl(RIOT_DEV_PORTAL)}>
         {t("Renew key")}
       </button>
-      <button className="btn btn--ghost btn--sm" onClick={() => navigate("/settings")}>
+      <button className="btn btn--ghost btn--sm" onClick={() => navigate("/settings?cat=account")}>
         {t("Open Settings")}
       </button>
       <button

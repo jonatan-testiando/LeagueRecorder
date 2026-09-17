@@ -515,6 +515,10 @@ pub struct AppConfig {
     /// sobrevivir a cerrar la app del todo, no solo a recargar la ventana.
     #[serde(default = "default_language")]
     pub language: String,
+    /// Tema de la interfaz: "dark", "light" o "system". Vive en disco por la
+    /// misma razón que el idioma: tiene que sobrevivir a cerrar la app.
+    #[serde(default = "default_theme")]
+    pub theme: String,
     /// Tamaño del minimapa respecto al estándar (1.0). Ver `camera_input`:
     /// con la interfaz de League reescalada, el rectángulo estándar pierde
     /// clics (el minimapa crece hacia dentro) o cuenta de más.
@@ -557,6 +561,10 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+fn default_theme() -> String {
+    "dark".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         let user_profile = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:".to_string());
@@ -573,6 +581,7 @@ impl Default for AppConfig {
             // Opt-in, también en instalaciones nuevas: ver `default_auto_prune`.
             auto_prune_days: 0,
             language: "en".to_string(),
+            theme: "dark".to_string(),
             minimap_scale: 1.0,
             riot_platform: "auto".to_string(),
             riot_platform_detected: String::new(),

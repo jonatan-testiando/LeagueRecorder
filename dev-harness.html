@@ -314,6 +314,7 @@
     max_storage_gb: 200,
     auto_prune_days: 30,
     language: "es",
+    theme: new URLSearchParams(location.search).get("theme") || "dark",
     minimap_scale: 1,
     riot_platform: "auto",
     riot_platform_detected: "la1",

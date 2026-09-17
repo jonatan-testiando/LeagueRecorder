@@ -752,7 +752,7 @@ const styles: Record<string, React.CSSProperties> = {
   clipName: {
     color: "var(--text)",
     fontSize: "var(--font-md)",
-    fontWeight: 600,
+    fontWeight: 500,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -774,7 +774,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--muted)",
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-xs)",
-    fontWeight: 600,
+    fontWeight: 500,
     flexShrink: 0,
   },
   rowActions: {
@@ -811,10 +811,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "var(--space-2)",
     borderRadius: "var(--radius-md)",
     fontSize: "var(--font-xs)",
-    fontWeight: 600,
-    background: "var(--action)",
+    fontWeight: 500,
+    // Fantasma, no relleno: hay un botón por clip y el relleno de acción es
+    // para UNA acción por pantalla. Con seis clips a la vista eran seis
+    // botones naranjas.
+    background: "transparent",
     border: "none",
-    color: "var(--on-action)",
+    boxShadow: "inset 0 0 0 1px var(--hair-strong)",
+    color: "var(--text)",
   },
   indeterminateTrack: {
     height: 3,

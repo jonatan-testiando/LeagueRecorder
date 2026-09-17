@@ -234,7 +234,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
   },
   progressHead: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  progressTitle: { fontSize: "var(--font-sm)", fontWeight: 600, color: "var(--muted)" },
+  progressTitle: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--muted)" },
   spark: { width: "100%", height: 60, display: "block" },
   sparkWrap: { position: "relative" },
   sparkRef: {

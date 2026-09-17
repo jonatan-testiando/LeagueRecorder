@@ -1,0 +1,13 @@
+.pressure-episode { padding: 14px; margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+.pressure-episode__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+.pressure-episode p { margin: 9px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.pressure-episode .pressure-episode__source { color: var(--faint); }
+.pressure-episode__assessment { display: block; font-size: 13px; margin: 12px 0; }
+.pressure-episode button { cursor: pointer; color: var(--brand); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 9px; font: inherit; font-size: 12px; }
+.pressure-episode summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.pressure-episode button:focus-visible, .pressure-episode summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.pressure-episode h4 { font-size: 12px; font-weight: 500; margin: 16px 0 8px; }
+.pressure-episode ul { margin: 0; padding-left: 16px; }
+.pressure-episode li { font-size: 12px; margin: 8px 0; line-height: 1.6; }
+.pressure-episode li button { margin-left: 8px; }
+.pressure-episode small { color: var(--faint); }

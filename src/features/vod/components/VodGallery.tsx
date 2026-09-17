@@ -141,7 +141,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   return (
     <div style={styles.container} className="panel-enter">
       <div style={styles.header}>
-        <h1 style={styles.pageTitle}>{t("Analysis")}</h1>
+        <h1 style={styles.pageTitle}>{t("Video analysis")}</h1>
         <p style={styles.pageSubtitle}>
           {t("Import a video and it reads the cursor and the clicks frame by frame, the same way it does with your own recordings.")}
         </p>
@@ -293,7 +293,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--on-action)",
     border: "none",
     borderRadius: "var(--radius-md)",
-    fontWeight: 600,
+    fontWeight: 500,
     fontSize: "var(--font-sm)",
     cursor: "pointer",
   },
@@ -348,7 +348,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardTitle: {
     fontSize: "var(--font-sm)",
-    fontWeight: 600,
+    fontWeight: 500,
     color: "var(--text)",
     overflow: "hidden",
     textOverflow: "ellipsis",

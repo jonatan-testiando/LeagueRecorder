@@ -1,57 +1,24 @@
 // Estilos inline del reproductor de review. Separados de VideoPlayer.tsx por volumen: son datos,
 // no lógica, y ocupaban un tercio del archivo.
+//
+// Aquí queda solo lo que necesita un valor calculado o una posición absoluta
+// (marcadores, cursor, capas sobre el vídeo). El cromo de la pantalla —barra
+// superior, rejilla, línea de tiempo, inspector, filas y chips— vive en
+// VideoPlayer.css, que es donde caben hover, foco y estados por atributo.
+// Ningún color escrito a mano: todo son tokens de index.css, así el tema claro
+// llega aquí sin que este fichero se entere.
 
 import React from "react";
 
 export const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: "flex",
-    flexDirection: "row",
-    flex: 1,
-    minHeight: 0,
-    width: "100%",
-    background: "transparent",
-    overflow: "hidden",
-  },
-  leftColumn: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    padding: "var(--space-4)",
-    gap: "var(--space-4)",
-    minWidth: 0,
-  },
-  topBar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    padding: "var(--space-4)",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    zIndex: 10,
-    background: "linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)",
-  },
-  topBarLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-  },
-  videoWrapper: {
-    flex: 1,
-    position: "relative",
-    backgroundColor: "#000",
-    borderRadius: "var(--radius-lg)",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-  },
   video: {
     width: "100%",
     height: "100%",
     objectFit: "contain",
   },
+  // Velo sobre el vídeo para el spinner y los estados vacíos. Va sobre el
+  // mismo hundido que el marco, no sobre un negro fijo: en tema claro el marco
+  // es gris y el velo tiene que ser del mismo material.
   centerOverlay: {
     position: "absolute",
     inset: 0,
@@ -59,7 +26,7 @@ export const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.7)",
+    backgroundColor: "color-mix(in srgb, var(--sunken) 72%, transparent)",
   },
   // En pantalla completa no hay baraja: tira y transporte flotan juntos sobre
   // el video, dentro de fsBottom (que pone el degradado y la posición).
@@ -78,7 +45,8 @@ export const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "var(--space-2)",
     padding: "18px 16px 12px",
-    background: "linear-gradient(to top, rgba(0,0,0,0.92), rgba(0,0,0,0.55) 70%, transparent)",
+    background:
+      "linear-gradient(to top, color-mix(in srgb, var(--sunken) 92%, transparent), color-mix(in srgb, var(--sunken) 55%, transparent) 70%, transparent)",
   },
   // La tira necesita alto propio: en la baraja lo heredaba del deck.
   fsTimeline: {
@@ -87,59 +55,15 @@ export const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
   },
-  // Acoplado a la baraja: sin degradado encima del video, y separado de la tira
-  // por una linea, no por un hueco. Son una sola herramienta.
-  transportDocked: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "0 0 var(--space-3) 0",
-    borderBottom: "1px solid var(--line-soft)",
-  },
   volumeSlider: {
     width: "80px",
-    accentColor: "var(--accent-violet)",
+    accentColor: "var(--cool)",
     cursor: "pointer",
     height: "4px",
     borderRadius: "2px",
     appearance: "none",
     background: "var(--sunken)",
     boxShadow: "var(--inset-sunken)",
-  },
-  // La "baraja": transporte + linea de tiempo + acciones, una sola superficie.
-  // Antes era un panel de cristal esmerilado flotando aparte; el desenfoque y la
-  // sombra grande son de los detalles que mas envejecen una interfaz, y ademas
-  // reforzaban la idea de que la tira era otra cosa distinta del transporte.
-  deck: {
-    height: "178px",
-    background: "var(--surface-1)",
-    borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--line-soft)",
-    padding: "var(--space-3) var(--space-4) var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-3)",
-  },
-  timelineHeaderRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  apmLabel: {
-    color: "var(--text-secondary)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 600,
-  },
-  snapLabel: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
-    color: "var(--text-secondary)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 600,
-    fontFamily: "var(--font-mono)",
-    marginRight: "auto",
-    marginLeft: "var(--space-4)",
   },
   // Tira de saltos de cámara al pie del gráfico de APM.
   snapStrip: {
@@ -165,30 +89,9 @@ export const styles: Record<string, React.CSSProperties> = {
     width: "2px",
     height: "100%",
     marginLeft: "-1px",
-    background: "var(--accent-teal)",
+    background: "var(--cool)",
     opacity: 0.75,
     borderRadius: "1px",
-  },
-  timelineHeaderRight: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-  },
-  ghostBtn: {
-    background: "transparent",
-    border: "none",
-    color: "var(--text-secondary)",
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    fontSize: "var(--font-xs)",
-    cursor: "pointer",
-  },
-  timelineGraph: {
-    flex: 1,
-    position: "relative",
-    cursor: "pointer",
-    marginTop: "var(--space-2)",
   },
   graphSvg: {
     width: "100%",
@@ -196,37 +99,38 @@ export const styles: Record<string, React.CSSProperties> = {
     position: "absolute",
     inset: 0,
   },
+  // Marcador de suceso en la tira. Sin rebote ni sombra de contacto: el
+  // sistema no tiene ninguna de las dos.
   eventNode: {
     position: "absolute",
-    bottom: "24px", // Ajustado a la nueva altura
-    width: "24px",  // Área de clic ligeramente mayor
+    bottom: "24px",
+    width: "24px",
     height: "24px",
     borderRadius: "50%",
-    border: "2.5px solid", // Borde con más presencia
+    border: "2px solid",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease",
+    transition: "border-color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move)",
     cursor: "pointer",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.5)", // Sombra de contacto
   },
   playhead: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: "2px",
-    backgroundColor: "#fff",
+    backgroundColor: "var(--text)",
     pointerEvents: "none",
     zIndex: 20,
     opacity: 0.9,
-    boxShadow: "0 0 8px rgba(255,255,255,0.8)",
+    boxShadow: "0 0 8px color-mix(in srgb, var(--text) 60%, transparent)",
   },
   playheadHover: {
     position: "absolute",
     top: 0,
     bottom: 0,
     width: "1px",
-    backgroundColor: "var(--accent-violet)",
+    backgroundColor: "var(--cool)",
     pointerEvents: "none",
     zIndex: 15,
     opacity: 0.5,
@@ -237,15 +141,6 @@ export const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
   },
-  rightColumn: {
-    width: "380px",
-    flexShrink: 0,
-    position: "relative",
-    backgroundColor: "var(--bg-sidebar)",
-    borderLeft: "1px solid var(--border-subtle)",
-    display: "flex",
-    flexDirection: "column",
-  },
   resizeHandle: {
     position: "absolute",
     left: "-3px",
@@ -255,96 +150,8 @@ export const styles: Record<string, React.CSSProperties> = {
     cursor: "ew-resize",
     zIndex: 30,
   },
-  reviewHeader: {
-    padding: "var(--space-4)",
-    textAlign: "center",
-  },
-  reviewTitle: {
-    color: "#fff",
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-  },
-  reviewList: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: "auto",
-    padding: "var(--space-4) 0",
-  },
-  reviewCard: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-    padding: "var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid",
-    backdropFilter: "blur(8px)", // Glassmorphism
-    WebkitBackdropFilter: "blur(8px)",
-    transition: "background 0.2s, border-color 0.2s",
-  },
-  reviewCardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  toneBadge: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    padding: "2px 6px",
-    borderRadius: "4px",
-  },
-  reviewCardBody: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  reviewCardTitle: {
-    color: "#fff",
-    fontSize: "var(--font-sm)",
-    fontWeight: 600,
-  },
-  reviewFooter: {
-    flexShrink: 0,
-    padding: "var(--space-4)",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderTop: "1px solid var(--border-subtle)",
-  },
-  pageInfo: {
-    color: "var(--text-muted)",
-    fontSize: "11px",
-    fontWeight: 600,
-  },
-  tabBar: {
-    display: "flex",
-    borderBottom: "1px solid var(--border-subtle)",
-    padding: "0 var(--space-2)",
-    flexShrink: 0,
-  },
-  tab: {
-    flex: 1,
-    background: "transparent",
-    border: "none",
-    borderBottom: "2px solid transparent",
-    color: "var(--text-muted)",
-    fontSize: "var(--font-sm)",
-    fontWeight: 700,
-    padding: "var(--space-3) var(--space-2)",
-    cursor: "pointer",
-    transition: "color 0.15s, border-color 0.15s",
-  },
-  // Atajo caro: `tab` pone `borderBottom` (atajo) y esto ponia
-  // `borderBottomColor` (propiedad larga). React avisa en cada render de que
-  // mezclar los dos sobre el mismo valor produce bugs de estilo, y llenaba la
-  // consola. Se dice entero.
-  tabActive: {
-    color: "var(--cool)",
-    borderBottom: "2px solid var(--cool)",
-  },
   emptyEvents: {
-    color: "var(--text-muted)",
+    color: "var(--faint)",
     fontSize: "var(--font-sm)",
     textAlign: "center",
     padding: "var(--space-6) var(--space-4)",
@@ -353,123 +160,13 @@ export const styles: Record<string, React.CSSProperties> = {
     width: "26px",
     height: "26px",
     borderRadius: "6px",
-    background: "var(--bg-app)",
+    background: "var(--sunken)",
     flexShrink: 0,
     objectFit: "cover",
   },
-  // --- Comentarios ---
-  commentsWrap: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    minHeight: 0,
-  },
-  commentsList: {
-    flex: 1,
-    minHeight: 0,
-    overflowY: "auto",
-    padding: "var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-  },
-  commentCard: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "var(--space-2)",
-    background: "var(--surface-1)",
-    border: "1px solid var(--border-subtle)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-2) var(--space-3)",
-  },
-  commentTime: {
-    background: "var(--accent-violet-soft)",
-    color: "var(--accent-violet)",
-    border: "none",
-    borderRadius: "4px",
-    padding: "2px 6px",
-    fontSize: "11px",
-    fontWeight: 700,
-    fontFamily: "var(--font-mono)",
-    cursor: "pointer",
-    flexShrink: 0,
-  },
-  commentText: {
-    flex: 1,
-    fontSize: "13px",
-    color: "var(--text-primary)",
-    lineHeight: 1.5,
-    wordBreak: "break-word",
-  },
-  commentDelete: {
-    background: "transparent",
-    border: "none",
-    color: "var(--text-muted)",
-    cursor: "pointer",
-    padding: "2px",
-    display: "flex",
-    flexShrink: 0,
-  },
-  commentInputRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "var(--space-3)",
-    borderTop: "1px solid var(--border-subtle)",
-  },
-  commentAtTime: {
-    color: "var(--accent-violet)",
-    fontSize: "11px",
-    fontWeight: 700,
-    fontFamily: "var(--font-mono)",
-    flexShrink: 0,
-  },
-  commentInput: {
-    flex: 1,
-    background: "var(--sunken)",
-    boxShadow: "var(--inset-sunken)",
-    border: "1px solid var(--border-subtle)",
-    borderRadius: "var(--radius-md)",
-    color: "var(--text-primary)",
-    fontSize: "13px",
-    padding: "var(--space-2) var(--space-3)",
-    outline: "none",
-  },
-  commentSend: {
-    background: "var(--action)",
-    border: "none",
-    color: "var(--on-action)",
-    borderRadius: "var(--radius-md)",
-    padding: "var(--space-2)",
-    cursor: "pointer",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  filterChips: { flexShrink: 0, display: "flex", gap: "var(--space-2)", padding: "var(--space-3) var(--space-4) 0" },
-  chip: {
-    display: "flex",
-    alignItems: "center",
-    gap: "5px",
-    background: "var(--surface-1)",
-    border: "1px solid var(--border-subtle)",
-    borderRadius: "16px",
-    padding: "4px 12px",
-    color: "var(--text-secondary)",
-    fontSize: "12px",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-  eventListV2: { 
-    display: "flex", 
-    flexDirection: "column",
-    gap: "4px", // Separación entre filas en lugar de border-bottom
-    padding: "0 8px"
-  },
-  perfItem: { width: "26px", height: "26px", borderRadius: "5px", background: "var(--bg-app)" },
-  perfItemEmpty: { width: "26px", height: "26px", borderRadius: "5px", background: "rgba(255,255,255,0.04)" },
-  buyIcon: { width: "30px", height: "30px", borderRadius: "5px", background: "var(--bg-app)" },
+  perfItem: { width: "26px", height: "26px", borderRadius: "6px", background: "var(--sunken)" },
+  perfItemEmpty: { width: "26px", height: "26px", borderRadius: "6px", background: "color-mix(in srgb, var(--text) 4%, transparent)" },
+  buyIcon: { width: "30px", height: "30px", borderRadius: "6px", background: "var(--sunken)" },
 
   // --- barra del recortador ---------------------------------------------
   clipBar: {
@@ -483,10 +180,10 @@ export const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
     maxWidth: "min(760px, calc(100% - var(--space-8)))",
     padding: "var(--space-3) var(--space-4)",
-    background: "var(--surface-1)",
-    border: "1px solid var(--glass-line)",
+    background: "var(--panel)",
+    border: "1px solid var(--hair-strong)",
     borderRadius: "var(--radius-lg)",
-    boxShadow: "var(--shadow-2)",
+    boxShadow: "inset 0 1px 0 var(--rim), var(--shadow-2)",
   },
   clipTitle: {
     display: "block",
@@ -500,7 +197,7 @@ export const styles: Record<string, React.CSSProperties> = {
     minWidth: 160,
     padding: "var(--space-2) var(--space-3)",
     borderRadius: "var(--radius-md)",
-    border: "1px solid var(--line)",
+    border: "1px solid var(--hair-strong)",
     background: "var(--sunken)",
     boxShadow: "var(--inset-sunken)",
     color: "var(--text)",
@@ -539,7 +236,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "2px",
     padding: "var(--space-2) var(--space-3)",
-    border: "1px solid var(--line-soft)",
+    border: "1px solid var(--hair)",
     borderRadius: "var(--radius-md)",
     background: "var(--sunken)",
   },
@@ -551,7 +248,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
   statValue: {
     fontFamily: "var(--font-mono)",
     fontSize: "15px",
-    fontWeight: 600,
+    fontWeight: 500,
     color: "var(--text)",
     fontVariantNumeric: "tabular-nums",
   },
@@ -565,7 +262,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     borderRadius: "var(--radius-md)",
     overflow: "hidden",
-    border: "1px solid var(--line-soft)",
+    border: "1px solid var(--hair)",
   },
   mapImg: {
     width: "100%",
@@ -600,7 +297,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     padding: "6px var(--space-3)",
     borderRadius: "var(--radius-sm)",
     background: "color-mix(in srgb, var(--ground) 88%, transparent)",
-    border: "1px solid var(--glass-line)",
+    border: "1px solid var(--hair-strong)",
     fontSize: "11.5px",
     color: "var(--text)",
     pointerEvents: "none",
@@ -619,7 +316,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     padding: "5px var(--space-2)",
     borderRadius: "var(--radius-sm)",
     background: "transparent",
-    border: "1px solid var(--line-soft)",
+    border: "1px solid var(--hair)",
     cursor: "pointer",
     textAlign: "left",
     color: "var(--text)",
@@ -642,7 +339,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     padding: "3px var(--space-2)",
     borderRadius: "var(--radius-sm)",
     background: "color-mix(in srgb, var(--ground) 92%, transparent)",
-    border: "1px solid var(--glass-line)",
+    border: "1px solid var(--hair-strong)",
     fontFamily: "var(--font-mono)",
     fontSize: "11px",
     color: "var(--text)",

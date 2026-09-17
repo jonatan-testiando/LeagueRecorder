@@ -2198,6 +2198,7 @@ pub struct AppConfigPatch {
     pub max_storage_gb: Option<u64>,
     pub auto_prune_days: Option<u32>,
     pub language: Option<String>,
+    pub theme: Option<String>,
     pub minimap_scale: Option<f64>,
     pub riot_platform: Option<String>,
     pub riot_proxy_url: Option<String>,
@@ -2232,6 +2233,13 @@ pub fn set_app_config(patch: AppConfigPatch) -> Result<(), String> {
     // traducir si algun dia llega un idioma que no existe.
     if let Some(l) = patch.language {
         config.language = if l == "es" { "es".to_string() } else { "en".to_string() };
+    }
+    // Tema: solo los tres valores conocidos; cualquier otro cae al oscuro.
+    if let Some(t) = patch.theme {
+        config.theme = match t.as_str() {
+            "light" | "system" => t,
+            _ => "dark".to_string(),
+        };
     }
     // Plataforma de Riot: "auto" o una de las conocidas. Al fijarla a mano se
     // olvida la sondeada, que puede ser de otra cuenta.

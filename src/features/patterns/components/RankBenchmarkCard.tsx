@@ -108,14 +108,38 @@ const usable = (m: MatchMetadata): boolean =>
 const porFecha = (a: MatchMetadata, b: MatchMetadata): number =>
   b.date.localeCompare(a.date);
 
+/**
+ * Lo que la tarjeta sabe de sí misma, para quien la enseña plegada.
+ *
+ * Patrones la mete en una ficha que se abre al pulsar; la línea de resumen de
+ * la ficha tiene que decir lo mejor y lo peor SIN abrirla, y los datos viven
+ * aquí. Se devuelven las claves de métrica, no texto: el que pinta traduce.
+ */
+export type BenchmarkSummary =
+  | { kind: "needs"; n: number }
+  | { kind: "loading" }
+  | { kind: "error"; msg: string | null }
+  | { kind: "ok"; games: number; strongest: string[]; weakest: string[] };
+
 export interface RankBenchmarkCardProps {
   /** Las partidas YA filtradas por la ventana temporal y el puesto del panel. */
   matches: MatchMetadata[];
   /** La píldora de puesto activa: manda sobre el puesto mayoritario. */
   roleFilter: RoleFilter;
+  /** Se llama cada vez que cambia el estado de la tarjeta. Debe ser estable
+   *  (un setter de useState vale) o el efecto se redispara en cada render. */
+  onSummary?: (s: BenchmarkSummary) => void;
 }
 
-export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, roleFilter }) => {
+/** Las dos métricas más altas y las dos más bajas, por percentil medio. */
+const extremos = (filas: Fila[]): { fuertes: Fila[]; flojas: Fila[] } => {
+  const ordenadas = filas
+    .filter((f) => f.pct != null)
+    .sort((a, b) => (b.pct as number) - (a.pct as number));
+  return { fuertes: ordenadas.slice(0, 2), flojas: ordenadas.slice(-2).reverse() };
+};
+
+export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, roleFilter, onSummary }) => {
   const t = useT();
   const [datos, setDatos] = useState<Agregado | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -254,6 +278,26 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave, roleFilter, intento]);
 
+  // El resumen para la ficha plegada, en cuanto cambia cualquier estado.
+  useEffect(() => {
+    if (!onSummary) return;
+    if (candidatas.length < MIN_GAMES) {
+      onSummary({ kind: "needs", n: MIN_GAMES - candidatas.length });
+    } else if (cargando) {
+      onSummary({ kind: "loading" });
+    } else if (error || !datos || datos.filas.length === 0) {
+      onSummary({ kind: "error", msg: error });
+    } else {
+      const { fuertes, flojas } = extremos(datos.filas);
+      onSummary({
+        kind: "ok",
+        games: datos.games,
+        strongest: fuertes.map((f) => f.metric),
+        weakest: flojas.map((f) => f.metric),
+      });
+    }
+  }, [onSummary, candidatas.length, cargando, error, datos]);
+
   const cabecera = (meta?: React.ReactNode) => (
     <div style={styles.cardHead}>
       <span className="u-label">{t("Versus your rank")}</span>
@@ -319,10 +363,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
     );
   }
 
-  const conPct = datos.filas.filter((f) => f.pct != null);
-  const ordenadas = [...conPct].sort((a, b) => (b.pct as number) - (a.pct as number));
-  const fuertes = ordenadas.slice(0, 2);
-  const flojas = ordenadas.slice(-2).reverse();
+  const { fuertes, flojas } = extremos(datos.filas);
   const banda = datos.tramosMixtos ? t("mixed ranks") : datos.band ? t(datos.band) : null;
 
   return (
@@ -439,7 +480,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid var(--line-soft)",
   },
   etiqueta: { fontSize: 12, color: "var(--muted)", flex: "0 0 132px", minWidth: 0 },
-  valor: { flex: "0 0 56px", textAlign: "right", fontSize: 12, fontWeight: 600 },
+  valor: { flex: "0 0 56px", textAlign: "right", fontSize: 12, fontWeight: 500 },
   pista: {
     position: "relative",
     flex: 1,
@@ -467,6 +508,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--faint)",
     zIndex: 1,
   },
-  pct: { flex: "0 0 26px", textAlign: "right", fontSize: 12, fontWeight: 700 },
+  pct: { flex: "0 0 26px", textAlign: "right", fontSize: 12, fontWeight: 500 },
   texto: { margin: 0, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 },
 };

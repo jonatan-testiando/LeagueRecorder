@@ -37,10 +37,10 @@
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
      escalón, no la sombra ni el color. */
-  --ground: #0E141D;     /* fondo de ventana: marino oscuro, no negro */
-  --panel: #161D27;      /* rail, barras, tarjetas, inspector */
-  --raised: #262D38;     /* elemento activo, hover, botón */
-  --sunken: #080D14;     /* campos y pistas hundidas */
+  --ground: #080D16;     /* fondo de ventana: el marino de la piel Rift */
+  --panel: #0F1622;      /* rail, barras, tarjetas, inspector */
+  --raised: #1E2735;     /* elemento activo, hover, botón */
+  --sunken: #04070E;     /* campos y pistas hundidas */
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
   --hair: rgba(219, 215, 208, 0.09);        /* filo de tarjeta y división */
@@ -51,7 +51,7 @@
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto */
-  --text: #D4D0CA;       /* hueso, no blanco: contraste ~11,5, no 16 */
+  --text: #D4D0CA;       /* hueso, no blanco: ~12:1 sobre el panel, no 16 */
   --muted: #ADAAA5;      /* ~7,5 */
   --faint: #82878C;      /* etiquetas y metadatos: ~4,8 */
 

@@ -1,11 +1,11 @@
 :root {
   /* =========================================================================
-     Sistema de diseño — piel "Grafito y naranja" (2026-09-16)
+     Sistema de diseño — piel "Marino y oro, suave" (2026-09-16)
 
-     Tercera piel. Sustituye al marino con oro hextech: el usuario quería
-     personalidad propia y no el uniforme de Riot. Elegida en un lienzo con
-     diez oscuros medidos (OKLCH + contraste WCAG); ver la memoria
-     "rediseno-refero-2026-09".
+     Tercera piel. Se probó "Grafito y naranja" (lienzo con diez oscuros
+     medidos) y el usuario volvió al marino con el oro hextech, pero con la
+     escala SUAVE: gris azulado en vez de negro, hueso en vez de blanco. Ver
+     las memorias "rediseno-refero-2026-09" y "contraste-suave".
 
      Lo que se toma de las referencias de Refero (Linear, Better Stack,
      AuthKit, Auros, Dimension):
@@ -20,11 +20,10 @@
          tinte de resultado en las filas, brillo de hallazgo, botón de acción.
 
      Cuatro tintes, cada uno con un trabajo y solo uno:
-       naranja   -> acción y marca. Rellena UNA acción por pantalla (--action).
-       verde     -> datos, victoria, foco, enlaces.
-       frambuesa -> grabando, derrota, destructivo. Es la alarma: la más
-                    saturada y lejos del naranja (358° frente a 50°).
-       azul      -> lo que ha encontrado el analizador.
+       oro     -> acción y marca. Rellena UNA acción por pantalla (--action).
+       jade    -> datos, victoria, foco, enlaces.
+       rojo    -> grabando, derrota, destructivo. Es la alarma: la más saturada.
+       violeta -> lo que ha encontrado el analizador.
      Suavizado el mismo día: el negro casi puro con texto casi blanco (16:1)
      deslumbraba y cansaba la vista (halación). Ahora el fondo es gris oscuro
      (L 0,23) y el texto marfil: 10,6:1, y el claro es papel gris con tinta
@@ -38,30 +37,30 @@
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
      escalón, no la sombra ni el color. */
-  --ground: #1A1D1F;     /* fondo de ventana: gris oscuro, no negro */
-  --panel: #232628;      /* rail, barras, tarjetas, inspector */
-  --raised: #333638;     /* elemento activo, hover, botón */
-  --sunken: #111416;     /* campos y pistas hundidas */
+  --ground: #171D26;     /* fondo de ventana: marino oscuro, no negro */
+  --panel: #1F2630;      /* rail, barras, tarjetas, inspector */
+  --raised: #2F3641;     /* elemento activo, hover, botón */
+  --sunken: #0F141C;     /* campos y pistas hundidas */
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
-  --hair: rgba(233, 235, 238, 0.09);        /* filo de tarjeta y división */
-  --hair-strong: rgba(233, 235, 238, 0.17); /* filo de control y chip activo */
+  --hair: rgba(219, 215, 208, 0.09);        /* filo de tarjeta y división */
+  --hair-strong: rgba(219, 215, 208, 0.17); /* filo de control y chip activo */
   --rim: rgba(255, 255, 255, 0.07);         /* luz de canto, 1px arriba */
   --line: var(--hair-strong);
   --line-soft: var(--hair);
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto */
-  --text: #D9D7D4;       /* marfil, no blanco: contraste 10,6, no 16 */
-  --muted: #AEB1B4;      /* 7,1 */
-  --faint: #8C9195;      /* etiquetas y metadatos: 4,6 */
+  --text: #DBD7D0;       /* hueso, no blanco: contraste 10,6, no 16 */
+  --muted: #B4B1AB;      /* 7,1 */
+  --faint: #888D92;      /* etiquetas y metadatos: 4,6 */
 
   /* Tintes */
-  --brand: #FD8537;      /* naranja: acción y marca */
-  --signal: #F05C9A;     /* frambuesa: grabando, derrota, destructivo */
-  --flag: #75AEF5;       /* azul: hallazgo del analizador */
-  --cool: #7CCD8E;       /* verde: datos, victoria, foco, enlaces */
-  --cool-hover: #9ADBA6;
+  --brand: #C8AA6E;      /* oro hextech: acción y marca */
+  --signal: #F26073;     /* rojo: grabando, derrota, destructivo */
+  --flag: #A589F1;       /* violeta: hallazgo del analizador */
+  --cool: #3CB787;       /* jade: datos, victoria, foco, enlaces */
+  --cool-hover: #4FC08F;
 
   /* Semánticos */
   --win: var(--cool);
@@ -72,8 +71,8 @@
 
   /* Relleno de acción: UNA por pantalla. Texto oscuro encima (contraste 7,9). */
   --action: var(--brand);
-  --action-hover: #FF9A55;
-  --on-action: #160C04;
+  --action-hover: #D9BE85;
+  --on-action: #0A1420;
 
   /* Series ambientales (APM) sin tinte, para no competir con los eventos. */
   --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
@@ -235,24 +234,24 @@
    ========================================================================= */
 :root[data-theme="light"] {
   color-scheme: light;
-  --ground: #E4E7E9;
-  --panel: #EDEFF0;
-  --raised: #F6F7F8;
-  --sunken: #D9DDDF;
+  --ground: #E3E6EB;
+  --panel: #ECEFF2;
+  --raised: #F5F7F9;
+  --sunken: #D9DCE2;
   --hair: rgba(23, 27, 38, 0.10);
   --hair-strong: rgba(23, 27, 38, 0.18);
   --rim: rgba(255, 255, 255, 0.85);
-  --text: #2E3437;
-  --muted: #50565A;
-  --faint: #666E73;
-  --brand: #B13F00;
-  --signal: #B30863;
-  --flag: #2063B0;
-  --cool: #067132;
-  --cool-hover: color-mix(in srgb, #1D7D3E 80%, black);
-  --action: #FD8537;
-  --action-hover: #FF9A55;
-  --on-action: #160C04;
+  --text: #2D333D;
+  --muted: #50565E;
+  --faint: #666C75;
+  --brand: #7F5D08;
+  --signal: #B61537;
+  --flag: #6C4AB3;
+  --cool: #006F47;
+  --cool-hover: color-mix(in srgb, #006F47 80%, black);
+  --action: #C8AA6E;
+  --action-hover: #D9BE85;
+  --on-action: #0A1420;
   --shadow-1: 0 1px 2px rgba(16, 20, 30, 0.06), 0 6px 16px -12px rgba(16, 20, 30, 0.25);
   --shadow-2: 0 2px 6px rgba(16, 20, 30, 0.08), 0 18px 40px -22px rgba(16, 20, 30, 0.3);
   --shadow-3: 0 28px 64px -24px rgba(16, 20, 30, 0.35);

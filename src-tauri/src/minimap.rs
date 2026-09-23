@@ -377,6 +377,122 @@ pub fn cancelar(match_id: &str) {
     .output();
 }
 
+/// Un lote de partidas procesándose una detrás de otra.
+///
+/// Existe porque la presión absorbida solo se MIDE en las partidas con
+/// minimapa procesado; en el resto se estima con la API, que medido contra el
+/// vídeo solo acierta la mitad de los episodios. Procesar de una en una desde el
+/// reproductor (unos 4 min cada una en AV1) dejaba 12 de 26 partidas del usuario sin
+/// medir. El lote las encadena: una a la vez, porque dos pasadas en paralelo se
+/// pelean por la misma GPU y el mismo disco sin terminar antes.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct Lote {
+    pub total: usize,
+    pub hechas: usize,
+    pub fallidas: usize,
+    /// La que se está procesando ahora.
+    pub actual: Option<String>,
+    pub activo: bool,
+}
+
+fn lote() -> &'static std::sync::Mutex<Option<Lote>> {
+    static L: std::sync::OnceLock<std::sync::Mutex<Option<Lote>>> = std::sync::OnceLock::new();
+    L.get_or_init(Default::default)
+}
+
+static LOTE_PARAR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Partidas propias y sincronizadas que se pueden procesar y aún no lo están,
+/// de la más nueva a la más vieja.
+pub fn pendientes(app: &tauri::AppHandle) -> Vec<String> {
+    let mut ms: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.is_vod && m.riot_match_id.is_some())
+        .collect();
+    ms.sort_by(|a, b| b.date.cmp(&a.date));
+    ms.into_iter()
+        .filter(|m| estado(app, &m.id) == Estado::Falta)
+        .map(|m| m.id)
+        .collect()
+}
+
+pub fn estado_lote() -> Option<Lote> {
+    lote().lock().ok().and_then(|l| l.clone())
+}
+
+/// Lanza el lote con todas las pendientes. Si ya hay uno en marcha, lo devuelve.
+pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
+    use tauri::Emitter;
+    {
+        let l = lote().lock().map_err(|_| "estado interno corrupto")?;
+        if let Some(l) = l.as_ref().filter(|l| l.activo) {
+            return Ok(l.clone());
+        }
+    }
+    let ids = pendientes(app);
+    let inicial = Lote { total: ids.len(), activo: !ids.is_empty(), ..Default::default() };
+    *lote().lock().map_err(|_| "estado interno corrupto")? = Some(inicial.clone());
+    if ids.is_empty() {
+        return Ok(inicial);
+    }
+    LOTE_PARAR.store(false, std::sync::atomic::Ordering::SeqCst);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let publicar = |app: &tauri::AppHandle| {
+            if let Some(l) = estado_lote() {
+                let _ = app.emit("minimap_batch", l);
+            }
+        };
+        for id in ids {
+            if LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst) {
+                break;
+            }
+            if let Ok(mut l) = lote().lock() {
+                if let Some(l) = l.as_mut() {
+                    l.actual = Some(id.clone());
+                }
+            }
+            publicar(&app);
+            let lanzado = spawn_processing(&app, &id).is_ok();
+            // Espera a que termine (el hilo de `spawn_processing` se quita del
+            // registro al acabar, bien o mal).
+            while lanzado
+                && en_curso().lock().map(|m| m.contains_key(&id)).unwrap_or(false)
+            {
+                std::thread::sleep(std::time::Duration::from_millis(1000));
+            }
+            let parado = LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst);
+            if let Ok(mut l) = lote().lock() {
+                if let Some(l) = l.as_mut() {
+                    if ruta(&id).exists() {
+                        l.hechas += 1;
+                    } else if !parado {
+                        l.fallidas += 1;
+                    }
+                }
+            }
+            publicar(&app);
+        }
+        if let Ok(mut l) = lote().lock() {
+            if let Some(l) = l.as_mut() {
+                l.activo = false;
+                l.actual = None;
+            }
+        }
+        publicar(&app);
+    });
+    Ok(inicial)
+}
+
+/// Para el lote: la partida en curso se corta (su parcial se conserva) y no se
+/// empieza ninguna más.
+pub fn parar_lote() {
+    LOTE_PARAR.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(actual) = estado_lote().and_then(|l| l.actual) {
+        cancelar(&actual);
+    }
+}
+
 /// Para todo lo que esté procesándose. Se llama al salir de la app.
 ///
 /// Sin esto, ocultar la consola del hijo (que es lo que arregla la ventana

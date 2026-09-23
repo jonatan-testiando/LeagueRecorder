@@ -43,3 +43,12 @@
 @media (max-width: 1100px) {
   .pb-eps { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Medir con el vídeo las partidas que aún están estimadas. */
+.mv { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px;
+  background: var(--sunken); box-shadow: var(--inset-sunken); }
+.mv__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; color: var(--text); }
+.mv__track { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 14%, transparent); overflow: hidden; }
+.mv__track > i { display: block; height: 100%; border-radius: 999px; background: var(--brand); transition: width var(--t-slow, 320ms) var(--e-move, ease); }
+.mv__note { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+.mv__note--err { color: var(--loss); }

@@ -4,6 +4,7 @@ import { useT } from "../../../core/LanguageProvider";
 import { clock } from "../../../core/time";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
+import { MeasureWithVideo } from "./MeasureWithVideo";
 import "./PressureBreakdown.css";
 
 /**
@@ -134,6 +135,8 @@ export const PressureBreakdown: React.FC<{
           )}
         </div>
       )}
+
+      <MeasureWithVideo />
 
       <p className="pp-note">
         {t("Per episode: the farm they lose chasing you, what your team takes elsewhere and the fight where you are, minus your own farm. A floor: enemy travel time and XP aren't counted.")}

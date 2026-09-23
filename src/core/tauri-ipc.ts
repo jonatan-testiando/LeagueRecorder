@@ -420,6 +420,32 @@ export interface PressureEpisode {
 // Pide que se procese el video de la partida para sacar posiciones densas del
 // minimapa (dos por segundo, frente a una por minuto de la API). Vuelve
 // enseguida: el trabajo va por detras y tarda ~2 min.
+/** Un lote de partidas midiéndose con el vídeo, una detrás de otra. */
+export interface MinimapBatch {
+  total: number;
+  hechas: number;
+  fallidas: number;
+  /** Id de la partida que se está procesando ahora. */
+  actual: string | null;
+  activo: boolean;
+}
+
+export interface MinimapBatchStatus {
+  /** Partidas propias sincronizadas que se pueden medir y aún no lo están. */
+  pending: number;
+  batch: MinimapBatch | null;
+}
+
+export const getMinimapBatch = async (): Promise<MinimapBatchStatus> =>
+  await invoke<MinimapBatchStatus>("get_minimap_batch");
+
+/** Mide con el vídeo todas las que faltan. El avance llega por `minimap_batch`. */
+export const processMissingMinimaps = async (): Promise<MinimapBatch> =>
+  await invoke<MinimapBatch>("process_missing_minimaps");
+
+export const cancelMissingMinimaps = async (): Promise<void> =>
+  await invoke<void>("cancel_missing_minimaps");
+
 export const processMatchMinimap = async (matchId: string): Promise<void> => {
   return await invoke<void>("process_match_minimap", { matchId });
 };

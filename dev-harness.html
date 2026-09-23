@@ -612,6 +612,16 @@
     // Rango en vivo (league-v4). El mismo que el guardado en las partidas del
     // arnés, para que rail, Hoy y Patrones coincidan.
     get_current_rank: () => ({ tier: "EMERALD", division: "II", lp: 64 }),
+    // Lote de minimapas: 12 pendientes como en la biblioteca real del usuario.
+    // `?lote` lo pinta en marcha (3 de 12) para ver la barra.
+    get_minimap_batch: () => ({
+      pending: 12,
+      batch: new URLSearchParams(location.search).has("lote")
+        ? { total: 12, hechas: 3, fallidas: 0, actual: "m3", activo: true }
+        : null,
+    }),
+    process_missing_minimaps: () => ({ total: 12, hechas: 0, fallidas: 0, actual: "m0", activo: true }),
+    cancel_missing_minimaps: () => null,
     get_pressure_summary: () => ({
       games: 26, windows: 77, wpa: 0, towers: 7, gold: 3900, with_gains: 31, without_gains: 46, deaths: 16,
       enemy_seconds: 2280, net_gold: -4232, farm_denied: 5204, own_farm_lost: 4207, local_gold: -9274,
@@ -830,6 +840,9 @@
     import "/src/main.tsx";
     const qs = new URLSearchParams(location.search);
     if (qs.has("player")) {
+      // El reproductor vive dentro del panel de la Biblioteca (App.tsx): desde
+      // Hoy, que es la ruta por defecto, seleccionar la partida no lo enseñaba.
+      if (!location.hash.startsWith("#/review")) location.hash = "#/review";
       useAppStore.getState().setSelectedMatch(window.__MOCK_MATCHES[0]);
     }
     // ?tab=2 abre esa pestana del inspector: el estado es local al componente,

@@ -342,6 +342,36 @@ pub async fn get_minimap_status(
 
 /// Para el procesado a medias. Lo calculado hasta ahora se conserva y la
 /// siguiente pasada lo retoma donde lo dejó.
+/// Cuántas partidas faltan por medir con el vídeo y, si hay un lote en marcha,
+/// por dónde va. Ver `crate::minimap::Lote`.
+#[derive(serde::Serialize)]
+pub struct MinimapBatchStatus {
+    pub pending: usize,
+    pub batch: Option<crate::minimap::Lote>,
+}
+
+#[tauri::command]
+pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStatus, String> {
+    Ok(MinimapBatchStatus {
+        pending: crate::minimap::pendientes(&app).len(),
+        batch: crate::minimap::estado_lote(),
+    })
+}
+
+/// Procesa, una detrás de otra, todas las partidas que aún no tienen el minimapa
+/// medido. Vuelve enseguida; el avance llega por el evento `minimap_batch` (y el
+/// de cada partida por `minimap_progress`, como siempre).
+#[tauri::command]
+pub async fn process_missing_minimaps(app: tauri::AppHandle) -> Result<crate::minimap::Lote, String> {
+    crate::minimap::lanzar_lote(&app)
+}
+
+#[tauri::command]
+pub async fn cancel_missing_minimaps() -> Result<(), String> {
+    crate::minimap::parar_lote();
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn cancel_match_minimap(match_id: String) -> Result<(), String> {
     crate::minimap::cancelar(&match_id);

@@ -39,6 +39,36 @@ import sys
 import cv2
 import numpy as np
 
+def decodificacion_por_gpu(ffmpeg, vid):
+    """Argumentos de ffmpeg para decodificar con la GPU, o [] para la CPU.
+
+    Solo para AV1, que es lo que graba el motor libobs. Medido sobre 60 s de un
+    vídeo AV1 1440p60 del usuario, con el mismo recorte y 2 fps: CPU 41,5 s,
+    d3d11va 9,1 s, cuda 8,2 s (4,5-5x). Por CPU una partida de 27 min tardaba
+    ~19 min en vez de ~4, y el lote de 12 partidas se iba a horas. Diferencia
+    de píxeles: 1 nivel de media sobre 255 (conversión de color), p99 9.
+
+    En H.264 (las grabaciones viejas) NO: ahí la copia GPU->CPU de cada
+    fotograma se come la ventaja (1m41 con cuda frente a 1m32 por CPU).
+
+    d3d11va y no cuda porque vale para cualquier GPU con decodificación AV1 en
+    Windows; si no la hay, ffmpeg vuelve solo a la CPU. VOD_MINIMAP_HWACCEL
+    fuerza otro método o "off".
+    """
+    forzado = os.environ.get("VOD_MINIMAP_HWACCEL", "").strip().lower()
+    if forzado == "off":
+        return []
+    try:
+        info = subprocess.run([ffmpeg, "-hide_banner", "-i", vid],
+                              capture_output=True, text=True, timeout=30).stderr
+    except Exception:
+        return []
+    es_av1 = "Video: av1" in info
+    if forzado:
+        return ["-hwaccel", forzado]
+    return ["-hwaccel", "d3d11va"] if es_av1 else []
+
+
 def preparar_cuda():
     """Deja a mano las DLL de CUDA antes de que se cargue `onnxruntime`.
 
@@ -320,6 +350,10 @@ def main():
     modelo = DetectorOnnx(a.modelo, a.conf)
 
     cmd = [a.ffmpeg, "-loglevel", "error"]
+    gpu = decodificacion_por_gpu(a.ffmpeg, vid)
+    if gpu:
+        print(f"decodificando con {' '.join(gpu)}", file=sys.stderr, flush=True)
+    cmd += gpu
     if desde > 0:
         cmd += ["-ss", f"{desde:.3f}"]
     cmd += ["-i", vid,

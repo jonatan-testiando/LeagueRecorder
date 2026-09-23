@@ -208,7 +208,7 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
                 onClick={() => onSeek(Math.max(0, a.t_video - 5))}
                 title={t("Jump to this moment")}
               >
-                <span className="u-metric">{mmss(a.t_video)}</span>
+                <span className="u-time">{mmss(a.t_video)}</span>
                 <span className="insp__pressWhat">
                   <Swords size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />
                   {a.top.length > 0
@@ -257,15 +257,16 @@ const estilos: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid var(--line-soft)",
   },
   ranura: {
+    // La ranura es una tecla (Q, W, E, R): la única mono de la fila.
     fontFamily: "var(--font-mono)",
-    fontSize: "11px",
+    fontSize: "12px",
     textAlign: "center",
     color: "var(--brand)",
     border: "1px solid var(--line)",
     borderRadius: "var(--radius-sm)",
     padding: "1px 0",
   },
-  nombre: { fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  nombre: { fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   barraHueco: {
     height: "6px",
     background: "var(--sunken)",

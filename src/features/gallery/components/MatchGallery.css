@@ -1,106 +1,205 @@
 /* =========================================================================
-   Biblioteca de partidas.
+   Biblioteca de partidas — maestro-detalle de escritorio.
 
-   Una cabecera, una fila de chips y UNA tarjeta que contiene la tabla:
-   cabecera de columnas fija arriba y lista virtualizada con scroll dentro.
-   Cabecera y filas comparten la misma rejilla (.lib-grid): son la misma
-   tabla, así que cada columna cae en la misma vertical.
+   Cabecera, UNA fila de filtros y debajo dos piezas: la lista (tarjeta con
+   cabecera de columnas fija y lista virtualizada) y, a la derecha, el panel
+   de la partida seleccionada (MatchDetailPanel.css). Cabecera de columnas y
+   filas comparten la misma rejilla (.lib-grid): son la misma tabla.
 
-   Solo tokens de la piel: el tema claro redefine los tokens y aquí no hay
-   ningún color fijo.
+   Voz sans con cifras tabulares; la mono solo para atajos (kbd) y tiempos.
+   Solo tokens: el tema claro los redefine y aquí no hay colores fijos.
    ========================================================================= */
 
 .lib {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 16px;
   width: 100%;
   height: 100%;
-  padding: var(--space-6) var(--space-8);
+  padding: 24px 32px;
   box-sizing: border-box;
   min-height: 0;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---- Cabecera ---------------------------------------------------------- */
 .lib-head {
   display: flex;
   align-items: baseline;
-  gap: var(--space-3);
+  gap: 14px;
   flex-wrap: wrap;
+  flex: none;
 }
 .lib-head h1 {
   margin: 0;
-  font-size: var(--font-xl);
+  font-size: 24px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1.1;
+  color: var(--text);
 }
-.lib-head__sub { color: var(--faint); font-size: 13px; }
+.lib-head__sub { color: var(--faint); font-size: 14px; }
 .lib-head__right {
   margin-left: auto;
+  align-self: center;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: 14px;
 }
 .lib-disk {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
+  font-size: 13px;
+  color: var(--muted);
 }
-.lib-disk--tight { color: var(--loss); }
+.lib-disk svg { color: var(--faint); flex: none; }
+.lib-disk--tight,
+.lib-disk--tight svg { color: var(--loss); }
 .lib-recording {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  gap: 8px;
+  font-size: 13px;
   color: var(--signal);
 }
 
-/* ---- Filtros: una fila de chips píldora -------------------------------- */
+/* ---- Filtros: una fila ------------------------------------------------- */
 .lib-filters {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
+  gap: 12px;
+  flex: none;
+  min-width: 0;
 }
-.lib-chip {
+.lib-grow { flex: 1; min-width: 0; }
+.lib-sep { width: 1px; height: 20px; background: var(--hair); flex: none; }
+
+/* Píldoras segmentadas de estado. */
+.lib-seg {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  flex: none;
+}
+.lib-seg__btn {
+  height: 28px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 999px;
+  padding: 0 13px;
   border: 0;
+  border-radius: 999px;
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 400;
-  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--t-instant) var(--e-move),
-    color var(--t-instant) var(--e-move),
-    box-shadow var(--t-instant) var(--e-move);
 }
-.lib-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
-.lib-chip[aria-pressed="true"],
-.lib-chip--on {
+.lib-seg__btn:hover { color: var(--text); }
+.lib-seg__btn[aria-pressed="true"] {
   background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
   color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  font-weight: 500;
 }
-.lib-chip:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.lib-chip__count { color: var(--flag); font-variant-numeric: tabular-nums; }
+.lib-seg__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.lib-seg__n { color: var(--faint); font-weight: 400; }
+.lib-seg__n--gold { color: var(--brand); }
 
-/* El orden es un <select> vestido de chip: el control nativo sigue debajo
-   (teclado, lector de pantalla), pero se ve como sus vecinos. */
-.lib-chip--select { position: relative; padding-right: 30px; }
-.lib-chip--select select {
+/* Posiciones: botones de icono, como en el cliente. */
+.lib-pos {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  flex: none;
+}
+.lib-pos__btn {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.lib-pos__btn:hover { color: var(--text); }
+.lib-pos__btn[aria-pressed="true"] {
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  color: var(--brand);
+}
+.lib-pos__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* Búsqueda. Cede ancho antes que nadie cuando la fila aprieta. */
+.lib-search {
+  flex: 0 1 220px;
+  min-width: 132px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--faint);
+  box-sizing: border-box;
+}
+.lib-search svg { flex: none; }
+.lib-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+}
+.lib-search input::placeholder { color: var(--faint); }
+.lib-search:focus-within { box-shadow: inset 0 0 0 1px var(--cool); }
+
+/* Orden: un <select> vestido de botón de superficie. El control nativo sigue
+   debajo (teclado, lector de pantalla). */
+.lib-sort {
+  position: relative;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  flex: none;
+  cursor: pointer;
+}
+.lib-sort__ico,
+.lib-sort__chev { color: var(--faint); flex: none; }
+.lib-sort select {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -109,154 +208,207 @@
   cursor: pointer;
   font: inherit;
 }
-.lib-chip--select svg { position: absolute; right: 10px; color: var(--faint); pointer-events: none; }
-.lib-chip--select:has(select:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.lib-sort:has(select:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-.lib-sep { width: 1px; height: 20px; background: var(--hair-strong); margin: 0 4px; flex: none; }
-
-.lib-search {
-  /* .field global lleva flex:1; aquí es un control de ancho fijo a la derecha. */
-  flex: 0 0 auto;
-  /* Ancho propio y no del input: a 1280px el campo se encogía por debajo del
-     input de 190px y el texto se salía por la derecha. */
-  width: 220px;
-  margin-left: auto;
-  display: flex;
+/* Botón de herramienta (Seleccionar, limpieza rápida): fantasma. */
+.lib-tool {
+  height: 34px;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
   padding: 0 12px;
-  box-sizing: border-box;
-  color: var(--faint);
-}
-.lib-search input {
-  background: transparent;
   border: 0;
-  outline: 0;
-  color: var(--text);
+  border-radius: 10px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--muted);
   font: inherit;
-  font-family: var(--font-sans);
   font-size: 13px;
-  width: 100%;
-  min-width: 0;
+  white-space: nowrap;
+  flex: none;
+  cursor: pointer;
 }
-.lib-search input::placeholder { color: var(--faint); }
-.lib-search:focus-within { border-color: var(--cool); }
+.lib-tool:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.lib-tool[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
+}
+.lib-tool:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 /* ---- Aviso de lectura fallida ----------------------------------------- */
 .lib-notice {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  gap: 12px;
+  padding: 12px 16px;
   background: color-mix(in srgb, var(--signal) 8%, var(--panel));
-  border: 1px solid color-mix(in srgb, var(--signal) 28%, transparent);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 28%, transparent);
+  border-radius: 10px;
   color: var(--muted);
-  font-size: var(--font-xs);
+  font-size: 13px;
   overflow-wrap: anywhere;
+  flex: none;
 }
 
-/* ---- La tarjeta con la tabla ------------------------------------------ */
+/* ---- Maestro-detalle --------------------------------------------------- */
+.lib-md {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 20px;
+}
+.lib-master {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* La tarjeta de la lista. Es contenedor de consulta: por debajo de cierto
+   ancho la columna del rival cede su sitio al campeón. */
 .lib-card {
-  padding: 0;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  border-radius: 16px;
   overflow: hidden;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  container-type: inline-size;
+  container-name: liblist;
 }
 .lib-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   position: relative;
+  padding: 2px 6px 6px;
+  /* El hueco de la barra siempre reservado: así la cabecera de columnas no se
+     descuadra al aparecer el scroll. */
+  scrollbar-gutter: stable;
 }
+.lib-scroll:focus { outline: none; }
 
-/* Partida · Resultado · KDA · CS · Rival · Nota · Puesto · acciones */
+/* Retrato · Partida · Resultado · KDA · CS · Rival · Impacto · Revisión */
 .lib-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) 160px 110px 96px minmax(0, 1.2fr) 64px 76px 56px;
-  gap: 12px;
+  grid-template-columns: 44px minmax(0, 1fr) 72px 76px 58px 104px 56px 88px;
+  column-gap: 10px;
   align-items: center;
 }
 .lib-th {
-  padding: 12px 20px 10px;
-  box-shadow: inset 0 -1px 0 var(--hair);
+  height: 36px;
   flex: none;
+  /* 6 de la lista + 8 de la fila; a la derecha, también la barra (6). */
+  padding: 0 20px 0 14px;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  box-shadow: inset 0 -1px 0 var(--hair);
 }
-.lib-right { text-align: right; }
+.lib-th > span { overflow: hidden; text-overflow: ellipsis; }
 
+@container liblist (max-width: 719px) {
+  .lib-grid { grid-template-columns: 44px minmax(0, 1fr) 72px 76px 58px 56px 88px; }
+  .lib-col-rival { display: none !important; }
+}
+
+/* Encabezado de día: discreto, en frase, con el saldo de LP a la derecha. */
+.lib-day {
+  height: 32px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px 6px;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.lib-day__lp { white-space: nowrap; }
+
+/* ---- La fila ----------------------------------------------------------- */
 .lib-tr {
   position: relative;
-  padding: 9px 20px;
-  min-height: 56px;
+  height: 64px;
+  padding: 0 8px;
   box-sizing: border-box;
+  border-radius: 10px;
   color: var(--text);
   cursor: pointer;
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent);
-  transition: box-shadow var(--t-instant) var(--e-move);
 }
 .lib-tr[data-result="win"] { background: var(--tint-win); }
 .lib-tr[data-result="loss"] { background: var(--tint-loss); }
+/* Divisor inferior; se oculta junto a la fila seleccionada y al final del día. */
+.lib-tr[data-divider]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 1px;
+  background: var(--hair);
+  pointer-events: none;
+}
 /* El hover se pinta como lámina encima (spread interior) para no pisar el
    tinte de resultado, que es lo que distingue la fila. */
-.lib-tr:hover,
-.lib-tr:focus-visible {
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent),
-    inset 0 0 0 999px color-mix(in srgb, var(--text) 3%, transparent);
+.lib-tr:hover { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--text) 3%, transparent); }
+/* Seleccionada: el escalón de "activo" y un filo de oro tenue. */
+.lib-tr[data-current] {
+  background-color: var(--raised);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent);
 }
-.lib-tr:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-.lib-tr[aria-selected="true"] {
-  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--text) 5%, transparent),
-    inset 2px 0 0 var(--brand),
-    inset 0 0 0 999px color-mix(in srgb, var(--brand) 6%, transparent);
+.lib-tr:focus { outline: none; }
+.lib-tr:focus-visible { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--brand) 75%, transparent); }
+/* En modo lote, lo marcado se ve también sin mirar la casilla. */
+.lib-tr[aria-selected="true"]:not([data-current]) {
+  box-shadow: inset 2px 0 0 var(--brand), inset 0 0 0 999px color-mix(in srgb, var(--brand) 6%, transparent);
 }
 
-.lib-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lib-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .lib-cell > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lib-game { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.lib-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.lib-name > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.lib-win { color: var(--win); }
-.lib-loss { color: var(--loss); }
+.lib-champ { font-size: 15px; font-weight: 500; color: var(--text); }
+.lib-sub { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+.lib-sub--muted { color: var(--muted); }
+.lib-big { font-size: 15px; color: var(--text); white-space: nowrap; }
+.lib-res { font-size: 14px; font-weight: 500; color: var(--muted); }
+.lib-res--win { color: var(--win); }
+.lib-res--loss { color: var(--loss); }
+.lib-ratio--high { color: var(--win); }
+.lib-ratio--mid { color: var(--text); }
+.lib-ratio--low { color: var(--faint); }
 
-.lib-badge {
-  display: inline-flex;
-  align-items: center;
+/* Retrato de 44 con radio 10 e insignia del puesto. ChampionAvatar lleva el
+   radio en línea (redondo); aquí se cuadra, como el retrato del cliente. */
+.lib-portrait { position: relative; display: block; width: 44px; height: 44px; }
+.lib-portrait > div:first-child { border-radius: 10px !important; }
+.lib-portrait__pos {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 20px;
   height: 20px;
-  padding: 0 7px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  flex: none;
-}
-.lib-badge--flag { color: var(--flag); background: color-mix(in srgb, var(--flag) 14%, transparent); }
-.lib-badge--mvp { color: var(--on-action); background: var(--brand); justify-self: end; }
-
-/* Acciones de fila: se ven al pasar el cursor o al enfocar; en modo de
-   selección la casilla ocupa su sitio y se ve siempre. */
-.lib-actions {
+  border-radius: 50%;
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
   display: flex;
-  justify-content: flex-end;
   align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--t-instant) var(--e-move);
+  justify-content: center;
+  color: var(--muted);
 }
-.lib-tr:hover .lib-actions,
-.lib-tr:focus-visible .lib-actions,
-.lib-tr:focus-within .lib-actions,
-.lib-actions--always { opacity: 1; }
-
 .lib-check {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), var(--inset-sunken);
-  background: var(--sunken);
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--hair-strong), var(--shadow-1);
+  background: var(--panel);
   display: grid;
   place-items: center;
   color: transparent;
@@ -264,24 +416,159 @@
 .lib-check--on {
   box-shadow: inset 0 0 0 1px var(--brand);
   color: var(--brand);
-  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  background: color-mix(in srgb, var(--brand) 22%, var(--panel));
 }
 
-/* Cabecera de grupo por día. */
-.lib-day {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 14px 20px 6px;
+/* Rival de línea. */
+.lib-rival { display: flex; align-items: center; min-width: 0; }
+.lib-rival__in { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lib-rival__img {
+  display: block;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--hair-strong);
 }
-
-/* ---- Barra del lote --------------------------------------------------- */
-.lib-batch {
+.lib-rival__name {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-nosync {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  gap: 5px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.lib-nosync svg { flex: none; }
+.lib-nosync span { overflow: hidden; text-overflow: ellipsis; }
+
+/* Impacto: puesto arriba, nota debajo. */
+.lib-rank { font-size: 14px; color: var(--text); white-space: nowrap; }
+.lib-mvp {
+  align-self: flex-start;
+  line-height: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 13%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+/* Revisión. */
+.lib-review { display: flex; align-items: center; min-width: 0; }
+.lib-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.lib-pill--done { color: var(--win); background: color-mix(in srgb, var(--win) 13%, transparent); padding-left: 7px; }
+.lib-pill--todo { color: var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+.lib-prog { display: flex; align-items: center; gap: 6px; }
+.lib-prog__bar {
+  display: block;
+  width: 44px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  overflow: hidden;
+}
+.lib-prog__bar > span { display: block; height: 100%; border-radius: 999px; background: var(--win); }
+
+/* Acciones de fila (solo sin panel de detalle): encima de la columna de
+   revisión, al pasar el cursor o con el foco dentro. */
+.lib-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), var(--shadow-1);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-instant) var(--e-move);
+}
+.lib-tr:hover .lib-actions,
+.lib-tr:focus-within .lib-actions,
+.lib-tr:focus-visible .lib-actions { opacity: 1; pointer-events: auto; }
+
+/* "N partidas ocultas por el filtro · Ver todas" */
+.lib-more {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.lib-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--cool);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.lib-link:hover { color: var(--cool-hover); }
+.lib-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- Ayuda de teclado y barra del lote --------------------------------- */
+.lib-keys {
+  height: 22px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.lib-keys > span { display: inline-flex; align-items: center; gap: 6px; }
+.lib-kbd { font-size: 11.5px; }
+.lib-kbd + .lib-kbd { margin-left: -2px; }
+
+.lib-batch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 8px 8px 16px;
   background: var(--panel);
-  border: 1px solid var(--hair-strong);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  border-radius: 12px;
+}
+.lib-batch__n { font-size: 13px; color: var(--text); }
+.lib-batch__acts { display: flex; gap: 8px; margin-left: auto; }
+
+/* ---- Anchos ------------------------------------------------------------ */
+/* Entre 1280 y 1440: menos margen de página y "Seleccionar" solo con icono. */
+@media (max-width: 1439px) {
+  .lib { padding: 22px 24px; }
+  .lib-md { gap: 16px; }
+  .lib-filters { gap: 10px; }
+  .lib-tool__txt { display: none; }
+}
+/* Sin panel de detalle (ventana estrecha): la fila de filtros puede partirse. */
+@media (max-width: 1279px) {
+  .lib-filters { flex-wrap: wrap; }
+  .lib-tool__txt { display: inline; }
 }

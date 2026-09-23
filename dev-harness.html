@@ -99,7 +99,11 @@
       const e = { type: "ChampionKill", subtype: kind, time: t, description: kind };
       // Las muertes llevan asesino, como en las partidas nuevas: es lo que
       // enseña el tooltip del mapa de Patrones.
-      if (kind === "death") e.actor = ["Kaisa", "Viego", "Ahri"][i % 3 === 0 ? (i / 3) % 3 : 0];
+      if (kind === "death") e.actor = ["Kaisa", "Orianna", "Nautilus"][i % 3 === 0 ? (i / 3) % 3 : 0];
+      // Kills y asistencias con víctima del equipo rival (por campeón o por
+      // nick): el reproductor pone su retrato en la línea de tiempo.
+      if (kind === "kill") e.target = ["Orianna", "Jax", "Nautilus", "Kaisa"][i % 4];
+      if (kind === "assist") e.target = ["Nautilus", "Orianna"][i % 2];
       ev.push(e);
     }
     ev.push({ type: "DragonKill", subtype: "ally", time: Math.round(dur * 0.4), description: "dragon" });
@@ -386,7 +390,8 @@
       used_bytes: 159 * 1024 ** 3,
       total_bytes: 931 * 1024 ** 3,
       // El hueco REAL del volumen: la cuota sola no dice si cabe otra partida.
-      free_bytes: 412 * 1024 ** 3,
+      // `?disk=2` lo deja en 2 GB: la píldora de captura pasa a "disco casi lleno".
+      free_bytes: Number(new URLSearchParams(location.search).get("disk") || 412) * 1024 ** 3,
       drive_total_bytes: 1863 * 1024 ** 3,
     }),
     get_app_config: () => ({ ...CONFIG }),
@@ -414,7 +419,11 @@
     // Sincronizar rellena el marcador de la partida, como hace el backend.
     sync_match_now: ({ matchId }) => {
       const m = matches.find((x) => x.id === matchId);
-      if (m && !m.participants) m.participants = matches[0].participants;
+      // Las del arnés traen solo su propia fila: sincronizar les pone los diez
+      // (los de la primera, con su campeón en tu sitio).
+      if (m && !(m.participants && m.participants.length === 10)) {
+        m.participants = matches[0].participants.map((p) => (p.is_self ? { ...p, champion: m.champion } : { ...p }));
+      }
       return m ? { ...m } : null;
     },
     set_event_reviewed: () => null,
@@ -425,11 +434,14 @@
       args && args.options && args.options.filters
         ? "C:/Users/dev/Descargas/LeagueRecorder-backup-20260902-1140.zip"
         : "C:/Users/dev/Videos/LeagueRecorder",
-    get_audio_status: () => ({
-      system_audio_device: "CABLE Output (VB-Audio)",
-      all_devices: ["CABLE Output (VB-Audio)", "Altavoces"],
-      ready_for_game_audio: true,
-    }),
+    // `?mute` simula que no entra el sonido del juego (píldora "sin sonido").
+    get_audio_status: () => new URLSearchParams(location.search).has("mute")
+      ? { system_audio_device: null, all_devices: [], ready_for_game_audio: false }
+      : {
+          system_audio_device: "CABLE Output (VB-Audio)",
+          all_devices: ["CABLE Output (VB-Audio)", "Altavoces"],
+          ready_for_game_audio: true,
+        },
     get_all_clips: () =>
       [
         ["Doble kill en bot", true, 48],
@@ -542,23 +554,37 @@
           mean_damage_share: 0.32,
         };
       }),
-    // Tramos de presión: el más valioso NO es el más aparatoso, para poder ver
-    // que el orden nuevo (por probabilidad de victoria) hace algo.
-    get_match_pressure: () =>
-      [
-        { start: 690, end: 712, max_enemies: 3.2, wpa_elsewhere: 0.041, towers_elsewhere: 1, gold_elsewhere: 520, died: true, from_video: false },
-        { start: 1180, end: 1230, max_enemies: 4.1, wpa_elsewhere: 0.012, towers_elsewhere: 0, gold_elsewhere: 180, died: false, from_video: false },
-        { start: 1490, end: 1505, max_enemies: 2.4, wpa_elsewhere: 0.0, towers_elsewhere: 0, gold_elsewhere: 0, died: true, from_video: true },
+    // Tramos de presión con su valor en oro (pressure_value.rs). Cifras de
+    // una partida real del usuario (match_20260903_032115): dos buenos, uno
+    // malo con muerte y uno de tablas, para ver los tres veredictos.
+    get_match_pressure: () => {
+      const ev = (id, t, kind, gold, extra) => ({ id, time: t + 35, game_time: t, kind, gold, after_episode: false, local: false, ...extra });
+      const PID = { Jax: 6, Graves: 7, Syndra: 8, Kaisa: 9, Leona: 10 };
+      const tie = (champion, seconds, farm_gold) => ({ participant_id: PID[champion] || 6, champion, seconds, farm_gold });
+      return [
+        { start: 1215, end: 1245, enemy_count: 4, max_enemies: 4, died: true, from_video: false, death_gold: 300, assessment: "bad",
+          ties: [tie("Graves", 30, 61), tie("Leona", 14, 22), tie("Syndra", 13, 38), tie("Kaisa", 4, 16)],
+          value: { enemy_seconds: 61, farm_denied: 137, own_farm_lost: 67, death_farm_lost: 88, local_gold: -254, team_elsewhere: 0, enemy_elsewhere: 0, net: -272, verdict: "bad" },
+          gains: [ev("22:1", 1230, "kill", 300, { local: true })], losses: [ev("22:3", 1238, "death", 300, { local: true }), ev("22:4", 1241, "kill", 254, { local: true })], context: [] },
+        { start: 1305, end: 1335, enemy_count: 3, max_enemies: 3, died: false, from_video: true, death_gold: 0, assessment: "good",
+          ties: [tie("Graves", 30, 88), tie("Kaisa", 30, 110), tie("Syndra", 1, 5)],
+          value: { enemy_seconds: 61, farm_denied: 203, own_farm_lost: 57, death_farm_lost: 0, local_gold: -447, team_elsewhere: 547, enemy_elsewhere: 814, net: 246, verdict: "good" },
+          gains: [ev("23:5", 1322, "tower", 315), ev("23:6", 1328, "plate", 116), ev("23:7", 1330, "plate", 116)],
+          losses: [ev("23:2", 1316, "kill", 447, { local: true })], context: [ev("23:9", 1331, "epic", 85), ev("23:10", 1334, "kill", 729)] },
+        { start: 1345, end: 1375, enemy_count: 4, max_enemies: 4, died: false, from_video: true, death_gold: 0, assessment: "even",
+          ties: [tie("Kaisa", 30, 110), tie("Leona", 17, 30), tie("Graves", 11, 32), tie("Syndra", 6, 48)],
+          value: { enemy_seconds: 64, farm_denied: 220, own_farm_lost: 77, death_farm_lost: 0, local_gold: -280, team_elsewhere: 0, enemy_elsewhere: 390, net: -137, verdict: "even" },
+          gains: [], losses: [ev("24:1", 1360, "kill", 280, { local: true })], context: [ev("24:3", 1370, "kill", 390)] },
+        { start: 1635, end: 1655, enemy_count: 4, max_enemies: 4, died: false, from_video: true, death_gold: 0, assessment: "good",
+          ties: [tie("Graves", 20, 62), tie("Syndra", 20, 58), tie("Leona", 20, 34), tie("Kaisa", 20, 59)],
+          value: { enemy_seconds: 80, farm_denied: 213, own_farm_lost: 54, death_farm_lost: 0, local_gold: 224, team_elsewhere: 0, enemy_elsewhere: 0, net: 383, verdict: "good" },
+          gains: [ev("28:2", 1648, "kill", 224, { local: true })], losses: [], context: [] },
       ].map((w) => ({
-        participant_id: 1,
-        champion: "Gwen",
-        x: 7000,
-        y: 7000,
-        inhibs_elsewhere: 0,
-        plates_elsewhere: 0,
-        epics_elsewhere: 0,
-        ...w,
-      })),
+        participant_id: 1, champion: "Gwen", x: 2000, y: 12000, lane: "top",
+        gold_elsewhere: 0, wpa_elsewhere: 0, towers_elsewhere: 0, inhibs_elsewhere: 0, plates_elsewhere: 0, epics_elsewhere: 0,
+        game_start: w.start, game_end: w.end, ...w,
+      }));
+    },
     // Estado del procesado del vídeo. `?minimap=` en la URL fuerza el que se
     // quiera mirar: hecha / en_curso / falta / no_disponible.
     get_minimap_status: () => ({
@@ -581,7 +607,21 @@
           looks: [20 + i, 120 + i * 4, 60 + i * 2],
         };
       }),
-    get_pressure_summary: () => ({ games: 9, windows: 23, wpa: 0.48, towers: 7, gold: 6100 }),
+    // Totales reales del usuario con el cálculo nuevo (26 partidas, 77
+    // episodios): la presión crea valor lejos y en farmeo, y se pierde en el sitio.
+    // Rango en vivo (league-v4). El mismo que el guardado en las partidas del
+    // arnés, para que rail, Hoy y Patrones coincidan.
+    get_current_rank: () => ({ tier: "EMERALD", division: "II", lp: 64 }),
+    get_pressure_summary: () => ({
+      games: 26, windows: 77, wpa: 0, towers: 7, gold: 3900, with_gains: 31, without_gains: 46, deaths: 16,
+      enemy_seconds: 2280, net_gold: -4232, farm_denied: 5204, own_farm_lost: 4207, local_gold: -9274,
+      team_elsewhere: 5830, enemy_elsewhere: 8199, good: 22, even: 27, bad: 28,
+      // Los cuatro de la partida de ejemplo, repartidos entre partidas del arnés
+      // para ver la lista de mejores y peores y que cada uno abre su partida.
+      episodes: HANDLERS.get_match_pressure().map((w, i) => ({
+        match_id: "m" + i, date: iso(now - i * 86400000), game_start: w.game_start, game_end: w.game_end, window: w,
+      })),
+    }),
     // La forma de temporada: 13V 7D con buena racha reciente, para que la
     // predicción proyecte subida (Emerald II 64 → Emerald I y pico).
     get_season_form: () => ({
@@ -613,6 +653,9 @@
         const lane = r < 55 ? "mid" : r < 80 ? "bot" : r < 92 ? "top" : null;
         // Un agujero deliberado en top entre el 8:00 y el 14:00.
         if (lane === "top" && t > 480 && t < 840) continue;
+        // Y diez segundos sin mirar nada antes de la muerte del 17:11: el
+        // hallazgo «muerte sin información previa» del reproductor.
+        if (t > 1019 && t < 1033) continue;
         out.push({ t, lane });
       }
       return out;

@@ -491,7 +491,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "var(--space-4) var(--space-6)",
     borderBottom: "1px solid var(--glass-line-soft)",
   },
-  headTitle: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" },
+  headTitle: { fontSize: 15, fontWeight: 500, color: "var(--text)" },
   dots: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" },
   dot: {
     height: 8,
@@ -508,7 +508,7 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     gap: "var(--space-4)",
   },
-  stepTitle: { margin: 0, fontSize: "var(--font-xl)", fontWeight: 500, letterSpacing: "-0.02em" },
+  stepTitle: { margin: 0, fontSize: 22, fontWeight: 500, letterSpacing: "-0.01em" },
   lead: { margin: 0, fontSize: "var(--font-sm)", lineHeight: 1.55, color: "var(--muted)", maxWidth: "58ch" },
   row: {
     display: "grid",
@@ -521,7 +521,7 @@ const styles: Record<string, React.CSSProperties> = {
   rowLabel: { fontSize: "var(--font-sm)", color: "var(--text)", paddingTop: 6 },
   rowField: { display: "flex", flexDirection: "column", gap: "var(--space-2)", minWidth: 0 },
   keyLine: { display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: 0 },
-  hint: { margin: 0, fontSize: "var(--font-xs)", lineHeight: 1.5, color: "var(--faint)", maxWidth: "54ch" },
+  hint: { margin: 0, fontSize: 13, lineHeight: 1.5, color: "var(--faint)", maxWidth: "54ch" },
   steps: {
     margin: 0,
     paddingLeft: "1.2em",

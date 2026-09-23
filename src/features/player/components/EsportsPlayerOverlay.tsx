@@ -98,7 +98,7 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
         <div style={styles.hud}>
           <span style={styles.clockCell}>
             <Tv size={13} color="var(--cool)" />
-            <span className="u-metric">{clock(gameTime)}</span>
+            <span className="u-time">{clock(gameTime)}</span>
           </span>
 
           {teamGoldDiff !== null ? (
@@ -198,7 +198,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: "color-mix(in srgb, var(--ground) 86%, transparent)",
     backdropFilter: "blur(10px)",
     border: "1px solid var(--glass-line)",
-    fontSize: "11px",
+    fontSize: "12px",
+    fontVariantNumeric: "tabular-nums",
   },
   clockCell: { display: "inline-flex", alignItems: "center", gap: "5px", color: "var(--text)" },
   pill: {
@@ -206,9 +207,9 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     gap: "4px",
     padding: "2px var(--space-2)",
-    borderRadius: "var(--radius-sm)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "11px",
+    borderRadius: 999,
+    fontSize: "12px",
+    fontWeight: 500,
     fontVariantNumeric: "tabular-nums",
   },
   snapPill: {
@@ -220,9 +221,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: "color-mix(in srgb, var(--flag) 22%, transparent)",
     border: "1px solid color-mix(in srgb, var(--flag) 45%, transparent)",
     color: "var(--text)",
-    fontSize: "11px",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
+    fontSize: "12px",
+    fontWeight: 500,
   },
   banner: {
     alignSelf: "center",
@@ -236,7 +236,7 @@ const styles: Record<string, React.CSSProperties> = {
     backdropFilter: "blur(10px)",
     border: "1px solid var(--glass-line)",
     color: "var(--text)",
-    fontSize: "12px",
+    fontSize: "13px",
   },
   bannerDot: {
     width: "6px",

@@ -84,55 +84,155 @@ interface AppState {
    */
   libraryFilter: "all" | "unreviewed" | "defeats" | null;
   setLibraryFilter: (f: "all" | "unreviewed" | "defeats" | null) => void;
+
+  /**
+   * Lista de reproducción ENTRE partidas ("Ver las 11 muertes seguidas").
+   *
+   * Cada ítem es un momento de una partida; pasar de uno a otro abre esa
+   * partida en ese instante con el mismo mecanismo que los puntos del mapa de
+   * Patrones (`selectedMatch` + `pendingSeek`). La pinta `PlaylistBar` sobre el
+   * reproductor. Termina sola si se abre a mano otra partida o se cierra el
+   * reproductor: seguir enseñando "3 de 11" encima de una partida que no es de
+   * la lista sería mentir sobre qué se está viendo.
+   */
+  playlist: Playlist | null;
+  /** Arranca la lista y abre el primer ítem. Quien llama navega a /review. */
+  startPlaylist: (title: string, items: PlaylistItem[]) => void;
+  /** Salta al ítem `index` (se recorta a la lista) y abre su partida. */
+  playlistGo: (index: number) => void;
+  clearPlaylist: () => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
-  matches: [],
-  matchesLoaded: false,
-  refreshMatches: async () => {
-    const data = await getRecordedMatches();
-    set({ matches: data, matchesLoaded: true });
-  },
+export interface PlaylistItem {
+  matchId: string;
+  /** Segundo del VÍDEO del momento (la muerte), no el de partida. */
+  time: number;
+  /** Qué pasó, ya traducido ("Te mató Kaisa"). */
+  label: string;
+}
 
-  selectedMatch: null,
-  setSelectedMatch: (match) => set({ selectedMatch: match }),
+export interface Playlist {
+  title: string;
+  items: PlaylistItem[];
+  index: number;
+}
 
-  selectedVod: null,
-  setSelectedVod: (match) => set({ selectedVod: match }),
+/**
+ * Cuánto antes del momento se pide el salto. El reproductor ya retrocede 5 s
+ * al consumir `pendingSeek`; con 3 más la muerte llega unos 8 s después de
+ * empezar, que es lo que hace falta para ver cómo se llega a ella.
+ */
+const PLAYLIST_LEAD_SECS = 3;
 
-  selectedError: null,
-  setSelectedError: (err) => set({ selectedError: err }),
+/** Salto aplazado al cambiar de partida (ver `abrirItem`). */
+let saltoAplazado: ReturnType<typeof setTimeout> | null = null;
 
-  errorClips: [],
-  errorClipsLoaded: false,
-  errorClipsError: null,
-  refreshErrorClips: async () => {
-    try {
-      const data = await getAllErrorClips();
-      const abierto = get().selectedError;
-      const fresco = abierto ? data.find((e) => e.path === abierto.path) ?? null : null;
-      set({
-        errorClips: data,
-        errorClipsLoaded: true,
-        errorClipsError: null,
-        // Si el clip abierto ya no está (se borró desde otra pantalla), se deja
-        // como estaba: cerrarlo por sorpresa es peor que enseñarlo obsoleto.
-        ...(fresco ? { selectedError: fresco } : {}),
-      });
-    } catch (e) {
-      set({ errorClipsLoaded: true, errorClipsError: String(e) });
+export const useAppStore = create<AppState>((set, get) => {
+  /**
+   * Abre la partida de un ítem de la lista en su momento.
+   *
+   * Si la partida ya está abierta basta con pedir el salto. Si es otra, el
+   * salto se pide un instante DESPUÉS de cambiarla: el reproductor no se
+   * desmonta entre partidas, y en el mismo render en que cambia la partida aún
+   * cree tener listo el vídeo anterior — consumiría el salto contra ese vídeo
+   * (y contra su duración) en vez de esperar al nuevo.
+   */
+  const abrirItem = (item: PlaylistItem): void => {
+    const m = get().matches.find((x) => x.id === item.matchId);
+    if (!m) return;
+    const seek = Math.max(0, item.time - PLAYLIST_LEAD_SECS);
+    if (saltoAplazado) {
+      clearTimeout(saltoAplazado);
+      saltoAplazado = null;
     }
-  },
+    if (get().selectedMatch?.id === m.id) {
+      set({ pendingSeek: seek });
+      return;
+    }
+    set({ selectedMatch: m, pendingSeek: null });
+    saltoAplazado = setTimeout(() => {
+      saltoAplazado = null;
+      if (get().selectedMatch?.id === m.id) set({ pendingSeek: seek });
+    }, 60);
+  };
 
-  pendingSeek: null,
-  setPendingSeek: (seconds) => set({ pendingSeek: seconds }),
+  return {
+    matches: [],
+    matchesLoaded: false,
+    refreshMatches: async () => {
+      const data = await getRecordedMatches();
+      set({ matches: data, matchesLoaded: true });
+    },
 
-  onboardingDone: null,
-  setOnboardingDone: (done) => set({ onboardingDone: done }),
+    selectedMatch: null,
+    // Abrir a mano otra partida (o cerrar el reproductor) termina la lista: la
+    // barra diría "3 de 11" encima de algo que no es el ítem 3. La propia lista
+    // cambia de partida con `set` directo, sin pasar por aquí.
+    setSelectedMatch: (match) =>
+      set((s) => {
+        const pl = s.playlist;
+        const sigue = !!pl && !!match && pl.items[pl.index]?.matchId === match.id;
+        return pl && !sigue ? { selectedMatch: match, playlist: null } : { selectedMatch: match };
+      }),
 
-  libraryFilter: null,
-  setLibraryFilter: (f) => set({ libraryFilter: f }),
-}));
+    selectedVod: null,
+    setSelectedVod: (match) => set({ selectedVod: match }),
+
+    selectedError: null,
+    setSelectedError: (err) => set({ selectedError: err }),
+
+    errorClips: [],
+    errorClipsLoaded: false,
+    errorClipsError: null,
+    refreshErrorClips: async () => {
+      try {
+        const data = await getAllErrorClips();
+        const abierto = get().selectedError;
+        const fresco = abierto ? data.find((e) => e.path === abierto.path) ?? null : null;
+        set({
+          errorClips: data,
+          errorClipsLoaded: true,
+          errorClipsError: null,
+          // Si el clip abierto ya no está (se borró desde otra pantalla), se deja
+          // como estaba: cerrarlo por sorpresa es peor que enseñarlo obsoleto.
+          ...(fresco ? { selectedError: fresco } : {}),
+        });
+      } catch (e) {
+        set({ errorClipsLoaded: true, errorClipsError: String(e) });
+      }
+    },
+
+    pendingSeek: null,
+    setPendingSeek: (seconds) => set({ pendingSeek: seconds }),
+
+    onboardingDone: null,
+    setOnboardingDone: (done) => set({ onboardingDone: done }),
+
+    libraryFilter: null,
+    setLibraryFilter: (f) => set({ libraryFilter: f }),
+
+    playlist: null,
+    startPlaylist: (title, items) => {
+      if (items.length === 0) return;
+      set({ playlist: { title, items, index: 0 } });
+      abrirItem(items[0]);
+    },
+    playlistGo: (index) => {
+      const pl = get().playlist;
+      if (!pl) return;
+      const i = Math.max(0, Math.min(pl.items.length - 1, index));
+      set({ playlist: { ...pl, index: i } });
+      abrirItem(pl.items[i]);
+    },
+    clearPlaylist: () => {
+      if (saltoAplazado) {
+        clearTimeout(saltoAplazado);
+        saltoAplazado = null;
+      }
+      set({ playlist: null });
+    },
+  };
+});
 
 /**
  * Las partidas, cargadas una sola vez y compartidas.

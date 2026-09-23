@@ -1,4 +1,4 @@
-import { MatchEvent, TimelineMarker } from "../types";
+import { MatchEvent, Participant, TimelineMarker } from "../types";
 
 /**
  * Los sucesos de una partida, uno por uno.
@@ -129,4 +129,69 @@ export function individualEvents(
     });
 
   return [...live, ...extra].sort((a, b) => a.time - b.time);
+}
+
+/**
+ * Nombre de un campeón tal y como se lee, a partir del id de Data Dragon que
+ * traen los `participants` ("MissFortune" → "Miss Fortune"). Los que no salen
+ * partiendo por mayúsculas —apóstrofos, Wukong— van en la tabla.
+ */
+const CHAMP_LABEL: Record<string, string> = {
+  MonkeyKing: "Wukong",
+  Kaisa: "Kai'Sa",
+  Khazix: "Kha'Zix",
+  Chogath: "Cho'Gath",
+  Velkoz: "Vel'Koz",
+  Belveth: "Bel'Veth",
+  KogMaw: "Kog'Maw",
+  RekSai: "Rek'Sai",
+  Leblanc: "LeBlanc",
+  KSante: "K'Sante",
+  JarvanIV: "Jarvan IV",
+  DrMundo: "Dr. Mundo",
+  Nunu: "Nunu & Willump",
+  FiddleSticks: "Fiddlesticks",
+};
+
+export const champLabel = (id: string): string =>
+  CHAMP_LABEL[id] ?? id.replace(/([a-z])([A-Z])/g, "$1 $2");
+
+/** Un nombre de jugador o de campeón, sin el "#TAG" y sin nada que no sea letra o cifra. */
+const normName = (s?: string): string =>
+  (s ?? "").split("#")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * El campeón del otro lado de un suceso de combate: a quién mataste (kill o
+ * asistencia) o quién te mató (muerte).
+ *
+ * La API en directo manda NOMBRES DE JUGADOR (`actor`, `target`); el marcador
+ * de Riot (`participants`) sabe qué campeón llevaba cada uno. Se busca solo en
+ * el equipo rival: si el nombre casa con un aliado, el dato está mal y es mejor
+ * enseñar el icono que la cara equivocada. `null` cuando no se puede saber —
+ * partida sin sincronizar, marcadores de la Timeline (no traen nombres) o
+ * partidas grabadas antes de que existieran esos campos.
+ */
+export function eventChampion(ev: MatchEvent, participants: Participant[] = []): string | null {
+  if (ev.type !== "ChampionKill") return null;
+  const who = normName(ev.subtype === "death" ? ev.actor : ev.target);
+  if (!who || participants.length === 0) return null;
+  const self = participants.find((p) => p.is_self);
+  const rivals = self ? participants.filter((p) => p.team_id !== self.team_id) : participants;
+  const p =
+    rivals.find((x) => normName(x.name) === who) ??
+    rivals.find((x) => normName(x.champion) === who);
+  return p?.champion ?? null;
+}
+
+/**
+ * El mismo suceso con el nombre del campeón en lugar del del jugador, para
+ * componer la frase ("Te mata Kai'Sa" y no "Te mata xXNoobXx"): en una revisión
+ * lo que se reconoce es la cara del campeón, no el nick.
+ */
+export function withChampionNames(ev: MatchEvent, participants: Participant[] = []): MatchEvent {
+  const champ = eventChampion(ev, participants);
+  if (!champ) return ev;
+  return ev.subtype === "death"
+    ? { ...ev, actor: champLabel(champ) }
+    : { ...ev, target: champLabel(champ) };
 }

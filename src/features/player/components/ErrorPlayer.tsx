@@ -437,7 +437,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
       {!isFullscreen && (
       <div style={styles.rightColumn}>
         <div style={styles.reviewHeader}>
-          <span style={styles.reviewTitle}>{t("Error Notebook")}</span>
+          <span style={styles.reviewTitle}>{t("Error notebook")}</span>
         </div>
 
         <div style={styles.reviewList}>
@@ -460,7 +460,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                     arrastraba al punto donde estuviera el vídeo. */}
                 <div style={styles.noteTimeRow}>
                   <span className="u-meta">{t("Note at")}</span>
-                  <span className="u-metric" style={{ fontSize: 12 }}>{clock(noteTime)}</span>
+                  <span className="u-time" style={{ color: "var(--text)" }}>{clock(noteTime)}</span>
                   <button
                     type="button"
                     className="btn btn--ghost btn--sm"
@@ -491,8 +491,8 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                   rows={4}
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
-                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} className="btn-ghost" style={styles.cancelBtn}>{t("Cancel")}</button>
-                  <button onClick={handleSaveNote} style={styles.saveBtn}>{t("Save")}</button>
+                  <button onClick={() => { setIsAddingMode(false); setEditEventId(null); }} className="btn btn--ghost btn--sm">{t("Cancel")}</button>
+                  <button onClick={handleSaveNote} className="btn btn--primary btn--sm">{t("Save")}</button>
                 </div>
               </motion.div>
             )}
@@ -516,12 +516,12 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                   onClick={() => jumpToEvent(ev.time, ev.id)}
                 >
                   <div style={styles.reviewCardHeader}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "10px", fontWeight: "bold" }}>
+                    <span className="u-time" style={{ color: "var(--faint)" }}>
                       {clock(ev.time)}
                     </span>
                     <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                       <div style={{...styles.toneBadge, color: conf.color, backgroundColor: mix(conf.color, 13)}}>
-                        {conf.icon} <span style={{fontSize: "10px", fontWeight: "bold"}}>{t(ev.category)}</span>
+                        {conf.icon} <span style={{ fontSize: 12, fontWeight: 500 }}>{t(ev.category)}</span>
                       </div>
                       <button
                         onClick={(e) => {
@@ -569,8 +569,8 @@ const styles: Record<string, React.CSSProperties> = {
   videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--sunken)", display: "flex", flexDirection: "column" },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "var(--space-3) var(--space-4)", background: "linear-gradient(180deg, rgba(0,0,0,0.75) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", zIndex: 10 },
   titleBlock: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 },
-  title: { fontFamily: "var(--font-mono)", fontSize: "12px", letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text)" },
-  backBtn: { background: "transparent", color: "var(--text-secondary)", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontWeight: "bold" },
+  title: { fontSize: 15, fontWeight: 500, color: "var(--text)" },
+  backBtn: { background: "transparent", color: "var(--text-secondary)", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 500 },
   video: { width: "100%", height: "100%", objectFit: "contain", flex: 1 },
   videoProgressWrapper: {
     position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 20px",
@@ -592,7 +592,7 @@ const styles: Record<string, React.CSSProperties> = {
   reviewCard: { padding: "12px", borderRadius: "8px", border: "1px solid var(--border-subtle)", cursor: "pointer", transition: "all 0.2s" },
   reviewCardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
   toneBadge: { padding: "2px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" },
-  reviewCardBody: { fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 },
+  reviewCardBody: { fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 },
   reviewCardTitle: { wordBreak: "break-word" },
   addForm: { backgroundColor: "var(--raised)", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid var(--line)" },
   noteTimeRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" },
@@ -606,9 +606,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     boxShadow: "var(--inset-sunken)",
   },
-  select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none" },
-  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "inherit", fontSize: "13px" },
-  cancelBtn: { background: "transparent", color: "var(--text-muted)", border: "none", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "bold" },
-  saveBtn: { background: "var(--action)", color: "var(--on-action)", border: "none", padding: "6px 16px", borderRadius: "var(--radius-md)", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "12px", fontWeight: 500 },
+  select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none", fontFamily: "var(--font-sans)", fontSize: 13 },
+  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "var(--font-sans)", fontSize: 14 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

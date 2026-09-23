@@ -1,28 +1,34 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, TrendingUp } from "lucide-react";
 import { MatchMetadata } from "../../../types";
 import { getMatchBenchmarks, type MetricComparison } from "../../../core/tauri-ipc";
 import {
   bandLabel,
   effectivePercentile,
   formatMetricValue,
+  headlineMetrics,
   metricLabel,
+  metricLever,
+  metricOrder,
   metricShort,
   sortByRelevance,
 } from "../../../core/benchmarkFormat";
 import { matchRole, ROLE_FILTERS, type RoleFilter, type RoleKey } from "../../../core/patterns";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Button } from "../../../components/ui/Button";
+import { PositionIcon } from "../../../components/PositionIcon";
 import { useT } from "../../../core/LanguageProvider";
 
 /**
- * "¿Esto es bueno para alguien como yo?", pero sobre varias partidas.
+ * "¿Esto es bueno para alguien como yo?", en dos escalas.
  *
- * El reproductor ya compara UNA partida contra la población de tu tramo y tu
- * puesto. Una partida sola no es una respuesta: el CS/min de la que perdiste en
- * veinte minutos no dice nada de cómo farmeas. Aquí se promedia el percentil de
- * las últimas veinte, que es la escala a la que la comparación empieza a ser
- * una propiedad tuya y no del lobby que te tocó.
+ *  - La TARJETA (fila principal de Patrones) enseña tu última partida contra
+ *    tu rango y tu puesto: cuatro filas que se leen de un vistazo y una frase
+ *    con la palanca que más rinde. Es la que contesta "¿y ahora qué hago?".
+ *  - La TABLA (ficha "Frente a tu rango" de Explorar) promedia el percentil de
+ *    las últimas veinte, que es la escala a la que la comparación empieza a ser
+ *    una propiedad tuya y no del lobby que te tocó. Una partida sola no es una
+ *    respuesta; por eso la media no se ha ido, solo se ha movido.
  *
  * Dos decisiones que conviene no deshacer:
  *
@@ -31,9 +37,13 @@ import { useT } from "../../../core/LanguageProvider";
  *    distintos se pueden mezclar sin falsear nada: un 70 en bajo y un 70 en
  *    alto significan lo mismo *dentro de su población*. Promediar los valores
  *    crudos sí mentiría.
- *  - La ventana de fechas y la píldora de puesto del panel mandan: las partidas
- *    llegan ya filtradas. Si esta tarjeta contara otras, sería la única de la
- *    pantalla que no responde a los filtros que el usuario acaba de tocar.
+ *  - La ventana de fechas y el puesto del panel mandan: las partidas llegan ya
+ *    filtradas. Si esto contara otras, sería lo único de la pantalla que no
+ *    responde a los filtros que el usuario acaba de tocar.
+ *
+ * La carga vive en un hook (`useRankBenchmarks`) que el panel llama UNA vez y
+ * reparte a la tarjeta y a la tabla: las dos leen los mismos baremos y pedirlos
+ * dos veces sería el doble de lecturas para lo mismo.
  */
 
 /** Cuántas partidas como mucho entran en la media (y en la chispa). */
@@ -43,6 +53,8 @@ const MIN_GAMES = 3;
 /** Peticiones a la vez. El backend lee un DTO por partida; de cuatro en cuatro
  *  la tarjeta se llena rápido sin monopolizar el hilo de comandos. */
 const CONCURRENCIA = 4;
+/** Por debajo de este percentil una métrica se propone como palanca. */
+const PALANCA_BAJO = 40;
 
 /** Una métrica agregada sobre las partidas de la ventana. */
 interface Fila {
@@ -59,7 +71,25 @@ interface Fila {
   chispa: (number | null)[];
 }
 
-interface Agregado {
+/** Una métrica de UNA partida: la última. */
+interface FilaUltima {
+  metric: string;
+  value: number;
+  pct: number;
+  median: number | null;
+}
+
+interface Ultima {
+  matchId: string;
+  champion: string;
+  /** Puesto con el que se leen sus filas. */
+  role: RoleKey | null;
+  /** Etiqueta del tramo de esa partida, o null si no se conoce. */
+  band: string | null;
+  filas: FilaUltima[];
+}
+
+export interface Agregado {
   filas: Fila[];
   /** Partidas que de verdad entraron. */
   games: number;
@@ -71,12 +101,21 @@ interface Agregado {
   band: string | null;
   /** ¿Había más de un tramo? */
   tramosMixtos: boolean;
+  /** La partida más reciente con baremos, o null si ninguna los trajo. */
+  ultima: Ultima | null;
 }
 
+/** El estado de los baremos, tal y como lo leen la tarjeta y la tabla. */
+export type RankBench =
+  | { kind: "needs"; n: number }
+  | { kind: "loading" }
+  | { kind: "error"; msg: string | null; retry: () => void }
+  | { kind: "ok"; data: Agregado };
+
 /**
- * El puesto, con la MISMA palabra que la píldora del panel ("ADC", no "Bot").
+ * El puesto, con la MISMA palabra que el selector del panel ("ADC", no "Bot").
  *
- * La tarjeta vive dentro de Patrones: si el usuario acaba de pulsar "ADC" y la
+ * La tarjeta vive dentro de Patrones: si el usuario acaba de elegir "ADC" y la
  * cabecera le contesta "Bot", parece que está mirando otra cosa.
  */
 const etiquetaPuesto = (r: RoleKey): string =>
@@ -108,39 +147,20 @@ const usable = (m: MatchMetadata): boolean =>
 const porFecha = (a: MatchMetadata, b: MatchMetadata): number =>
   b.date.localeCompare(a.date);
 
-/**
- * Lo que la tarjeta sabe de sí misma, para quien la enseña plegada.
- *
- * Patrones la mete en una ficha que se abre al pulsar; la línea de resumen de
- * la ficha tiene que decir lo mejor y lo peor SIN abrirla, y los datos viven
- * aquí. Se devuelven las claves de métrica, no texto: el que pinta traduce.
- */
-export type BenchmarkSummary =
-  | { kind: "needs"; n: number }
-  | { kind: "loading" }
-  | { kind: "error"; msg: string | null }
-  | { kind: "ok"; games: number; strongest: string[]; weakest: string[] };
-
-export interface RankBenchmarkCardProps {
-  /** Las partidas YA filtradas por la ventana temporal y el puesto del panel. */
-  matches: MatchMetadata[];
-  /** La píldora de puesto activa: manda sobre el puesto mayoritario. */
-  roleFilter: RoleFilter;
-  /** Se llama cada vez que cambia el estado de la tarjeta. Debe ser estable
-   *  (un setter de useState vale) o el efecto se redispara en cada render. */
-  onSummary?: (s: BenchmarkSummary) => void;
-}
-
 /** Las dos métricas más altas y las dos más bajas, por percentil medio. */
-const extremos = (filas: Fila[]): { fuertes: Fila[]; flojas: Fila[] } => {
+export const extremos = (filas: Fila[]): { fuertes: Fila[]; flojas: Fila[] } => {
   const ordenadas = filas
     .filter((f) => f.pct != null)
     .sort((a, b) => (b.pct as number) - (a.pct as number));
   return { fuertes: ordenadas.slice(0, 2), flojas: ordenadas.slice(-2).reverse() };
 };
 
-export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, roleFilter, onSummary }) => {
-  const t = useT();
+/**
+ * Carga los baremos de las partidas de la ventana (las veinte más recientes
+ * que se puedan comparar) y los agrega. Se redispara al cambiar la ventana o el
+ * puesto, no en cada render.
+ */
+export function useRankBenchmarks(matches: MatchMetadata[], roleFilter: RoleFilter): RankBench {
   const [datos, setDatos] = useState<Agregado | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,13 +192,15 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
     // izquierda a derecha como el tiempo.
     const orden = [...candidatas].reverse();
     const res: (MetricComparison[] | null)[] = new Array(orden.length).fill(null);
-    let siguiente = 0;
+    // Se piden de la más nueva hacia atrás: la tarjeta de la última partida es
+    // la que se ve primero.
+    let siguiente = orden.length - 1;
     // Un fallo suelto no tumba la tarjeta: se pierde esa partida y las demás
     // siguen contando. Sólo cuando fallan TODAS hay algo que decir.
     const obrero = async (): Promise<void> => {
       for (;;) {
-        const i = siguiente++;
-        if (i >= orden.length) return;
+        const i = siguiente--;
+        if (i < 0) return;
         try {
           res[i] = await getMatchBenchmarks(orden[i].id);
         } catch (e) {
@@ -191,8 +213,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
       .then(() => {
         if (!vivo) return;
         // Sin datos no se guarda un mensaje ya traducido: el texto lo pone el
-        // render, que es quien sabe en qué idioma está la app AHORA. Guardarlo
-        // aquí dejaba el fallo en el idioma en que ocurrió.
+        // render, que es quien sabe en qué idioma está la app AHORA.
         const conDatos = res.filter((r) => r != null).length;
         if (conDatos === 0) {
           setDatos(null);
@@ -240,8 +261,8 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
           }
         });
 
-        // Sin percentil no hay comparación, y esta tarjeta es sólo comparación:
-        // el valor crudo ya lo enseña el reproductor partida a partida.
+        // Sin percentil no hay comparación, y esto es sólo comparación: el
+        // valor crudo ya lo enseña el reproductor partida a partida.
         const filas: Fila[] = [...acc.entries()]
           .filter(([, e]) => e.nP > 0 && e.nV > 0)
           .map(([metric, e]) => ({
@@ -253,6 +274,27 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
             chispa: e.chispa,
           }));
 
+        // --- la última partida con baremos
+        let ultima: Ultima | null = null;
+        for (let i = orden.length - 1; i >= 0 && !ultima; i--) {
+          const lista = res[i];
+          if (!lista) continue;
+          const m = orden[i];
+          const filasU: FilaUltima[] = [];
+          for (const c of lista) {
+            const p = effectivePercentile(c);
+            if (p != null) filasU.push({ metric: c.metric, value: c.value, pct: p, median: c.median });
+          }
+          if (filasU.length === 0) continue;
+          ultima = {
+            matchId: m.id,
+            champion: m.champion,
+            role: roleFilter !== "all" ? roleFilter : matchRole(m),
+            band: bandLabel(m.tier_bucket),
+            filas: filasU,
+          };
+        }
+
         setDatos({
           filas: sortByRelevance(filas, rolMostrado),
           games: conDatos,
@@ -260,6 +302,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
           rolesMixtos: roles.size > 1,
           band: tramos.size === 1 ? bandLabel([...tramos][0]) : null,
           tramosMixtos: tramos.size > 1,
+          ultima,
         });
       })
       .catch((e) => {
@@ -278,137 +321,285 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clave, roleFilter, intento]);
 
-  // El resumen para la ficha plegada, en cuanto cambia cualquier estado.
-  useEffect(() => {
-    if (!onSummary) return;
-    if (candidatas.length < MIN_GAMES) {
-      onSummary({ kind: "needs", n: MIN_GAMES - candidatas.length });
-    } else if (cargando) {
-      onSummary({ kind: "loading" });
-    } else if (error || !datos || datos.filas.length === 0) {
-      onSummary({ kind: "error", msg: error });
-    } else {
-      const { fuertes, flojas } = extremos(datos.filas);
-      onSummary({
-        kind: "ok",
-        games: datos.games,
-        strongest: fuertes.map((f) => f.metric),
-        weakest: flojas.map((f) => f.metric),
-      });
-    }
-  }, [onSummary, candidatas.length, cargando, error, datos]);
+  if (candidatas.length < MIN_GAMES) return { kind: "needs", n: MIN_GAMES - candidatas.length };
+  if (cargando) return { kind: "loading" };
+  if (error || !datos || datos.filas.length === 0) {
+    return { kind: "error", msg: error, retry: () => setIntento((n) => n + 1) };
+  }
+  return { kind: "ok", data: datos };
+}
 
-  const cabecera = (meta?: React.ReactNode) => (
-    <div style={styles.cardHead}>
-      <span className="u-label">{t("Versus your rank")}</span>
-      {meta}
+// ======================================================================
+// La barra de percentil: peor a la izquierda, mediana en medio, mejor a la
+// derecha. Es la misma en la tarjeta y en la tabla.
+// ======================================================================
+
+const BarraPercentil: React.FC<{ pct: number; label: string }> = ({ pct, label }) => {
+  const p = Math.max(1, Math.min(99, pct));
+  const color = tono(pct);
+  return (
+    <div className="pp-pbar" role="img" aria-label={label}>
+      <div className="pp-pbar-track" />
+      {/* El tramo entre la mediana y tú: lo que te separa de "lo normal". */}
+      <div
+        className="pp-pbar-gap"
+        style={{
+          left: `${Math.min(50, p)}%`,
+          width: `${Math.abs(p - 50)}%`,
+          background: `color-mix(in srgb, ${color} 30%, transparent)`,
+        }}
+      />
+      <div className="pp-pbar-median" />
+      <div
+        className="pp-pbar-dot"
+        style={{
+          left: `${p}%`,
+          background: color,
+          boxShadow: `0 0 0 2px var(--panel), 0 0 0 5px color-mix(in srgb, ${color} 18%, transparent)`,
+        }}
+      />
     </div>
   );
+};
 
-  // ------------------------------------------------------------ poca muestra
-  if (candidatas.length < MIN_GAMES) {
-    const faltan = MIN_GAMES - candidatas.length;
+// ======================================================================
+// Tarjeta: tu última partida frente a tu rango.
+// ======================================================================
+
+export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => {
+  const t = useT();
+
+  const titulo = <h2 className="pp-cardtitle">{t("Your last game vs your rank")}</h2>;
+
+  if (bench.kind === "needs") {
     return (
-      <div className="card" style={styles.card}>
-        {cabecera(<span className="u-meta">{t("players of your rank in your role")}</span>)}
+      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+        <div className="pp-cardhead">{titulo}</div>
         <EmptyState
           icon={<BarChart3 size={26} color="var(--faint)" />}
           title={t("Not enough synced ranked games")}
           text={
-            faltan === 1
+            bench.n === 1
               ? t("Needs 1 more synced ranked game")
-              : t("Needs {n} more synced ranked games", { n: faltan })
+              : t("Needs {n} more synced ranked games", { n: bench.n })
           }
         />
-      </div>
+      </section>
     );
   }
 
-  // ------------------------------------------------------------------- carga
   // Esqueleto, no ruleta: la forma de la tarjeta ya está decidida y enseñarla
   // evita que la página dé un salto cuando llegan los datos.
-  if (cargando) {
+  if (bench.kind === "loading") {
     return (
-      <div className="card" style={styles.card}>
-        {cabecera(<span className="skeleton" style={{ display: "inline-block", width: 120, height: 10 }} />)}
-        <div style={styles.filas}>
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} style={styles.fila}>
-              <span className="skeleton" style={{ height: 10, width: 96 }} />
-              <span className="skeleton" style={{ height: 10, width: 44 }} />
-              <span className="skeleton" style={{ height: 6, flex: 1 }} />
-              <span className="skeleton" style={{ height: 10, width: 28 }} />
-              <span className="skeleton" style={{ height: 14, width: 60 }} />
+      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")} aria-busy="true">
+        <div className="pp-cardhead">
+          {titulo}
+          <span className="skeleton" style={{ display: "inline-block", width: 120, height: 10 }} />
+        </div>
+        <div className="pp-rank-rows">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="pp-rank-row">
+              <div className="pp-rank-line">
+                <span className="skeleton" style={{ height: 12, width: 120 }} />
+                <span className="skeleton" style={{ height: 12, width: 90 }} />
+              </div>
+              <span className="skeleton" style={{ height: 6, width: "100%" }} />
             </div>
           ))}
         </div>
-      </div>
+      </section>
     );
   }
 
-  // ------------------------------------------------------------------- fallo
-  if (error || !datos || datos.filas.length === 0) {
+  if (bench.kind === "error" || !bench.data.ultima) {
+    const msg = bench.kind === "error" ? bench.msg : null;
     return (
-      <div className="card" style={styles.card}>
-        {cabecera()}
-        <p style={styles.texto}>
-          {t("Couldn't load the benchmarks: {msg}", { msg: error ?? t("no benchmarks came back") })}
+      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+        <div className="pp-cardhead">{titulo}</div>
+        <p className="pp-prose">
+          {t("Couldn't load the benchmarks: {msg}", { msg: msg ?? t("no benchmarks came back") })}
         </p>
-        <div>
-          <Button variant="ghost" size="sm" onClick={() => setIntento((n) => n + 1)}>
-            {t("Retry")}
-          </Button>
+        {bench.kind === "error" && (
+          <div>
+            <Button variant="ghost" size="sm" onClick={bench.retry}>
+              {t("Retry")}
+            </Button>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  const u = bench.data.ultima;
+  const porMetrica = new Map(u.filas.map((f) => [f.metric, f]));
+
+  // La palanca: de las ocho métricas que más pesan en tu puesto, la que peor
+  // sale. Sólo si de verdad sale mal: por encima de 40 no hay palanca que
+  // proponer, y decir "tu punto débil" de algo que está en la media es
+  // inventarse un problema.
+  const relevantes = metricOrder(u.role).slice(0, 8);
+  const palanca =
+    relevantes
+      .map((m) => porMetrica.get(m))
+      .filter((f): f is FilaUltima => !!f && f.pct < PALANCA_BAJO && metricLever(f.metric) != null)
+      .sort((a, b) => a.pct - b.pct)[0] ?? null;
+
+  // Las filas: las cuatro de cabecera del puesto. Si la palanca no está entre
+  // ellas, ocupa el sitio del KDA (el menos accionable: mezcla lo que otras
+  // filas ya dicen) — la frase de abajo tiene que poder verse en una barra.
+  const cabecera = headlineMetrics(u.role).filter((m) => porMetrica.has(m));
+  if (palanca && !cabecera.includes(palanca.metric)) {
+    const i = cabecera.indexOf("kda");
+    if (i >= 0) cabecera[i] = palanca.metric;
+    else cabecera.push(palanca.metric);
+  }
+  const filas = cabecera.map((m) => porMetrica.get(m) as FilaUltima);
+
+  return (
+    <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+      <div className="pp-cardhead">
+        {titulo}
+        <span className="pp-meta pp-rank-scope">
+          {u.band && <span>{t(u.band)}</span>}
+          {u.band && u.role && <span aria-hidden="true">·</span>}
+          {u.role && (
+            <span className="pp-inline-icon">
+              <PositionIcon position={u.role} size={14} />
+              {t(etiquetaPuesto(u.role))}
+            </span>
+          )}
+        </span>
+      </div>
+
+      <div className="pp-rank-rows">
+        {filas.map((f) => (
+          <div key={f.metric} className="pp-rank-row">
+            <div className="pp-rank-line">
+              <span className="pp-rank-name">{t(metricLabel(f.metric))}</span>
+              <span className="pp-meta pp-num">
+                <span className="pp-rank-value" style={{ color: tono(f.pct) }}>
+                  {formatMetricValue(f.metric, f.value)}
+                </span>
+                {f.median != null && (
+                  <> · {t("the median is {v}", { v: formatMetricValue(f.metric, f.median) })}</>
+                )}
+              </span>
+            </div>
+            <BarraPercentil
+              pct={f.pct}
+              label={t("Percentile {p} in your rank", { p: Math.round(f.pct) })}
+            />
+          </div>
+        ))}
+        <div className="pp-pbar-axis" aria-hidden="true">
+          <span>{t("Worse")}</span>
+          <span>{t("Your rank's median")}</span>
+          <span>{t("Better")}</span>
         </div>
       </div>
-    );
-  }
 
+      <div className="pp-lever">
+        <TrendingUp size={16} aria-hidden="true" className="pp-lever-icon" />
+        {palanca ? (
+          <p className="pp-prose">
+            <span className="pp-lever-strong">
+              {t("Where you gain most: {lever}.", { lever: t(metricLever(palanca.metric) as string) })}
+            </span>{" "}
+            {palanca.median != null
+              ? t("You were at {v}; your rank's median is {m}.", {
+                  v: formatMetricValue(palanca.metric, palanca.value),
+                  m: formatMetricValue(palanca.metric, palanca.median),
+                })
+              : t("You were at {v}.", { v: formatMetricValue(palanca.metric, palanca.value) })}
+          </p>
+        ) : (
+          <p className="pp-prose">
+            {t("Nothing in this game falls clearly below your rank's median.")}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+};
+
+// ======================================================================
+// Tabla: la media de tus últimas partidas, métrica a métrica (ficha de
+// Explorar). Es la tarjeta de antes, con las etiquetas en la voz nueva.
+// ======================================================================
+
+/** Resumen de una línea para la ficha plegada. */
+export function benchmarkSummaryText(
+  bench: RankBench,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): React.ReactNode {
+  if (bench.kind === "loading") {
+    return <span className="skeleton" style={{ display: "inline-block", width: 160, height: 10 }} />;
+  }
+  if (bench.kind === "needs") {
+    return bench.n === 1
+      ? t("Needs 1 more synced ranked game")
+      : t("Needs {n} more synced ranked games", { n: bench.n });
+  }
+  if (bench.kind === "error") {
+    return t("Couldn't load the benchmarks: {msg}", { msg: bench.msg ?? t("no benchmarks came back") });
+  }
+  const { fuertes, flojas } = extremos(bench.data.filas);
+  const [a, b] = fuertes;
+  const [c, d] = flojas;
+  return a && b && c && d
+    ? t("Strongest: {a} and {b} · weakest: {c} and {d}", {
+        a: t(metricShort(a.metric)), b: t(metricShort(b.metric)), c: t(metricShort(c.metric)), d: t(metricShort(d.metric)),
+      })
+    : `${bench.data.games} ${t(bench.data.games === 1 ? "game" : "games")}`;
+}
+
+export const RankBenchmarkTable: React.FC<{ bench: RankBench }> = ({ bench }) => {
+  const t = useT();
+  if (bench.kind !== "ok") return null;
+  const datos = bench.data;
   const { fuertes, flojas } = extremos(datos.filas);
   const banda = datos.tramosMixtos ? t("mixed ranks") : datos.band ? t(datos.band) : null;
 
   return (
-    <div className="card" style={styles.card}>
-      {cabecera(
-        <span className="u-meta">
+    <div className="card pp-card">
+      <div className="pp-cardhead">
+        <h3 className="pp-cardtitle">{t("Versus your rank")}</h3>
+        <span className="pp-meta">
           {datos.games} {t(datos.games === 1 ? "game" : "games")}
           {datos.role ? ` · ${t(datos.role)}` : ""}
           {banda ? ` · ${banda}` : ""}
         </span>
-      )}
+      </div>
       {/* El puesto ordena las filas, así que cuando la muestra mezcla puestos
           hay que decir con cuál se ordenó: si no, el orden parece arbitrario. */}
       {datos.rolesMixtos && datos.role && (
-        <div className="u-meta" style={{ marginBottom: 6 }}>
+        <div className="pp-meta">
           {t("Mixed roles in this window, ordered for {role}", { role: t(datos.role) })}
         </div>
       )}
 
-      <div style={styles.filas}>
+      <div className="pp-avg-rows">
         {datos.filas.map((f) => {
           const p = f.pct;
           const color = tono(p);
           return (
-            <div key={f.metric} style={styles.fila}>
-              <span style={styles.etiqueta}>{t(metricLabel(f.metric))}</span>
-              <span className="u-metric" style={styles.valor}>
-                {formatMetricValue(f.metric, f.value)}
-              </span>
+            <div key={f.metric} className="pp-avg-row">
+              <span className="pp-avg-name">{t(metricLabel(f.metric))}</span>
+              <span className="pp-num pp-avg-value">{formatMetricValue(f.metric, f.value)}</span>
               {/* La barra es el percentil, no el valor: la muesca del 50 es la
                   mediana de la población y es la única referencia que importa. */}
               <div
-                style={styles.pista}
+                className="pp-avg-track"
                 title={f.median != null ? t("median {v}", { v: formatMetricValue(f.metric, f.median) }) : undefined}
               >
                 <div
-                  style={{
-                    ...styles.relleno,
-                    width: `${Math.max(1, Math.min(100, p ?? 0))}%`,
-                    background: tonoBarra(p),
-                  }}
+                  className="pp-avg-fill"
+                  style={{ width: `${Math.max(1, Math.min(100, p ?? 0))}%`, background: tonoBarra(p) }}
                 />
-                <div style={styles.muesca} title={t("rank median")} />
+                <div className="pp-avg-median" title={t("rank median")} />
               </div>
-              <span className="u-metric" style={{ ...styles.pct, color }}>
+              <span className="pp-num pp-avg-pct" style={{ color }}>
                 {p == null ? "—" : Math.round(p)}
               </span>
               <Chispa valores={f.chispa} color={color} />
@@ -418,7 +609,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
       </div>
 
       {fuertes.length === 2 && flojas.length === 2 && (
-        <p style={styles.texto}>
+        <p className="pp-prose">
           {t("Strongest: {a} and {b} · weakest: {c} and {d}", {
             a: t(metricShort(fuertes[0].metric)),
             b: t(metricShort(fuertes[1].metric)),
@@ -427,7 +618,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
           })}
         </p>
       )}
-      <div className="u-meta">{t("average percentile against players of your rank in your role")}</div>
+      <div className="pp-meta">{t("average percentile against players of your rank in your role")}</div>
     </div>
   );
 };
@@ -435,7 +626,7 @@ export const RankBenchmarkCard: React.FC<RankBenchmarkCardProps> = ({ matches, r
 /**
  * El percentil de esa métrica partida a partida. Veinte puntos en sesenta
  * píxeles no se leen uno a uno: lo que se lee es si la línea sube o baja, que
- * es justo lo que la media de arriba no puede decir.
+ * es justo lo que la media de al lado no puede decir.
  */
 const Chispa: React.FC<{ valores: (number | null)[]; color: string }> = ({ valores, color }) => {
   const W = 60;
@@ -443,7 +634,7 @@ const Chispa: React.FC<{ valores: (number | null)[]; color: string }> = ({ valor
   const puntos = valores
     .map((v, i) => ({ v, i }))
     .filter((p): p is { v: number; i: number } => p.v != null);
-  if (puntos.length < 2) return <span style={{ width: W, height: H, display: "inline-block" }} />;
+  if (puntos.length < 2) return <span style={{ width: W, height: H, display: "inline-block", flex: "none" }} />;
   const n = Math.max(1, valores.length - 1);
   const d = puntos
     .map((p) => `${((p.i / n) * W).toFixed(1)},${(H - 1 - (p.v / 100) * (H - 2)).toFixed(1)}`)
@@ -451,63 +642,8 @@ const Chispa: React.FC<{ valores: (number | null)[]; color: string }> = ({ valor
   return (
     <svg width={W} height={H} style={{ display: "block", flex: "0 0 auto" }} aria-hidden="true">
       {/* La mediana de la población, para saber de qué lado va la línea. */}
-      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="var(--line-soft)" strokeWidth="1" />
+      <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="var(--hair)" strokeWidth="1" />
       <polyline points={d} fill="none" stroke={color} strokeWidth="1.25" opacity={0.9} />
     </svg>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  card: {
-    padding: "var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-  },
-  cardHead: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "var(--space-3)",
-    marginBottom: 2,
-  },
-  filas: { display: "flex", flexDirection: "column", gap: 5 },
-  fila: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "3px 0",
-    borderBottom: "1px solid var(--line-soft)",
-  },
-  etiqueta: { fontSize: 12, color: "var(--muted)", flex: "0 0 132px", minWidth: 0 },
-  valor: { flex: "0 0 56px", textAlign: "right", fontSize: 12, fontWeight: 500 },
-  pista: {
-    position: "relative",
-    flex: 1,
-    minWidth: 90,
-    height: 6,
-    background: "var(--sunken)",
-    borderRadius: "var(--radius-sm)",
-  },
-  relleno: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    height: "100%",
-    borderRadius: "var(--radius-sm)",
-  },
-  /* La muesca del 50 SOBRESALE de la barra por arriba y por abajo a propósito.
-     Dentro se perdía: sobre el relleno claro no se distinguía, y es justo en
-     las filas que rondan la mediana donde hay que verla. */
-  muesca: {
-    position: "absolute",
-    left: "50%",
-    top: -3,
-    width: 1,
-    height: 12,
-    background: "var(--faint)",
-    zIndex: 1,
-  },
-  pct: { flex: "0 0 26px", textAlign: "right", fontSize: 12, fontWeight: 500 },
-  texto: { margin: 0, fontSize: 12, color: "var(--muted)", lineHeight: 1.5 },
 };

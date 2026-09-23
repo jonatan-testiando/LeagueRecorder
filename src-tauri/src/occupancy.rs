@@ -334,6 +334,9 @@ impl Occupancy {
     }
 
     /// Confianza de cada jugador del equipo `team_id` de estar cerca de (x, y).
+    // Sin uso desde que la presión cuenta solo a los vivos (pressure.rs
+    // recorre a los jugadores uno a uno). Se conservan para diagnósticos.
+    #[allow(dead_code)]
     pub fn presences(
         &self,
         participants: &[ParticipantDto],
@@ -357,6 +360,9 @@ impl Occupancy {
     /// 2,25 y parecen una multitud, cuando en realidad no se sabe dónde estaba
     /// ninguno. Contando sólo los que superan el umbral, la incertidumbre deja
     /// de acumularse en presencia ficticia.
+    // Sin uso desde que la presión cuenta solo a los vivos (pressure.rs
+    // recorre a los jugadores uno a uno). Se conservan para diagnósticos.
+    #[allow(dead_code)]
     pub fn committed_sure(
         &self,
         participants: &[ParticipantDto],
@@ -375,6 +381,9 @@ impl Occupancy {
 
     /// Cuántos jugadores del equipo `team_id` estaban cerca de (x, y), sumando
     /// confianzas. Es la medida de "cuánta gente había comprometida aquí".
+    // Sin uso desde que la presión cuenta solo a los vivos (pressure.rs
+    // recorre a los jugadores uno a uno). Se conservan para diagnósticos.
+    #[allow(dead_code)]
     pub fn committed(
         &self,
         participants: &[ParticipantDto],

@@ -2,19 +2,20 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
 import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { outcome, queueKey } from "../../../core/matchStats";
+import { outcome, queueKey, lpDeltas } from "../../../core/matchStats";
 import {
-  ArrowLeft, Eye, Maximize, Play, Pause,
-  VolumeX, Volume1, Volume2, Scissors, AlertTriangle,
-  Trash2, RefreshCw,
+  ArrowLeft, Eye, EyeOff, Maximize, Play, Pause,
+  VolumeX, Volume1, Volume2, Scissors, AlertTriangle, Flag, Check, RotateCcw,
+  Trash2, RefreshCw, FileText,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
   BarChart3
 } from "lucide-react";
 import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
-import { clock, matchAge } from "../../../core/time";
+import { clock, relativeDay } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
 import { PressureEpisodeCard } from "./PressureEpisodeCard";
+import { formatGold, formatSeconds } from "./pressureFormat";
 import { TacticalMap } from "./TacticalMap";
 import { MapAwarenessWidget } from "./MapAwarenessWidget";
 import { PowerSpikeWidget } from "./PowerSpikeWidget";
@@ -26,17 +27,23 @@ import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { InspSection } from "./InspSection";
 import { BenchmarkWidget } from "./BenchmarkWidget";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
 import { useClipExporter } from "../hooks/useClipExporter";
-import { eventMeta, toneLabelAndIcon, type Tone } from "./eventMeta";
-import { buildQueue, type Moment } from "./ReviewQueue";
+import {
+  eventMeta, toneLabelAndIcon, ChampFace, IconFinding,
+  IconDragon, IconBaron, IconHerald, IconTower, type Tone,
+} from "./eventMeta";
+import { buildQueue, analyzerFindings, type Moment, type Finding } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
-import { individualEvents } from "../../../core/matchEvents";
+import { individualEvents, eventChampion, withChampionNames, champLabel } from "../../../core/matchEvents";
 import { champIcon, ddragonUrl } from "../../../core/ddragon";
 import { sameRole } from "../../../core/roles";
-import { useT } from "../../../core/LanguageProvider";
+import { useLang } from "../../../core/LanguageProvider";
+import { useMatches } from "../../../store/useAppStore";
+import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../components/PositionIcon";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import { mix } from "../../../core/color";
@@ -62,6 +69,49 @@ const MARK_PITCH = 23;       // separación mínima entre centros de una misma f
 // del carril: 12+21 = 33, y la de arriba ocupa de 35 a 56.
 const MARK_ROWS = [12, 35];
 
+// El resto de la línea de tiempo, de arriba abajo: la regla de minutos, la
+// barra de progreso (lo reproducido, en oro), la curva de APM y el carril de
+// los sucesos. El carril sigue midiendo 56 px —las dos filas de arriba lo
+// llenan— y la curva de APM sale de detrás de las marcas a su propia fila: en
+// la misma, las marcas tapaban justo los picos de una pelea.
+const RULER_H = 16;
+const BAR_TOP = RULER_H + 6;
+const BAR_H = 4;
+const APM_H = 32;
+const LANE_H = 56;
+const ROW_GAP = 8;
+
+/** Un elemento de la línea de tiempo: un suceso de la partida o un hallazgo. */
+interface TimelineItem {
+  key: string;
+  time: number;
+  ev?: MatchEvent;
+  finding?: Finding;
+}
+
+type Bucket = "good" | "neutral" | "bad";
+
+/** Fila de la lista de revisión. */
+interface ReviewRow {
+  key: string;
+  time: number;
+  color: string;
+  icon: React.ReactNode;
+  /** La frase de la fila, ya traducida ("Te mata Kai'Sa"). */
+  text: string;
+  /** Qué clase de momento es ("Muerte"), ya traducido. */
+  label: string;
+  /** Explicación: la de un hallazgo, o la categoría de un error marcado. */
+  detail: string;
+  tone: Tone;
+  bucket: Bucket;
+  finding?: Finding;
+  moment?: Moment;
+}
+
+const bucketOf = (tone: Tone): Bucket =>
+  tone === "excellent" || tone === "good" ? "good" : tone === "mistake" || tone === "throw" ? "bad" : "neutral";
+
 /**
  * Salto de un "fotograma" con `,` y `.`. No se puede saber el fps real del
  * fichero desde el elemento `<video>`, así que se usa 1/30 s: en una grabación a
@@ -76,17 +126,28 @@ const FRAME_STEP = 1 / 30;
  */
 const FEATURED_NEAR = 4;
 
-/** Atajos de teclado del reproductor, en el orden en que se enseñan. */
+/**
+ * Atajos de teclado del reproductor, en el orden en que se enseñan.
+ *
+ * La maqueta ponía el momento anterior/siguiente en `[` y `]`, pero esas dos
+ * ya marcan la entrada y la salida del recorte: se quedan P y N, que ya
+ * existían, y son las que se enseñan en los botones.
+ */
 const SHORTCUTS: [string, string][] = [
   ["Space / K", "Play or pause"],
   ["← / →", "Back or forward 5 s"],
   [", / .", "Step one frame"],
   ["P / N", "Previous or next moment"],
   ["[ / ]", "Set clip in or out point"],
+  ["C", "Create clip"],
+  ["E", "Mark error"],
   ["M", "Mute"],
   ["F", "Fullscreen"],
   ["Esc", "Leave fullscreen"],
 ];
+
+/** Velocidades del segmentado del transporte. */
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 
 interface VideoPlayerProps {
   match: MatchMetadata;
@@ -99,9 +160,10 @@ interface VideoPlayerProps {
 }
 
 /**
- * Fila del inspector: etiqueta a la izquierda, cifra a la derecha, en mono
- * tabular. Todas las cifras de la columna caen en la misma vertical, que es lo
- * que permite recorrerlas de un vistazo en vez de buscarlas dentro de azulejos.
+ * Fila del inspector: etiqueta a la izquierda, cifra a la derecha, en sans con
+ * cifras tabulares. Todas las cifras de la columna caen en la misma vertical,
+ * que es lo que permite recorrerlas de un vistazo en vez de buscarlas dentro de
+ * azulejos.
  */
 const InspRow: React.FC<{
   label: string;
@@ -179,7 +241,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const [hoverClientX, setHoverClientX] = useState<number | null>(null);
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
-  const t = useT();
+  const { t, lang } = useLang();
   // Tres pestañas: Revisión (los sucesos, la cola y las notas: todo lo que se
   // hace CON el vídeo), Partida (qué pasó) e Impacto (qué significó). "Eventos"
   // era una cuarta con la misma lista que la cola de revisión, en otro orden.
@@ -251,8 +313,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   );
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "380", 10);
-    return isNaN(v) ? 380 : Math.min(700, Math.max(300, v));
+    const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "392", 10);
+    return isNaN(v) ? 392 : Math.min(700, Math.max(300, v));
   });
   const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
   const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
@@ -334,20 +396,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const jumpToClip = useCallback((eventTime: number) => {
     jumpToClipAt(eventTime, CLIP_BEFORE, CLIP_AFTER);
   }, [jumpToClipAt]);
-
-  const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
-    const times = match.events
-      .filter((e) => e.type !== "GameStart" && e.type !== "GameEnd")
-      .map((e) => e.time)
-      .sort((a, b) => a - b);
-    if (!times.length) return;
-    const cur = activeEventTime ?? currentTime;
-    let target: number | undefined;
-    if (dir === 1) target = times.find((t) => t > cur + 0.5);
-    else target = [...times].reverse().find((t) => t < cur - 0.5);
-    if (target === undefined) target = dir === 1 ? times[0] : times[times.length - 1];
-    jumpToClip(target);
-  }, [match.events, activeEventTime, currentTime, jumpToClip]);
 
   // Las dos ramas del if hacían lo mismo, así que no había tal decisión: en modo
   // recorte o fuera de él, pinchar la tira busca ese punto.
@@ -433,43 +481,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     pendingBound.current = null;
     setClipDragThumb(null);
   }, [clipDragThumb, dragThumbTo, setClipDragThumb]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      const v = videoRef.current;
-      if (!v) return;
-      switch (e.key) {
-        case " ":
-        case "k":
-          e.preventDefault();
-          handlePlayPause();
-          break;
-        case "ArrowRight": clipEndRef.current = null; seekTo(v.currentTime + 5, false); break;
-        case "ArrowLeft": clipEndRef.current = null; seekTo(v.currentTime - 5, false); break;
-        case "m": setMuted((m) => !m); break;
-        case "f": toggleFullscreen(); break;
-        case "n": e.preventDefault(); goToAdjacentEvent(1); break;
-        case "p": e.preventDefault(); goToAdjacentEvent(-1); break;
-        // Escape salía de pantalla completa por el navegador, pero no si se
-        // había entrado desde el botón sin pasar por su gesto: se dice aquí.
-        case "Escape":
-          if (document.fullscreenElement) { e.preventDefault(); toggleFullscreen(); }
-          break;
-        // Fotograma a fotograma. A 60 fps son 16 ms; se usa 1/30 para que un
-        // toque avance algo visible en cualquier grabación.
-        case ",": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime - FRAME_STEP, false); break;
-        case ".": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime + FRAME_STEP, false); break;
-        // Entrada y salida del recorte, sin soltar el teclado.
-        case "[": e.preventDefault(); setClipBound("start", v.currentTime); break;
-        case "]": e.preventDefault(); setClipBound("end", v.currentTime); break;
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [handlePlayPause, seekTo, goToAdjacentEvent, toggleFullscreen, setMuted, setClipBound]);
-
 
   // --- Comentarios (persistidos en el JSON de la partida vía backend) ---
   const persistComments = useCallback(
@@ -732,6 +743,191 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     }
   };
 
+  // --- Hallazgos del analizador -------------------------------------------
+  // Lecturas de lo que hiciste sacadas de datos ya grabados (miradas al mapa,
+  // saltos de cámara), no sucesos de Riot. Van en violeta en la línea de tiempo,
+  // en la lista y, si son de los que avisan, sobre el propio vídeo.
+  const findings = React.useMemo<Finding[]>(() => {
+    const deaths = timedEvents
+      .filter((e) => e.type === "ChampionKill" && e.subtype === "death")
+      .map((e) => e.time);
+    const looks = [...cameraSnaps, ...cameraLooks.map((l) => l.t)];
+    return analyzerFindings(deaths, looks, moments, t);
+  }, [timedEvents, cameraSnaps, cameraLooks, moments, t]);
+
+  // La lista única de la línea de tiempo: sucesos y hallazgos, por orden. Es lo
+  // que colocan los racimos y lo que recorren «momento anterior/siguiente».
+  const timelineItems = React.useMemo<TimelineItem[]>(
+    () =>
+      [
+        ...timedEvents.map((ev) => ({ key: `event:${ev.time}:${ev.type}:${ev.subtype ?? ""}`, time: ev.time, ev })),
+        ...findings.map((f) => ({ key: f.id, time: f.time, finding: f })),
+      ].sort((a, b) => a.time - b.time),
+    [timedEvents, findings]
+  );
+
+  // Una sola lista para la pestaña Revisión: los sucesos con hora (marcadores
+  // de Riot incluidos, la MISMA que pinta la tira), los errores que marcaste y
+  // los hallazgos. La cola de revisión no es otra lista: es esta, con su casilla
+  // de "visto" en las filas que salen de buildQueue.
+  const rows = React.useMemo<ReviewRow[]>(() => {
+    const byId = new Map(moments.map((m) => [m.id, m] as const));
+    const out: ReviewRow[] = timedEvents.map((ev) => {
+      const meta = eventMeta(ev, 16);
+      const key = `event:${ev.time}:${ev.type}:${ev.subtype ?? ""}`;
+      const label = t(meta.label);
+      // La frase con la cara que se reconoce: el campeón, no el nick.
+      const desc = describeEvent(withChampionNames(ev, participants), t);
+      return {
+        key,
+        time: ev.time,
+        color: meta.color,
+        icon: meta.icon,
+        text: desc || label,
+        label,
+        detail: "",
+        tone: meta.tone,
+        bucket: bucketOf(meta.tone),
+        moment: byId.get(key),
+      };
+    });
+    for (const m of moments) {
+      if (m.source !== "error") continue;
+      out.push({
+        key: m.id,
+        time: m.time,
+        color: "var(--loss)",
+        icon: <Flag size={16} />,
+        text: m.title,
+        label: t("Flagged error"),
+        detail: m.note ? t(m.note) : "",
+        tone: "mistake",
+        bucket: "bad",
+        moment: m,
+      });
+    }
+    for (const f of findings) {
+      out.push({
+        key: f.id,
+        time: f.time,
+        color: "var(--flag)",
+        icon: <IconFinding size={16} />,
+        text: f.title,
+        label: t("Finding"),
+        detail: f.detail,
+        tone: "neutral",
+        bucket: f.bad ? "bad" : "neutral",
+        finding: f,
+        moment: f.moment,
+      });
+    }
+    return out.sort((a, b) => a.time - b.time);
+  }, [timedEvents, moments, findings, participants, t]);
+
+  // El aviso violeta sobre el vídeo: el hallazgo en cuyo tramo estás. Se puede
+  // cerrar, y cerrado se queda para esta partida (volver a pasar por el mismo
+  // tramo no lo resucita).
+  const [dismissedNotices, setDismissedNotices] = useState<Set<string>>(() => new Set());
+  useEffect(() => setDismissedNotices(new Set()), [match.id]);
+  const activeNotice = findings.find(
+    (f) => f.notice && !dismissedNotices.has(f.id) && currentTime >= f.time && currentTime <= f.end
+  );
+
+  // El momento actual de la tarjeta: el elegido (una marca, una fila, las
+  // flechas), o el suceso más cercano al cursor, o el hallazgo en cuyo tramo
+  // estás.
+  const featured = React.useMemo<ReviewRow | undefined>(() => {
+    const exact = rows.find((r) => r.time === activeEventTime);
+    if (exact) return exact;
+    let best: ReviewRow | undefined;
+    let bestD = Infinity;
+    for (const r of rows) {
+      const d = Math.abs(r.time - currentTime);
+      if (d <= FEATURED_NEAR && d < bestD) { best = r; bestD = d; }
+    }
+    return best ?? rows.find((r) => r.finding && currentTime >= r.time && currentTime <= r.finding.end);
+  }, [rows, activeEventTime, currentTime]);
+
+  // La fila del momento actual se trae a la vista cuando CAMBIA de momento, no
+  // en cada render: con un `ref` en línea se recolocaba cuatro veces por
+  // segundo durante la reproducción y no dejaba desplazar la lista a mano.
+  const listRef = useRef<HTMLDivElement>(null);
+  const featuredKey = featured?.key;
+  useEffect(() => {
+    if (!featuredKey || tab !== "review") return;
+    const list = listRef.current;
+    if (!list) return;
+    const row = Array.from(list.querySelectorAll<HTMLElement>("[data-key]")).find(
+      (el) => el.dataset.key === featuredKey
+    );
+    row?.scrollIntoView({ block: "nearest" });
+  }, [featuredKey, tab]);
+
+  // Los LP que dio o quitó esta partida: la resta con la clasificatoria anterior
+  // del mismo rango, la MISMA cuenta que enseñan la biblioteca y «Hoy».
+  const { matches: library } = useMatches();
+  const lpDelta = React.useMemo(() => lpDeltas(library).get(match.id), [library, match.id]);
+
+  const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
+    const times = timelineItems.map((it) => it.time);
+    if (!times.length) return;
+    const cur = activeEventTime ?? currentTime;
+    let target: number | undefined;
+    if (dir === 1) target = times.find((x) => x > cur + 0.5);
+    else target = [...times].reverse().find((x) => x < cur - 0.5);
+    if (target === undefined) target = dir === 1 ? times[0] : times[times.length - 1];
+    jumpToClip(target);
+  }, [timelineItems, activeEventTime, currentTime, jumpToClip]);
+
+  // Atajos. Dos guardas nuevas:
+  // - con un modificador pulsado no son nuestros (Ctrl K es la búsqueda global,
+  //   y la «k» sola pausaba el vídeo al abrirla);
+  // - el reproductor sigue montado aunque se cambie de pantalla (App oculta las
+  //   rutas con display:none), así que solo responde si se está viendo. Si no,
+  //   la «c» pulsada en otra pantalla abría el recortador aquí, a escondidas.
+  const vpRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!vpRef.current || vpRef.current.getClientRects().length === 0) return;
+      const v = videoRef.current;
+      if (!v) return;
+      switch (e.key) {
+        case " ":
+        case "k":
+          e.preventDefault();
+          handlePlayPause();
+          break;
+        case "ArrowRight": clipEndRef.current = null; seekTo(v.currentTime + 5, false); break;
+        case "ArrowLeft": clipEndRef.current = null; seekTo(v.currentTime - 5, false); break;
+        case "m": setMuted((m) => !m); break;
+        case "f": toggleFullscreen(); break;
+        case "n": e.preventDefault(); goToAdjacentEvent(1); break;
+        case "p": e.preventDefault(); goToAdjacentEvent(-1); break;
+        // Los dos botones de la cabecera, sin soltar el teclado.
+        case "c": if (hasVideo) { e.preventDefault(); toggleClipMode("clip", v.currentTime, duration); } break;
+        case "e": if (hasVideo) { e.preventDefault(); toggleClipMode("error", v.currentTime, duration); } break;
+        // Escape salía de pantalla completa por el navegador, pero no si se
+        // había entrado desde el botón sin pasar por su gesto: se dice aquí.
+        case "Escape":
+          if (document.fullscreenElement) { e.preventDefault(); toggleFullscreen(); }
+          break;
+        // Fotograma a fotograma. A 60 fps son 16 ms; se usa 1/30 para que un
+        // toque avance algo visible en cualquier grabación.
+        case ",": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime - FRAME_STEP, false); break;
+        case ".": e.preventDefault(); v.pause(); clipEndRef.current = null; seekTo(v.currentTime + FRAME_STEP, false); break;
+        // Entrada y salida del recorte, sin soltar el teclado.
+        case "[": e.preventDefault(); setClipBound("start", v.currentTime); break;
+        case "]": e.preventDefault(); setClipBound("end", v.currentTime); break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handlePlayPause, seekTo, goToAdjacentEvent, toggleFullscreen, setMuted, setClipBound, toggleClipMode, duration, hasVideo, videoRef, clipEndRef]);
+
   const apmSeries = match.apm_series ?? [];
   let apmLinePath = "";
   if (apmSeries.length >= 2) {
@@ -774,11 +970,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
   const eventMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
-    const evs = timedEvents;
     const w = trackSize.w || 1000;
     const half = MARK_SIZE / 2;
     const sitio = (t: number) => Math.min(w - half, Math.max(half, (t / duration) * w));
-    const marcas = evs.map((ev) => ({ ev, exactX: sitio(ev.time) }));
+    const marcas = timelineItems.map((it) => ({ it, exactX: sitio(it.time) }));
 
     // Racimos: sucesos cuyos INSTANTES REALES caen tan juntos que sus marcas se
     // pisarían. Se encadena por vecindad de tiempo, nunca por dónde acabó la
@@ -787,7 +982,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     // heredaba el desplazamiento. En una partida de 57 sucesos eso arrastraba
     // TODAS las marcas (hasta 128 px, casi tres minutos de partida) y subía a la
     // fila de arriba marcas que no tenían a nadie al lado.
-    const racimos: { ev: MatchEvent; exactX: number }[][] = [];
+    const racimos: { it: TimelineItem; exactX: number }[][] = [];
     for (const m of marcas) {
       const ult = racimos[racimos.length - 1];
       if (ult && m.exactX - ult[ult.length - 1].exactX < MARK_PITCH) ult.push(m);
@@ -825,13 +1020,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
     return racimos.flatMap((g, gi) =>
       g.map((m, i) => ({
-        ev: m.ev,
+        it: m.it,
         exactX: m.exactX,
         x: limitar(inicios[gi], gi) + (i >> 1) * MARK_PITCH,
         bottom: MARK_ROWS[i & 1],
       }))
     );
-  }, [timedEvents, duration, trackSize.w]);
+  }, [timelineItems, duration, trackSize.w]);
 
   const result = outcome(match.result);
   const isWin = result === "victory";
@@ -851,337 +1046,463 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   // La estela del ratón vive en su hook: canvas, rAF y sincronía.
   const { canvasRef, mouseSync, updateMouseSync } = useMouseTrailCanvas(videoRef, match, mouseEvents);
 
-  // Transporte. Lo que se hace en esta pantalla es saltar entre momentos, así que
-  // eso manda en el centro; los ajustes crípticos (sincronía del rastro del ratón,
-  // capas del overlay) se van a un menú con nombres de verdad en vez de vivir
-  // sueltos y sin etiqueta en la barra principal.
+  // --- Línea de tiempo ------------------------------------------------------
+  // La tira ES la barra de búsqueda de este reproductor: en pantalla completa
+  // también tiene que existir (sin ella no había forma de saltar a un minuto,
+  // que fue lo que señaló el usuario). Allí va compacta, sin la curva de APM,
+  // que taparía media imagen.
   //
-  // Va acoplado a la baraja, y solo flota sobre el vídeo en pantalla completa,
-  // que es cuando la baraja no existe.
-  // La tira de eventos ES la barra de búsqueda de este reproductor: en
-  // pantalla completa también tiene que existir (sin ella no había forma de
-  // saltar a un minuto, que fue lo que señaló el usuario).
-  const timelineStrip = (
-    <div
-            className="vp-tl__strip"
-            ref={progressBarRef}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerLeave}
-          >
-            {/* APM Graph (línea + área rellena) */}
-            {apmSeries.length >= 2 && (
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={styles.graphSvg}>
-                <path d={apmAreaPath} fill="var(--apm-fill)" stroke="none" />
-                <path d={apmLinePath} fill="none" stroke="var(--apm-line)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
-              </svg>
-            )}
+  // Regla, barra, curva y carril son UNA superficie de búsqueda con un solo
+  // ancho —el que mide `progressBarRef` para colocar los racimos—, así que
+  // pinchar en cualquiera de las cuatro busca ese instante.
+  const laneTop = (compact: boolean) => BAR_TOP + BAR_H + ROW_GAP + (compact ? 0 : APM_H + ROW_GAP);
+  /** Aro del retrato: a quién matas en jade, quién te mata en rojo, la asistencia en jade tenue. */
+  const markRing = (ev: MatchEvent): string =>
+    ev.subtype === "death"
+      ? "var(--loss)"
+      : ev.subtype === "assist"
+        ? "color-mix(in srgb, var(--win) 45%, transparent)"
+        : "var(--win)";
+  const hasLookStrip = duration > 0 && (cameraLooks.some((l) => l.lane) || cameraSnaps.length > 0);
 
-            {/* Miradas al mapa, al pie de la curva de APM. Los huecos anchos son
-                exactamente los minutos en que no miraste.
-
-                Tres carriles en vez de uno: con 250 miradas por partida una sola
-                fila era un peine ilegible, y partirla por carril baja la densidad
-                Y dice de qué lado tienes el punto ciego — el hueco se ve en su
-                fila. De arriba abajo, top / mid / bot, como en el mapa. Las
-                miradas que no caen en ningún carril (jungla profunda, base, o las
-                teclas de cámara, que no saben adónde) no se pintan aquí. */}
-            {duration > 0 && cameraLooks.some((l) => l.lane) ? (
-              <div style={styles.snapStrip}>
-                {(["top", "mid", "bot"] as const).map((carril, fila) => (
-                  <div key={carril} style={{ ...styles.snapLane, top: `${fila * 4}px` }}>
-                    {cameraLooks
-                      .filter((l) => l.lane === carril)
-                      .map((l, i) => (
-                        <div
-                          key={i}
-                          style={{ ...styles.snapTick, left: `${(l.t / duration) * 100}%` }}
-                          title={`${carril} · ${clock(l.t)}`}
-                        />
-                      ))}
-                  </div>
-                ))}
-              </div>
-            ) : duration > 0 && cameraSnaps.length > 0 ? (
-              <div style={styles.snapStrip}>
-                {cameraSnaps.map((t, i) => (
-                  <div
-                    key={i}
-                    style={{ ...styles.snapTick, left: `${(t / duration) * 100}%` }}
-                  />
-                ))}
-              </div>
-            ) : null}
-
-            {/* Guías: solo las dibuja el marcador que ha tenido que apartarse,
-                y van de su instante real al pie del propio marcador. */}
-            {duration > 0 && trackSize.w > 0 && (
-              <svg
-                viewBox={`0 0 ${trackSize.w} ${trackSize.h}`}
-                style={{ ...styles.graphSvg, pointerEvents: "none", zIndex: 4 }}
+  const renderTrack = (compact: boolean) => {
+    const top = laneTop(compact);
+    const move = isSeeking ? "var(--t-base) var(--e-move)" : "0s";
+    return (
+      <div
+        className="vp-track"
+        ref={progressBarRef}
+        style={{ height: top + LANE_H }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
+      >
+        {/* Regla de minutos, generada según la duración real. El último rótulo
+            es la duración, pegado a la derecha; el que lo pisaría se calla. */}
+        <div className="vp-track__ruler" style={{ height: RULER_H }}>
+          {axisMarks
+            .filter((m) => m === 0 || ((duration - m) / duration) * (trackSize.w || 1000) >= 68)
+            .map((m) => (
+              <span
+                key={m}
+                className="u-time"
+                style={{ left: `${(m / duration) * 100}%`, transform: m === 0 ? "none" : "translateX(-50%)" }}
               >
-                {eventMarks
-                  .filter((m) => Math.abs(m.x - m.exactX) > 1.5)
-                  .map((m, i) => (
-                    <line
-                      key={i}
-                      x1={m.exactX}
-                      y1={trackSize.h - 1}
-                      x2={m.x}
-                      y2={trackSize.h - m.bottom}
-                      stroke={mix(eventMeta(m.ev).color, 40)}
-                      strokeWidth={1}
-                    />
-                  ))}
-              </svg>
-            )}
+                {clock(m)}
+              </span>
+            ))}
+          {duration > 0 && (
+            <span className="u-time" style={{ left: "100%", transform: "translateX(-100%)" }}>
+              {clock(duration)}
+            </span>
+          )}
+        </div>
 
-            {/* Marcadores de eventos: uno por suceso */}
-            {duration > 0 && eventMarks.map((m, i) => {
-              const meta = eventMeta(m.ev, 14);
-              const isActive = m.ev.time === activeEventTime;
-              return (
-                <div
-                  key={i}
-                  onClick={(e) => { e.stopPropagation(); jumpToClip(m.ev.time); }}
-                  style={{
-                    ...styles.eventNode,
-                    left: `${m.x}px`,
-                    bottom: `${m.bottom}px`,
-                    width: `${MARK_SIZE}px`,
-                    height: `${MARK_SIZE}px`,
-                    borderColor: isActive ? meta.color : mix(meta.color, 55),
-                    background: isActive ? meta.color : "var(--panel)",
-                    transform: "translateX(-50%)",
-                    boxShadow: "none",
-                    zIndex: isActive ? 10 : 5,
-                  }}
-                  title={[`${clock(m.ev.time)} · ${t(meta.label)}`, describeEvent(m.ev, t)]
-                    .filter(Boolean)
-                    .join(" – ")}
-                >
-                  <span style={{ color: isActive ? "var(--text)" : meta.color, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {meta.icon}
-                  </span>
+        {/* Rejilla: una línea tenue por rótulo, de la barra al pie. */}
+        {duration > 0 &&
+          axisMarks.slice(1).map((m) => (
+            <i key={m} className="vp-track__grid" style={{ left: `${(m / duration) * 100}%`, top: BAR_TOP }} />
+          ))}
+
+        {/* Progreso: lo reproducido, en oro. */}
+        <div className="vp-track__bar" style={{ top: BAR_TOP, height: BAR_H }}>
+          <div className="vp-track__played" style={{ width: `${progressPct}%`, transition: `width ${move}` }} />
+        </div>
+
+        {/* Curva de APM (línea + área). */}
+        {!compact && apmSeries.length >= 2 && (
+          <svg
+            className="vp-track__apm"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            style={{ top: BAR_TOP + BAR_H + ROW_GAP, height: APM_H }}
+            aria-hidden="true"
+          >
+            <path d={apmAreaPath} fill="var(--apm-fill)" stroke="none" />
+            <path d={apmLinePath} fill="none" stroke="var(--apm-line)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
+
+        {/* El carril de los sucesos: dos filas de marcas y, al pie, las miradas
+            al mapa. */}
+        <div className="vp-track__lane" style={{ top, height: LANE_H }}>
+          {/* Miradas al mapa. Los huecos anchos son exactamente los minutos en
+              que no miraste.
+
+              Tres carriles en vez de uno: con 250 miradas por partida una sola
+              fila era un peine ilegible, y partirla por carril baja la densidad
+              Y dice de qué lado tienes el punto ciego — el hueco se ve en su
+              fila. De arriba abajo, top / mid / bot, como en el mapa. Las
+              miradas que no caen en ningún carril (jungla profunda, base, o las
+              teclas de cámara, que no saben adónde) no se pintan aquí. */}
+          {duration > 0 && cameraLooks.some((l) => l.lane) ? (
+            <div style={styles.snapStrip}>
+              {(["top", "mid", "bot"] as const).map((carril, fila) => (
+                <div key={carril} style={{ ...styles.snapLane, top: `${fila * 4}px` }}>
+                  {cameraLooks
+                    .filter((l) => l.lane === carril)
+                    .map((l, i) => (
+                      <div
+                        key={i}
+                        style={{ ...styles.snapTick, left: `${(l.t / duration) * 100}%` }}
+                        title={`${carril} · ${clock(l.t)}`}
+                      />
+                    ))}
                 </div>
-              );
-            })}
-
-            {/* Cursor de reproducción. Durante la reproducción va pegado al vídeo
-                (sin transición); cuando el salto lo provoca un evento o un
-                comentario, recorre la distancia en --t-base para que se vea
-                hacia qué lado y cuánto te has movido dentro de la partida. */}
-            <div
-              style={{
-                ...styles.playhead,
-                left: `${progressPct}%`,
-                transition: isSeeking ? "left var(--t-base) var(--e-move)" : "none",
-              }}
-            />
-            
-            {/* Hover Scrubber Line */}
-            {hoverPct !== null && (
-              <div style={{ ...styles.playheadHover, left: `${hoverPct * 100}%` }} />
-            )}
-            
-            {/* Axis marks — generados dinámicamente según la duración real */}
-            <div style={styles.axisMarks}>
-              {axisMarks.map(m => (
-                <span key={m} className="u-meta" style={{ position: "absolute", left: `${(m/duration)*100}%`, fontSize: "10px" }}>
-                  {clock(m)}
-                </span>
               ))}
             </div>
+          ) : duration > 0 && cameraSnaps.length > 0 ? (
+            <div style={styles.snapStrip}>
+              {cameraSnaps.map((s, i) => (
+                <div key={i} style={{ ...styles.snapTick, left: `${(s / duration) * 100}%` }} />
+              ))}
+            </div>
+          ) : null}
 
-            {/* Etiqueta al pasar por encima.
-                Estaba en `position: fixed` con `bottom: 160px` a fuego, o sea
-                atada a la altura que tenía la baraja el día que se escribió: en
-                pantalla completa (donde la tira está abajo del todo) flotaba en
-                mitad del vídeo, y con la ventana pequeña tapaba el transporte.
-                Ahora cuelga de la propia tira, que es a lo que se refiere. */}
-            {hoverPct !== null && hoverClientX !== null && (
-              <div style={{
-                position: "absolute",
-                left: `${hoverPct * 100}%`,
-                bottom: "calc(100% + var(--space-2))",
-                transform: "translateX(-50%)",
-                background: "var(--panel)",
-                padding: "var(--space-2) var(--space-3)",
-                borderRadius: "var(--radius-md)",
-                border: "1px solid var(--hair-strong)",
-                boxShadow: "inset 0 1px 0 var(--rim), var(--shadow-2)",
-                pointerEvents: "none",
-                zIndex: 100,
-                display: "flex",
-                flexDirection: "column",
-                gap: "var(--space-1)",
-                minWidth: "120px",
-                maxWidth: "260px",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-3)", fontSize: "12px", color: "var(--text)" }}>
-                  <span className="u-metric">{clock(hoverPct * duration)}</span>
-                  <span className="u-metric" style={{ color: "var(--cool)" }}>
-                    {t("{n} APM", { n: apmSeries.length > 0 ? Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]) : 0 })}
-                  </span>
-                </div>
-                {timedEvents.filter(ev => Math.abs(ev.time - hoverPct * duration) < (duration * 0.01)).slice(0, 1).map(ev => {
-                  const meta = eventMeta(ev);
-                  const desc = describeEvent(ev, t);
+          {/* Guías: solo las dibuja el marcador que ha tenido que apartarse,
+              y van de su instante real al pie del propio marcador. */}
+          {duration > 0 && trackSize.w > 0 && (
+            <svg className="vp-track__guides" viewBox={`0 0 ${trackSize.w} ${LANE_H}`} aria-hidden="true">
+              {eventMarks
+                .filter((m) => Math.abs(m.x - m.exactX) > 1.5)
+                .map((m, i) => (
+                  <line
+                    key={i}
+                    x1={m.exactX}
+                    y1={LANE_H - 1}
+                    x2={m.x}
+                    y2={LANE_H - m.bottom}
+                    stroke={mix(m.it.ev ? eventMeta(m.it.ev).color : "var(--flag)", 40)}
+                    strokeWidth={1}
+                  />
+                ))}
+            </svg>
+          )}
+
+          {/* Marcas: una por suceso. Kills, muertes y asistencias llevan la cara
+              del campeón del otro lado cuando se sabe; objetivos en oro; los
+              hallazgos del analizador, rombo violeta. */}
+          {duration > 0 &&
+            eventMarks.map((m, i) => {
+              const { it } = m;
+              const isActive = it.time === activeEventTime;
+              const place: React.CSSProperties = {
+                left: `${m.x}px`,
+                bottom: `${m.bottom}px`,
+                width: `${MARK_SIZE}px`,
+                height: `${MARK_SIZE}px`,
+                zIndex: isActive ? 10 : 5,
+              };
+              if (it.finding) {
+                const f = it.finding;
+                const label = `${clock(f.time)} · ${f.title}`;
+                return (
+                  <button
+                    key={`${it.key}:${i}`}
+                    type="button"
+                    className="vp-mark vp-mark--finding"
+                    data-on={isActive || undefined}
+                    style={place}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); jumpToClip(f.time); }}
+                    aria-label={label}
+                    title={`${label} – ${f.detail}`}
+                  >
+                    <span className="vp-mark__diamond" />
+                  </button>
+                );
+              }
+              const ev = it.ev as MatchEvent;
+              const meta = eventMeta(ev, 12);
+              const champ = eventChampion(ev, participants);
+              const desc = describeEvent(withChampionNames(ev, participants), t);
+              const label = [`${clock(ev.time)} · ${t(meta.label)}`, desc].filter(Boolean).join(" – ");
+              const glyph = <span className="vp-mark__glyph">{meta.icon}</span>;
+              return (
+                <button
+                  key={`${it.key}:${i}`}
+                  type="button"
+                  className="vp-mark"
+                  data-on={isActive || undefined}
+                  style={{ ...place, "--mark": meta.color, "--ring": champ ? markRing(ev) : meta.color } as React.CSSProperties}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); jumpToClip(ev.time); }}
+                  aria-label={label}
+                  title={label}
+                >
+                  {champ ? (
+                    <ChampFace champion={champ} size={MARK_SIZE} className="vp-mark__face" fallback={glyph} />
+                  ) : (
+                    glyph
+                  )}
+                </button>
+              );
+            })}
+        </div>
+
+        {/* Cabezal: línea y asa, en oro. Durante la reproducción va pegado al
+            vídeo (sin transición); cuando el salto lo provoca un suceso o una
+            nota, recorre la distancia en --t-base para que se vea hacia qué
+            lado y cuánto te has movido dentro de la partida. */}
+        <div className="vp-track__head" style={{ left: `${progressPct}%`, top: BAR_TOP - 3, transition: `left ${move}` }} />
+        <div
+          className="vp-track__knob"
+          style={{ left: `${progressPct}%`, top: BAR_TOP + BAR_H / 2 - 6, transition: `left ${move}` }}
+        />
+
+        {hoverPct !== null && (
+          <div className="vp-track__hover" style={{ left: `${hoverPct * 100}%`, top: BAR_TOP - 3 }} />
+        )}
+
+        {/* Etiqueta al pasar por encima. Cuelga de la propia tira, que es a lo
+            que se refiere: en `position: fixed` con una altura a fuego flotaba
+            en mitad del vídeo en pantalla completa. */}
+        {hoverPct !== null && hoverClientX !== null && (
+          <div className="vp-tip" style={{ left: `${hoverPct * 100}%` }}>
+            <div className="vp-tip__head">
+              <span className="u-time">{clock(hoverPct * duration)}</span>
+              {apmSeries.length > 0 && (
+                <span className="u-metric vp-tip__apm">
+                  {t("{n} APM", {
+                    n: Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]),
+                  })}
+                </span>
+              )}
+            </div>
+            {timelineItems
+              .filter((it) => Math.abs(it.time - hoverPct * duration) < duration * 0.01)
+              .slice(0, 1)
+              .map((it) => {
+                if (it.finding) {
                   return (
-                    <div key={ev.time} style={{ fontSize: "11px", color: meta.color, display: "flex", alignItems: "center", gap: "4px" }}>
-                      <span style={{ transform: "scale(0.8)", display: "flex" }}>{meta.icon}</span>
-                      {t(meta.label)}{desc ? ` – ${desc}` : ""}
+                    <div key={it.key} className="vp-tip__ev" style={{ color: "var(--flag)" }}>
+                      <IconFinding size={12} />
+                      <span>{it.finding.title}</span>
                     </div>
                   );
-                })}
-              </div>
-            )}
-
-            {/* Rango del recortador. Del color de lo que va a producir: verde
-                si es un clip, frambuesa si es un error. */}
-            {isClippingMode && duration > 0 && (
-              <div style={{
-                position: "absolute",
-                top: 0, bottom: 0,
-                left: `${(clipStart / duration) * 100}%`,
-                width: `${((clipEnd - clipStart) / duration) * 100}%`,
-                backgroundColor: mix(exportType === "clip" ? "var(--cool)" : "var(--loss)", 22),
-                borderLeft: `2px solid ${exportType === "clip" ? "var(--cool)" : "var(--loss)"}`,
-                borderRight: `2px solid ${exportType === "clip" ? "var(--cool)" : "var(--loss)"}`,
-                zIndex: 10,
-              }}>
-                <div 
-                  onPointerDown={(e) => handleThumbPointerDown(e, "start")}
-                  style={{ position: "absolute", left: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }} 
-                />
-                <div 
-                  onPointerDown={(e) => handleThumbPointerDown(e, "end")}
-                  style={{ position: "absolute", right: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }} 
-                />
-              </div>
-            )}
+                }
+                const ev = it.ev as MatchEvent;
+                const meta = eventMeta(ev, 12);
+                const desc = describeEvent(withChampionNames(ev, participants), t);
+                return (
+                  <div key={it.key} className="vp-tip__ev" style={{ color: meta.color }}>
+                    {meta.icon}
+                    <span>{desc || t(meta.label)}</span>
+                  </div>
+                );
+              })}
           </div>
+        )}
+
+        {/* Rango del recortador. Del color de lo que va a producir: jade si es
+            un clip, rojo si es un error. */}
+        {isClippingMode && duration > 0 && (
+          <div
+            className="vp-track__clip"
+            style={{
+              top: BAR_TOP - 3,
+              left: `${(clipStart / duration) * 100}%`,
+              width: `${((clipEnd - clipStart) / duration) * 100}%`,
+              "--clip": exportType === "clip" ? "var(--cool)" : "var(--loss)",
+            } as React.CSSProperties}
+          >
+            <div
+              onPointerDown={(e) => handleThumbPointerDown(e, "start")}
+              style={{ position: "absolute", left: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }}
+            />
+            <div
+              onPointerDown={(e) => handleThumbPointerDown(e, "end")}
+              style={{ position: "absolute", right: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // --- Transporte -------------------------------------------------------------
+  // Lo que se hace en esta pantalla es saltar entre momentos, así que eso manda
+  // a la izquierda, junto al play; los ajustes crípticos (sincronía del rastro
+  // del ratón, capas del overlay) viven en un menú con nombres de verdad.
+  //
+  // Va debajo de la línea de tiempo, y solo flota sobre el vídeo en pantalla
+  // completa.
+  const speedLabel = (r: number) => `${lang === "es" ? String(r).replace(".", ",") : String(r)}×`;
+
+  // Las miradas al mapa (por minuto y el rato más largo sin mirar), o el botón
+  // que las busca en el vídeo. Vivían en una cabecera de la línea de tiempo.
+  const lookStats = snapSummary?.analyzed ? (
+    <span
+      className="vp-looks"
+      title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
+    >
+      <Eye size={14} />
+      <span className="u-metric">{snapSummary.per_minute.toFixed(1)}/min</span>
+      <span aria-hidden="true">·</span>
+      <span className="u-metric" style={{ color: snapSummary.longest_gap_secs > 120 ? "var(--loss)" : "var(--win)" }}>
+        {clock(snapSummary.longest_gap_secs)} {t("blind")}
+      </span>
+    </span>
+  ) : (
+    <button
+      type="button"
+      className="vp-tbtn vp-tbtn--text"
+      onClick={runSnapAnalysis}
+      disabled={snapBusy}
+      title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
+    >
+      <Eye size={14} />
+      <span className="vp-tbtn__label">
+        {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
+      </span>
+    </button>
   );
 
   const transportBar = (
-        <div className={isFullscreen ? "tp" : "tp vp-transport"} style={isFullscreen ? styles.transportOverlay : undefined}>
+    <div className={isFullscreen ? "vp-transport vp-transport--fs" : "vp-transport"}>
+      <button
+        type="button"
+        className="vp-play"
+        onClick={handlePlayPause}
+        title={`${t(isPlaying ? "Pause" : "Play")} (Space)`}
+        aria-label={t(isPlaying ? "Pause" : "Play")}
+        aria-keyshortcuts="Space K"
+      >
+        {isPlaying ? <Pause fill="currentColor" size={16} /> : <Play fill="currentColor" size={16} />}
+      </button>
+      <button
+        type="button"
+        className="vp-tbtn"
+        onClick={() => goToAdjacentEvent(-1)}
+        title={t("Previous moment")}
+        aria-label={t("Previous moment")}
+        aria-keyshortcuts="P"
+      >
+        <SkipBack size={16} />
+        <kbd className="u-kbd">P</kbd>
+      </button>
+      <button
+        type="button"
+        className="vp-tbtn"
+        onClick={() => goToAdjacentEvent(1)}
+        title={t("Next moment")}
+        aria-label={t("Next moment")}
+        aria-keyshortcuts="N"
+      >
+        <SkipForward size={16} />
+        <kbd className="u-kbd">N</kbd>
+      </button>
+
+      {/* Centésimas: en una herramienta de revisión hace falta señalar un
+          instante, no un minuto. */}
+      <span className="u-time vp-clock">
+        <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
+        <span> / {clock(duration)}</span>
+      </span>
+
+      <span className="vp-transport__fill" />
+
+      {/* Lo primero que cede si no cabe: se queda en el icono. */}
+      {!isFullscreen && <span className="vp-transport__aux">{lookStats}</span>}
+
+      {/* Segmentado y no desplegable: durante una revisión la velocidad se
+          cambia constantemente y un desplegable son dos clics cada vez. */}
+      <span className="vp-speeds" role="group" aria-label={t("Playback speed")}>
+        {SPEEDS.map((r) => (
           <button
-            className="tp-b"
-            onClick={() => goToAdjacentEvent(-1)}
-            title={t("Previous moment")}
-            aria-label={t("Previous moment")}
+            key={r}
+            type="button"
+            onClick={() => setPlaybackRate(r)}
+            aria-pressed={playbackRate === r}
+            data-on={playbackRate === r ? "" : undefined}
           >
-            <SkipBack size={14} fill="currentColor" />
+            {speedLabel(r)}
           </button>
-          <button
-            className="tp-b tp-b--primary"
-            onClick={handlePlayPause}
-            title={t(isPlaying ? "Pause" : "Play")}
-            aria-label={t(isPlaying ? "Pause" : "Play")}
-          >
-            {isPlaying ? <Pause fill="currentColor" size={15} /> : <Play fill="currentColor" size={15} />}
-          </button>
-          <button
-            className="tp-b"
-            onClick={() => goToAdjacentEvent(1)}
-            title={t("Next moment")}
-            aria-label={t("Next moment")}
-          >
-            <SkipForward size={14} fill="currentColor" />
-          </button>
+        ))}
+      </span>
 
-          {/* Centesimas: en una herramienta de revision hace falta senalar un
-              instante, no un minuto. */}
-          <span className="tp-tc">
-            <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-            <span className="tp-tc__total"> / {clock(duration)}</span>
-          </span>
+      <div className="tp-vol vp-vol">
+        <button
+          type="button"
+          className="vp-tbtn vp-tbtn--icon"
+          onClick={toggleMute}
+          title={t(muted ? "Unmute" : "Mute")}
+          aria-label={t(muted ? "Unmute" : "Mute")}
+          aria-keyshortcuts="M"
+        >
+          {muted || volume === 0 ? <VolumeX size={17} /> : volume < 0.5 ? <Volume1 size={17} /> : <Volume2 size={17} />}
+        </button>
+        <input
+          type="range" min="0" max="1" step="0.05"
+          className="vp-range"
+          value={muted ? 0 : volume}
+          onChange={handleVolumeChange}
+          aria-label={t("Volume")}
+        />
+      </div>
 
-          <span className="tp-sep" />
-
-          {/* Segmentado y no desplegable: durante una revision la velocidad se
-              cambia constantemente y un desplegable son dos clics cada vez. */}
-          <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
-            {[0.25, 0.5, 1, 2].map((r) => (
-              <button
-                key={r}
-                onClick={() => setPlaybackRate(r)}
-                aria-pressed={playbackRate === r}
-                data-on={playbackRate === r ? "" : undefined}
-              >
-                {r}&times;
-              </button>
-            ))}
-          </span>
-
-          <span style={{ flex: 1, minWidth: 12 }} />
-
-          <div className="tp-vol">
-            <button className="tp-b" onClick={toggleMute} title={t(muted ? "Unmute" : "Mute")} aria-label={t(muted ? "Unmute" : "Mute")}>
-              {muted || volume === 0 ? <VolumeX size={15} /> : volume < 0.5 ? <Volume1 size={15} /> : <Volume2 size={15} />}
-            </button>
-            <input
-              type="range" min="0" max="1" step="0.05"
-              value={muted ? 0 : volume}
-              onChange={handleVolumeChange}
-              aria-label={t("Volume")}
-              style={styles.volumeSlider}
-            />
-          </div>
-
-          <details className="tp-more">
-            <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
-              <MoreHorizontal size={15} />
-            </summary>
-            <div className="tp-pop">
-              <label className="tp-pop__row">
-                <span>{t("Broadcast overlay")}</span>
-                <input type="checkbox" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
-              </label>
-              <label className="tp-pop__row">
-                <span>{t("Mouse trail")}</span>
-                <input type="checkbox" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
-              </label>
-              <div className="tp-pop__row tp-pop__row--stack">
-                <span>
-                  {t("Mouse trail sync")}
-                  <em>{t("Shifts the trail against the video, in seconds.")}</em>
-                </span>
-                <div className="tp-pop__sync">
-                  <input
-                    type="range" min="-3" max="3" step="0.1" value={mouseSync}
-                    aria-label={t("Mouse trail sync")}
-                    onChange={(e) => updateMouseSync(parseFloat(e.target.value))}
-                  />
-                  <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
-                </div>
-              </div>
-              {/* Los atajos existían y no los sabía nadie: no estaban escritos
-                  en ningún sitio de la pantalla. */}
-              <div className="tp-pop__row tp-pop__row--stack">
-                <span>{t("Keyboard shortcuts")}</span>
-                <div style={{ marginTop: "var(--space-2)", display: "grid", gap: "3px" }}>
-                  {SHORTCUTS.map(([keys, what]) => (
-                    <div key={keys} style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-4)" }}>
-                      <span className="u-metric" style={{ fontSize: 11, color: "var(--muted)" }}>{keys}</span>
-                      <span style={{ fontSize: 11, color: "var(--faint)" }}>{t(what)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+      <details className="tp-more vp-more">
+        <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
+          <MoreHorizontal size={17} />
+        </summary>
+        <div className="tp-pop">
+          <label className="tp-pop__row">
+            <span>{t("Broadcast overlay")}</span>
+            <input type="checkbox" className="vp-check" checked={showEsportsHud} onChange={() => setShowEsportsHud((h) => !h)} />
+          </label>
+          <label className="tp-pop__row">
+            <span>{t("Mouse trail")}</span>
+            <input type="checkbox" className="vp-check" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
+          </label>
+          <div className="tp-pop__row tp-pop__row--stack">
+            <span>
+              {t("Mouse trail sync")}
+              <em>{t("Shifts the trail against the video, in seconds.")}</em>
+            </span>
+            <div className="tp-pop__sync">
+              <input
+                type="range" min="-3" max="3" step="0.1" value={mouseSync}
+                className="vp-range vp-range--wide"
+                aria-label={t("Mouse trail sync")}
+                onChange={(e) => updateMouseSync(parseFloat(e.target.value))}
+              />
+              <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
             </div>
-          </details>
-
-          <button className="tp-b" onClick={toggleFullscreen} title={t("Fullscreen")} aria-label={t("Fullscreen")}>
-            <Maximize size={15} />
-          </button>
+          </div>
+          {/* Los atajos existían y no los sabía nadie: no estaban escritos en
+              ningún sitio de la pantalla. */}
+          <div className="tp-pop__row tp-pop__row--stack">
+            <span>{t("Keyboard shortcuts")}</span>
+            <div className="vp-keys">
+              {SHORTCUTS.map(([keys, what]) => (
+                <div key={keys} className="vp-keys__row">
+                  <kbd className="u-kbd">{keys}</kbd>
+                  <span>{t(what)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+      </details>
+
+      <button
+        type="button"
+        className="vp-tbtn vp-tbtn--icon"
+        onClick={toggleFullscreen}
+        title={`${t("Fullscreen")} (F)`}
+        aria-label={t("Fullscreen")}
+        aria-keyshortcuts="F"
+      >
+        <Maximize size={17} />
+      </button>
+    </div>
   );
 
-  // Cabecera de la pantalla: quién, cómo acabó y las dos acciones que producen
-  // un fichero (clip y error). Vivía en App.tsx con el campeón y la fecha; aquí
-  // tiene a mano el resultado, la duración real del vídeo y el recortador.
+  // Cabecera de la pantalla: quién, cómo acabó, cuánto llevas revisado y las
+  // dos acciones que producen un fichero (clip y error). Vivía en App.tsx con
+  // el campeón y la fecha; aquí tiene a mano el resultado, la duración real del
+  // vídeo y el recortador.
   const rankText =
     match.impact_rank != null
       ? t("{rank} of {total} by impact", {
@@ -1189,58 +1510,135 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           total: participants.length || 10,
         })
       : null;
+  const when = (() => {
+    const day = relativeDay(match.date, t);
+    const d = new Date(match.date.replace(" ", "T"));
+    if (Number.isNaN(d.getTime())) return day;
+    return `${day} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  })();
   const metaLine = [
     match.is_vod ? null : t(queueKey(match.queue)),
     clock(duration),
-    matchAge(match.date, t),
+    when,
     rankText,
   ]
     .filter(Boolean)
     .join(" · ");
+  const resultTone = match.is_vod
+    ? "var(--cool)"
+    : result === "victory"
+      ? "var(--win)"
+      : result === "defeat"
+        ? "var(--loss)"
+        : "var(--hair-strong)";
+  const doneCount = moments.filter((m) => m.reviewed).length;
 
-  const hideBroken = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    e.currentTarget.style.visibility = "hidden";
+  // El aviso del analizador. Sobre el vídeo, abajo a la izquierda; en pantalla
+  // completa sube encima de la tira y el transporte para no taparlos.
+  const noticeEl = activeNotice ? (
+    <div className={isFullscreen ? "vp-notice vp-notice--fs" : "vp-notice"} role="status">
+      <EyeOff size={16} className="vp-notice__icon" aria-hidden="true" />
+      <span className="vp-notice__text">
+        <b>{activeNotice.title}.</b> {activeNotice.detail}
+      </span>
+      <button
+        type="button"
+        className="vp-notice__x"
+        onClick={() => setDismissedNotices((prev) => new Set(prev).add(activeNotice.id))}
+        title={t("Dismiss")}
+        aria-label={t("Dismiss")}
+      >
+        <X size={14} />
+      </button>
+    </div>
+  ) : null;
+
+  // `tl` son las etiquetas de tono (texto inglés + color), no `t`.
+  const toneBadge = (tone: Tone) => {
+    const tl = toneLabelAndIcon(tone);
+    return (
+      <span className="badge" style={{ color: tl.color, background: mix(tl.color, 13) }}>
+        {t(tl.text)}
+      </span>
+    );
   };
+  // Las filas neutras (definitivas, placas…) no llevan chip: un «Info» en cada
+  // una era ruido que tapaba los que sí dicen algo.
+  const chipFor = (r: ReviewRow) =>
+    r.finding ? (
+      <span className="badge vp-badge--finding">{t("Finding")}</span>
+    ) : r.tone === "neutral" ? null : (
+      toneBadge(r.tone)
+    );
 
   return (
-    <div className="vp">
+    <div className="vp" ref={vpRef}>
       <header className="vp-top">
         {onBack && (
-          <button className="btn btn--ghost vp-top__back" onClick={onBack} title={t("Back")} aria-label={t("Back")}>
+          <button type="button" className="vp-iconbtn" onClick={onBack} title={t("Back")} aria-label={t("Back")}>
             <ArrowLeft size={16} />
           </button>
         )}
-        <img className="vp-top__avatar" src={champIcon(match.champion)} alt="" onError={hideBroken} />
+        <span className="vp-top__face" style={{ boxShadow: `0 0 0 2px ${resultTone}` }}>
+          <ChampionAvatar champion={match.champion} size={36} />
+        </span>
         <div className="vp-top__block">
-          <h2 className="vp-top__title">
-            {match.champion}
+          <div className="vp-top__title">
+            <h2>{match.champion}</h2>
             {(match.is_vod || result !== "unknown") && (
-              <span
-                className="vp-top__result"
-                style={{ color: match.is_vod ? "var(--cool)" : isWin ? "var(--win)" : "var(--loss)" }}
-              >
+              <span className="vp-top__result" style={{ color: resultTone }}>
                 {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
               </span>
             )}
-          </h2>
-          <span className="u-meta vp-top__meta">{metaLine}</span>
+            {lpDelta != null && lpDelta !== 0 && (
+              <span className="vp-top__lp" data-down={lpDelta < 0 || undefined}>
+                {lpDelta > 0 ? "+" : "−"}{Math.abs(lpDelta)} LP
+              </span>
+            )}
+          </div>
+          <span className="vp-top__meta">{metaLine}</span>
         </div>
+        <span className="vp-top__fill" />
+        {moments.length > 0 && (
+          <div className="vp-top__progress">
+            <span>{t("{done} of {total} moments reviewed", { done: doneCount, total: moments.length })}</span>
+            <div
+              className="vp-meter"
+              role="progressbar"
+              aria-label={t("Moments reviewed")}
+              aria-valuemin={0}
+              aria-valuemax={moments.length}
+              aria-valuenow={doneCount}
+            >
+              <div style={{ width: `${(doneCount / moments.length) * 100}%` }} />
+            </div>
+          </div>
+        )}
         {hasVideo && (
           <div className="vp-top__actions">
+            <span className="vp-top__sep" aria-hidden="true" />
             <button
-              className="btn btn--ghost btn--md"
+              type="button"
+              className="vp-sbtn"
               aria-pressed={isClippingMode && exportType === "clip"}
+              aria-keyshortcuts="C"
               onClick={() => toggleClipMode("clip", currentTime, duration)}
               title={`${t("Export video clip")} ([ / ])`}
             >
-              <Scissors size={14} /> {t("Clip")}
+              <Scissors size={15} color="var(--muted)" />
+              {t("Create clip")}
+              <kbd className="u-kbd">C</kbd>
             </button>
             <button
-              className="btn btn--ghost btn--md"
+              type="button"
+              className="vp-sbtn"
               aria-pressed={isClippingMode && exportType === "error"}
+              aria-keyshortcuts="E"
               onClick={() => toggleClipMode("error", currentTime, duration)}
             >
-              <AlertTriangle size={14} /> {t("Mark error")}
+              <Flag size={15} color="var(--loss)" />
+              {t("Mark error")}
+              <kbd className="u-kbd">E</kbd>
             </button>
           </div>
         )}
@@ -1311,255 +1709,202 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               visible={showEsportsHud && hasVideo}
             />
 
+            {!isFullscreen && noticeEl}
+
             {isFullscreen && (
               <div style={styles.fsBottom}>
-                <div style={styles.fsTimeline}>{timelineStrip}</div>
+                {noticeEl}
+                <div style={styles.fsTimeline}>{renderTrack(true)}</div>
                 {transportBar}
               </div>
             )}
           </div>
 
           {/* Línea de tiempo y transporte, debajo del vídeo. La tira ES la
-              barra de búsqueda de este reproductor (APM + sucesos); el
-              transporte va justo debajo, sin ningún botón relleno de color. */}
+              barra de búsqueda de este reproductor; a su izquierda, el nombre
+              de cada fila. */}
           {!isFullscreen && hasVideo && (
             <>
-              <div className="vp-tl">
-                <div className="vp-tl__head">
-                  <span className="u-meta">{t("Average APM")}: {Math.round(match.apm || 0)}</span>
-                  {/* Métricas de uso de las teclas de cámara aliada. */}
-                  {snapSummary?.analyzed ? (
-                    <span
-                      className="u-meta"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                      title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
-                    >
-                      <Eye size={12} /> {snapSummary.per_minute.toFixed(1)}/min
-                      <span>·</span>
-                      <span style={{ color: snapSummary.longest_gap_secs > 120 ? "var(--loss)" : "var(--win)" }}>
-                        {clock(snapSummary.longest_gap_secs)} {t("blind")}
-                      </span>
-                    </span>
-                  ) : (
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      onClick={runSnapAnalysis}
-                      disabled={snapBusy}
-                      title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
-                    >
-                      <Eye size={13} />
-                      {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
-                    </button>
-                  )}
+              <section className="vp-tl" aria-label={t("Game timeline")}>
+                <div className="vp-tl__gutter" aria-hidden="true">
+                  <span style={{ height: BAR_TOP + BAR_H + ROW_GAP }} />
+                  <span className="vp-tl__g" style={{ height: APM_H }} title={t("Average APM")}>
+                    <span>{t("APM")}</span>
+                    {!!match.apm && <b className="u-metric">{Math.round(match.apm)}</b>}
+                  </span>
+                  <span style={{ height: ROW_GAP }} />
+                  <span className="vp-tl__g vp-tl__g--lane" style={{ height: LANE_H }}>
+                    <span>{t("Events")}</span>
+                    {hasLookStrip && <span className="vp-tl__looks">{t("Looks")}</span>}
+                  </span>
                 </div>
-                {timelineStrip}
-              </div>
+                {renderTrack(false)}
+              </section>
               {transportBar}
             </>
           )}
         </div>
 
         {/* Inspector: tres pestañas. Revisión reúne los sucesos, la cola y las
-            notas —todo lo que se hace con el vídeo delante—; Partida y Impacto
+            notas —todo lo que se hace con el vídeo delante—; Partida e Impacto
             son lectura. */}
         {!isFullscreen && (
-        <aside ref={asideRef} className="card vp-insp">
+        <aside ref={asideRef} className="vp-insp" aria-label={t("Game review")}>
           <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
-          <div className="vp-tabs" role="tablist">
+          <div className="vp-tabs" role="tablist" aria-label={t("Game panels")}>
             {(["review", "match", "impact"] as const).map((id) => (
               <button
                 key={id}
+                type="button"
                 role="tab"
                 className="vp-tab"
                 aria-selected={tab === id}
                 data-on={tab === id ? "" : undefined}
                 onClick={() => setTab(id)}
               >
-                {t(id === "review" ? "Review" : id === "match" ? "Match" : "Impact")}
+                {t(id === "review" ? "Review" : id === "match" ? "Game" : "Impact")}
               </button>
             ))}
           </div>
 
         {tab === "review" && (() => {
-          const bucket = (tone: Tone): "good" | "neutral" | "bad" =>
-            tone === "excellent" || tone === "good" ? "good"
-              : tone === "mistake" || tone === "throw" ? "bad"
-              : "neutral";
-          // Una sola lista: los sucesos con hora (marcadores de Riot incluidos,
-          // la MISMA que pinta la tira), los errores que marcaste y los saltos
-          // de cámara cuando son pocos. La cola de revisión no es otra lista:
-          // es esta, con su casilla de "visto" en las filas que salen de
-          // buildQueue. Antes vivían en dos pestañas con el mismo contenido en
-          // distinto orden.
-          const byId = new Map(moments.map((m) => [m.id, m] as const));
-          type Row = {
-            key: string;
-            time: number;
-            color: string;
-            icon: React.ReactNode;
-            label: string;
-            desc: string;
-            tone: Tone;
-            moment?: Moment;
-          };
-          const rows: Row[] = timedEvents.map((ev) => {
-            const meta = eventMeta(ev);
-            const key = `event:${ev.time}:${ev.type}:${ev.subtype ?? ""}`;
-            return {
-              key,
-              time: ev.time,
-              color: meta.color,
-              icon: meta.icon,
-              label: t(meta.label),
-              desc: describeEvent(ev, t),
-              tone: meta.tone,
-              moment: byId.get(key),
-            };
-          });
-          for (const m of moments) {
-            if (m.source === "error") {
-              rows.push({ key: m.id, time: m.time, color: "var(--loss)", icon: <AlertTriangle size={18} />, label: m.title, desc: m.note ?? "", tone: "mistake", moment: m });
-            } else if (m.id.startsWith("snap:")) {
-              rows.push({ key: m.id, time: m.time, color: "var(--flag)", icon: <Eye size={18} />, label: m.title, desc: m.note ?? "", tone: "neutral", moment: m });
-            }
-          }
-          rows.sort((a, b) => a.time - b.time);
-
           const counts = { good: 0, neutral: 0, bad: 0 };
-          rows.forEach((r) => { counts[bucket(r.tone)]++; });
-          const done = moments.filter((m) => m.reviewed).length;
+          rows.forEach((r) => { counts[r.bucket]++; });
           const shown = rows.filter((r) =>
             eventFilter === "all" ? true
               : eventFilter === "pending" ? !!r.moment && !r.moment.reviewed
-              : bucket(r.tone) === eventFilter
+              : r.bucket === eventFilter
           );
-          // La tarjeta destacada sólo aparece si hay algo elegido o si el
-          // cursor está encima de un suceso: cuando de verdad se refiere a
-          // algo. Con `rows[0]` de defecto presidía la pestaña el primer suceso
-          // del minuto 2 como si fuera EL momento.
-          const featured =
-            rows.find((r) => r.time === activeEventTime) ??
-            rows.find((r) => Math.abs(r.time - currentTime) <= FEATURED_NEAR);
-          const chips: [typeof eventFilter, string, number][] = [
-            ["all", "All", rows.length],
-            ["good", "Good", counts.good],
-            ["neutral", "Neutral", counts.neutral],
-            ["bad", "Bad", counts.bad],
-            ["pending", "To review", moments.length - done],
+          // «Regulares» no cabe al ancho por defecto: sale cuando el panel es
+          // ancho (se redimensiona desde su borde) o si ya está elegido. Sus
+          // filas siguen todas bajo «Todas».
+          const showNeutral = counts.neutral > 0 && (sidebarWidth >= 440 || eventFilter === "neutral");
+          const chips: [typeof eventFilter, string, number, string | null][] = [
+            ["all", "All", rows.length, null],
+            ["good", "Good", counts.good, "var(--win)"],
+            ["bad", "Bad", counts.bad, "var(--loss)"],
+            ...(showNeutral ? [["neutral", "Neutral", counts.neutral, "var(--faint)"] as [typeof eventFilter, string, number, string | null]] : []),
+            ["pending", "To review", moments.length - doneCount, null],
           ];
-          // `tl` son las etiquetas de tono (texto inglés + color), no `t`.
-          const toneBadge = (tone: Tone) => {
-            const tl = toneLabelAndIcon(tone);
-            return (
-              <span className="badge" style={{ color: tl.color, background: mix(tl.color, 12) }}>
-                {t(tl.text)}
-              </span>
-            );
-          };
           return (
             <>
+              <div className="vp-filters" role="group" aria-label={t("Filter moments")}>
+                {chips.map(([id, label, n, dot]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className="vp-chip"
+                    aria-pressed={eventFilter === id}
+                    data-on={eventFilter === id ? "" : undefined}
+                    onClick={() => setEventFilter(id)}
+                  >
+                    {dot && <i className="vp-chip__dot" style={{ background: dot }} />}
+                    {t(label)} <span className="vp-chip__n">{n}</span>
+                  </button>
+                ))}
+              </div>
+              {reviewErr && <p className="vp-saveErr">{reviewErr}</p>}
+
+              {/* La tarjeta del momento actual sólo aparece si hay algo elegido
+                  o si el cursor está encima de un suceso: cuando de verdad se
+                  refiere a algo. Con el primer suceso por defecto presidía la
+                  pestaña el del minuto 2 como si fuera EL momento. */}
               {featured && (
-                <section className="evfeat vp-feat">
+                <section
+                  className="vp-feat"
+                  data-finding={featured.finding ? "" : undefined}
+                  aria-label={t("Current moment")}
+                >
                   <div className="vp-feat__meta">
-                    {toneBadge(featured.tone)}
-                    <span className="u-meta">
-                      {featured.desc ? `${featured.label} · ` : ""}
-                      {clock(featured.time)} · {t("minute")} {Math.floor(featured.time / 60)}
-                    </span>
+                    <span className="u-time vp-feat__time">{clock(featured.time)}</span>
+                    <span className="vp-feat__kicker">{t("Current moment")}</span>
+                    <span className="vp-feat__fill" />
+                    {chipFor(featured)}
                   </div>
-                  <h3 className="vp-feat__name">
-                    <span style={{ color: featured.color, display: "flex" }}>{featured.icon}</span>
-                    {featured.desc || featured.label}
-                  </h3>
+                  <h3 className="vp-feat__name">{featured.text}</h3>
+                  <p className="vp-feat__desc">
+                    {featured.detail || `${featured.label} · ${t("minute")} ${Math.floor(featured.time / 60)}`}
+                  </p>
                   <div className="vp-feat__actions">
-                    <button className="vp-chip" onClick={() => jumpToClip(featured.time)}>
-                      {t("Jump to this moment")}
-                    </button>
-                    {hasVideo && (
-                      <button
-                        className="vp-chip"
-                        aria-pressed={isClippingMode && exportType === "error"}
-                        onClick={() => { if (!isClippingMode) toggleClipMode("error", featured.time, duration); }}
-                      >
-                        {t("Mark error")}
-                      </button>
-                    )}
                     {featured.moment && (
                       <button
-                        className="vp-chip"
+                        type="button"
+                        className="vp-sbtn vp-sbtn--sm"
                         aria-pressed={featured.moment.reviewed}
                         onClick={() => toggleReviewed(featured.moment!)}
                       >
+                        <Check size={14} color="var(--win)" />
                         {t(featured.moment.reviewed ? "Mark as not reviewed" : "Mark as reviewed")}
                       </button>
                     )}
+                    {hasVideo && (
+                      <button
+                        type="button"
+                        className="vp-sbtn vp-sbtn--sm"
+                        aria-pressed={isClippingMode && exportType === "clip"}
+                        onClick={() => { if (!isClippingMode) toggleClipMode("clip", featured.time, duration); }}
+                      >
+                        <Scissors size={14} color="var(--muted)" />
+                        {t("Create {n} s clip", { n: 20 })}
+                      </button>
+                    )}
+                    {hasVideo && (
+                      <button
+                        type="button"
+                        className="vp-sbtn vp-sbtn--sm vp-sbtn--icon"
+                        aria-pressed={isClippingMode && exportType === "error"}
+                        onClick={() => { if (!isClippingMode) toggleClipMode("error", featured.time, duration); }}
+                        title={t("Mark error")}
+                        aria-label={t("Mark error")}
+                      >
+                        <Flag size={14} color="var(--loss)" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="vp-sbtn vp-sbtn--sm vp-sbtn--icon"
+                      onClick={() => jumpToClip(featured.time)}
+                      title={t("Jump to this moment")}
+                      aria-label={t("Jump to this moment")}
+                    >
+                      <RotateCcw size={14} />
+                    </button>
                   </div>
                 </section>
               )}
 
-              <div className="vp-filters">
-                {chips.map(([id, label, n]) => (
-                  <button
-                    key={id}
-                    className="vp-chip"
-                    data-on={eventFilter === id ? "" : undefined}
-                    onClick={() => setEventFilter(id)}
-                  >
-                    {t(label)} <span className="vp-chip__n">{n}</span>
-                  </button>
-                ))}
-                {moments.length > 0 && (
-                  <span className="u-meta vp-filters__count">
-                    {t("{done} of {total} reviewed", { done, total: moments.length })}
-                  </span>
-                )}
-              </div>
-              {reviewErr && <p className="vp-saveErr">{reviewErr}</p>}
-
-              <div className="vp-list">
-                {shown.map((r) => {
-                  const isActive = activeEventTime === r.time;
+              <div className="vp-list" ref={listRef} role="list" aria-label={t("Game moments")}>
+                {shown.map((r, i) => {
+                  const isActive = featured?.key === r.key;
                   return (
                     <div
-                      key={r.key}
-                      className="evrow vp-ev"
+                      key={`${r.key}:${i}`}
+                      data-key={r.key}
+                      role="listitem"
+                      className="vp-ev"
                       data-on={isActive || undefined}
                       data-done={r.moment?.reviewed || undefined}
-                      role="button"
-                      tabIndex={0}
-                      // Traerla a la vista si la selección vino de fuera (una
-                      // marca de la línea de tiempo, o las flechas): marcar una
-                      // fila que se ha quedado fuera de la lista es no marcar
-                      // nada. `nearest` no mueve la lista si ya se está viendo.
-                      ref={(el) => {
-                        if (isActive && el) el.scrollIntoView({ block: "nearest" });
-                      }}
-                      onClick={() => jumpToClip(r.time)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") { e.preventDefault(); jumpToClip(r.time); }
-                      }}
+                      data-finding={r.finding ? "" : undefined}
                     >
-                      <span className="u-metric evrow__time">{clock(r.time)}</span>
-                      <span className="vp-ev__dot" style={{ background: r.color }} />
-                      <span className="vp-ev__text">
-                        <span className="evrow__label">{r.label}</span>
-                        {r.desc && <span className="evrow__desc">{r.desc}</span>}
-                      </span>
-                      {toneBadge(r.tone)}
+                      <button
+                        type="button"
+                        className="vp-ev__main"
+                        onClick={() => jumpToClip(r.time)}
+                        title={r.detail ? `${r.text} · ${r.detail}` : r.text}
+                      >
+                        <span className="u-time vp-ev__time">{clock(r.time)}</span>
+                        <span className="vp-ev__icon" style={{ color: r.color }}>{r.icon}</span>
+                        <span className="vp-ev__text">{r.text}</span>
+                        {chipFor(r)}
+                      </button>
                       <span className="vp-ev__done">
                         {r.moment && (
-                          <span
-                            className="rq-done"
-                            role="checkbox"
-                            aria-checked={r.moment.reviewed}
-                            aria-label={t(r.moment.reviewed ? "Mark as not reviewed" : "Mark as reviewed")}
-                            tabIndex={0}
-                            onClick={(e) => { e.stopPropagation(); toggleReviewed(r.moment!); }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault(); e.stopPropagation(); toggleReviewed(r.moment!);
-                              }
-                            }}
+                          <input
+                            type="checkbox"
+                            className="vp-check"
+                            checked={r.moment.reviewed}
+                            onChange={() => toggleReviewed(r.moment!)}
+                            aria-label={t("Reviewed: {what}", { what: `${clock(r.time)} · ${r.text}` })}
                           />
                         )}
                       </span>
@@ -1575,35 +1920,44 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 )}
               </div>
 
-              {/* Notas ancladas al minuto. La caja escribe en el instante
+              {/* Notas ancladas al instante. La caja escribe en el instante
                   actual; las guardadas cuelgan debajo, con su hora, y se editan
-                  en sitio. Guardar es el único botón relleno de la pantalla. */}
+                  en sitio. Guardar es la única acción en oro de la pantalla. */}
               <div className="vp-notes">
                 <div className="vp-notes__row">
-                  <label className="field vp-notes__field">
-                    <span className="u-meta" title={t("Will be anchored to this moment")}>{clock(currentTime)}</span>
+                  <label className="vp-notes__field">
+                    <span className="u-time vp-notes__at" title={t("Will be anchored to this moment")}>
+                      {clock(currentTime)}
+                    </span>
                     <input
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
-                      placeholder={t("Note this moment…")}
-                      aria-label={t("Notes")}
+                      placeholder={t("What would you do differently here…")}
+                      aria-label={t("Note for {time}", { time: clock(currentTime) })}
                     />
                   </label>
                   <button
-                    className="btn btn--primary btn--md"
+                    type="button"
+                    className="btn btn--primary vp-notes__save"
                     onClick={addComment}
                     disabled={!newComment.trim()}
                     title={t("Add at current time")}
                   >
-                    {t("Save")}
+                    {t("Save note")}
                   </button>
                 </div>
                 {comments.length > 0 && (
                   <div className="vp-notes__list">
                     {comments.map((c, i) => (
                       <div key={i} className="vp-note">
-                        <button className="vp-note__time" onClick={() => seekTo(c.time, false)} title={t("Jump to this moment")}>
+                        <FileText size={14} className="vp-note__icon" aria-hidden="true" />
+                        <button
+                          type="button"
+                          className="u-time vp-note__time"
+                          onClick={() => seekTo(c.time, false)}
+                          title={t("Jump to this moment")}
+                        >
                           {clock(c.time)}
                         </button>
                         {editingNote === i ? (
@@ -1621,10 +1975,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                               aria-label={t("Edit note")}
                             />
                             <button
+                              type="button"
                               className="vp-note__btn"
                               onMouseDown={(e) => e.preventDefault()}
                               onClick={() => { setEditingNote(null); setEditingText(""); }}
                               title={t("Cancel")}
+                              aria-label={t("Cancel")}
                             >
                               <X size={14} />
                             </button>
@@ -1632,8 +1988,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                         ) : (
                           <>
                             <span className="vp-note__text">{c.text}</span>
-                            <button className="vp-note__btn" onClick={() => startEditNote(i)} title={t("Edit note")}><Pencil size={13} /></button>
-                            <button className="vp-note__btn" onClick={() => deleteComment(i)} title={t("Delete note")}><Trash2 size={13} /></button>
+                            <button type="button" className="vp-note__btn" onClick={() => startEditNote(i)} title={t("Edit note")} aria-label={t("Edit note")}>
+                              <Pencil size={14} />
+                            </button>
+                            <button type="button" className="vp-note__btn" onClick={() => deleteComment(i)} title={t("Delete note")} aria-label={t("Delete note")}>
+                              <Trash2 size={14} />
+                            </button>
                           </>
                         )}
                       </div>
@@ -1647,17 +2007,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
         {tab === "match" && (
           <div className="insp">
-            {/* El resultado es una linea, no una tarjeta: ya lo sabes al entrar,
-                solo hace falta que te lo confirme. */}
-            <div className="insp__lead">
-              <span
-                className="insp__verdict"
-                style={{ color: match.is_vod ? "var(--cool)" : isWin ? "var(--win)" : "var(--loss)" }}
-              >
-                {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
-              </span>
-              <span className="u-meta">{match.champion} · {clock(duration)}</span>
-            </div>
+            {/* El veredicto que abría la pestaña («Victoria · Gwen · 27:30») se
+                ha ido: lo dice la cabecera de la pantalla, a la vista siempre. */}
 
             {/* ------------------------------------------------ tu partida */}
             <section>
@@ -1785,36 +2136,51 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   <span className="u-label">{t("Scoreboard")}</span>
                   <i className="sect__rule" />
                 </div>
-                {/* La leyenda va arriba: es la cabecera de las columnas, no un
-                    pie de tabla. */}
-                <div className="insp__legend u-label">
-                  <span>{t("player")}</span><span>{t("K/D/A")}</span><span>{t("CS")}</span><span>{t("gold")}</span>
-                </div>
+                {/* Un bloque por equipo: su nombre y resultado hacen de cabecera
+                    de las columnas. La cara del campeón y el icono de su
+                    posición dicen quién era cada uno antes que el nick. */}
                 {[100, 200].map((teamId) => {
                   const team = participants.filter((p) => p.team_id === teamId);
                   if (team.length === 0) return null;
                   const won = team[0].win;
                   const tone = won ? "var(--win)" : "var(--loss)";
                   return (
-                    <div key={teamId} className="insp__team">
-                      <div className="insp__teamHead">
-                        <span style={{ color: tone }}>{t(teamId === 100 ? "Blue Team" : "Red Team")}</span>
-                        <span className="u-meta" style={{ color: tone }}>{t(won ? "Victory" : "Defeat")}</span>
+                    <div key={teamId} className="vp-sb">
+                      <div className="vp-sb__head">
+                        <span className="vp-sb__team">
+                          <i style={{ background: tone }} />
+                          {t(teamId === 100 ? "Blue Team" : "Red Team")}
+                          <em style={{ color: tone }}>{t(won ? "Victory" : "Defeat")}</em>
+                        </span>
+                        <span>{t("K/D/A")}</span>
+                        <span>{t("CS")}</span>
+                        <span>{t("Gold")}</span>
                       </div>
-                      {team.map((p, i) => (
-                        <div key={i} className={`insp__player${p.is_self ? " insp__player--self" : ""}`}>
-                          <img
-                            src={champIcon(p.champion)}
-                            alt={p.champion}
-                            style={styles.champIcon}
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                          />
-                          <span className="insp__playerName">{p.is_self ? t("You") : (p.name || p.champion)}</span>
-                          <span className="u-metric insp__playerKda">{p.kills}/{p.deaths}/{p.assists}</span>
-                          <span className="u-metric insp__playerNum">{p.cs}</span>
-                          <span className="u-metric insp__playerNum">{(p.gold / 1000).toFixed(1)}k</span>
-                        </div>
-                      ))}
+                      {team.map((p, i) => {
+                        const pos = normalizePosition(p.role);
+                        return (
+                          <div key={i} className="vp-sb__row" data-self={p.is_self || undefined}>
+                            <ChampFace
+                              champion={p.champion}
+                              size={28}
+                              className="vp-sb__face"
+                              fallback={<span className="vp-sb__face vp-sb__face--empty" />}
+                            />
+                            <span className="vp-sb__who">
+                              <span className="vp-sb__name">{p.is_self ? t("You") : (p.name || champLabel(p.champion))}</span>
+                              <span className="vp-sb__champ">
+                                {pos && (
+                                  <PositionIcon position={pos} size={12} color="var(--faint)" title={t(POSITION_LABEL[pos])} />
+                                )}
+                                {champLabel(p.champion)}
+                              </span>
+                            </span>
+                            <span className="u-metric vp-sb__kda">{p.kills}/{p.deaths}/{p.assists}</span>
+                            <span className="u-metric vp-sb__num">{p.cs}</span>
+                            <span className="u-metric vp-sb__num">{(p.gold / 1000).toFixed(1)}k</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -1851,24 +2217,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   <i className="sect__rule" />
                 </div>
                 {/* "Equipo Azul" no cabe en una columna de 40px: se parte en
-                    dos lineas encima de las cifras. Aqui basta el color. */}
-                <div className="drow drow--3 insp__objLegend u-label">
+                    dos lineas encima de las cifras. Aqui basta el color. Cada
+                    fila lleva el glifo de la línea de tiempo, en oro. */}
+                <div className="drow drow--3 insp__objLegend vp-obj__legend">
                   <span />
                   <span>{t("Blue")}</span>
                   <span>{t("Red")}</span>
                 </div>
                 {([
-                  ["Dragons", "dragons"],
-                  ["Barons", "barons"],
-                  ["Heralds", "heralds"],
-                  ["Towers", "towers"],
-                  ["Inhibitors", "inhibitors"],
-                ] as const).map(([label, key]) => {
+                  ["Dragons", "dragons", <IconDragon size={15} />],
+                  ["Barons", "barons", <IconBaron size={15} />],
+                  ["Heralds", "heralds", <IconHerald size={15} />],
+                  ["Towers", "towers", <IconTower size={15} />],
+                  ["Inhibitors", "inhibitors", <IconTower size={15} />],
+                ] as const).map(([label, key, icon]) => {
                   const blue = objectives.find((o) => o.team_id === 100);
                   const red = objectives.find((o) => o.team_id === 200);
                   return (
-                    <div key={key} className="drow drow--3">
-                      <span>{t(label)}</span>
+                    <div key={key} className="drow drow--3 vp-obj">
+                      <span className="vp-obj__name">
+                        <span className="vp-obj__icon">{icon}</span>
+                        {t(label)}
+                      </span>
                       <b style={{ color: (blue?.[key] ?? 0) >= (red?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
                         {blue?.[key] ?? 0}
                       </b>
@@ -1902,7 +2272,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                         style={styles.buyIcon}
                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
                       />
-                      <span className="u-meta">{clock(ip.time)}</span>
+                      <span className="u-time vp-buy__time">{clock(ip.time)}</span>
                     </button>
                   ))}
                 </div>
@@ -2067,7 +2437,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                     );
                   })}
                   <div className="imp__total">
-                    <span className="u-label">{t("total")}</span>
+                    <span className="u-label">{t("Total")}</span>
                     <span
                       className="u-metric"
                       style={{ color: mio.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
@@ -2102,7 +2472,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                       {t("Kill gold as the scoreboard hands it out (last hit) versus how it splits by damage actually dealt.")}
                     </p>
                     <div className="insp__legend u-label">
-                      <span>{t("player")}</span><span>{t("gap")}</span><span>{t("win %")}</span><span>{t("vs role")}</span>
+                      <span>{t("Player")}</span><span>{t("Gap")}</span><span>{t("Win %")}</span><span>{t("Vs. role")}</span>
                     </div>
                     {/* Separado por bandos: la lista de los 10 mezclados ordena
                         bien pero no se puede leer como rendimiento si no sabes
@@ -2297,9 +2667,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                     <span className="u-label">{t("Pressure you absorbed")}</span>
                     <i className="sect__rule" />
                   </div>
-                  <p className="note">
-                    {t("Pressure episodes, with and without gains. Evidence shows concurrent events, not personal credit.")}
-                  </p>
+                  {/* El resumen de la partida: cuánto rival ataste y lo que valió en
+                      total. Cada tarjeta de abajo es un sumando que se puede ver. */}
+                  {mios.length > 0 && mios.some(w => w.value) ? (() => {
+                    const neto = mios.reduce((a, w) => a + (w.value?.net ?? 0), 0);
+                    const atado = mios.reduce((a, w) => a + (w.value?.enemy_seconds ?? 0), 0);
+                    return (
+                      <p className="pe-sum">
+                        {t("They came for you {n} times. You tied up {time} of enemy time and it was worth {gold} gold in total.", {
+                          n: mios.length,
+                          time: formatSeconds(atado),
+                          gold: formatGold(neto, true),
+                        })}
+                      </p>
+                    );
+                  })() : (
+                    <p className="note">{t("When 2 or more enemies come for you: how long you kept them busy and what it was worth in gold.")}</p>
+                  )}
                   {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
                   {pressureErr !== null && (
                     <>
@@ -2342,7 +2726,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               <span style={styles.clipTitle}>
                 {t(exportType === "clip" ? "Export video clip" : "Mark error")}
               </span>
-              <span className="u-metric" style={styles.clipRange}>
+              <span className="u-time" style={styles.clipRange}>
                 {clock(clipStart)} – {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
               </span>
             </span>

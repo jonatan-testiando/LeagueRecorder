@@ -85,9 +85,9 @@ export const PowerSpikeWidget: React.FC<PowerSpikeWidgetProps> = ({
               }}
             />
             <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <span className="u-metric" style={{ fontSize: 11 }}>{mmss(item.purchase.time)}</span>
+              <span className="u-time">{mmss(item.purchase.time)}</span>
               {item.after > 0 && (
-                <span style={{ fontSize: 10, color: "var(--win)" }}>
+                <span style={{ fontSize: 12, color: "var(--win)", fontVariantNumeric: "tabular-nums" }}>
                   {t("+{n} K/A", { n: item.after })}
                 </span>
               )}

@@ -89,10 +89,9 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
       </svg>
       </div>
       <div style={styles.progressFoot}>
-        <span style={{ fontFamily: "var(--font-mono)" }}>{last.toFixed(0)} ms</span>
+        <span>{t("{n} ms", { n: last.toFixed(0) })}</span>
         <span
           style={{
-            fontFamily: "var(--font-mono)",
             color: delta <= 0 ? "var(--win)" : "var(--loss)",
           }}
         >
@@ -207,13 +206,13 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     height: "100%",
-    padding: "var(--space-6)",
+    padding: "var(--space-6) var(--space-8)",
     gap: "var(--space-5)",
     overflowY: "auto",
     boxSizing: "border-box",
   },
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  pageTitle: { margin: 0, fontSize: "var(--font-2xl)", fontWeight: 800, color: "var(--text)" },
+  pageTitle: { margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.15, color: "var(--text)" },
   pageSub: {
     margin: "var(--space-2) 0 0",
     fontSize: "var(--font-sm)",
@@ -221,7 +220,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 620,
   },
   tabs: { display: "flex", gap: "var(--space-2)" },
-  tab: { padding: "8px 16px", fontSize: "var(--font-sm)" },
+  tab: { padding: "8px 16px", fontSize: 14 },
   content: { flex: 1, minHeight: 0 },
   drillsGrid: { display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: 820 },
   progressCard: {
@@ -234,16 +233,15 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
   },
   progressHead: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  progressTitle: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--muted)" },
+  progressTitle: { fontSize: 15, fontWeight: 500, color: "var(--text)" },
   spark: { width: "100%", height: 60, display: "block" },
   sparkWrap: { position: "relative" },
   sparkRef: {
     position: "absolute",
     left: 0,
     transform: "translateY(50%)",
-    fontFamily: "var(--font-mono)",
-    fontSize: 9,
-    letterSpacing: "0.08em",
+    fontSize: 12,
+    fontVariantNumeric: "tabular-nums",
     color: "var(--faint)",
     background: "var(--surface-1)",
     paddingRight: 6,
@@ -252,7 +250,8 @@ const styles: Record<string, React.CSSProperties> = {
   progressFoot: {
     display: "flex",
     justifyContent: "space-between",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
+    fontVariantNumeric: "tabular-nums",
     color: "var(--faint)",
   },
 };

@@ -1,61 +1,77 @@
 /* =========================================================================
-   Patrones — la única pantalla que mira más de una partida a la vez.
+   Patrones — de datos a UNA acción (rediseño «Post-partida», 2026-09).
 
-   Estructura (maqueta aprobada 2026-09): cabecera con cifras y aviso de
-   muestra; una fila de chips (puesto · periodo); la fila 1 con las tres
-   preguntas de entrada (dónde mueres, cuándo mueres, tu escalada y tu puesto)
-   y, debajo, seis fichas compactas que se abren enteras al pulsarlas.
+   Cabecera en una fila (título + cifras · periodo + posición); fila principal
+   con el mapa de muertes como héroe y, a su derecha, el foco (con la acción
+   oro) y tu última partida frente a tu rango; debajo, "Explorar": fichas de
+   una línea que se abren enteras a todo el ancho.
 
-   Solo tokens de src/index.css: no hay un color escrito aquí. Prefijo `pp-`.
+   Voz: sans en todo (Instrument Sans) con cifras tabulares; la mono solo en
+   marcas de tiempo. Sin mayúsculas con tracking. Solo tokens de index.css,
+   más los del mapa (--rift-*), que se definen aquí para los dos temas.
+   Prefijo `pp-`.
    ========================================================================= */
 
 .pp {
-  padding: var(--space-6) var(--space-8) 28px;
+  padding: 24px 32px 32px;
   height: 100%;
   box-sizing: border-box;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   background: transparent;
+  font-family: var(--font-sans);
 }
 .pp-center { display: grid; place-items: center; height: 100%; }
 
+/* Voces pequeñas, compartidas por toda la pantalla. */
+.pp-num { font-variant-numeric: tabular-nums; }
+.pp-time { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pp-cap { font-size: 13px; color: var(--faint); }
+.pp-meta { font-size: 12px; line-height: 1.4; color: var(--faint); }
+.pp-sub { font-size: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-prose { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.pp-prose--faint { color: var(--faint); }
+/* La cautela de una tarjeta: una línea, al final, en voz baja. */
+.pp-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
+
 /* ------------------------------------------------------------ cabecera */
-.pp-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-.pp-head h1 { margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; }
-.pp-sub { color: var(--faint); font-size: 13px; }
-.pp-badge {
-  display: inline-flex;
+.pp-head {
+  display: flex;
   align-items: center;
-  align-self: center;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  min-height: 32px;
+  flex: none;
 }
-.pp-badge--flag { color: var(--flag); background: color-mix(in srgb, var(--flag) 14%, transparent); }
-.pp-badge--quiet { color: var(--muted); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.pp-title { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
+.pp-head h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 32px;
+  color: var(--text);
+}
+.pp-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 /* Fuentes que no se pudieron leer: en voz baja, pero en su propia línea. */
 .pp-broken { flex-basis: 100%; color: var(--signal); }
 
 /* --------------------------------------------------------------- chips */
-.pp-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pp-chips--sm { gap: 6px; }
 .pp-chip {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  gap: 7px;
+  height: 30px;
   padding: 0 12px;
   border: 0;
   border-radius: 999px;
   background: transparent;
-  font: inherit;
-  font-size: 12.5px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--muted);
   box-shadow: inset 0 0 0 1px var(--hair);
   cursor: pointer;
@@ -66,188 +82,452 @@
     box-shadow var(--t-instant) var(--e-move);
 }
 .pp-chip:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 4%, transparent); }
-.pp-chip[aria-pressed="true"] { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.pp-chip[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
+}
 .pp-chip:disabled { opacity: 0.45; cursor: default; }
 .pp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-.pp-chip--sm { height: 24px; padding: 0 10px; font-size: 11.5px; }
-.pp-sep { width: 1px; height: 20px; background: var(--hair-strong); margin: 0 4px; flex: none; }
 
-/* --------------------------------------------------------------- fila 1 */
-.pp-row1 {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) 332px;
-  gap: 18px;
-  align-items: stretch;
-}
-.pp-card { padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.pp-cardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.pp-prose { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
-.pp-prose--faint { color: var(--faint); }
-
-/* El héroe: la aureola, una por pantalla. */
-.pp-hero {
-  background: var(--halo), var(--panel);
-  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
-  flex-direction: row;
-  gap: 20px;
-}
-.pp-where-text { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
-.pp-where-hint { margin-top: auto; max-width: 26ch; }
-.pp-map {
-  position: relative;
-  width: min(240px, 52%);
-  aspect-ratio: 1 / 1;
-  flex: none;
-  align-self: flex-start;
-  background: var(--sunken);
-  border-radius: var(--radius-md);
-  overflow: hidden;
+/* El periodo: un control segmentado, una sola píldora. */
+.pp-seg {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair);
 }
-.pp-map img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  filter: brightness(0.55) saturate(0.7);
+.pp-seg .pp-chip { height: 26px; box-shadow: none; font-weight: 400; }
+.pp-seg .pp-chip[aria-pressed="true"] {
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
 }
-/* Punto de muerte: pequeño y translúcido a propósito — el calor lo hace la
-   acumulación, no cada punto. */
-.pp-dot {
+
+/* El peor tramo: el violeta del hallazgo, el mismo de la barra del foco. */
+.pp-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--flag); flex: none; }
+.pp-chip--worst[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--flag) 14%, var(--raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 45%, transparent);
+}
+
+/* ------------------------------------------------------ selector de posición */
+.pp-posmenu { position: relative; }
+.pp-posbtn {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: box-shadow var(--t-instant) var(--e-move);
+}
+.pp-posbtn > svg:first-child { color: var(--muted); }
+.pp-posbtn:hover { box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong); }
+.pp-posbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.pp-posbtn-chev { color: var(--faint); }
+.pp-posmenu-list {
   position: absolute;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--loss) 75%, transparent);
-  box-shadow: 0 0 8px 3px color-mix(in srgb, var(--loss) 45%, transparent);
-  transform: translate(-50%, -50%);
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 210px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-2);
+  animation: pp-pop var(--t-quick) var(--e-out) both;
+}
+@keyframes pp-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.pp-posmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: left;
   cursor: pointer;
 }
-.pp-dot:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.pp-posmenu-item:hover,
+.pp-posmenu-item:focus-visible { background: var(--raised); color: var(--text); outline: none; }
+.pp-posmenu-item[aria-checked="true"] { color: var(--text); }
+.pp-posmenu-check { margin-left: auto; color: var(--cool); }
+
+/* ------------------------------------------------------- fila principal */
+.pp-main {
+  display: grid;
+  /* Las proporciones de la maqueta (620 : 520 en 1440). */
+  grid-template-columns: minmax(0, 62fr) minmax(0, 52fr);
+  gap: 20px;
+  align-items: stretch;
+}
+.pp-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pp-cardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.pp-cardtitle { margin: 0; font-size: 14px; font-weight: 500; line-height: 20px; color: var(--text); }
+
+/* El héroe: la Grieta ocupa la tarjeta. */
+.pp-hero {
+  position: relative;
+  min-width: 0;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
+}
+.pp-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  flex-wrap: wrap;
+  min-height: 30px;
+}
+.pp-hero-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.pp-hero-title h2,
+.pp-explore-head h2 { margin: 0; font-size: 16px; font-weight: 500; line-height: 20px; color: var(--text); }
+.pp-hero-title .pp-sub { font-size: 13px; }
+.pp-phase { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------- el mapa */
+/* La superficie del mapa llena lo que quede de la tarjeta: si la columna de la
+   derecha es más alta, la Grieta se queda centrada sobre su propio suelo en vez
+   de dejar un hueco de panel debajo de la leyenda. */
+.pp-rift-wrap {
+  /* Tokens del mapa. Salen de los del tema: el suelo es el fondo con un poco
+     de jade, el río el fondo con un poco de azul de equipo. */
+  --rift-blue: #6096E6;
+  --rift-ground: color-mix(in srgb, var(--cool) 8%, var(--ground));
+  --rift-wall: color-mix(in srgb, black 30%, var(--rift-ground));
+  --rift-river: color-mix(in srgb, var(--rift-blue) 16%, var(--ground));
+  --rift-river-core: color-mix(in srgb, var(--rift-blue) 24%, var(--ground));
+  --rift-pit: color-mix(in srgb, var(--rift-blue) 10%, var(--ground));
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--rift-wall);
+}
+:root[data-theme="light"] .pp-rift-wrap {
+  --rift-blue: #2F63B5;
+  --rift-ground: color-mix(in srgb, var(--cool) 10%, var(--sunken));
+  --rift-wall: color-mix(in srgb, var(--text) 14%, var(--rift-ground));
+  --rift-river: color-mix(in srgb, var(--rift-blue) 18%, var(--sunken));
+  --rift-river-core: color-mix(in srgb, var(--rift-blue) 26%, var(--sunken));
+  --rift-pit: color-mix(in srgb, var(--rift-blue) 10%, var(--sunken));
+}
+/* Textura mínima y el filo, encima de todo lo pintado (sobre toda la
+   superficie: si solo cubriera el mapa, se vería dónde acaba). */
+.pp-rift-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1.3px);
+  background-size: 12px 12px;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  pointer-events: none;
+  z-index: 5;
+}
+.pp-rift {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 580 / 500;
+  flex: none;
+}
+.pp-rift-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.pp-halo {
+  position: absolute;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--loss) 30%, transparent),
+    color-mix(in srgb, var(--loss) 11%, transparent) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  transition: left var(--t-base) var(--e-move), top var(--t-base) var(--e-move);
+}
+/* Punto de muerte. Con un tramo elegido, las de dentro se encienden con un
+   anillo y las de fuera se quedan al 15 %: se ve el tramo SIN perder el resto. */
+.pp-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--loss);
+  opacity: 0.78;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--rift-ground) 80%, transparent);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition:
+    opacity var(--t-quick) var(--e-move),
+    transform var(--t-instant) var(--e-move),
+    box-shadow var(--t-quick) var(--e-move);
+}
+/* Más área que el punto: 8 px no se aciertan con el ratón. */
+.pp-dot::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
+.pp-dot:hover { opacity: 1; transform: translate(-50%, -50%) scale(1.5); z-index: 3; }
+.pp-dot:focus-visible { opacity: 1; outline: 2px solid var(--cool); outline-offset: 2px; z-index: 3; }
+.pp-dot.is-on {
+  opacity: 1;
+  z-index: 2;
+  box-shadow: 0 0 0 1.5px var(--rift-ground), 0 0 0 5px color-mix(in srgb, var(--loss) 22%, transparent);
+}
+.pp-dot.is-off { opacity: 0.15; pointer-events: none; }
 /* Tooltip propio: el `title` nativo tarda un segundo y no colorea el resultado. */
 .pp-tip {
   position: absolute;
-  transform: translate(-50%, calc(-100% - 10px));
   background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair-strong), var(--shadow-1);
-  border-radius: var(--radius-sm);
-  padding: 4px 8px;
-  font-size: 11px;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
   color: var(--text);
   white-space: nowrap;
   pointer-events: none;
-  z-index: 3;
+  z-index: 4;
 }
-
-/* Cuándo mueres: ocho tramos, el peor en azul de hallazgo. */
-.pp-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; margin-top: 22px; }
-.pp-bar {
-  flex: 1;
-  min-height: 2px;
-  position: relative;
-  border-radius: 3px 3px 0 0;
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
-}
-.pp-bar.is-hot { background: var(--flag); }
-.pp-bar i {
+.pp-rift-empty {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: -18px;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
   text-align: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--panel) 55%, transparent);
+}
+.pp-rift-empty .pp-prose { max-width: 30ch; color: var(--text); }
+
+.pp-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px 20px;
+  flex-wrap: wrap;
+  font-size: 13px;
   color: var(--muted);
 }
-.pp-axis { display: flex; }
-.pp-axis span { flex: 1; text-align: center; }
-.pp-axis .is-hot { color: var(--flag); }
-.pp-split { display: flex; gap: 24px; margin-top: auto; }
-.pp-split .u-metric { font-size: 20px; }
-.pp-split .u-label { margin-top: 2px; }
-
-/* Columna derecha: escalada y puesto. */
-.pp-side { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
-.pp-side .pp-card { flex: 1; }
-.pp-bigv-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.pp-bigv-row img { width: 36px; height: 36px; display: block; flex: none; }
-.pp-bigv {
-  font-family: var(--font-mono);
-  font-size: 40px;
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 55%, white), var(--brand));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.pp-legend-item { display: flex; align-items: center; gap: 8px; }
+.pp-legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--loss); opacity: 0.78; flex: none; }
+.pp-legend-halo {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: none;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--loss) 55%, transparent),
+    color-mix(in srgb, var(--loss) 15%, transparent) 60%,
+    transparent 100%
+  );
 }
-.pp-climb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
-.pp-climb-row img { width: 20px; height: 20px; display: block; }
-.pp-climb-spark { display: block; width: 100%; height: 36px; }
-.pp-climb-aviso { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.pp-rk-row { display: flex; gap: 6px; }
-.pp-rk {
+.pp-legend-strong { color: var(--text); }
+
+/* -------------------------------------------------------- columna derecha */
+.pp-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.pp-focus { flex: none; }
+.pp-rank { flex: 1 1 auto; }
+
+/* La muestra: cuánto aguanta lo que se dice, en un chip discreto. */
+.pp-sample {
+  flex: none;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  white-space: nowrap;
+  cursor: help;
+}
+.pp-sample--low { color: var(--flag); background: color-mix(in srgb, var(--flag) 12%, transparent); }
+
+.pp-focus-text { display: flex; flex-direction: column; gap: 6px; }
+.pp-focus-title { margin: 0; font-size: 18px; font-weight: 500; line-height: 1.3; color: var(--text); }
+
+/* Cuándo mueres: ocho tramos, el peor en violeta de hallazgo. */
+.pp-histo { display: flex; flex-direction: column; gap: 6px; }
+.pp-bars { display: flex; align-items: flex-end; gap: 8px; height: 64px; }
+.pp-bar-col {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  flex: 1;
-  min-width: 0;
-  padding: 4px 0;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-  transition: background-color var(--t-instant) var(--e-move);
 }
-.pp-rk:hover { background: color-mix(in srgb, var(--text) 4%, transparent); }
-.pp-rk:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.pp-rk b { font-family: var(--font-mono); font-weight: 500; font-size: 16px; font-variant-numeric: tabular-nums; }
-.pp-rk .u-meta { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-bar-n { font-size: 12px; line-height: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* Neutra en los dos temas: el texto mezclado en el panel sube en oscuro y baja
+   en claro (--raised en claro es MÁS claro que el panel y la barra se perdía). */
+.pp-bar { display: block; width: 100%; border-radius: 4px; background: color-mix(in srgb, var(--text) 11%, var(--panel)); }
+.pp-bar-col.is-hot .pp-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--flag) 78%, var(--text)), var(--flag));
+}
+.pp-bar-col.is-hot .pp-bar-n { color: var(--flag); }
+.pp-axis { display: flex; gap: 8px; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-axis span { flex: 1 1 0; text-align: center; }
+.pp-axis .is-hot { color: var(--flag); }
+
+/* La acción oro de la pantalla. */
+.pp-cta {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  gap: 10px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.pp-cta-dur { font-size: 12px; font-weight: 500; opacity: 0.72; font-variant-numeric: tabular-nums; }
+.pp-cta:disabled { opacity: 0.5; cursor: default; }
+.pp-cta:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+
+/* Tu última partida frente a tu rango. */
+.pp-rank-scope { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pp-inline-icon { display: inline-flex; align-items: center; gap: 5px; }
+.pp-rank-rows { display: flex; flex-direction: column; gap: 12px; }
+.pp-rank-row { display: flex; flex-direction: column; gap: 7px; }
+.pp-rank-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; line-height: 18px; }
+.pp-rank-name { font-size: 14px; color: var(--text); }
+.pp-rank-line .pp-meta { font-size: 13px; }
+.pp-rank-value { font-size: 14px; font-weight: 600; }
+.pp-pbar { position: relative; height: 10px; }
+.pp-pbar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.pp-pbar-gap { position: absolute; top: 2px; height: 6px; border-radius: 999px; }
+.pp-pbar-median {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: -1px;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--faint);
+}
+.pp-pbar-dot { position: absolute; top: 0; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; }
+.pp-pbar-axis {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.pp-pbar-axis span:nth-child(2) { text-align: center; }
+.pp-pbar-axis span:nth-child(3) { text-align: right; }
+.pp-lever {
+  margin-top: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 12px;
+  box-shadow: inset 0 1px 0 var(--hair);
+}
+.pp-lever-icon { flex: none; margin-top: 2px; color: var(--cool); }
+.pp-lever-strong { color: var(--text); font-weight: 500; }
 
 /* -------------------------------------------------------------- explorar */
-.pp-explore-head { display: flex; align-items: baseline; gap: 12px; margin-top: 4px; }
+.pp-explore-wrap { display: flex; flex-direction: column; gap: 10px; }
+.pp-explore-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.pp-explore-head .pp-sub { font-size: 13px; }
 /* `dense`: el cuerpo abierto ocupa la fila entera justo debajo de la fila de
    su ficha, y las fichas que vienen detrás rellenan el hueco que dejó en
    vez de saltar a la fila siguiente. El orden del DOM (ficha, cuerpo) se
    conserva para el teclado y el lector de pantalla. */
 .pp-explore {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   grid-auto-flow: dense;
 }
 .pp-ex {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 12px;
+  min-height: 76px;
   min-width: 0;
+  padding: 12px 14px 12px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  color: var(--faint);
+  font-family: var(--font-sans);
   text-align: left;
-  font: inherit;
-  color: inherit;
   cursor: pointer;
   transition:
     background-color var(--t-instant) var(--e-move),
-    border-color var(--t-instant) var(--e-move);
+    box-shadow var(--t-instant) var(--e-move);
 }
-.pp-ex:hover:not(:disabled) { background: var(--raised); border-color: var(--hair-strong); }
+.pp-ex:hover:not(:disabled),
+.pp-ex.is-open { background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim); }
 .pp-ex:disabled { cursor: default; }
 .pp-ex:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-/* Brillo de hallazgo: las fichas que enseñan algo que descubrió el analizador. */
-.pp-ex--sheen, .pp-ex--sheen:hover:not(:disabled) { background: var(--media-sheen); }
-.pp-ex-text { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.pp-ex-title { font-size: 14.5px; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
-.pp-ex-text .u-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-ex-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.pp-ex-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--faint); }
+.pp-ex-label svg { flex: none; }
+/* El valor es una frase: hasta dos líneas antes de recortar. Con una sola, a
+   1280 las frases de los cruces y del rango se quedaban en tres palabras. */
+.pp-ex-value {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+  overflow: hidden;
+}
+.pp-ex:disabled .pp-ex-value { color: var(--faint); }
+.pp-ex-strong { font-size: 15px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.pp-ex-soft { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pp-ex-pool { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pp-ex-pool .pp-ex-strong,
+.pp-ex-pool .pp-ex-soft { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-ex-pool .pp-ex-keep { flex: none; }
+.pp-ex-faces { display: inline-flex; flex: none; }
+.pp-ex-faces > * + * { margin-left: -6px; }
+.pp-ex-emblem { width: 22px; height: 22px; object-fit: contain; flex: none; }
 .pp-ex-chev { flex: none; color: var(--faint); transition: transform var(--t-quick) var(--e-move); }
 .pp-ex.is-open .pp-ex-chev { transform: rotate(90deg); }
 .pp-ex-body { grid-column: 1 / -1; min-width: 0; }
@@ -255,36 +535,84 @@
 .pp-sheen { background: var(--media-sheen); }
 
 /* Cuerpos de las fichas. */
-.pp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.pp-list-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--hair); }
-.pp-list-name { font-size: 13px; font-weight: 500; }
-.pp-zone { display: grid; grid-template-columns: 56px 1fr 1fr 1fr; gap: 4px 12px; align-items: baseline; }
+.pp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pp-list-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--hair); font-size: 13px; }
+.pp-list-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.pp-zone { display: grid; grid-template-columns: 64px 1fr 1fr 1fr; gap: 6px 12px; align-items: baseline; font-size: 13px; }
 .pp-cats { display: flex; flex-direction: column; gap: 12px; }
-.pp-cat { display: grid; grid-template-columns: 1fr 32px; gap: 12px; align-items: center; }
-.pp-cat-label { font-size: 12px; color: var(--muted); }
+.pp-cat { display: grid; grid-template-columns: 1fr 40px; gap: 12px; align-items: center; }
+.pp-cat-label { font-size: 13px; color: var(--muted); }
+.pp-cat-n { font-size: 13px; text-align: right; color: var(--muted); }
 /* Pista hundida y relleno con filo: el mismo modelo de luz que el resto. */
 .pp-track { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; margin-top: 5px; box-shadow: var(--inset-sunken); }
-.pp-fill { display: block; height: 100%; border-radius: 2px; box-shadow: inset 0 1px 0 color-mix(in srgb, white 22%, transparent); }
+.pp-fill { display: block; height: 100%; border-radius: 2px; }
 .pp-insight {
   padding: 12px;
   border-left: 2px solid var(--brand);
   background: color-mix(in srgb, var(--brand) 7%, transparent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  border-radius: 0 6px 6px 0;
 }
+.pp-bigline { display: flex; align-items: baseline; gap: 8px; }
+.pp-bignum { font-size: 22px; font-weight: 500; }
+
+/* Escalada. */
+.pp-bigv-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pp-bigv-row img { width: 40px; height: 40px; display: block; flex: none; object-fit: contain; }
+.pp-bigv {
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pp-climb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--text); }
+.pp-climb-row img { width: 20px; height: 20px; display: block; object-fit: contain; }
+.pp-climb-spark { display: block; width: 100%; height: 36px; }
+.pp-climb-aviso { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.pp-rk-row { display: flex; gap: 6px; }
+.pp-rk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-sans);
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.pp-rk:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.pp-rk:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.pp-rk b { font-weight: 500; font-size: 15px; font-variant-numeric: tabular-nums; }
+
+/* La media frente a tu rango (tabla de la ficha). */
+.pp-avg-rows { display: flex; flex-direction: column; }
+.pp-avg-row { display: flex; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--hair); }
+.pp-avg-name { flex: 0 0 170px; min-width: 0; font-size: 13px; color: var(--muted); }
+.pp-avg-value { flex: 0 0 60px; text-align: right; font-size: 13px; font-weight: 500; color: var(--text); }
+.pp-avg-track { position: relative; flex: 1; min-width: 90px; height: 6px; background: var(--sunken); border-radius: 999px; box-shadow: var(--inset-sunken); }
+.pp-avg-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; }
+/* La muesca del 50 SOBRESALE de la barra: dentro se perdía sobre el relleno
+   claro, y es justo en las filas que rondan la mediana donde hay que verla. */
+.pp-avg-median { position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--faint); z-index: 1; }
+.pp-avg-pct { flex: 0 0 28px; text-align: right; font-size: 13px; font-weight: 500; }
 
 /* ------------------------------------------------------------ anchuras */
-@media (max-width: 1240px) {
-  .pp-row1 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .pp-side { grid-column: 1 / -1; flex-direction: row; }
-}
-@media (max-width: 860px) {
-  .pp-row1 { grid-template-columns: minmax(0, 1fr); }
-  .pp-side { flex-direction: column; }
-  .pp-hero { flex-direction: column; }
-  .pp-map { width: 100%; }
+@media (max-width: 1100px) {
+  .pp-main { grid-template-columns: minmax(0, 1fr); }
   .pp-explore { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pp-two { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 620px) {
+@media (max-width: 720px) {
+  .pp { padding: 16px; }
   .pp-explore { grid-template-columns: minmax(0, 1fr); }
+  .pp-two { grid-template-columns: minmax(0, 1fr); }
+  .pp-avg-name { flex-basis: 110px; }
 }

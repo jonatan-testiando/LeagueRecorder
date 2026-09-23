@@ -1,9 +1,10 @@
 import React from "react";
 
 /**
- * Una cifra con su etiqueta. Siempre en mono y con cifras tabulares: es la
- * única forma de que dos filas seguidas se puedan comparar de un vistazo, que
- * es justo lo que se hace en la biblioteca.
+ * Una cifra con su etiqueta. Siempre con cifras tabulares: es la única forma
+ * de que dos filas seguidas se puedan comparar de un vistazo, que es justo lo
+ * que se hace en la biblioteca. Desde «Post-partida» en sans (la mono queda
+ * para tiempos y atajos) y la etiqueta en tipo oración, no en mayúsculas.
  */
 export type MetricTone = "default" | "win" | "loss" | "muted";
 

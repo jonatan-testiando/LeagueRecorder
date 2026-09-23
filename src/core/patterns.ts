@@ -160,6 +160,22 @@ export function deathClock(matches: MatchMetadata[]): DeathClock {
  */
 export type Confidence = "low" | "medium" | "good";
 
+/**
+ * La etiqueta de muestra, igual en Hoy y en Patrones ("Tendencia · 26
+ * partidas"). Cada pantalla tenía la suya ("Tendencia" en Hoy, "Patrón
+ * probable · menos de 40 partidas" en Patrones) para el MISMO foco, y dos
+ * nombres para un dato es exactamente lo que hace desconfiar de los dos.
+ */
+export function sampleLabel(
+  conf: Confidence,
+  games: number,
+  t: (key: string, vars?: Record<string, string | number>) => string
+): string {
+  if (conf === "low") return t("Lead · {n} games", { n: games });
+  if (conf === "medium") return t("Trend · {n} games", { n: games });
+  return t("Solid · {n} games", { n: games });
+}
+
 export function confidenceOf(sampleGames: number): Confidence {
   if (sampleGames < 15) return "low";
   if (sampleGames < 40) return "medium";

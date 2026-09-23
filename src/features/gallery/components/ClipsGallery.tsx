@@ -4,20 +4,23 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useNavigate } from "react-router-dom";
 import {
-  Film, UploadCloud, Check, Copy, ExternalLink, Clock, RotateCcw, Heart,
+  Film, UploadCloud, Check, Copy, ExternalLink, RotateCcw, Heart,
   FolderOpen, PlaySquare, Trash2,
 } from "lucide-react";
-import { motion } from "framer-motion";
 import { ClipMetadata, MatchMetadata } from "../../../types";
-import { deleteClip, toggleClipFavorite, type UploadProgress } from "../../../core/tauri-ipc";
+import { deleteClip, getHotkeys, toggleClipFavorite, type UploadProgress } from "../../../core/tauri-ipc";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useToast } from "../../../components/ui/Toaster";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
+import { matchAge } from "../../../core/time";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
+import "./ClipsGallery.css";
 
 /**
  * Límites de los servicios de subida, en un solo sitio.
@@ -65,12 +68,12 @@ interface StoredLink {
 
 const LS_KEY = "clipLinks";
 
-// Medidas del grid. Están aquí y no solo en el CSS porque el virtualizador necesita
-// calcular a mano cuántas columnas caben.
-const GRID_GAP = 12;
-// Ancho mínimo de la tarjeta HORIZONTAL: 2 por hilera en un portátil, 3 en un
-// monitor ancho.
-const CARD_MIN_WIDTH = 540;
+/**
+ * Alto estimado de una fila: miniatura 16:9 de 256 px (144) más el relleno.
+ * La altura real la mide `measureElement`, porque la fila crece con la barra
+ * de subida o el aviso de tamaño.
+ */
+const ROW_ESTIMATE = 166;
 
 type Sort = "newest" | "oldest" | "largest" | "smallest";
 
@@ -120,6 +123,15 @@ const clipTime = (matchId: string): number => {
   ).getTime() || 0;
 };
 
+/**
+ * Los clips, en filas como la Biblioteca: miniatura 16:9 que se reproduce ahí
+ * mismo, titular a la derecha y chips debajo.
+ *
+ * El oro es UNO por pantalla: lo lleva la acción de compartir del clip
+ * seleccionado (el primero, o el último que tocaste). Las demás filas llevan
+ * el mismo botón en superficie — con seis clips a la vista eran seis botones
+ * de acción compitiendo.
+ */
 export const ClipsGallery: React.FC = () => {
   const [clips, setClips] = useState<ClipMetadata[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +141,7 @@ export const ClipsGallery: React.FC = () => {
   // Segundos que lleva la subida en curso. Sigue haciendo falta: el primer
   // aviso de progreso puede tardar (el backend abre la conexión antes de
   // empezar a mandar bytes), y hasta que llegue lo honesto es una barra
-  // indeterminada con el tiempo transcurrido debajo.
+  // indeterminada con el tiempo transcurrido al lado.
   const [uploadElapsed, setUploadElapsed] = useState(0);
   // Bytes ya enviados del clip en curso, según el evento `clip_upload_progress`.
   // null = todavía no ha llegado ninguno.
@@ -141,6 +153,10 @@ export const ClipsGallery: React.FC = () => {
   const [copied, setCopied] = useState<string | null>(null);
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [sort, setSort] = useState<Sort>("newest");
+  // Fila seleccionada: la que lleva la acción de oro. null = la primera.
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // La tecla del replay, para decirla en el estado vacío.
+  const [replayKey, setReplayKey] = useState<string>("");
 
   // La biblioteca, para poder decir de qué partida salió cada clip con algo que
   // se pueda leer (campeón y fecha) en vez del id de la carpeta.
@@ -151,13 +167,15 @@ export const ClipsGallery: React.FC = () => {
   // "sin clips". Declararlos después haría que el número de hooks cambiara entre
   // renders y React abortaría con "Rendered more hooks than during the previous render".
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [columns, setColumns] = useState(2);
 
   const matchById = useMemo(() => {
     const map = new Map<string, MatchMetadata>();
     for (const m of matches) map.set(m.id, m);
     return map;
   }, [matches]);
+
+  const favCount = useMemo(() => clips.filter((c) => c.favorite).length, [clips]);
+  const totalBytes = useMemo(() => clips.reduce((n, c) => n + c.size, 0), [clips]);
 
   const visible = useMemo(() => {
     const list = onlyFavorites ? clips.filter((c) => c.favorite) : clips;
@@ -171,20 +189,33 @@ export const ClipsGallery: React.FC = () => {
     return out;
   }, [clips, onlyFavorites, sort]);
 
-  // Cuántas tarjetas caben por fila. Replica a mano lo que hacía
-  // `grid-template-columns: repeat(auto-fill, minmax(CARD_MIN_WIDTH, 1fr))`,
-  // porque el virtualizador necesita saber el número de columnas para agrupar.
+  // La seleccionada tiene que estar a la vista: si el filtro la deja fuera,
+  // pasa a serlo la primera.
+  const selectedIndex = useMemo(() => {
+    const i = selectedPath ? visible.findIndex((c) => c.path === selectedPath) : -1;
+    return i >= 0 ? i : visible.length > 0 ? 0 : -1;
+  }, [visible, selectedPath]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: visible.length,
+    getScrollElement: () => scrollRef.current,
+    // Estimación inicial; la altura real de cada fila se mide con `measureElement`,
+    // porque la fila cambia de alto según el estado (barra de subida, aviso de
+    // tamaño excedido...).
+    estimateSize: () => ROW_ESTIMATE,
+    overscan: 4,
+  });
+
+  // Mismo bug que la biblioteca: la ruta se oculta con display:none sin
+  // desmontarse y el virtualizador cachea medidas a 0. Al reaparecer, se
+  // remide — y los elementos que siguieron montados se remiden a mano,
+  // porque measure() solo limpia la caché y su observer interno ya disparó.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     let anchoPrevio = 0;
     const medir = () => {
       const w = el.clientWidth;
-      setColumns(Math.max(1, Math.floor((w + GRID_GAP) / (CARD_MIN_WIDTH + GRID_GAP))));
-      // Mismo bug que la biblioteca: la ruta se oculta con display:none sin
-      // desmontarse y el virtualizador cachea medidas a 0. Al reaparecer, se
-      // remide — y los elementos que siguieron montados se remiden a mano,
-      // porque measure() solo limpia la caché y su observer interno ya disparó.
       if (anchoPrevio === 0 && w > 0) {
         rowVirtualizer.measure();
         requestAnimationFrame(() => {
@@ -199,24 +230,14 @@ export const ClipsGallery: React.FC = () => {
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [loading, clips.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, clips.length, visible.length > 0]);
 
-  const rowCount = Math.ceil(visible.length / columns);
-  const rowVirtualizer = useVirtualizer({
-    count: rowCount,
-    getScrollElement: () => scrollRef.current,
-    // Estimación inicial; la altura real de cada fila se mide con `measureElement`,
-    // porque la tarjeta cambia de alto según el estado (selector de caducidad, fila
-    // de enlace ya subido, aviso de tamaño excedido...).
-    estimateSize: () => 380,
-    overscan: 3,
-  });
-
-  // Al cambiar el número de columnas, cada índice de fila pasa a contener otras
-  // tarjetas: las alturas medidas antes ya no valen. Igual al reordenar o filtrar.
+  // Al reordenar o filtrar, cada índice pasa a contener otro clip: las alturas
+  // medidas antes ya no valen.
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [columns, sort, onlyFavorites, rowVirtualizer]);
+  }, [sort, onlyFavorites, rowVirtualizer]);
 
   // Persistir los enlaces cada vez que cambian para que sobrevivan a recargas.
   useEffect(() => {
@@ -267,6 +288,7 @@ export const ClipsGallery: React.FC = () => {
 
   useEffect(() => {
     fetchClips();
+    getHotkeys().then((h) => setReplayKey(h.replay)).catch(() => {});
   }, []);
 
   const copyLink = async (link: string) => {
@@ -360,8 +382,8 @@ export const ClipsGallery: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={styles.container} className="panel-enter">
-        <div style={styles.emptyState}>
+      <div className="cg panel-enter">
+        <div className="cg-center">
           <div className="spinner" />
         </div>
       </div>
@@ -370,79 +392,108 @@ export const ClipsGallery: React.FC = () => {
 
   if (clips.length === 0) {
     return (
-      <div style={styles.container} className="panel-enter">
-        <div style={styles.header}>
-          <h1 style={styles.title}>{t("Clips")}</h1>
+      <div className="cg panel-enter">
+        <div className="cg__head">
+          <h1>{t("Clips")}</h1>
         </div>
-        <EmptyState
-          icon={<Film size={30} color="var(--faint)" />}
-          title={t("No clips yet")}
-          // Palabra por palabra la clave del diccionario: la frase de antes se
-          // le parecía pero no era la misma, así que en español salía en inglés.
-          text={t("Use the clipping tool in the player to create clips of your best moments.")}
-        />
+        <div className="cg-center">
+          <EmptyState
+            icon={<Film size={30} color="var(--faint)" />}
+            title={t("No clips yet")}
+            text={t("Your best plays will live here. Clip a moment from the player, or save the last 30 seconds while a game is recording.")}
+            action={
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                {/* La pantalla vacía lleva a donde se hacen los clips. */}
+                <Button variant="primary" size="md" icon={<PlaySquare size={15} />} onClick={() => navigate("/review")}>
+                  {t("Go to the Library")}
+                </Button>
+                {replayKey && (
+                  <span className="u-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    {t("Save replay")}
+                    <kbd className="u-kbd">{replayKey}</kbd>
+                  </span>
+                )}
+              </div>
+            }
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={styles.container} className="panel-enter">
-      <div style={styles.header}>
-        <h1 style={styles.title}>{t("Clips")}</h1>
-        <div className="u-meta">
-          {clips.length} {t(clips.length === 1 ? "clip" : "clips")}
+    <div className="cg panel-enter">
+      <div className="cg__head">
+        <h1>{t("Clips")}</h1>
+        <span className="cg__count">
+          {clips.length} {t(clips.length === 1 ? "clip" : "clips")} · {formatSize(totalBytes)}
+        </span>
+      </div>
+
+      <div className="cg__tools">
+        <div className="cg-seg" role="group" aria-label={t("Filter clips")}>
+          <button type="button" aria-pressed={!onlyFavorites} onClick={() => setOnlyFavorites(false)}>
+            {t("All clips")} <span className="cg-seg__n">{clips.length}</span>
+          </button>
+          <button type="button" aria-pressed={onlyFavorites} onClick={() => setOnlyFavorites(true)}>
+            <Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />
+            {t("Favourites")} <span className="cg-seg__n">{favCount}</span>
+          </button>
+        </div>
+        <span className="cg__spacer" />
+        <span className="cg__toolLabel">{t("Sort")}</span>
+        <div className="cg-seg" role="group" aria-label={t("Sort")}>
+          {SORTS.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              aria-pressed={sort === s.key}
+              onClick={() => setSort(s.key)}
+            >
+              {t(s.label)}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div style={styles.tools}>
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-pressed={onlyFavorites}
-          icon={<Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />}
-          onClick={() => setOnlyFavorites((v) => !v)}
-        >
-          {t("Favourites")}
-        </Button>
-        <span style={{ flex: 1 }} />
-        <span className="u-label" style={{ marginRight: 2 }}>{t("Sort")}</span>
-        {SORTS.map((s) => (
-          <Button
-            key={s.key}
-            variant="ghost"
-            size="sm"
-            aria-pressed={sort === s.key}
-            onClick={() => setSort(s.key)}
-          >
-            {t(s.label)}
-          </Button>
-        ))}
-      </div>
-
       {visible.length === 0 ? (
-        <EmptyState
-          icon={<Heart size={30} color="var(--faint)" />}
-          title={t("No favourite clips yet")}
-          text={t("Mark a clip with the heart and it shows up here.")}
-          action={
-            <Button variant="ghost" size="sm" onClick={() => setOnlyFavorites(false)}>
-              {t("Clear filters")}
-            </Button>
-          }
-        />
+        <div className="cg-center">
+          <EmptyState
+            icon={<Heart size={30} color="var(--faint)" />}
+            title={t("No favourite clips yet")}
+            text={t("Mark a clip with the heart and it shows up here.")}
+            action={
+              <Button variant="ghost" size="sm" onClick={() => setOnlyFavorites(false)}>
+                {t("Show all clips")}
+              </Button>
+            }
+          />
+        </div>
       ) : (
       /* El scroll vive aquí y no en el contenedor: el virtualizador posiciona los
          items relativos a este div, así que si el elemento con scroll fuera el de
          fuera, la cabecera desplazaría todas las filas. */
-      <div style={styles.scrollArea} ref={scrollRef}>
+      <div className="cg__list" ref={scrollRef}>
       <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const startIndex = virtualRow.index * columns;
-          const rowClips = visible.slice(startIndex, startIndex + columns);
+          const clip = visible[virtualRow.index];
+          if (!clip) return null;
+          const stored = links[clip.path];
+          const isUploading = uploading === clip.path;
+          const exp = expiry[clip.path] ?? "72h";
+          const isPermanent = exp === "permanent";
+          const kind = isPermanent ? "permanent" : "temporary";
+          const tooBig = clip.size > UPLOAD_LIMITS[kind];
+          const remaining = stored ? expiresAt(stored) - Date.now() : 0;
+          const match = matchById.get(clip.match_id);
+          const isSelected = virtualRow.index === selectedIndex;
+          // El filo de debajo se esconde junto a la seleccionada (arriba y abajo).
+          const hideDivider =
+            isSelected || virtualRow.index === selectedIndex - 1 || virtualRow.index === visible.length - 1;
 
           return (
             <div
-              key={virtualRow.key}
+              key={clip.path}
               data-index={virtualRow.index}
               ref={rowVirtualizer.measureElement}
               style={{
@@ -450,216 +501,194 @@ export const ClipsGallery: React.FC = () => {
                 top: 0,
                 left: 0,
                 width: "100%",
-                // Sin `height`: la mide `measureElement`. El hueco entre filas se
-                // hace con padding para que entre en esa medida.
-                paddingBottom: `${GRID_GAP}px`,
                 transform: `translateY(${virtualRow.start}px)`,
-                display: "grid",
-                gridTemplateColumns: `repeat(${columns}, 1fr)`,
-                gap: `${GRID_GAP}px`,
               }}
             >
-              {rowClips.map((clip) => {
-                const stored = links[clip.path];
-                const isUploading = uploading === clip.path;
-                const exp = expiry[clip.path] ?? "72h";
-                const isPermanent = exp === "permanent";
-                const kind = isPermanent ? "permanent" : "temporary";
-                const tooBig = clip.size > UPLOAD_LIMITS[kind];
-                const remaining = stored ? expiresAt(stored) - Date.now() : 0;
-                const match = matchById.get(clip.match_id);
+              {/* Tocar cualquier cosa de la fila (el vídeo, un botón, el
+                  selector) la selecciona: no hace falta un clic aparte. */}
+              <div
+                className="cg-row"
+                {...(isSelected ? { "data-selected": true } : {})}
+                {...(hideDivider ? { "data-nodivider": true } : {})}
+                onPointerDown={() => setSelectedPath(clip.path)}
+                onFocusCapture={() => setSelectedPath(clip.path)}
+              >
+                <div className="cg-thumb">
+                  <video src={streamUrl(clip.path)} controls preload="metadata" />
+                </div>
 
-                return (
-                  <motion.div
-                    key={clip.path}
-                    style={styles.card}
-                    whileHover={{ scale: 1.005 }}
-                  >
-                    <div style={styles.thumbnailWrapper}>
-                      <video
-                        src={streamUrl(clip.path)}
-                        style={styles.videoPreview}
-                        controls
-                        preload="metadata"
-                      />
-                    </div>
-                    <div style={styles.cardInfo}>
-                      <div style={styles.nameRow}>
-                        <span style={styles.clipName} title={clip.name}>{clip.name}</span>
-                        <button
-                          onClick={() => handleToggleFavorite(clip.path)}
-                          style={{ ...styles.iconBtn, background: "transparent", color: clip.favorite ? "var(--flag)" : "var(--faint)" }}
-                          title={t(clip.favorite ? "Remove from favourites" : "Add to favourites")}
-                          aria-label={t(clip.favorite ? "Remove from favourites" : "Add to favourites")}
-                        >
-                          <Heart size={16} fill={clip.favorite ? "var(--flag)" : "transparent"} />
-                        </button>
-                      </div>
-                      <div style={styles.metaRow}>
-                        {/* Era "De: match_20260813_022120", o sea el nombre de la
-                            carpeta. Lo que ubica un clip es de qué partida salió. */}
-                        <span style={styles.clipMatch} title={clip.match_id}>
+                <div className="cg-body">
+                  <div className="cg-top">
+                    <div className="cg-top__text">
+                      <span className="cg-title" title={clip.name}>{clip.name}</span>
+                      {/* Era "De: match_20260813_022120", o sea el nombre de la
+                          carpeta. Lo que ubica un clip es de qué partida salió. */}
+                      <span className="cg-meta" title={clip.match_id}>
+                        {match && <ChampionAvatar champion={match.champion} size={20} />}
+                        <span>
                           {match
-                            ? t("From {champion} · {date}", { champion: match.champion, date: match.date })
+                            ? t("From {champion} · {date}", { champion: match.champion, date: matchAge(match.date, t) })
                             : t("From {id}", { id: clip.match_id })}
                         </span>
-                        <span style={styles.sizeBadge}>{formatSize(clip.size)}</span>
-                      </div>
-
-                      <div style={styles.rowActions}>
-                        {match && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<PlaySquare size={13} />}
-                            onClick={() => openMatch(match)}
-                            title={t("Open the game this clip came from")}
-                          >
-                            {t("Open match")}
-                          </Button>
-                        )}
-                        <Button
-                          variant="icon"
-                          size="sm"
-                          icon={<FolderOpen size={14} />}
-                          title={t("Reveal in folder")}
-                          aria-label={t("Reveal in folder")}
-                          onClick={() => handleReveal(clip)}
-                        />
-                        <Button
-                          variant="icon"
-                          size="sm"
-                          icon={<Trash2 size={14} />}
-                          title={t("Delete clip")}
-                          aria-label={t("Delete clip")}
-                          onClick={() => handleDelete(clip)}
-                        />
-                      </div>
-
-                      <div style={styles.actions}>
-                        {stored ? (
-                          <>
-                            <div style={styles.linkRow}>
-                              <input
-                                readOnly
-                                value={stored.url}
-                                style={styles.linkInput}
-                                aria-label={t("Share link")}
-                                onFocus={(e) => e.target.select()}
-                              />
-                              <button
-                                onClick={() => copyLink(stored.url)}
-                                style={styles.iconBtn}
-                                title={t("Copy link")}
-                                aria-label={t("Copy link")}
-                              >
-                                {copied === stored.url ? <Check size={14} color="var(--cool)" /> : <Copy size={14} />}
-                              </button>
-                              <button
-                                onClick={() => openUrl(stored.url)}
-                                style={styles.iconBtn}
-                                title={t("Open in browser")}
-                                aria-label={t("Open in browser")}
-                              >
-                                <ExternalLink size={14} />
-                              </button>
-                            </div>
-                            <div style={styles.statusRow}>
-                              <span className="u-meta">
-                                {stored.expiry === "permanent" ? t("Permanent link") : formatRemaining(remaining)}
-                              </span>
-                              <button
-                                onClick={() => clearLink(clip.path)}
-                                style={styles.relinkBtn}
-                                title={t("Generate a new link")}
-                              >
-                                <RotateCcw size={11} /> {t("Re-upload")}
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={styles.expiryRow}>
-                              <Clock size={13} color="var(--faint)" />
-                              <select
-                                value={exp}
-                                disabled={isUploading}
-                                onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
-                                aria-label={t("How long the link lasts")}
-                                style={styles.select}
-                              >
-                                {EXPIRY_OPTIONS.map(o => (
-                                  <option key={o.value} value={o.value}>{t(o.label)}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <button
-                              onClick={() => handleUpload(clip)}
-                              disabled={isUploading || tooBig}
-                              style={{
-                                ...styles.uploadBtn,
-                                opacity: isUploading || tooBig ? 0.5 : 1,
-                                cursor: isUploading || tooBig ? "default" : "pointer",
-                              }}
-                            >
-                              {isUploading ? (
-                                <>
-                                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                                  {t("Uploading…")}
-                                </>
-                              ) : (
-                                <><UploadCloud size={14} /> {t("Upload & share")}</>
-                              )}
-                            </button>
-                            {/* Con progreso del backend, barra de verdad con los
-                                MB. Sin él todavía (los primeros segundos son
-                                handshake), la indeterminada con el tiempo que
-                                lleva: una barra que avanza sola sería una
-                                mentira útil, pero mentira. */}
-                            {isUploading && (
-                              uploadProg && uploadProg.total > 0 ? (
-                                <div>
-                                  <div style={styles.indeterminateTrack}>
-                                    <span
-                                      style={{
-                                        ...styles.progressFill,
-                                        width: `${Math.min(100, (100 * uploadProg.sent) / uploadProg.total)}%`,
-                                      }}
-                                    />
-                                  </div>
-                                  <span className="u-meta">
-                                    {t("{pct}% · {sent} of {total} MB", {
-                                      pct: Math.floor((100 * uploadProg.sent) / uploadProg.total),
-                                      sent: (uploadProg.sent / 1024 / 1024).toFixed(1),
-                                      total: (uploadProg.total / 1024 / 1024).toFixed(1),
-                                    })}
-                                  </span>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div style={styles.indeterminateTrack}>
-                                    <span style={styles.indeterminateFill} />
-                                  </div>
-                                  <span className="u-meta">
-                                    {t("{s}s elapsed", { s: uploadElapsed })}
-                                  </span>
-                                </div>
-                              )
-                            )}
-                            {tooBig && (
-                              <span style={styles.warn}>
-                                {isPermanent
-                                  ? t("Over the {limit} limit of the permanent link. Pick a temporary one.", { limit: LIMIT_LABEL.permanent })
-                                  : t("Over the {limit} limit. Clip a shorter moment.", { limit: LIMIT_LABEL.temporary })}
-                              </span>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      </span>
                     </div>
-                  </motion.div>
-                );
-              })}
+                    <button
+                      type="button"
+                      className="cg-fav"
+                      aria-pressed={clip.favorite}
+                      onClick={() => handleToggleFavorite(clip.path)}
+                      title={clip.favorite ? t("Remove from favourites") : t("Add to favourites")}
+                      aria-label={clip.favorite ? t("Remove from favourites") : t("Add to favourites")}
+                    >
+                      <Heart size={16} fill={clip.favorite ? "currentColor" : "transparent"} />
+                    </button>
+                  </div>
+
+                  <div className="cg-chips">
+                    <Badge tone="neutral" emphasis="solid">{formatSize(clip.size)}</Badge>
+                    {stored && (
+                      <Badge tone="win" emphasis="solid">
+                        {stored.expiry === "permanent" ? t("Permanent link") : formatRemaining(remaining)}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="cg-actions">
+                    {match && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={<PlaySquare size={14} />}
+                        onClick={() => openMatch(match)}
+                        title={t("Open the game this clip came from")}
+                      >
+                        {t("Open match")}
+                      </Button>
+                    )}
+                    <Button
+                      variant="icon"
+                      size="sm"
+                      icon={<FolderOpen size={15} />}
+                      title={t("Reveal in folder")}
+                      aria-label={t("Reveal in folder")}
+                      onClick={() => handleReveal(clip)}
+                    />
+                    <Button
+                      variant="icon"
+                      size="sm"
+                      icon={<Trash2 size={15} />}
+                      title={t("Delete clip")}
+                      aria-label={t("Delete clip")}
+                      onClick={() => handleDelete(clip)}
+                    />
+
+                    <div className="cg-actions__end">
+                      {stored ? (
+                        <>
+                          <div className="cg-link">
+                            <input
+                              readOnly
+                              value={stored.url}
+                              aria-label={t("Share link")}
+                              onFocus={(e) => e.target.select()}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => openUrl(stored.url)}
+                              title={t("Open in browser")}
+                              aria-label={t("Open in browser")}
+                            >
+                              <ExternalLink size={14} />
+                            </button>
+                          </div>
+                          <Button
+                            variant={isSelected ? "primary" : "ghost"}
+                            size="sm"
+                            icon={copied === stored.url ? <Check size={14} /> : <Copy size={14} />}
+                            onClick={() => copyLink(stored.url)}
+                          >
+                            {t("Copy link")}
+                          </Button>
+                          <Button
+                            variant="icon"
+                            size="sm"
+                            icon={<RotateCcw size={14} />}
+                            onClick={() => clearLink(clip.path)}
+                            title={t("Generate a new link")}
+                            aria-label={t("Re-upload")}
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <select
+                            className="cg-select"
+                            value={exp}
+                            disabled={isUploading}
+                            onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
+                            aria-label={t("How long the link lasts")}
+                            title={t("How long the link lasts")}
+                          >
+                            {EXPIRY_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{t(o.label)}</option>
+                            ))}
+                          </select>
+                          <Button
+                            variant={isSelected ? "primary" : "ghost"}
+                            size="sm"
+                            disabled={isUploading || tooBig}
+                            icon={
+                              isUploading
+                                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                                : <UploadCloud size={14} />
+                            }
+                            onClick={() => handleUpload(clip)}
+                          >
+                            {isUploading ? t("Uploading…") : t("Upload & share")}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Con progreso del backend, barra de verdad con los MB. Sin
+                      él todavía (los primeros segundos son handshake), la
+                      indeterminada con el tiempo que lleva: una barra que
+                      avanza sola sería una mentira útil, pero mentira. */}
+                  {isUploading && (
+                    uploadProg && uploadProg.total > 0 ? (
+                      <div className="cg-progress">
+                        <span className="cg-progress__track">
+                          <span
+                            className="cg-progress__fill"
+                            style={{ width: `${Math.min(100, (100 * uploadProg.sent) / uploadProg.total)}%` }}
+                          />
+                        </span>
+                        <span>
+                          {t("{pct}% · {sent} of {total} MB", {
+                            pct: Math.floor((100 * uploadProg.sent) / uploadProg.total),
+                            sent: (uploadProg.sent / 1024 / 1024).toFixed(1),
+                            total: (uploadProg.total / 1024 / 1024).toFixed(1),
+                          })}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="cg-progress">
+                        <span className="cg-progress__track">
+                          <span className="cg-progress__fill cg-progress__fill--pulse" />
+                        </span>
+                        <span>{t("{s}s elapsed", { s: uploadElapsed })}</span>
+                      </div>
+                    )
+                  )}
+                  {!stored && tooBig && (
+                    <p className="cg-warn">
+                      {isPermanent
+                        ? t("Over the {limit} limit of the permanent link. Pick a temporary one.", { limit: LIMIT_LABEL.permanent })
+                        : t("Over the {limit} limit. Clip a shorter moment.", { limit: LIMIT_LABEL.temporary })}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -668,235 +697,4 @@ export const ClipsGallery: React.FC = () => {
       )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: "flex",
-    flexDirection: "column",
-    padding: "var(--space-6) var(--space-8)",
-    height: "100%",
-    boxSizing: "border-box",
-    background: "transparent",
-  },
-  scrollArea: {
-    flex: 1,
-    overflowY: "auto",
-    position: "relative",
-  },
-  header: {
-    display: "flex",
-    alignItems: "baseline",
-    gap: "var(--space-3)",
-    margin: "0 0 var(--space-3) 0",
-  },
-  title: {
-    color: "var(--text)",
-    margin: 0,
-    fontSize: "var(--font-xl)",
-  },
-  tools: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    flexWrap: "wrap",
-    padding: "var(--space-3) 0",
-    borderTop: "1px solid var(--line-soft)",
-    borderBottom: "1px solid var(--line-soft)",
-    marginBottom: "var(--space-4)",
-  },
-  emptyState: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    height: "100%",
-  },
-  card: {
-    background: "var(--media-sheen)",
-    borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--line)",
-    overflow: "hidden",
-    display: "grid",
-    gridTemplateColumns: "224px 1fr",
-    height: 210,
-  },
-  thumbnailWrapper: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "var(--sunken)",
-    position: "relative",
-    borderRight: "1px solid var(--line-soft)",
-  },
-  videoPreview: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
-  cardInfo: {
-    padding: "var(--space-3) var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: "var(--space-2)",
-    minWidth: 0,
-    overflow: "hidden",
-  },
-  nameRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "var(--space-2)",
-  },
-  clipName: {
-    color: "var(--text)",
-    fontSize: "var(--font-md)",
-    fontWeight: 500,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  metaRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  clipMatch: {
-    color: "var(--faint)",
-    fontSize: "var(--font-xs)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  sizeBadge: {
-    color: "var(--muted)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 500,
-    flexShrink: 0,
-  },
-  rowActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  actions: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-  },
-  expiryRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-  },
-  select: {
-    flex: 1,
-    background: "var(--sunken)",
-    color: "var(--text)",
-    border: "1px solid var(--line)",
-    borderRadius: "var(--radius-md)",
-    padding: "6px 8px",
-    fontSize: "var(--font-xs)",
-    cursor: "pointer",
-    outline: "none",
-  },
-  uploadBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "var(--space-2)",
-    padding: "var(--space-2)",
-    borderRadius: "var(--radius-md)",
-    fontSize: "var(--font-xs)",
-    fontWeight: 500,
-    // Fantasma, no relleno: hay un botón por clip y el relleno de acción es
-    // para UNA acción por pantalla. Con seis clips a la vista eran seis
-    // botones naranjas.
-    background: "transparent",
-    border: "none",
-    boxShadow: "inset 0 0 0 1px var(--hair-strong)",
-    color: "var(--text)",
-  },
-  indeterminateTrack: {
-    height: 3,
-    background: "var(--sunken)",
-    borderRadius: "var(--radius-full)",
-    overflow: "hidden",
-    boxShadow: "var(--inset-sunken)",
-  },
-  indeterminateFill: {
-    display: "block",
-    width: "100%",
-    height: "100%",
-    borderRadius: "var(--radius-full)",
-    background: "var(--cool)",
-    // Latido, no barrido: dice "sigue vivo", no "va por la mitad". Reutiliza el
-    // keyframe `pulse` que ya existe en index.css en vez de traerse el suyo.
-    animation: "pulse 1.4s ease-in-out infinite",
-  },
-  progressFill: {
-    display: "block",
-    height: "100%",
-    borderRadius: "var(--radius-full)",
-    background: "var(--cool)",
-    transition: "width var(--t-quick) var(--e-move)",
-  },
-  warn: {
-    color: "var(--signal)",
-    fontSize: "11px",
-    lineHeight: 1.4,
-  },
-  linkRow: {
-    display: "flex",
-    width: "100%",
-    gap: "6px",
-    background: "var(--sunken)",
-    padding: "4px",
-    borderRadius: "var(--radius-md)",
-    alignItems: "center",
-    boxShadow: "var(--inset-sunken)",
-  },
-  linkInput: {
-    flex: 1,
-    minWidth: 0,
-    background: "transparent",
-    color: "var(--text)",
-    border: "none",
-    fontFamily: "var(--font-mono)",
-    fontSize: "11px",
-    outline: "none",
-    padding: "0 4px",
-  },
-  iconBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "var(--surface-2)",
-    border: "1px solid var(--glass-line-soft)",
-    color: "var(--muted)",
-    borderRadius: "var(--radius-sm)",
-    padding: "6px",
-    cursor: "pointer",
-    flexShrink: 0,
-  },
-  statusRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  relinkBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    background: "transparent",
-    border: "none",
-    color: "var(--muted)",
-    fontSize: "11px",
-    cursor: "pointer",
-    padding: 0,
-  },
 };

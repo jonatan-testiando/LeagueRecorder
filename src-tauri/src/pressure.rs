@@ -173,6 +173,15 @@ pub struct PressureWindow {
     pub game_start: f64,
     #[serde(default)]
     pub game_end: f64,
+    /// Rivales que tuviste encima y cuánto tiempo cada uno.
+    #[serde(default)]
+    pub ties: Vec<crate::pressure_value::EnemyTie>,
+    /// Lo que valió el episodio, en oro. Ver `crate::pressure_value`.
+    #[serde(default)]
+    pub value: crate::pressure_value::PressureValue,
+    /// Lo que el rival sacó lejos mientras tanto. Contexto, no coste tuyo.
+    #[serde(default)]
+    pub context: Vec<PressureEvidence>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -183,6 +192,9 @@ pub struct PressureEvidence {
     pub kind: String,
     pub gold: f64,
     pub after_episode: bool,
+    /// Pasó donde estabas tú (resultado de la pelea), no lejos.
+    #[serde(default)]
+    pub local: bool,
 }
 
 impl PressureWindow {
@@ -278,6 +290,7 @@ pub fn detect(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Pressure
 ///
 /// Es opcional por diseño: si la partida no tiene vídeo procesado, se devuelven
 /// los tramos tal cual.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn refinar_con_video(
     ventanas: &mut [PressureWindow],
     pos: &crate::minimap::Positions,
@@ -297,6 +310,7 @@ pub fn refinar_con_video(
 
 /// Igual que `refinar_con_video` pero con los radios abiertos, para barrerlos
 /// en las pruebas contra las muertes, que son la verja objetiva.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn refinar_con_video_with(
     ventanas: &mut [PressureWindow],
     pos: &crate::minimap::Positions,
@@ -549,6 +563,7 @@ pub fn detect_with(
         .unwrap_or(0.0);
 
     let muertes = muertes_de(tl);
+    let vivos = crate::pressure_value::Vivos::build(tl);
 
     let mut out = Vec::new();
     for (idx, p) in participants.iter().enumerate() {
@@ -560,29 +575,49 @@ pub fn detect_with(
         let mut abierto: Option<PressureWindow> = None;
         let mut sec = 0.0;
         while sec <= fin {
-            let (enemigos, seguros, aliados, pos) = match occ.estimate(pid, sec) {
-                Some(e) => (
-                    occ.committed(participants, rival, sec, e.x, e.y, radio),
-                    occ.committed_sure(participants, rival, sec, e.x, e.y, radio, CERTEZA),
+            // Solo cuentan los VIVOS. Un muerto no está sujeto a nadie ni
+            // sujeta a nadie, y contarlo convertía el final de una pelea
+            // perdida en "presión absorbida".
+            let estimado = occ.estimate(pid, sec).filter(|_| vivos.alive(pid, sec));
+            let (enemigos, seguros, aliados, pos) = match estimado {
+                Some(e) => {
+                    let (mut enemigos, mut seguros) = (0.0, 0usize);
                     // Incluye al propio jugador, que siempre suma 1 en su
                     // posición: es justo lo que interesa contar.
-                    occ.committed(participants, p.teamId, sec, e.x, e.y, radio),
-                    (e.x, e.y),
-                ),
+                    let mut aliados = 1.0;
+                    for (j, q) in participants.iter().enumerate() {
+                        let qid = (j + 1) as i32;
+                        if qid == pid || !vivos.alive(qid, sec) {
+                            continue;
+                        }
+                        let c = occ.presence(qid, sec, e.x, e.y, radio);
+                        if q.teamId == rival {
+                            enemigos += c;
+                            seguros += usize::from(c >= CERTEZA);
+                        } else {
+                            aliados += c;
+                        }
+                    }
+                    (enemigos, seguros, aliados, (e.x, e.y))
+                }
                 None => (0.0, 0, 0.0, (0.0, 0.0)),
             };
 
-            // La condición que define el fenómeno, y que faltaba: no basta con
-            // tener rivales encima, hay que tener MÁS rivales que aliados. Si
-            // hay 4 y 4, eso es una pelea; el equipo no gana nada en otra zona.
-            // Con `enemigos > aliados`, los que quedan sueltos por el mapa son
+            // La condición que define el fenómeno: no basta con tener rivales
+            // encima, hay que tener MÁS rivales que aliados. Si hay 4 y 4, eso
+            // es una pelea; el equipo no gana nada en otra zona. Con
+            // `enemigos > aliados`, los que quedan sueltos por el mapa son
             // menos que los tuyos: ahí es donde nace la ventaja.
             //
-            // Sin esto salían 70 tramos por partida —básicamente toda la fase
-            // final, donde todo el mundo va junto— en vez de los episodios
-            // reales de tirar de gente.
-            // Además de estar en inferioridad, tiene que haber combate contra
-            // campeones: sin esto, estar cerca de rivales contaba como aguantarlos.
+            // Contando solo a los VIVOS (2026-09-23). Se probaron, medidas
+            // contra el vídeo en 14 partidas con minimapa (`verdad_de_video`),
+            // dos condiciones más estrictas: un tope de un aliado contigo y
+            // exigir ventaja numérica fuera. Ninguna subió la precisión (56-60 %
+            // en todas) y las dos hundían la cobertura. La API no ve lo bastante
+            // bien a los aliados cercanos como para decidir con ellos; donde hay
+            // vídeo, manda el vídeo (`detectar_con_video`).
+            // Además tiene que haber combate contra campeones: sin esto, estar
+            // cerca de rivales contaba como aguantarlos.
             // OJO con el índice: `dano` guarda cada intervalo bajo la clave del
             // fotograma que lo CIERRA, así que el daño del minuto que contiene
             // `sec` está en la clave siguiente. Consultarlo sin el +1 miraba el
@@ -645,6 +680,9 @@ pub fn detect_with(
                             assessment: String::new(),
                             game_start: sec,
                             game_end: sec,
+                            ties: Vec::new(),
+                            value: Default::default(),
+                            context: Vec::new(),
                         });
                     }
                 }
@@ -730,10 +768,182 @@ pub fn analyse(
 ) -> Vec<PressureWindow> {
     let mut windows = detect(tl, participants);
     if let Some(pos) = video {
-        refinar_con_video(&mut windows, pos, tl, participants);
+        // Donde el vídeo te vio, manda el vídeo: sus episodios sustituyen a los
+        // de la API para el jugador grabado. Donde no te vio (rastro pobre),
+        // se conservan los de la API que no pisen ninguno del vídeo.
+        let yo = pos.self_participant_id;
+        let (propios, pista) = detectar_con_video(pos, tl, participants);
+        if !pista.is_empty() {
+            windows.retain(|w| {
+                if w.participant_id != yo {
+                    return true;
+                }
+                let vistos = pista.iter().filter(|f| f.sec >= w.start && f.sec <= w.end).count() as f64;
+                let esperados = ((w.end - w.start) * pos.fps).max(1.0);
+                let solapa = propios.iter().any(|p| p.start <= w.end + CORTE && p.end >= w.start - CORTE);
+                vistos / esperados < COBERTURA_MINIMA && !solapa
+            });
+            windows.extend(propios);
+        }
     }
     finalize(&mut windows, tl, participants);
+    valorar(&mut windows, tl, participants);
     windows
+}
+
+/// Lo mínimo que tiene que durar un episodio visto en el vídeo. El vídeo no
+/// necesita el margen de `MINIMO_SEGUNDOS` (que existe por estimar entre
+/// minutos): cuatro segundos seguidos con dos rivales encima ya no son un cruce.
+const MINIMO_VIDEO: f64 = 4.0;
+
+/// Hueco que une dos trozos del vídeo en un mismo episodio. Más largo que
+/// `HUECO_VIDEO`: el icono parpadea (el detector ve el 75 %) y un rival puede
+/// salir un momento del radio, pero sigue siendo la misma persecución. Con 4 s
+/// salían cuatro episodios de 5 s en el mismo minuto.
+const UNE_VIDEO: f64 = 10.0;
+
+/// Cuánto se mira hacia atrás para saber si el episodio nació de una pelea de
+/// equipo. Si justo antes tenías a dos aliados contigo, quedarte solo contra
+/// tres no es que vinieran a por ti: es el final de una pelea que se perdió.
+const ANTES_DE_PELEA: f64 = 8.0;
+
+/// Episodios del jugador grabado sacados directamente del minimapa.
+///
+/// Por qué no basta con ajustar los de la API: medido en 14 partidas con
+/// minimapa (`verdad_de_video`), el vídeo ve 61 episodios en los que tenías dos
+/// o más rivales encima y más rivales que aliados; el detector de la API solo
+/// solapaba con 9–17 de ellos, y la mitad de sus tramos caían donde el vídeo no
+/// ve presión ninguna. Ajustar bordes no arregla un tramo que no existe ni
+/// crea uno que falta.
+///
+/// Mismo criterio que la API, contado con iconos: 2+ rivales a menos de
+/// `RIVAL_ENCIMA_VIDEO` y más rivales que tú más los aliados que te
+/// acompañan. Tu muerte cercana ancla el final, como en el ajuste.
+pub fn detectar_con_video(
+    pos: &crate::minimap::Positions,
+    tl: &TimelineDto,
+    participants: &[ParticipantDto],
+) -> (Vec<PressureWindow>, Vec<crate::minimap::Fix>) {
+    let yo = pos.self_participant_id;
+    let Some(p) = participants.get((yo - 1).max(0) as usize) else { return (Vec::new(), Vec::new()) };
+    let anclas: Vec<(f64, f64, f64)> = tl
+        .info
+        .frames
+        .iter()
+        .filter_map(|f| {
+            let q = f.participantFrames.get(&yo.to_string())?.position.as_ref()?;
+            Some((f.timestamp as f64 / 1000.0, q.x as f64, q.y as f64))
+        })
+        .collect();
+    let pista = pos.follow(&anclas);
+    let vivos = crate::pressure_value::Vivos::build(tl);
+    let occ = Occupancy::build(tl, participants);
+    let muertes = muertes_de(tl);
+
+    let mut instantes: Vec<(f64, f64, f64, usize)> = Vec::new();
+    for f in &pista {
+        if !vivos.alive(yo, f.sec) {
+            continue;
+        }
+        let (Some(e), Some(a)) = (
+            pos.enemies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO),
+            pos.allies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO),
+        ) else {
+            continue;
+        };
+        let otros = a.saturating_sub(1); // tu propio icono
+        if e >= MINIMO_RIVALES && e > otros + 1 {
+            instantes.push((f.sec, f.x, f.y, e));
+        }
+    }
+
+    let mut grupos: Vec<Vec<(f64, f64, f64, usize)>> = Vec::new();
+    for i in instantes {
+        match grupos.last_mut() {
+            Some(g) if i.0 - g.last().unwrap().0 <= UNE_VIDEO => g.push(i),
+            _ => grupos.push(vec![i]),
+        }
+    }
+    // Fuera los que nacen de una pelea de equipo: dos o más aliados contigo
+    // en los segundos de antes.
+    grupos.retain(|g| {
+        let t0 = g[0].0;
+        !pista.iter().filter(|f| f.sec >= t0 - ANTES_DE_PELEA && f.sec <= t0 + 1.0).any(|f| {
+            pos.allies_near(f.sec, f.x, f.y, RIVAL_SE_FUE).is_some_and(|a| a.saturating_sub(1) >= 2)
+        })
+    });
+
+    let mut out = Vec::new();
+    for g in grupos {
+        let (mut start, mut end) = (g[0].0, g.last().unwrap().0);
+        let murio = muertes
+            .iter()
+            .find(|(pid, s)| *pid == yo && *s >= start - HUECO_VIDEO && *s <= end + PASO)
+            .map(|(_, s)| *s);
+        if let Some(s) = murio {
+            start = start.min(s);
+            end = end.max(s);
+        }
+        // Si acabó en tu muerte basta con menos: te pillaron. Pero no con
+        // nada: un instante suelto antes de morir no es un episodio.
+        if end - start < if murio.is_some() { 2.0 } else { MINIMO_VIDEO } {
+            continue;
+        }
+        let pico = g.iter().max_by_key(|i| i.3).copied().unwrap();
+        let ties = crate::pressure_value::atados_video(&occ, &vivos, participants, yo, &g, RIVAL_ENCIMA);
+        out.push(PressureWindow {
+            participant_id: yo,
+            champion: p.championName.clone(),
+            start,
+            end,
+            max_enemies: pico.3 as f64,
+            enemy_count: pico.3,
+            x: pico.1,
+            y: pico.2,
+            lane: crate::gank::Lane::nearest_within(pico.1, pico.2, crate::camera_input::RADIO_CARRIL)
+                .map(|l| l.key().to_string()),
+            died: false,
+            gold_elsewhere: 0.0,
+            wpa_elsewhere: 0.0,
+            towers_elsewhere: 0,
+            inhibs_elsewhere: 0,
+            plates_elsewhere: 0,
+            epics_elsewhere: 0,
+            from_video: true,
+            gains: Vec::new(),
+            losses: Vec::new(),
+            death_gold: 0.0,
+            assessment: String::new(),
+            game_start: start,
+            game_end: end,
+            ties,
+            value: Default::default(),
+            context: Vec::new(),
+        });
+    }
+    (out, pista)
+}
+
+/// Cierra el valor en oro de cada episodio: a quién ataste y cuánto tiempo,
+/// cuánto farmeo les costó y el neto. La evidencia (lo del sitio y lo de lejos)
+/// ya la ha repartido `finalize`. Ver `crate::pressure_value`.
+fn valorar(windows: &mut [PressureWindow], tl: &TimelineDto, participants: &[ParticipantDto]) {
+    let occ = Occupancy::build(tl, participants);
+    let vivos = crate::pressure_value::Vivos::build(tl);
+    for w in windows.iter_mut() {
+        // Los episodios del vídeo ya traen a quién ataste, contado con iconos.
+        let mut ties = if w.ties.is_empty() {
+            crate::pressure_value::atados(
+                &occ, &vivos, participants, w.participant_id, w.start, w.end, RIVAL_ENCIMA, w.enemy_count,
+            )
+        } else {
+            std::mem::take(&mut w.ties)
+        };
+        let muerte = w.losses.iter().find(|l| l.kind == "death").map(|l| l.game_time);
+        crate::pressure_value::cerrar_valor(&mut w.value, &mut ties, tl, w.participant_id, w.start, w.end, muerte);
+        w.ties = ties;
+        w.assessment = w.value.verdict.clone();
+    }
 }
 
 fn finalize(windows: &mut Vec<PressureWindow>, tl: &TimelineDto, participants: &[ParticipantDto]) {
@@ -763,6 +973,8 @@ fn finalize(windows: &mut Vec<PressureWindow>, tl: &TimelineDto, participants: &
         w.game_end = w.end;
         w.gains.clear();
         w.losses.clear();
+        w.context.clear();
+        w.value = Default::default();
         w.death_gold = 0.0;
         w.died = false;
         // Legacy model credit is not spatially attributable; never expose it
@@ -774,65 +986,109 @@ fn finalize(windows: &mut Vec<PressureWindow>, tl: &TimelineDto, participants: &
         w.plates_elsewhere = 0;
         w.epics_elsewhere = 0;
     }
+    // Cada evento se clasifica, para cada jugador con un episodio abierto, en
+    // una de tres cajas, según DÓNDE pasó respecto a él:
+    //
+    // - **En el sitio** (a menos de `RADIO_LOCAL`, durante el episodio): es el
+    //   resultado de la pelea. Lo que gana tu equipo suma —también si lo haces
+    //   tú: "si estoy fuerte puedo contra todos"— y lo que pierde resta.
+    // - **Lejos** (a más de `OTRA_ZONA`, durante el episodio y `COLA` después):
+    //   lo que tu equipo saca de la ventaja numérica. Sin tu participación.
+    // - Lo que el rival saca **lejos** se guarda como contexto, no como coste.
+    //
+    // Entre `RADIO_LOCAL` y `OTRA_ZONA` no se atribuye a nada: no se sabe si
+    // es tu pelea o la de otro. Tu propia muerte cuenta siempre como del sitio
+    // aunque te persigan lejos.
+    //
+    // Antes, cualquier cosa del rival en todo el mapa era un coste tuyo. En una
+    // pelea 5 contra 5 eso metía como "pérdida" la muerte de cada aliado.
     let team_of = |pid: i32| participants.get(pid.checked_sub(1)? as usize).map(|p| p.teamId);
     for (fi, frame) in tl.info.frames.iter().enumerate() {
         for (ei, ev) in frame.events.iter().enumerate() {
             let sec = ev.timestamp as f64 / 1000.0;
-            let kind = match ev.event_type.as_str() {
-                "CHAMPION_KILL" => "kill",
-                "BUILDING_KILL" if ev.buildingType.as_deref() == Some("INHIBITOR_BUILDING") => "inhibitor",
-                "BUILDING_KILL" => "tower",
-                "TURRET_PLATE_DESTROYED" => "plate",
-                "ELITE_MONSTER_KILL" => "epic",
-                _ => continue,
-            };
-            // For destroyed structures teamId is the OWNER, including kills
-            // credited to minions (killerId == 0).
-            let event_team = if matches!(kind, "tower" | "inhibitor" | "plate") && matches!(ev.teamId, 100 | 200) {
-                Some(300 - ev.teamId)
-            } else if matches!(ev.killerTeamId, 100 | 200) {
-                Some(ev.killerTeamId)
-            } else { team_of(ev.killerId) };
-            let gold = if kind == "kill" { (ev.bounty + ev.shutdownBounty).max(0) as f64 } else { 0.0 };
+            let Some((kind, gold)) = crate::pressure_value::valor_evento(ev) else { continue };
+            let event_team = crate::pressure_value::equipo_del_evento(ev, participants);
+            let victim_team = if kind == "kill" { team_of(ev.victimId) } else { None };
+            let pos = ev.position.as_ref().map(|p| (p.x as f64, p.y as f64));
             for pid in 1..=participants.len() as i32 {
                 let Some(team) = team_of(pid) else { continue };
                 let own_death = kind == "kill" && ev.victimId == pid;
-                let gain = event_team == Some(team) && !own_death;
-                let loss = own_death || event_team.is_some_and(|t| t != team);
-                if !gain && !loss { continue; }
-                if gain && (ev.killerId == pid || ev.assistingParticipantIds.contains(&pid)) { continue; }
+                let participo = ev.killerId == pid || ev.assistingParticipantIds.contains(&pid);
                 // Exactly one owner per event and player. Prefer an episode
                 // still in progress, then the nearest preceding episode.
-                let owner = windows.iter().enumerate()
-                    .filter(|(_, w)| w.participant_id == pid && sec >= w.start
-                        && sec <= w.end + COLA)
-                    .filter(|(_, w)| !gain || ev.position.as_ref().is_some_and(|p|
-                        ((p.x as f64 - w.x).powi(2) + (p.y as f64 - w.y).powi(2)).sqrt() >= OTRA_ZONA))
-                    .min_by(|(_, a), (_, b)| {
-                        (sec > a.end).cmp(&(sec > b.end))
-                            .then((sec - a.end).abs().total_cmp(&(sec - b.end).abs()))
-                            .then(a.start.total_cmp(&b.start))
-                    }).map(|(i, _)| i);
-                let Some(i) = owner else { continue };
+                let mut mejor: Option<(usize, &'static str)> = None;
+                let mut clave_mejor = (true, f64::MAX, f64::MAX);
+                for (i, w) in windows.iter().enumerate() {
+                    if w.participant_id != pid || sec < w.start {
+                        continue;
+                    }
+                    let d = pos.map(|(x, y)| ((x - w.x).powi(2) + (y - w.y).powi(2)).sqrt());
+                    let en_episodio = sec <= w.end + PASO;
+                    let caja = if own_death && en_episodio {
+                        "loss"
+                    } else if en_episodio && d.is_some_and(|d| d < crate::pressure_value::RADIO_LOCAL) {
+                        if event_team == Some(team) {
+                            "local_gain"
+                        } else if victim_team == Some(team) || (kind != "kill" && event_team.is_some()) {
+                            "loss"
+                        } else {
+                            continue;
+                        }
+                    } else if sec <= w.end + COLA && d.is_some_and(|d| d >= OTRA_ZONA) {
+                        if event_team == Some(team) && !participo {
+                            "gain"
+                        } else if event_team.is_some_and(|t| t != team) {
+                            "context"
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    };
+                    let clave = (sec > w.end, (sec - w.end).abs(), w.start);
+                    if mejor.is_none() || clave < clave_mejor {
+                        mejor = Some((i, caja));
+                        clave_mejor = clave;
+                    }
+                }
+                let Some((i, caja)) = mejor else { continue };
                 let w = &mut windows[i];
                 let evidence = PressureEvidence {
                     id: format!("{fi}:{ei}"), time: sec, game_time: sec,
                     kind: if own_death { "death".into() } else { kind.into() },
-                    gold, after_episode: sec > w.end,
+                    gold, after_episode: sec > w.end, local: matches!(caja, "local_gain" | "loss"),
                 };
-                if gain {
-                    w.gold_elsewhere += gold;
-                    match kind {
-                        "tower" => w.towers_elsewhere += 1,
-                        "inhibitor" => w.inhibs_elsewhere += 1,
-                        "plate" => w.plates_elsewhere += 1,
-                        "epic" => w.epics_elsewhere += 1,
-                        _ => (),
+                match caja {
+                    "gain" => {
+                        if kind == "kill" {
+                            w.gold_elsewhere += gold;
+                        }
+                        match kind {
+                            "tower" => w.towers_elsewhere += 1,
+                            "inhibitor" => w.inhibs_elsewhere += 1,
+                            "plate" => w.plates_elsewhere += 1,
+                            "epic" => w.epics_elsewhere += 1,
+                            _ => (),
+                        }
+                        w.value.team_elsewhere += gold;
+                        w.gains.push(evidence);
                     }
-                    w.gains.push(evidence);
-                } else {
-                    if own_death { w.died = true; w.death_gold += gold; }
-                    w.losses.push(evidence);
+                    "local_gain" => {
+                        w.value.local_gold += gold;
+                        w.gains.push(evidence);
+                    }
+                    "loss" => {
+                        if own_death {
+                            w.died = true;
+                            w.death_gold += gold;
+                        }
+                        w.value.local_gold -= gold;
+                        w.losses.push(evidence);
+                    }
+                    _ => {
+                        w.value.enemy_elsewhere += gold;
+                        w.context.push(evidence);
+                    }
                 }
             }
         }
@@ -866,14 +1122,15 @@ mod regression {
             died: false, gold_elsewhere: 0.0, wpa_elsewhere: 0.0, towers_elsewhere: 0,
             inhibs_elsewhere: 0, plates_elsewhere: 0, epics_elsewhere: 0,
             from_video: false, gains: vec![], losses: vec![], death_gold: 0.0,
-            assessment: String::new(), game_start: start, game_end: end }
+            assessment: String::new(), game_start: start, game_end: end,
+            ties: vec![], value: Default::default(), context: vec![] }
     }
     fn timeline(events: serde_json::Value) -> TimelineDto {
         serde_json::from_value(json!({"info": {"frames": [{"timestamp": 180000, "events": events}]}})).unwrap()
     }
     fn tower(time: i64) -> serde_json::Value {
         json!({"type": "BUILDING_KILL", "timestamp": time * 1000, "killerId": 0,
-            "teamId": 200, "buildingType": "TOWER_BUILDING", "position": {"x": 10000, "y": 10000}})
+            "teamId": 200, "buildingType": "TOWER_BUILDING", "towerType": "OUTER_TURRET", "position": {"x": 10000, "y": 10000}})
     }
 
     #[test]
@@ -927,28 +1184,185 @@ mod regression {
     }
 
     #[test]
-    fn local_and_direct_gains_are_excluded_and_tail_is_bounded() {
+    fn local_result_counts_direct_elsewhere_does_not_and_tail_is_bounded() {
+        // Lo del sitio es el resultado de la pelea: cuenta aunque lo hagas tú.
         let mut local = tower(110);
         local["position"] = json!({"x":1000,"y":1000});
+        // Lejos y con tu participación: es trabajo directo, no fruto de la presión.
         let mut direct = tower(111);
         direct["killerId"] = json!(1);
         let mut ws = vec![window(100.0, 120.0)];
         finalize(&mut ws, &timeline(json!([local, direct, tower(140), tower(141)])), &players());
-        assert_eq!(ws[0].gains.len(), 1);
-        assert_eq!(ws[0].gains[0].time, 140.0);
-        assert!(ws[0].gains[0].after_episode);
+        let lejos: Vec<_> = ws[0].gains.iter().filter(|g| !g.local).collect();
+        assert_eq!(lejos.len(), 1);
+        assert_eq!(lejos[0].time, 140.0);
+        assert!(lejos[0].after_episode);
+        assert_eq!(ws[0].gains.iter().filter(|g| g.local).count(), 1);
+        assert!(ws[0].value.local_gold > 0.0 && ws[0].value.team_elsewhere > 0.0);
     }
 
     #[test]
-    fn concurrent_enemy_objectives_are_costs_not_personal_blame() {
+    fn enemy_gains_elsewhere_are_context_not_your_cost() {
         let mut enemy = tower(115);
         enemy["teamId"] = json!(100);
         let mut ws = vec![window(100.0, 120.0)];
         finalize(&mut ws, &timeline(json!([enemy])), &players());
-        assert_eq!(ws[0].losses.len(), 1);
+        assert!(ws[0].losses.is_empty());
+        assert_eq!(ws[0].context.len(), 1);
+        assert!(ws[0].value.enemy_elsewhere > 0.0);
+        assert_eq!(ws[0].value.local_gold, 0.0);
         assert!(!ws[0].died);
         assert_eq!(ws[0].death_gold, 0.0);
-        assert_eq!(ws[0].assessment, "cost_without_gain");
+    }
+
+    /// El cálculo entero sobre las partidas grabadas del usuario, con su vídeo
+    /// cuando lo hay. `MIS_PARTIDAS_DIR` = carpeta de grabaciones.
+    #[test]
+    fn valor_en_mis_partidas() {
+        let Ok(dir) = std::env::var("MIS_PARTIDAS_DIR") else { return };
+        let mut ids: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten()
+            .filter_map(|e| e.file_name().to_str().filter(|n| n.starts_with("match_")).map(str::to_string))
+            .collect();
+        ids.sort();
+        let (mut eps, mut buenas, mut malas, mut neto, mut atado) = (0usize, 0usize, 0usize, 0.0, 0.0);
+        let mut comp = [0.0f64; 7]; // farmeo rival, propio, muerto, sitio, lejos, rival lejos, muertes
+        let mut partidas = 0usize;
+        for id in ids {
+            let base = format!("{dir}/{id}");
+            let (Ok(m), Ok(t), Ok(meta)) = (
+                std::fs::read_to_string(format!("{base}/riot_match.json")),
+                std::fs::read_to_string(format!("{base}/riot_timeline.json")),
+                std::fs::read_to_string(format!("{base}/{id}.json")),
+            ) else { continue };
+            let m: serde_json::Value = serde_json::from_str(&m).unwrap();
+            let tl: TimelineDto = serde_json::from_str(&t).unwrap();
+            let meta: serde_json::Value = serde_json::from_str(&meta).unwrap();
+            let ps: Vec<ParticipantDto> = serde_json::from_value(m["info"]["participants"].clone()).unwrap();
+            let champ = meta["champion"].as_str().unwrap_or("");
+            let Some(idx) = ps.iter().position(|p| p.championName == champ) else { continue };
+            let pid = (idx + 1) as i32;
+            let video = crate::minimap::Positions::load(&id);
+            let ws = analyse(&tl, &ps, video.as_ref());
+            partidas += 1;
+            println!("\n{id}  {champ}{}", if video.is_some() { "  [vídeo]" } else { "" });
+            for w in ws.iter().filter(|w| w.participant_id == pid) {
+                eps += 1;
+                let v = &w.value;
+                neto += v.net;
+                comp[0] += v.farm_denied; comp[1] += v.own_farm_lost; comp[2] += v.death_farm_lost;
+                comp[3] += v.local_gold; comp[4] += v.team_elsewhere; comp[5] += v.enemy_elsewhere;
+                comp[6] += if w.died { 1.0 } else { 0.0 };
+                atado += v.enemy_seconds;
+                buenas += usize::from(v.verdict == "good");
+                malas += usize::from(v.verdict == "bad");
+                let quien: Vec<String> = w.ties.iter().map(|t| format!("{} {:.0}s", t.champion, t.seconds)).collect();
+                println!(
+                    "  {:>2}:{:02} +{:>3.0}s {:<5} rivales[{}] farmeo−rival {:>4.0} propio −{:>3.0} muerto −{:>3.0} sitio {:>+5.0} lejos {:>+5.0} (rival lejos {:>4.0}) = {:>+5.0}{}",
+                    (w.start / 60.0) as i64, (w.start % 60.0) as i64, w.end - w.start, v.verdict,
+                    quien.join(", "), v.farm_denied, v.own_farm_lost, v.death_farm_lost, v.local_gold, v.team_elsewhere,
+                    v.enemy_elsewhere, v.net, if w.died { "  †" } else { "" }
+                );
+            }
+        }
+        println!(
+            "\n{partidas} partidas · {eps} episodios · buenos {buenas} · malos {malas} · neto total {neto:+.0} · rival atado {:.0} min",
+            atado / 60.0
+        );
+        println!("componentes: farmeo rival {:.0} · propio {:.0} · muerto {:.0} · sitio {:.0} · lejos {:.0} · rival lejos {:.0} · muertes {:.0}",
+            comp[0], comp[1], comp[2], comp[3], comp[4], comp[5], comp[6]);
+    }
+
+    /// Verdad de campo del vídeo para elegir la condición de detección.
+    ///
+    /// En las partidas con minimapa procesado, cada medio segundo se sabe
+    /// cuántos rivales y aliados tienes alrededor. Un instante es de **presión**
+    /// si hay 2+ rivales y más rivales que aliados contigo más uno, y de
+    /// **pelea** si además hay 2+ aliados contigo. Se agrupan en episodios y se
+    /// mide, para cada variante del detector de la API, cuántos de sus tramos
+    /// caen sobre presión real (precisión) y cuántos episodios reales pilla
+    /// (cobertura). También se evalúa lo que había en caché (detector viejo).
+    #[test]
+    fn verdad_de_video() {
+        let Ok(dir) = std::env::var("MIS_PARTIDAS_DIR") else { return };
+        let r = RIVAL_ENCIMA_VIDEO;
+        let mut ids: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten()
+            .filter_map(|e| e.file_name().to_str().filter(|n| n.starts_with("match_")).map(str::to_string))
+            .collect();
+        ids.sort();
+        let (mut reales, mut reales_pillados) = (0usize, 0usize);
+        let (mut tramos, mut sobre_presion, mut sobre_pelea, mut sobre_nada) = (0usize, 0usize, 0usize, 0usize);
+        let (mut v_tramos, mut v_presion, mut v_pelea, mut v_nada) = (0usize, 0usize, 0usize, 0usize);
+        for id in ids {
+            let base = format!("{dir}/{id}");
+            let Some(pos) = crate::minimap::Positions::load(&id) else { continue };
+            let (Ok(m), Ok(t)) = (
+                std::fs::read_to_string(format!("{base}/riot_match.json")),
+                std::fs::read_to_string(format!("{base}/riot_timeline.json")),
+            ) else { continue };
+            let m: serde_json::Value = serde_json::from_str(&m).unwrap();
+            let tl: TimelineDto = serde_json::from_str(&t).unwrap();
+            let ps: Vec<ParticipantDto> = serde_json::from_value(m["info"]["participants"].clone()).unwrap();
+            let yo = pos.self_participant_id;
+            let anclas: Vec<(f64, f64, f64)> = tl.info.frames.iter().filter_map(|f| {
+                let p = f.participantFrames.get(&yo.to_string())?.position.as_ref()?;
+                Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
+            }).collect();
+            let pista = pos.follow(&anclas);
+            // Instantes clasificados.
+            let mut presion: Vec<f64> = Vec::new();
+            let mut pelea: Vec<f64> = Vec::new();
+            for f in &pista {
+                let (Some(e), Some(a)) = (pos.enemies_near(f.sec, f.x, f.y, r), pos.allies_near(f.sec, f.x, f.y, r)) else { continue };
+                let otros = a.saturating_sub(1);
+                if e >= 2 && otros >= 2 { pelea.push(f.sec); } else if e >= 2 && e > otros + 1 { presion.push(f.sec); }
+            }
+            // Episodios reales: presión continua (huecos ≤ 4 s) de 4 s o más.
+            let mut eps: Vec<(f64, f64)> = Vec::new();
+            for &s in &presion {
+                match eps.last_mut() { Some(e) if s - e.1 <= HUECO_VIDEO => e.1 = s, _ => eps.push((s, s)) }
+            }
+            eps.retain(|e| e.1 - e.0 >= 4.0);
+            let cae = |a: f64, b: f64, v: &[f64]| v.iter().filter(|s| **s >= a && **s <= b).count();
+            let ws = analyse(&tl, &ps, Some(&pos));
+            let mios: Vec<&PressureWindow> = ws.iter().filter(|w| w.participant_id == yo).collect();
+            for e in &eps {
+                reales += 1;
+                if mios.iter().any(|w| w.start <= e.1 + 5.0 && w.end >= e.0 - 5.0) { reales_pillados += 1; }
+            }
+            for w in &mios {
+                tramos += 1;
+                let (p, q) = (cae(w.start, w.end, &presion), cae(w.start, w.end, &pelea));
+                if p >= 2 && p >= q { sobre_presion += 1 } else if q > p { sobre_pelea += 1 } else { sobre_nada += 1 }
+            }
+            // Lo que había en caché (detector anterior), si sigue en disco.
+            if let Ok(c) = std::fs::read_to_string(format!("{base}/pressure_v1.json")) {
+                let c: serde_json::Value = serde_json::from_str(&c).unwrap();
+                if c["v"] == 2 {
+                    for w in c["episodes"].as_array().unwrap().iter().filter(|w| w["participant_id"] == yo) {
+                        let (a, b) = (w["start"].as_f64().unwrap(), w["end"].as_f64().unwrap());
+                        v_tramos += 1;
+                        let (p, q) = (cae(a, b, &presion), cae(a, b, &pelea));
+                        if p >= 2 && p >= q { v_presion += 1 } else if q > p { v_pelea += 1 } else { v_nada += 1 }
+                    }
+                }
+            }
+        }
+        println!("  episodios reales (vídeo): {reales} · pillados {reales_pillados}");
+        println!("  tramos detector: {tramos} · sobre presión {sobre_presion} · sobre pelea {sobre_pelea} · sobre nada {sobre_nada}");
+        println!("  detector viejo (caché v2): {v_tramos} · sobre presión {v_presion} · sobre pelea {v_pelea} · sobre nada {v_nada}");
+    }
+
+    #[test]
+    fn an_ally_dying_next_to_you_is_a_local_loss_but_far_away_is_not() {
+        let mut ps = players();
+        ps.push(ps[0].clone()); // pid 3, equipo azul
+        let kill = |t: i64, x: i32| json!({"type":"CHAMPION_KILL","timestamp":t*1000,
+            "killerId":2,"victimId":3,"bounty":300,"position":{"x":x,"y":1000}});
+        let mut ws = vec![window(100.0, 120.0)];
+        finalize(&mut ws, &timeline(json!([kill(110, 1500), kill(112, 12000)])), &ps);
+        assert_eq!(ws[0].losses.len(), 1);
+        assert_eq!(ws[0].value.local_gold, -300.0);
+        assert_eq!(ws[0].context.len(), 1);
     }
 }
 

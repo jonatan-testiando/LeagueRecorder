@@ -33,6 +33,23 @@
      cliente de LoL, los dos oscuros). El claro se activa con
      [data-theme="light"] en <html> y solo redefine estos tokens: ningún
      componente sabe qué tema hay.
+
+     Rediseño «Post-partida» (2026-09-22). La paleta y el contraste NO se
+     tocan; cambia la voz:
+       - Fuera la mono como voz. Las etiquetas en mono, MAYÚSCULAS y con
+         tracking hacían de la app una herramienta de desarrollo y costaba
+         leerlas: a 10 px y con 0,14 em de espaciado, "ÚLTIMA PARTIDA" se
+         descifra, no se lee. Ahora todo habla en Instrument Sans, las
+         etiquetas en tipo oración (12,5 px, --faint) y las cifras con
+         tabular-nums para que sigan en columna.
+       - La mono queda para dos cosas que SÍ son de máquina: marcas de tiempo
+         del vídeo (.u-time, "01:43") y atajos de teclado (.u-kbd, "Ctrl K").
+       - Nada por debajo de 12 px (salvo el kbd, 11, que va en caja). Cuerpo
+         13–14, filas y títulos de tarjeta 14–16, h1 24/500, pesos ≤ 600.
+       - La identidad de LoL la pone el contenido (retratos, emblema de rango,
+         iconos de posición), no la tipografía.
+       - Barra de título de 44 px con buscador (Ctrl K) y el estado de captura
+         siempre visible; el rail acaba en la tarjeta de perfil con el rango.
      ========================================================================= */
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
@@ -157,10 +174,11 @@
   --gradient-violet: linear-gradient(135deg, var(--cool), color-mix(in srgb, #000 22%, var(--cool)));
 
   /* =========================================================================
-     Tipografía. La identidad la lleva la mono: en esta app el 80% del texto son
-     etiquetas, códigos de tiempo y cifras, y una mesa de montaje se etiqueta en
-     mono. La sans queda para prosa. El display serif se retiró (competía con
-     los datos en vez de ordenarlos) y sus ficheros ya no se descargan.
+     Tipografía. La interfaz habla en sans (Instrument Sans) y las cifras van
+     con tabular-nums. La mono (JetBrains Mono) solo marca tiempos de vídeo y
+     atajos de teclado: antes era la voz de toda la app —etiquetas en
+     mayúsculas incluidas— y se leía como una consola, no como un producto.
+     El display serif se retiró hace tiempo y sus ficheros ya no se descargan.
 
      Las dos familias van empaquetadas en public/fonts, no son fuentes del
      sistema: así la app se ve igual en una instalación limpia que aquí.
@@ -186,8 +204,15 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* Altura de la barra de título personalizada */
-  --titlebar-h: 36px;
+  /* Altura de la barra de título personalizada. 44 y no 36: ahora lleva el
+     buscador y el estado de captura, no solo la marca. */
+  --titlebar-h: 44px;
+  /* Ancho del rail: desplegado, y plegado a solo iconos (con una partida
+     abierta en el reproductor, el vídeo se queda el sitio). */
+  --rail-w: 216px;
+  --rail-w-collapsed: 64px;
+  /* Canto inferior del kbd: la tecla "hundida" del teclado. */
+  --kbd-edge: rgba(0, 0, 0, 0.4);
 
   /* =========================================================================
      Movimiento — cuatro duraciones, tres curvas, ningún rebote.
@@ -256,6 +281,7 @@
   --shadow-2: 0 2px 6px rgba(16, 20, 30, 0.08), 0 18px 40px -22px rgba(16, 20, 30, 0.3);
   --shadow-3: 0 28px 64px -24px rgba(16, 20, 30, 0.35);
   --inset-sunken: inset 0 1px 2px rgba(16, 20, 30, 0.12);
+  --kbd-edge: rgba(23, 27, 38, 0.2);
   --halo: radial-gradient(60% 120% at 82% 20%, color-mix(in srgb, var(--brand) 10%, transparent) 0%, transparent 60%),
     radial-gradient(70% 140% at 100% 80%, color-mix(in srgb, var(--cool) 6%, transparent) 0%, transparent 55%);
 }
@@ -298,6 +324,24 @@ body {
   overflow: hidden;
 }
 
+/* Hueco de la lista de reproducción, flotando abajo sobre el reproductor. El
+   contenedor no recibe clics (vacío no debe tapar el vídeo); lo que pinte
+   dentro, sí. */
+.playlist-dock {
+  /* Arriba, sobre el vídeo y bajo la cabecera de la partida: abajo tapaba la
+     línea de tiempo y la fila de controles del reproductor. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 64px;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+.playlist-dock > * { pointer-events: auto; }
+
 /* Los títulos van en sans con peso, no en serif display: en una herramienta que
    se opera y se escanea, el serif compite con los datos en vez de ordenarlos. */
 h1 {
@@ -307,37 +351,70 @@ h1 {
 }
 
 /* =========================================================================
-   Utilidades tipográficas — la "voz de instrumento"
+   Utilidades tipográficas
 
-   .u-label   etiqueta de columna o de campo (mayúsculas, mono, tracking)
-   .u-metric  una cifra que se compara con otras en columna (mono tabular)
+   .u-label   etiqueta de columna o de campo: tipo oración, sans, --faint
+   .u-metric  una cifra que se compara con otras en columna (sans tabular)
    .u-meta    metadato secundario: fecha, cola, duración
+   .u-time    marca de tiempo del vídeo ("01:43"): mono tabular
+   .u-kbd     atajo de teclado ("Ctrl K", "F8"): mono pequeña en su tecla
+
+   Antes .u-label era mono, 10 px, MAYÚSCULAS y 0,14 em de tracking, y .u-meta
+   mono a 11 px: la app entera hablaba como un volcado de consola. Ver la
+   cabecera del sistema de diseño («Post-partida»).
    ========================================================================= */
 .u-label {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-/* La ficha de la biblioteca habla en la sans de su columna izquierda ("Ranked
-   Solo/Duo"): a esta densidad el mono se le hacía duro al usuario. Los
-   tabular-nums del .u-metric se conservan para que las cifras sigan en columna. */
-.filaficha .u-metric {
   font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12.5px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--faint);
 }
 
 .u-metric {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 .u-meta {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+/* El tiempo del vídeo es lo único que se lee como código de máquina: se
+   compara dígito a dígito con el reloj del reproductor. */
+.u-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+/* La tecla: un escalón más claro que lo de alrededor y un canto oscuro
+   abajo, como una tecla de verdad. Es la única mono por debajo de 12 px, y
+   va dentro de su caja. */
+.u-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.04em;
-  color: var(--faint);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  box-shadow: inset 0 -1px 0 var(--kbd-edge);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* El peso lleva la jerarquía. El censo dio 175 elementos a peso 400 y diez
    repartidos entre el resto: toda la jerarquía la cargaba el color, que es lo
@@ -438,23 +515,80 @@ a:focus:not(:focus-visible) {
 }
 .titlebar__drag {
   flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
   padding-left: var(--space-4);
 }
-.titlebar__title {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  text-transform: uppercase;
+/* La marca ocupa lo mismo que el rail de debajo (menos el margen), así el
+   buscador cae centrado sobre el contenido y no sobre la ventana entera. */
+.titlebar__brand {
+  width: 176px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: none;
 }
+.titlebar__title {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+.titlebar__center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+}
+/* El buscador es un botón con cara de campo: abre la paleta (Ctrl K). */
+.titlebar__search {
+  width: 440px;
+  max-width: 100%;
+  min-width: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text) 3%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+.titlebar__search:hover { box-shadow: inset 0 0 0 1px var(--hair-strong); color: var(--muted); }
+.titlebar__search:not(:disabled):active { transform: none; }
+.titlebar__search span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.titlebar__status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.titlebar__free { color: var(--faint); font-variant-numeric: tabular-nums; }
 .titlebar__controls {
   display: flex;
   height: 100%;
+  flex-shrink: 0;
 }
 .titlebar__btn {
   width: 46px;
@@ -464,7 +598,7 @@ a:focus:not(:focus-visible) {
   justify-content: center;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: var(--faint);
   cursor: pointer;
   padding: 0;
   border-radius: 0;
@@ -485,26 +619,142 @@ a:focus:not(:focus-visible) {
 }
 
 /* =========================================================================
-   Navegación lateral
+   Píldora de captura (barra de título). Cinco estados, un solo sitio: lo que
+   antes era la caja del pie del rail, que no se veía dentro del reproductor.
+   El filo de la píldora lleva el tono: neutro (listo), rojo (grabando, disco),
+   oro (procesando, sin sonido, clave de Riot).
    ========================================================================= */
+.cap {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 3%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  animation: pop-in var(--t-quick) var(--e-out) both;
+}
+.cap[data-tone="signal"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--signal) 30%, transparent); }
+.cap[data-tone="gold"] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 24%, transparent); }
+.cap--tight { padding-right: 4px; }
+button.cap { cursor: pointer; }
+button.cap:hover { background: var(--raised); }
+button.cap:not(:disabled):active { transform: none; }
+.cap__main { color: var(--text); }
+.cap__sub { color: var(--faint); }
+.cap__dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.cap__dot--ready { background: var(--cool); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cool) 18%, transparent); }
+.cap__dot--rec { background: var(--signal); animation: rec-beat 2s ease-out infinite; }
+.cap__sep { width: 1px; height: 14px; flex-shrink: 0; background: var(--hair-strong); }
+.cap__hint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); }
+.cap__pct { color: var(--brand); font-variant-numeric: tabular-nums; }
+.cap__bar {
+  width: 40px;
+  height: 4px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  overflow: hidden;
+}
+.cap__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand), var(--action-hover));
+  transition: width var(--t-base) var(--e-move);
+}
+/* Sin cifra del backend: la barra no finge un porcentaje, recorre. */
+.cap__bar--indet > span {
+  width: 40%;
+  animation: cap-indet 1.4s var(--e-move) infinite;
+}
+@keyframes cap-indet {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.cap__fix {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.cap__fix:hover { background: color-mix(in srgb, var(--text) 8%, var(--raised)); }
+.cap__fix:not(:disabled):active { transform: none; }
+
+/* =========================================================================
+   Navegación lateral (rail)
+
+   Tres grupos en tipo oración, ítems de 14 px con iconos de 18, y al pie la
+   tarjeta de perfil con el rango (lo primero que un jugador reconoce como
+   suyo). Con una partida abierta en el reproductor se pliega a 64 px de solo
+   iconos: el vídeo necesita el ancho y la navegación sigue a un clic.
+
+   El icono queda en la MISMA x en los dos anchos (12 de margen del rail + 11
+   del ítem = 23, que es (64 − 18) / 2): al plegarse, los iconos no se mueven,
+   solo desaparecen las etiquetas.
+   ========================================================================= */
+.rail {
+  width: var(--rail-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px 12px;
+  background: var(--rail);
+  box-shadow: inset -1px 0 0 var(--glass-line-soft);
+  overflow: hidden;
+  transition: width var(--t-base) var(--e-move);
+}
+.rail--collapsed { width: var(--rail-w-collapsed); }
+.rail__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-height: 0;
+}
 .nav-btn {
   position: relative;
   width: 100%;
+  height: 38px;
+  flex-shrink: 0;
   border: none;
   background: transparent;
-  border-radius: var(--radius-md);
-  padding: 8px 10px;
+  border-radius: 8px;
+  padding: 0 11px;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.2;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   box-shadow: none;
+  white-space: nowrap;
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
 }
 .nav-btn svg { color: var(--faint); flex: none; }
@@ -512,42 +762,144 @@ a:focus:not(:focus-visible) {
   background: color-mix(in srgb, var(--text) 4%, transparent);
   color: var(--text);
 }
-/* La sección activa es superficie levantada con filo y luz de canto; el color
-   de marca entra solo en el icono. Nada de negrita: el peso no es jerarquía. */
+.nav-btn:not(:disabled):active { transform: none; }
+/* La sección activa es superficie levantada con luz de canto; el oro entra
+   solo en el icono. Nada de negrita: el peso no es jerarquía. */
 .nav-btn--active {
   background: var(--raised);
   color: var(--text);
   font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  box-shadow: inset 0 1px 0 var(--rim);
 }
 .nav-btn--active svg { color: var(--brand); }
-/* Grupo del rail: etiqueta mono en mayúsculas. */
-.nav-grp {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--faint);
-  padding: 14px 10px 6px;
+.nav-btn__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: opacity var(--t-quick) var(--e-move);
 }
-/* Estado de captura, fijo abajo del rail: esperando, grabando, clave y disco. */
-.rail-status {
-  margin-top: auto;
+/* Partidas por revisar, junto a «Biblioteca»: oro suave, como un aviso que
+   no grita. */
+.nav-btn__count {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  padding: 1px 7px;
+  border-radius: 999px;
+  transition: opacity var(--t-quick) var(--e-move);
+}
+/* Grupo del rail: tipo oración, 12 px, --faint. */
+.nav-grp {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+  padding: 18px 11px 6px;
+  white-space: nowrap;
+  position: relative;
+  transition: color var(--t-quick) var(--e-move);
+}
+.nav-grp:first-child { padding-top: 4px; }
+
+/* Plegado: fuera las etiquetas (se funden, no saltan), el contador se queda
+   como un punto de oro en la esquina del icono y el nombre del grupo como
+   un filo. */
+.rail--collapsed .nav-btn__label { opacity: 0; }
+.rail--collapsed .nav-btn__count {
+  position: absolute;
+  top: 7px;
+  left: 26px;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  font-size: 0;
+  background: var(--brand);
+  box-shadow: 0 0 0 2px var(--rail);
+}
+.rail--collapsed .nav-grp { color: transparent; }
+.rail--collapsed .nav-grp::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 12px;
+  height: 1px;
+  background: var(--hair);
+}
+.rail--collapsed .nav-grp:first-child::after { display: none; }
+
+/* --- tarjeta de perfil ---------------------------------------------------- */
+.rail-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
   padding: 12px;
-  border-radius: 10px;
-  background: var(--raised);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 2%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  min-width: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: padding var(--t-base) var(--e-move), background-color var(--t-base) var(--e-move),
+    box-shadow var(--t-base) var(--e-move);
+}
+.rail-profile__emblem {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  object-fit: contain;
+  transition: width var(--t-base) var(--e-move), height var(--t-base) var(--e-move);
+}
+.rail-profile__emblem--none {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--faint);
+}
+.rail-profile__text {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  min-width: 0;
+  transition: opacity var(--t-quick) var(--e-move);
 }
-.rail-status__st { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
-.rail-status__meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.rail-status__meta button {
-  background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--signal); cursor: pointer; box-shadow: none;
+.rail-profile__rank {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.rail-status__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
-.rail-status__dot--rec { background: var(--signal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 18%, transparent); }
+.rail-profile__meta {
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rail--collapsed .rail-profile {
+  padding: 4px;
+  background: transparent;
+  box-shadow: none;
+}
+.rail--collapsed .rail-profile__emblem { width: 32px; height: 32px; }
+.rail--collapsed .rail-profile__text { opacity: 0; }
+.rail-version {
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  margin-top: 8px;
+  white-space: nowrap;
+  transition: opacity var(--t-quick) var(--e-move);
+}
+.rail--collapsed .rail-version,
+.rail--collapsed .updpill { opacity: 0; pointer-events: none; }
 
 /* =========================================================================
    Tarjetas y filas interactivas
@@ -764,24 +1116,29 @@ a:focus:not(:focus-visible) {
 /* =========================================================================
    Primitivos de UI
    ========================================================================= */
+/* Los botones hablan en sans y a 14/13 px: en mono de 12 px con tracking, el
+   verbo del botón ("Revisar esta partida") se leía como un comando. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0;
+  border-radius: 8px;
   cursor: pointer;
   box-shadow: none;
   border: 1px solid transparent;
+  white-space: nowrap;
   transition: background-color var(--t-instant) var(--e-move),
     border-color var(--t-instant) var(--e-move),
     color var(--t-instant) var(--e-move);
 }
-.btn--md { padding: var(--space-2) var(--space-4); }
-.btn--sm { padding: 5px var(--space-3); font-size: 11px; }
+.btn--md { padding: 8px var(--space-4); }
+.btn--sm { padding: 5px var(--space-3); font-size: 13px; }
 
 /* El botón es la superficie más pequeña de la app y por eso es donde más se
    nota que hay volumen: filo iluminado arriba, cuerpo, y base un punto más
@@ -795,7 +1152,7 @@ a:focus:not(:focus-visible) {
     color-mix(in srgb, var(--ground) 30%, var(--action)) 100%
   );
   color: var(--on-action);
-  font-weight: 500;
+  font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .btn--primary:hover:not(:disabled) {
@@ -811,7 +1168,7 @@ a:focus:not(:focus-visible) {
 .btn--ghost {
   background: transparent;
   border-color: var(--hair-strong);
-  color: var(--muted);
+  color: var(--text);
 }
 .btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
 .btn--ghost[aria-pressed="true"] { background: var(--surface-2); color: var(--text); border-color: var(--glass-line); }
@@ -827,31 +1184,85 @@ a:focus:not(:focus-visible) {
 }
 .btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
+/* Chip de estado ("Error", "Hallazgo", "Excelente"): píldora en sans. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  padding: 2px 7px;
-  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
   white-space: nowrap;
 }
 
 .metric__value {
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 .metric__label {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
   color: var(--faint);
   margin-top: 3px;
+}
+
+/* --- avisos (Toaster) ------------------------------------------------------ */
+.toast__close {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+.toast__close:hover { background: var(--raised); color: var(--text); }
+.toast__btn {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.toast__btn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
+.toast__btn--main {
+  padding: 0 14px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+}
+.toast__btn--main:hover { background: color-mix(in srgb, var(--text) 7%, var(--raised)); }
+.toast__timer {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  animation-name: toast-left;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes toast-left {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
 }
 
 .card--interactive {
@@ -878,16 +1289,18 @@ a:focus:not(:focus-visible) {
   background: var(--cool);
   pointer-events: none;
 }
+/* El tip y el eje son tiempos del vídeo: mono, que es su sitio. */
 .mtl__tip {
   position: absolute;
   top: -6px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: var(--ground);
   background: var(--cool);
   padding: 1px 5px;
-  border-radius: 2px;
+  border-radius: 4px;
   pointer-events: none;
   white-space: nowrap;
 }
@@ -895,8 +1308,8 @@ a:focus:not(:focus-visible) {
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   color: var(--faint);
   margin-top: 2px;
 }
@@ -960,7 +1373,7 @@ a:focus:not(:focus-visible) {
 
 .rq-time {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   padding-top: 1px;
@@ -969,8 +1382,8 @@ a:focus:not(:focus-visible) {
 
 .rq-title {
   display: block;
-  font-size: 12.5px;
-  line-height: 1.35;
+  font-size: 13px;
+  line-height: 1.4;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -980,8 +1393,8 @@ a:focus:not(:focus-visible) {
 
 .rq-note {
   display: block;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--faint);
   margin-top: 3px;
 }
@@ -1080,9 +1493,10 @@ a:focus:not(:focus-visible) {
   flex-shrink: 0;
 }
 .tp-seg button {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 4px 9px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 4px 10px;
   background: transparent;
   border: 0;
   color: var(--faint);
@@ -1163,7 +1577,7 @@ a:focus:not(:focus-visible) {
 .tp-pop__row em {
   display: block;
   font-style: normal;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--faint);
   margin-top: 3px;
   line-height: 1.45;
@@ -1171,11 +1585,11 @@ a:focus:not(:focus-visible) {
 .tp-pop__sync { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 .tp-pop__sync input[type="range"] { flex: 1; }
 .tp-pop__val {
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
-  width: 38px;
+  width: 40px;
   text-align: right;
 }
 
@@ -1203,10 +1617,9 @@ a:focus:not(:focus-visible) {
   padding: var(--space-4) var(--space-4) var(--space-2);
 }
 .day-sep__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--faint);
   white-space: nowrap;
 }
@@ -1216,8 +1629,8 @@ a:focus:not(:focus-visible) {
   background: var(--line-soft);
 }
 .day-sep__count {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1233,9 +1646,10 @@ a:focus:not(:focus-visible) {
    oro@15 salía dos veces, la presión de ganks tres).
 
    Lo que hay: una sola columna de filas etiqueta -> valor. La jerarquía la dan
-   el espacio y una etiqueta mono con su regla, no una caja. Las cifras caen
-   todas en la misma vertical, en mono tabular, y el color aparece solo cuando
-   el signo significa algo.
+   el espacio y una etiqueta con su regla, no una caja. Las cifras caen todas
+   en la misma vertical, con tabular-nums, y el color aparece solo cuando el
+   signo significa algo. (Desde «Post-partida», en sans: la mono solo marca
+   tiempos.)
    ========================================================================= */
 .insp {
   flex: 1;
@@ -1254,11 +1668,9 @@ a:focus:not(:focus-visible) {
   gap: var(--space-3);
 }
 .insp__verdict {
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 
 .sect__head {
@@ -1277,11 +1689,11 @@ a:focus:not(:focus-visible) {
   padding: 5px 0;
   border-bottom: 1px solid var(--line-soft);
 }
-.drow span { font-size: 12.5px; color: var(--muted); }
-.drow b { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.drow span { font-size: 13px; color: var(--muted); }
+.drow b { font-size: 13.5px; font-weight: 500; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drow__note {
   font-style: normal;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--faint);
   margin-left: 6px;
 }
@@ -1306,10 +1718,9 @@ a:focus:not(:focus-visible) {
 .insp__teamHead {
   display: flex;
   justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
   padding: var(--space-2) 0 var(--space-1);
 }
 .insp__player {
@@ -1322,15 +1733,15 @@ a:focus:not(:focus-visible) {
 }
 .insp__player--self { background: var(--surface-2); }
 .insp__playerName {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .insp__player--self .insp__playerName { color: var(--text); font-weight: 500; }
-.insp__playerKda { font-size: 11.5px; color: var(--text); }
-.insp__playerNum { font-size: 11px; color: var(--faint); text-align: right; }
+.insp__playerKda { font-size: 12.5px; color: var(--text); }
+.insp__playerNum { font-size: 12px; color: var(--faint); text-align: right; }
 /* Mismas columnas que la fila de jugador, mas la del icono, o la cabecera no
    cae encima de sus cifras. */
 .insp__legend {
@@ -1361,10 +1772,9 @@ a:focus:not(:focus-visible) {
 .insp__more summary {
   list-style: none;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--faint);
   display: flex;
   align-items: center;
@@ -1400,12 +1810,12 @@ a:focus:not(:focus-visible) {
 .evrow:hover { background: var(--surface-2); }
 .evrow[data-on] { background: var(--surface-2); }
 .evrow__sev { align-self: stretch; border-radius: 1px; }
-.evrow__time { font-size: 11px; color: var(--faint); }
+.evrow__time { font-family: var(--font-mono); font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .evrow[data-on] .evrow__time { color: var(--cool); }
 .evrow__icon { display: flex; align-items: center; justify-content: center; }
-.evrow__label { font-size: 12.5px; color: var(--text); white-space: nowrap; }
+.evrow__label { font-size: 13px; color: var(--text); white-space: nowrap; }
 .evrow__desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1413,10 +1823,9 @@ a:focus:not(:focus-visible) {
   min-width: 0;
 }
 .evrow__tone {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 /* El evento seleccionado, en grande. Antes su insignia pesaba más que el
@@ -1433,7 +1842,9 @@ a:focus:not(:focus-visible) {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   color: var(--muted);
-  font-size: 11px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
   padding: 2px 7px;
   cursor: pointer;
 }
@@ -1449,14 +1860,14 @@ a:focus:not(:focus-visible) {
 }
 .evfeat__desc {
   margin: var(--space-2) 0 0;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
   color: var(--muted);
 }
 
 /* Cabecera de las dos columnas de objetivos: arriba, como el marcador. */
 .insp__objLegend { border-bottom-color: transparent; padding-bottom: 0; }
-.insp__objLegend span { font-size: 10px; }
+.insp__objLegend span { font-size: 12px; }
 
 /* =========================================================================
    Ajustes.
@@ -1509,14 +1920,13 @@ a:focus:not(:focus-visible) {
 .status__dot[data-tone="ok"] { background: var(--win); }
 .status__dot[data-tone="warn"] { background: var(--gold); }
 .status__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--faint);
 }
 .status__value {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
   max-width: 34ch;
   overflow: hidden;
@@ -1533,10 +1943,10 @@ a:focus:not(:focus-visible) {
   padding: var(--space-3) 0;
 }
 .drow--set > div:first-child { min-width: 0; }
-.drow__label { display: block; font-size: 13px; color: var(--text); }
+.drow__label { display: block; font-size: 14px; color: var(--text); }
 .drow__desc {
   display: block;
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.45;
   color: var(--faint);
   margin-top: 2px;
@@ -1559,8 +1969,8 @@ a:focus:not(:focus-visible) {
   border-radius: var(--radius-md);
   box-shadow: var(--inset-sunken);
   color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   padding: 6px var(--space-3);
   outline: none;
   min-width: 0;
@@ -1634,8 +2044,9 @@ a:focus:not(:focus-visible) {
   align-items: stretch;
   gap: 0;
   padding: 8px 11px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -1694,10 +2105,9 @@ a:focus:not(:focus-visible) {
 .fold summary {
   list-style: none;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--faint);
   display: flex;
   align-items: center;
@@ -1711,7 +2121,7 @@ a:focus:not(:focus-visible) {
 .fold__list {
   margin: var(--space-3) 0 0;
   padding-left: var(--space-4);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
 }
@@ -1729,7 +2139,8 @@ a:focus:not(:focus-visible) {
   margin-bottom: var(--space-2);
 }
 .imp__rank {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
   font-size: 26px;
   font-weight: 500;
   line-height: 1;
@@ -1812,5 +2223,170 @@ a:focus:not(:focus-visible) {
 }
 .insp__press:hover { background: var(--surface-2); }
 .insp__press + .insp__press { border-top: 1px solid var(--line); }
-.insp__pressWhat { font-size: 12px; color: var(--text); }
-.insp__pressGain { font-size: 11px; color: var(--muted); text-align: right; }
+.insp__pressWhat { font-size: 13px; color: var(--text); }
+.insp__pressGain { font-size: 12px; color: var(--muted); text-align: right; }
+
+/* =========================================================================
+   Paleta de comandos (Ctrl K). Velo sobre la app y una caja de 640 px arriba
+   al centro: se escribe donde se mira, no en una esquina.
+   ========================================================================= */
+.cmdk-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 110px 16px 24px;
+  background: color-mix(in srgb, var(--sunken) 62%, transparent);
+  backdrop-filter: blur(2px);
+  animation: updv-in var(--t-quick) var(--e-out) both;
+}
+.cmdk {
+  width: 640px;
+  max-width: 100%;
+  max-height: calc(100vh - 134px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 3%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-3);
+  animation: pop-in var(--t-quick) var(--e-out) both;
+}
+.cmdk__field {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px 0 18px;
+  box-shadow: inset 0 -1px 0 var(--hair);
+  color: var(--muted);
+}
+.cmdk__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  color: var(--text);
+  caret-color: var(--brand);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  user-select: text;
+}
+.cmdk__input::placeholder { color: var(--faint); }
+.cmdk__input:focus-visible { outline: none; }
+.cmdk__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 10px;
+}
+.cmdk__group {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--faint);
+  padding: 14px 10px 6px;
+}
+.cmdk__item {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.cmdk__item--on {
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 35%, transparent), inset 0 1px 0 var(--rim);
+}
+.cmdk__main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.cmdk__strong { font-weight: 600; }
+.cmdk__dim { color: var(--faint); }
+.cmdk__num { font-variant-numeric: tabular-nums; color: var(--muted); }
+.cmdk__meta {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cmdk__time {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--sunken);
+  padding: 2px 7px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.cmdk__slot {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.cmdk__mark { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+.cmdk__slot--bad { background: color-mix(in srgb, var(--signal) 12%, transparent); box-shadow: none; }
+.cmdk__slot--bad .cmdk__mark { background: var(--signal); }
+.cmdk__slot--good { background: color-mix(in srgb, var(--cool) 12%, transparent); box-shadow: none; }
+.cmdk__slot--good .cmdk__mark { background: var(--cool); }
+.cmdk__slot--finding { background: color-mix(in srgb, var(--flag) 14%, transparent); box-shadow: none; }
+.cmdk__slot--finding .cmdk__mark { background: var(--flag); border-radius: 2px; transform: rotate(45deg); }
+.cmdk__slot--neutral { box-shadow: none; }
+.cmdk__enter { color: var(--text); background: color-mix(in srgb, var(--text) 3%, var(--panel)); box-shadow: inset 0 0 0 1px var(--hair); }
+.cmdk__hl {
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.cmdk__empty {
+  margin: 0;
+  padding: 28px 12px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--faint);
+}
+.cmdk__foot {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: var(--panel);
+  box-shadow: inset 0 1px 0 var(--hair);
+  font-size: 12px;
+  color: var(--faint);
+}
+.cmdk__keys { display: inline-flex; align-items: center; gap: 6px; }

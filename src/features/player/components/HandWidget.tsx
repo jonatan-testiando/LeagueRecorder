@@ -180,7 +180,7 @@ export const HandWidget: React.FC<HandWidgetProps> = ({ matchId }) => {
             <line x1={6 + (RADIO_CORTO / 0.05) * 19 - 2} y1={8} x2={6 + (RADIO_CORTO / 0.05) * 19 - 2} y2={120}
                   stroke="var(--brand)" strokeDasharray="3 3" />
             <line x1={4} y1={120} x2={216} y2={120} stroke="var(--line-soft)" />
-            <text x={6 + (RADIO_CORTO / 0.05) * 19 + 2} y={16} fontSize="9" fill="var(--brand)">
+            <text x={6 + (RADIO_CORTO / 0.05) * 19 + 2} y={16} fontSize="11" fill="var(--brand)">
               {t("short")}
             </text>
           </svg>

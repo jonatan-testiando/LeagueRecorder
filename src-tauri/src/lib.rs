@@ -18,6 +18,7 @@ mod obs_client;
 mod occupancy;
 mod overlay;
 mod pressure;
+mod pressure_value;
 mod proc;
 mod recorder;
 pub mod riot_api;
@@ -333,6 +334,7 @@ pub fn run() {
             spells::get_spell_diet,
             riot_api::get_pressure_summary,
             riot_api::get_season_form,
+            riot_api::get_current_rank,
             overlay::preview_metronome_overlay,
             app_update::get_pending_update,
             app_update::install_pending_update,

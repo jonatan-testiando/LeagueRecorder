@@ -6,7 +6,11 @@ import { useAppStore } from "../../store/useAppStore";
 
 /** Refresh cached evidence on return, sync and completed video processing. */
 export function usePressureSummary(path: string) {
-  const { pathname } = useLocation();
+  const { pathname: raw } = useLocation();
+  // En la app real Hoy vive en "/" (ruta por defecto) y solo el arnés usa
+  // "/home": comparando a pelo, Hoy nunca pedía el resumen y decía "nada
+  // medido" con 26 partidas analizadas.
+  const pathname = raw === "/" ? "/home" : raw;
   const matches = useAppStore(s => s.matches);
   const [data, setData] = useState<PressureSummary | null>(null);
   const [error, setError] = useState<string | null>(null);

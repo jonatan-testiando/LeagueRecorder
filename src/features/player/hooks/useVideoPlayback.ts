@@ -19,6 +19,15 @@ export function useVideoPlayback(match: MatchMetadata) {
   const containerRef = useRef<HTMLDivElement>(null);
   /** Segundo en que la reproducción actual debe auto-pausarse (ventana de clip). */
   const clipEndRef = useRef<number | null>(null);
+  /**
+   * De qué partida es el "ready" actual. Al cambiar de partida y pedir un salto
+   * en el mismo render (mapa de Patrones, enlaces de Hoy, lista de reproducción),
+   * `loadState` todavía decía "ready" por el vídeo ANTERIOR y el salto se
+   * consumía contra él —con su duración— antes de que cargara el nuevo.
+   */
+  const readyForRef = useRef<string | null>(null);
+  const matchIdRef = useRef(match.id);
+  matchIdRef.current = match.id;
 
   const [currentTime, setCurrentTime] = useState<number>(0);
   // La duración de la partida, hasta que el vídeo diga la suya (que es la buena).
@@ -52,6 +61,7 @@ export function useVideoPlayback(match: MatchMetadata) {
     setCurrentTime(0);
     setIsPlaying(false);
     setLoadState("loading");
+    readyForRef.current = null;
     setActiveEventTime(null);
     clipEndRef.current = null;
     if (videoRef.current) videoRef.current.load();
@@ -110,15 +120,35 @@ export function useVideoPlayback(match: MatchMetadata) {
     if (seekAnimRef.current) window.clearTimeout(seekAnimRef.current);
   }, []);
 
-  // Salto pedido desde fuera (el mapa de muertes de Patrones): se consume una
-  // sola vez, cuando el vídeo ya sabe su duración — antes, seekTo lo recortaría.
+  // Salto pedido desde fuera (el mapa de muertes de Patrones, los enlaces de
+  // «Hoy», la lista de momentos entre partidas): se consume una sola vez,
+  // cuando el vídeo DE ESTA PARTIDA ya sabe su duración — antes, seekTo lo
+  // recortaría.
+  //
+  // La tienda guarda solo los segundos (`setPendingSeek(seconds)` sigue siendo
+  // la API de quien llama); aquí se ata el salto a la partida abierta en el
+  // render en que aparece — quien abre una partida pide el salto en el mismo
+  // gesto, así que los dos cambios llegan juntos. Si la partida cambia sin
+  // haberlo consumido (su vídeo no cargó), el salto era de otra y se descarta
+  // en vez de aplicarse al vídeo siguiente.
   const pendingSeek = useAppStore((s) => s.pendingSeek);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
+  const boundSeek = useRef<{ seconds: number; matchId: string } | null>(null);
+  if (pendingSeek == null) boundSeek.current = null;
+  else if (boundSeek.current?.seconds !== pendingSeek) {
+    boundSeek.current = { seconds: pendingSeek, matchId: match.id };
+  }
   useEffect(() => {
-    if (loadState !== "ready" || pendingSeek == null) return;
-    seekTo(Math.max(0, pendingSeek - 5), false);
+    const want = boundSeek.current;
+    if (pendingSeek == null || !want) return;
+    if (want.matchId !== match.id) {
+      setPendingSeek(null);
+      return;
+    }
+    if (loadState !== "ready" || readyForRef.current !== match.id) return;
+    seekTo(Math.max(0, want.seconds - 5), false);
     setPendingSeek(null);
-  }, [loadState, pendingSeek, seekTo, setPendingSeek]);
+  }, [loadState, pendingSeek, seekTo, setPendingSeek, match.id]);
 
   /** Salta a un momento y reproduce su ventana (CLIP_BEFORE..CLIP_AFTER). */
   const jumpToClip = useCallback((eventTime: number, before: number, after: number) => {
@@ -141,6 +171,7 @@ export function useVideoPlayback(match: MatchMetadata) {
     const v = videoRef.current;
     if (!v) return;
     if (isFinite(v.duration) && v.duration > 0) setDuration(v.duration);
+    readyForRef.current = matchIdRef.current;
     setLoadState("ready");
   }, []);
 

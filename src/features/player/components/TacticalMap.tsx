@@ -147,7 +147,7 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({ markers, onSeek }) => 
 
         {active && (
           <div style={wstyles.mapTip}>
-            <span className="u-metric">{mmss(active.time)}</span>
+            <span className="u-time">{mmss(active.time)}</span>
             <span style={{ flex: 1, textAlign: "left" }}>{active.description}</span>
             <span className="u-label" style={{ color: "var(--cool)" }}>{t("Click to jump")}</span>
           </div>

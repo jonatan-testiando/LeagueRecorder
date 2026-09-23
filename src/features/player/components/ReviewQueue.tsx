@@ -132,3 +132,83 @@ export function buildQueue(
 
   return out.sort((a, b) => a.time - b.time);
 }
+
+/**
+ * Segundos que se miran antes de cada muerte. El mismo número que usa el panel
+ * «Conciencia de mapa antes de morir» (MapAwarenessWidget): si uno dijera 10 y
+ * el otro 12, la misma muerte saldría ciega en un sitio y no en el otro.
+ */
+export const BLIND_LOOKBACK_S = 10;
+
+/**
+ * Un hallazgo del analizador: algo que no es un suceso de Riot sino una lectura
+ * de lo que hiciste, sacada de datos que ya están grabados. Se pinta en violeta
+ * (rombo en la línea de tiempo, aviso sobre el vídeo, tarjeta con el brillo de
+ * hallazgo) para que no se confunda con lo que pasó en la partida.
+ */
+export interface Finding {
+  id: string;
+  /** Dónde empieza: ahí va la marca. */
+  time: number;
+  /** Hasta cuándo es "el momento actual" (aviso y tarjeta). */
+  end: number;
+  /** Ya traducidos. */
+  title: string;
+  detail: string;
+  /** Si merece el aviso sobre el vídeo. Los saltos de cámara ya los anuncia el HUD. */
+  notice: boolean;
+  /** Cuenta como algo malo en los filtros. */
+  bad: boolean;
+  /** Si además es un momento de la cola (tiene casilla de revisado). */
+  moment?: Moment;
+}
+
+/**
+ * Los hallazgos de una partida, con lo que ya hay en disco:
+ *
+ * - **Muertes a ciegas**: ni un clic de minimapa ni una cámara aliada en los
+ *   `BLIND_LOOKBACK_S` segundos antes de morir. La marca va al PRINCIPIO de ese
+ *   tramo, que es cuando el aviso sirve: lo ves mientras te acercas a la muerte.
+ *   Solo si la partida tiene miradas registradas; sin ellas, "no miraste" sería
+ *   mentira.
+ * - **Saltos de cámara** del detector de vídeo, cuando son pocos (los que ya
+ *   entran en la cola, ver `buildQueue`).
+ */
+export function analyzerFindings(
+  deaths: number[],
+  looks: number[],
+  moments: Moment[],
+  t: Translate
+): Finding[] {
+  const out: Finding[] = [];
+  if (looks.length > 0) {
+    const sorted = [...looks].sort((a, b) => a - b);
+    for (const d of deaths) {
+      const from = d - BLIND_LOOKBACK_S;
+      if (sorted.some((s) => s >= from && s <= d)) continue;
+      out.push({
+        id: `finding:blind:${d}`,
+        time: Math.max(0, from),
+        end: d,
+        title: t("Died with no information"),
+        detail: t("No minimap click or ally camera in the {n} s before this death.", { n: BLIND_LOOKBACK_S }),
+        notice: true,
+        bad: true,
+      });
+    }
+  }
+  for (const m of moments) {
+    if (!m.id.startsWith("snap:")) continue;
+    out.push({
+      id: m.id,
+      time: m.time,
+      end: m.time + 3,
+      title: m.title,
+      detail: t("Detected by the video analyzer."),
+      notice: false,
+      bad: false,
+      moment: m,
+    });
+  }
+  return out.sort((a, b) => a.time - b.time);
+}

@@ -39,7 +39,7 @@ export const DiskMeter: React.FC<{ disk: DiskSpaceInfo | null }> = ({ disk }) =>
             total: gb(disk.total_bytes, 0),
           })}
         </span>
-        <span className="u-metric" style={{ fontSize: 11, color: "var(--faint)" }}>
+        <span className="u-metric" style={{ fontSize: 13, color: "var(--faint)" }}>
           {pct}%
         </span>
       </div>
@@ -86,5 +86,5 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-3)",
     flexWrap: "wrap",
   },
-  label: { fontSize: 11.5, color: "var(--faint)", lineHeight: 1.45 },
+  label: { fontSize: 13, color: "var(--faint)", lineHeight: 1.45, fontVariantNumeric: "tabular-nums" },
 };

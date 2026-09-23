@@ -186,7 +186,7 @@ const styles: Record<string, React.CSSProperties> = {
   resumen: {
     margin: "0 0 var(--space-3) 0",
     color: "var(--text)",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     lineHeight: 1.5,
   },
   lista: {
@@ -207,7 +207,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   etiqueta: {
     color: "var(--muted)",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",
@@ -215,8 +215,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   valor: {
     color: "var(--text)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
+    fontVariantNumeric: "tabular-nums",
+    fontSize: 13,
     fontWeight: 500,
     flexShrink: 0,
   },
@@ -254,8 +254,8 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.7,
   },
   percentil: {
-    fontFamily: "var(--font-mono)",
-    fontSize: "11px",
+    fontVariantNumeric: "tabular-nums",
+    fontSize: 12,
     fontWeight: 500,
     flexShrink: 0,
     // Ancho fijo para que las barras queden alineadas entre filas. 92 es lo que

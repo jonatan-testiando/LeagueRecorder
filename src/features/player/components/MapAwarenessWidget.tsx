@@ -68,7 +68,7 @@ export const MapAwarenessWidget: React.FC<MapAwarenessWidgetProps> = ({
             onClick={() => onSeek(r.marker.time)}
             title={t("Jump to this moment")}
           >
-            <span className="u-metric">{mmss(r.marker.time)}</span>
+            <span className="u-time">{mmss(r.marker.time)}</span>
             <span className="insp__pressWhat">
               {r.blind ? t("Died with no information") : t("Map check on record")}
             </span>

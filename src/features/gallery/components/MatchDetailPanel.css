@@ -1,0 +1,374 @@
+/* =========================================================================
+   Panel de detalle de la biblioteca (maestro-detalle).
+
+   Tarjeta de 392 px a la derecha de la lista: cabecera con el ambiente del
+   campeón, tres cifras, marcador o cómo conseguirlo, momentos por revisar y,
+   abajo del todo, la única acción en oro. El centro hace scroll y las
+   acciones se quedan quietas: a 720 px de alto no cabe todo.
+
+   Solo tokens: el tema claro los redefine y aquí no hay colores fijos.
+   ========================================================================= */
+
+.mdp {
+  width: 392px;
+  flex: none;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim), var(--shadow-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Cabecera ---------------------------------------------------------- */
+.mdp-hero {
+  position: relative;
+  overflow: hidden;
+  flex: none;
+  padding: 22px 20px 18px;
+}
+.mdp-hero__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.mdp-portrait {
+  display: block;
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--ring),
+    0 0 0 5px color-mix(in srgb, var(--panel) 90%, transparent),
+    0 10px 24px -8px color-mix(in srgb, var(--ring) 45%, transparent);
+}
+.mdp-hero__txt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.mdp-hero__res {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mdp-res {
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.mdp-lp {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.mdp-lp--win { color: var(--win); background: color-mix(in srgb, var(--win) 14%, transparent); }
+.mdp-lp--loss { color: var(--loss); background: color-mix(in srgb, var(--loss) 14%, transparent); }
+.mdp-lp--neutral { color: var(--muted); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.mdp-meta {
+  font-size: 13.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdp-meta__champ { color: var(--text); }
+
+/* ---- Tres cifras ------------------------------------------------------- */
+.mdp-figs {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 20px;
+  padding: 14px 0;
+  box-shadow: inset 0 1px 0 var(--hair), inset 0 -1px 0 var(--hair);
+}
+.mdp-fig {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mdp-fig + .mdp-fig {
+  padding-left: 16px;
+  box-shadow: inset 1px 0 0 var(--hair);
+}
+.mdp-fig__lbl { font-size: 12.5px; color: var(--faint); }
+.mdp-fig__val {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.mdp-fig__sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Centro con scroll ------------------------------------------------- */
+.mdp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px 20px 14px;
+  /* Si no cabe todo, el borde de abajo se funde: dice "hay más" sin cortar
+     una fila a cuchillo contra las acciones. */
+  mask-image: linear-gradient(180deg, #000 calc(100% - 14px), transparent);
+}
+
+/* Marcador de los diez: dos columnas y el puesto en medio. */
+.mdp-board { display: flex; flex-direction: column; gap: 2px; }
+.mdp-board__head,
+.mdp-board__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  align-items: center;
+}
+.mdp-board__head {
+  font-size: 12.5px;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+.mdp-board__head > span { display: flex; align-items: center; gap: 6px; }
+.mdp-board__right { justify-content: flex-end; }
+.mdp-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.mdp-dot--win { background: var(--win); }
+.mdp-dot--loss { background: var(--loss); }
+.mdp-board__row { height: 30px; }
+.mdp-board__pos { display: flex; justify-content: center; color: var(--faint); }
+.mdp-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 8px 0 2px;
+  border-radius: 8px;
+}
+.mdp-side--enemy { flex-direction: row-reverse; padding: 0 2px 0 8px; }
+.mdp-side--me { background: var(--raised); box-shadow: inset 0 1px 0 var(--rim); }
+.mdp-side--me .mdp-side__name { font-weight: 500; }
+.mdp-side__name {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.mdp-side__kda {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.mdp-side--enemy .mdp-side__kda { margin-left: 0; margin-right: auto; }
+/* El retrato de ChampionAvatar es redondo por dentro (estilo en línea); en el
+   marcador va en cuadrado suave, como en el cliente. */
+.mdp-sq { display: block; flex: none; }
+.mdp-sq > div { border-radius: 7px !important; }
+
+/* Bloque vacío amable: qué falta y el botón que lo trae. */
+.mdp-empty {
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px 24px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sunken) 55%, transparent);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  text-align: center;
+}
+.mdp-empty__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+.mdp-empty__txt { font-size: 13.5px; line-height: 1.45; color: var(--muted); max-width: 280px; }
+.mdp-empty__err { font-size: 12.5px; line-height: 1.4; color: var(--loss); overflow-wrap: anywhere; }
+
+/* Secciones con cabecera en frase. */
+.mdp-sec { display: flex; flex-direction: column; gap: 6px; }
+.mdp-sec__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--faint);
+}
+.mdp-sec__aside { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+.mdp-none { margin: 4px 0 0; font-size: 13px; color: var(--faint); }
+
+.mdp-list { display: flex; flex-direction: column; }
+.mdp-moment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  width: 100%;
+  padding: 0 6px;
+  margin: 0 -6px;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.mdp-moment:last-child { box-shadow: none; }
+.mdp-moment:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.mdp-moment:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+/* Marca de tiempo de vídeo: la única voz mono del panel junto a los atajos. */
+.mdp-time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  background: var(--sunken);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0;
+}
+.mdp-moment__txt {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mdp-moment__txt--note { color: var(--muted); }
+.mdp-chip {
+  flex: none;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.mdp-chip--loss { color: var(--loss); background: color-mix(in srgb, var(--loss) 12%, transparent); }
+.mdp-chip--gold { color: var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+.mdp-chip--flag { color: var(--flag); background: color-mix(in srgb, var(--flag) 14%, transparent); }
+
+/* ---- Acciones ---------------------------------------------------------- */
+.mdp-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 20px 20px;
+}
+/* El botón de acción de la pantalla: la clase global pone el oro; aquí solo
+   el tamaño y la voz (sans, frase). */
+.mdp-cta {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  gap: 10px;
+  border-radius: 10px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.mdp-cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.mdp-cta__kbd {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--on-action);
+  background: color-mix(in srgb, var(--on-action) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-action) 18%, transparent);
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+.mdp-actions__row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* Botón de superficie: el segundo escalón, sin tinte. */
+.mdp-sbtn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mdp-sbtn svg { color: var(--muted); }
+.mdp-sbtn:hover:not(:disabled) { box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong); }
+.mdp-sbtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.mdp-sbtn:disabled { cursor: default; opacity: 0.7; }
+.mdp-sbtn--danger:hover:not(:disabled) { color: var(--loss); }
+.mdp-sbtn--danger:hover:not(:disabled) svg { color: var(--loss); }
+
+.mdp-spin { animation: spin 0.8s linear infinite; }
+
+/* Ventana baja (720-820 px): todo un escalón más prieto para que los momentos
+   por revisar sigan a la vista sin hacer scroll. */
+@media (max-height: 820px) {
+  .mdp-hero { padding-top: 16px; padding-bottom: 12px; }
+  .mdp-hero__row { gap: 14px; }
+  .mdp-portrait { width: 52px; height: 52px; }
+  .mdp-portrait > div { width: 52px !important; height: 52px !important; }
+  .mdp-hero__txt { gap: 4px; }
+  .mdp-res { font-size: 22px; }
+  .mdp-figs { padding: 10px 0; }
+  .mdp-fig__val { font-size: 18px; }
+  .mdp-body { gap: 12px; padding-top: 12px; }
+  .mdp-board__head { margin-bottom: 2px; }
+  .mdp-board__row,
+  .mdp-side { height: 27px; }
+  .mdp-empty { min-height: 0; padding: 14px 20px; gap: 10px; }
+  .mdp-moment { height: 32px; }
+  .mdp-actions { gap: 6px; padding-top: 10px; padding-bottom: 14px; }
+  .mdp-cta { height: 40px; }
+  .mdp-sbtn { height: 32px; }
+}
+
+/* Entre 1280 y 1440 el panel cede ancho a la lista. */
+@media (max-width: 1439px) {
+  .mdp { width: 348px; }
+  .mdp-hero { padding-left: 18px; padding-right: 18px; }
+  .mdp-figs { margin: 0 18px; }
+  .mdp-body { padding-left: 18px; padding-right: 18px; }
+  .mdp-actions { padding-left: 18px; padding-right: 18px; }
+}

@@ -95,7 +95,7 @@ fn time_increase_factor(minute: f64) -> f64 {
 }
 
 /// Cuánto dura una muerte concreta, en segundos.
-fn death_timer(level: i32, minute: f64) -> f64 {
+pub(crate) fn death_timer(level: i32, minute: f64) -> f64 {
     let idx = (level.clamp(1, 18) - 1) as usize;
     BASE_RESPAWN[idx] * (1.0 + time_increase_factor(minute))
 }

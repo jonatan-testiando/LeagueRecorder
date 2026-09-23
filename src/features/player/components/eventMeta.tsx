@@ -1,14 +1,16 @@
 // Iconografía y clasificación de los eventos de partida: de un `MatchEvent` a su icono, color,
 // etiqueta y "tono" (lo bueno o malo que fue). Vive aparte de VideoPlayer porque es una unidad
-// cerrada: los iconos y las tablas de color de aquí no los usa nadie más que `eventMeta`.
+// cerrada. Los glifos se exportan para la tabla de objetivos del inspector, que habla el mismo
+// vocabulario (dragón, barón, heraldo, torre) que la línea de tiempo.
 //
 // Los iconos son de trazo y heredan `currentColor`, con el mismo grosor que los de lucide para
 // que unos y otros pesen igual cuando aparecen juntos. Antes eran insignias con degradados y
 // `drop-shadow` de neón: eso los ataba a una paleta fija (57 colores escritos a mano en este
 // archivo) y era el detalle que más abarataba el reproductor.
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { MatchEvent } from "../../../types";
+import { champIcon } from "../../../core/ddragon";
 import { Sparkles, Flag, Trophy, FlagOff, AlertTriangle, ThumbsUp, XCircle } from "lucide-react";
 
 export type Tone = "excellent" | "good" | "inaccuracy" | "mistake" | "throw" | "neutral";
@@ -37,7 +39,7 @@ const GlyphBase: React.FC<{ size: number; children: React.ReactNode }> = ({ size
 );
 
 /** Espadas cruzadas. */
-const IconKill: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconKill: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M4.5 4.5h3l9.5 9.5M19.5 4.5h-3L7 14" />
     <path d="M5 17l2 2M19 17l-2 2" />
@@ -46,7 +48,7 @@ const IconKill: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 
 /** Calavera. */
-const IconDeath: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconDeath: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M12 3.5c-4.1 0-7 2.9-7 6.8 0 2.2 1 3.9 2.4 5v2.2c0 .6.4 1 1 1h7.2c.6 0 1-.4 1-1V15.3c1.4-1.1 2.4-2.8 2.4-5 0-3.9-2.9-6.8-7-6.8Z" />
     <circle cx="9.4" cy="10.6" r="1.4" />
@@ -56,7 +58,7 @@ const IconDeath: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 
 /** Escudo con visto: participaste sin rematar. */
-const IconAssist: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconAssist: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M12 3.5 5.5 6v5.2c0 4 2.8 7 6.5 8.8 3.7-1.8 6.5-4.8 6.5-8.8V6L12 3.5Z" />
     <path d="m9.3 11.6 1.9 1.9 3.6-3.7" />
@@ -64,14 +66,14 @@ const IconAssist: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 
 /** Ala de dragón. */
-const IconDragon: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconDragon: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M3 8.5c3.5-.4 6 .6 7.6 2.4L12 4l1.4 6.9C15 9.1 17.5 8.1 21 8.5c-1.6 2.6-2.9 4.4-4.8 5.6l1.5 5.4-5.7-3.2-5.7 3.2 1.5-5.4C5.9 12.9 4.6 11.1 3 8.5Z" />
   </GlyphBase>
 );
 
 /** Fauces del barón. */
-const IconBaron: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconBaron: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M4 5.5 6.5 11 12 4.5 17.5 11 20 5.5 18.2 15H5.8L4 5.5Z" />
     <path d="M6.2 17.5h11.6" />
@@ -80,7 +82,7 @@ const IconBaron: React.FC<{ size?: number }> = ({ size = 18 }) => (
 );
 
 /** Torreta. */
-const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
+export const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
     <path d="M8 4.5v2.2M12 4.5v2.2M16 4.5v2.2" />
     <path d="M7 4.5h10v2.5l-1.5 1.6V16h-7V8.6L7 7V4.5Z" />
@@ -88,13 +90,40 @@ const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </GlyphBase>
 );
 
+/** Heraldo: el caparazón con su ojo. Compartía la torreta, y en la línea de
+ *  tiempo un heraldo y una torre caídos al lado eran la misma marca. */
+export const IconHerald: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <GlyphBase size={size}>
+    <path d="M4 15.5c0-5 3.6-9 8-9s8 4 8 9" />
+    <path d="M4 15.5h16" />
+    <circle cx="12" cy="12" r="2.2" />
+    <path d="M7.5 19.5 9 15.5M16.5 19.5 15 15.5" />
+  </GlyphBase>
+);
+
+/** Rombo: hallazgo del analizador. Es la única forma que no es un círculo en
+ *  la línea de tiempo, así que se distingue sin depender solo del violeta. */
+export const IconFinding: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M12 3.5 20.5 12 12 20.5 3.5 12Z"
+      fill="color-mix(in srgb, currentColor 30%, transparent)"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
 // Un tinte por trabajo. Los objetivos (dragón, barón, heraldo) comparten el oro
 // a propósito: son la misma categoría de suceso y se distinguen por el glifo.
+// El violeta es SOLO del analizador (hallazgos): las definitivas lo usaban y en
+// la línea de tiempo se confundían con un hallazgo.
 const C_ALLY = "var(--win)";
 const C_ENEMY = "var(--loss)";
 const C_OBJECTIVE = "var(--brand)";
 const C_STRUCTURE = "var(--cool)";
-const C_ABILITY = "var(--flag)";
+const C_ABILITY = "var(--muted)";
 const C_NEUTRAL = "var(--faint)";
 
 const objTone = (s?: string): Tone => (s === "ally" ? "excellent" : s === "enemy" ? "mistake" : "neutral");
@@ -121,7 +150,7 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
     case "BaronKill":
       return { icon: <IconBaron size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Baron", tone: objTone(ev.subtype), category: "objectives" };
     case "HeraldKill":
-      return { icon: <IconTower size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Herald", tone: objTone(ev.subtype), category: "objectives" };
+      return { icon: <IconHerald size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Herald", tone: objTone(ev.subtype), category: "objectives" };
     case "TowerKill":
       return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Tower", tone: structTone(ev.subtype), category: "structures" };
     case "InhibKill":
@@ -145,14 +174,48 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
  * `text` es la cadena inglesa, que es la clave de i18n: quien la pinta la pasa
  * por `t()`. Se quedo sin traducir hasta que se vio en pantalla — una columna
  * de palabras en ingles en una interfaz en espanol.
+ *
+ * El oro ya no es de ningún tono: es la acción de la pantalla. Un «Error» en
+ * oro se leía como un botón; ahora lo malo es rojo y lo bueno jade, como en la
+ * línea de tiempo.
  */
 export function toneLabelAndIcon(tone: Tone) {
   switch (tone) {
-    case "excellent": return { text: "Excellent", color: "var(--brand)", icon: <Sparkles size={12} fill="currentColor" /> };
+    case "excellent": return { text: "Excellent", color: "var(--win)", icon: <Sparkles size={12} fill="currentColor" /> };
     case "good": return { text: "Good", color: "var(--win)", icon: <ThumbsUp size={12} fill="currentColor" /> };
-    case "inaccuracy": return { text: "Inaccuracy", color: "var(--brand)", icon: <AlertTriangle size={12} fill="currentColor" /> };
-    case "mistake": return { text: "Mistake", color: "var(--brand)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "inaccuracy": return { text: "Inaccuracy", color: "var(--muted)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "mistake": return { text: "Mistake", color: "var(--loss)", icon: <AlertTriangle size={12} fill="currentColor" /> };
     case "throw": return { text: "Throw", color: "var(--loss)", icon: <XCircle size={12} fill="currentColor" /> };
     default: return { text: "Info", color: "var(--faint)", icon: <div style={{width:8,height:8,borderRadius:4,background:"currentColor"}}/> };
   }
 }
+
+/**
+ * Retrato de un campeón para las marcas de la línea de tiempo, con la vuelta al
+ * icono si el fichero no está. Los 174 retratos viajan con la app
+ * (`public/champions`), así que casi nunca falla; cuando falla (un campeón
+ * nuevo, un nombre raro) se ve el glifo del suceso y no un hueco.
+ */
+export const ChampFace: React.FC<{
+  champion: string;
+  size: number;
+  fallback: React.ReactNode;
+  style?: React.CSSProperties;
+  className?: string;
+}> = ({ champion, size, fallback, style, className }) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [champion]);
+  if (failed) return <>{fallback}</>;
+  return (
+    <img
+      src={champIcon(champion)}
+      alt=""
+      width={size}
+      height={size}
+      className={className}
+      style={style}
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  );
+};

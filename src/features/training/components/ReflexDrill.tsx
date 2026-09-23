@@ -357,7 +357,7 @@ export const ReflexDrill: React.FC<{
   if (phase === "countdown") {
     return (
       <div style={styles.panel}>
-        <div style={styles.countdown}>{countdown === 0 ? t("GO") : countdown}</div>
+        <div style={styles.countdown}>{countdown === 0 ? t("Go!") : countdown}</div>
         <p style={styles.desc}>{t("Hands on the keys.")}</p>
       </div>
     );
@@ -581,25 +581,23 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 500, color: "var(--text)" },
+  title: { margin: 0, fontSize: 16, fontWeight: 500, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 560 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
   poolError: {
     display: "inline-flex",
     alignItems: "center",
     gap: "var(--space-2)",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--loss)",
   },
   optionLabel: {
-    fontSize: "var(--font-xs)",
-    fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 400,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
     width: 70,
   },
-  chip: { padding: "6px 14px", fontSize: "var(--font-xs)" },
+  chip: { padding: "6px 14px", fontSize: 13, fontVariantNumeric: "tabular-nums" },
   bigBtn: {
     padding: "10px 20px",
     fontSize: "var(--font-sm)",
@@ -608,10 +606,10 @@ const styles: Record<string, React.CSSProperties> = {
   },
   countdown: {
     fontSize: 96,
-    fontWeight: 800,
+    fontWeight: 600,
     color: "var(--accent-violet)",
     textAlign: "center",
-    fontFamily: "var(--font-mono)",
+    fontVariantNumeric: "tabular-nums",
   },
   stage: {
     height: 220,
@@ -624,8 +622,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   roleprompt: {
     fontSize: 56,
-    fontWeight: 800,
-    letterSpacing: "0.06em",
+    fontWeight: 600,
     color: "var(--text)",
   },
   champWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-3)" },
@@ -641,17 +638,17 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     background: "var(--surface-2)",
-    fontWeight: 800,
+    fontWeight: 600,
     fontSize: 32,
     color: "var(--muted)",
   },
   champName: { fontSize: "var(--font-xl)", fontWeight: 500, color: "var(--text)" },
   feedback: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" },
-  feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 500, fontFamily: "var(--font-mono)" },
+  feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 500, fontVariantNumeric: "tabular-nums" },
   progressRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   progressText: {
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
+    fontVariantNumeric: "tabular-nums",
     color: "var(--faint)",
     minWidth: 60,
   },
@@ -670,25 +667,23 @@ const styles: Record<string, React.CSSProperties> = {
   liveStats: {
     display: "flex",
     justifyContent: "space-between",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--faint)",
-    fontFamily: "var(--font-mono)",
+    fontVariantNumeric: "tabular-nums",
   },
   statRow: { display: "flex", gap: "var(--space-6)", flexWrap: "wrap" },
   stat: { display: "flex", flexDirection: "column", gap: 2 },
   statLabel: {
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    fontWeight: 500,
+    fontWeight: 400,
   },
-  statValue: { fontSize: "var(--font-2xl)", fontWeight: 800, fontFamily: "var(--font-mono)" },
+  statValue: { fontSize: 24, fontWeight: 500, fontVariantNumeric: "tabular-nums" },
   breakdown: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
   breakdownRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   breakdownRole: {
     width: 90,
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     fontWeight: 500,
     color: "var(--muted)",
   },
@@ -703,15 +698,15 @@ const styles: Record<string, React.CSSProperties> = {
   breakdownVal: {
     width: 70,
     textAlign: "right",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
+    fontVariantNumeric: "tabular-nums",
+    fontSize: 13,
     color: "var(--muted)",
   },
   breakdownAcc: {
     width: 50,
     textAlign: "right",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
+    fontVariantNumeric: "tabular-nums",
+    fontSize: 13,
     fontWeight: 500,
   },
   trackArea: {
@@ -736,9 +731,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "absolute",
     left: "var(--space-3)",
     bottom: "var(--space-2)",
-    fontSize: 10,
+    fontSize: 12,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
   },
 };

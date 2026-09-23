@@ -1,13 +1,86 @@
-.pressure-episode { padding: 14px; margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
-.pressure-episode__head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
-.pressure-episode p { margin: 9px 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-.pressure-episode .pressure-episode__source { color: var(--faint); }
-.pressure-episode__assessment { display: block; font-size: 13px; margin: 12px 0; }
-.pressure-episode button { cursor: pointer; color: var(--brand); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 6px 9px; font: inherit; font-size: 12px; }
-.pressure-episode summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-.pressure-episode button:focus-visible, .pressure-episode summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
-.pressure-episode h4 { font-size: 12px; font-weight: 500; margin: 16px 0 8px; }
-.pressure-episode ul { margin: 0; padding-left: 16px; }
-.pressure-episode li { font-size: 12px; margin: 8px 0; line-height: 1.6; }
-.pressure-episode li button { margin-left: 8px; }
-.pressure-episode small { color: var(--faint); }
+/* Episodio de presión absorbida. Tipografía «Post-partida»: sans con cifras
+   tabulares, mono solo en las marcas de tiempo (.u-time). */
+.pe {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  font-variant-numeric: tabular-nums;
+}
+.pe--good { background: linear-gradient(90deg, color-mix(in srgb, var(--win) 9%, var(--panel)) 0%, var(--panel) 60%); }
+.pe--bad { background: linear-gradient(90deg, color-mix(in srgb, var(--loss) 8%, var(--panel)) 0%, var(--panel) 60%); }
+
+.pe__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pe__when { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-size: 13px; color: var(--muted); }
+.pe__label { color: var(--text); font-weight: 500; margin-right: 6px; }
+.pe__net { display: flex; align-items: baseline; gap: 6px; }
+.pe__net strong { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+.pe--good .pe__net strong { color: var(--win); }
+.pe--bad .pe__net strong { color: var(--loss); }
+.pe__net span { font-size: 13px; color: var(--faint); }
+
+.pe__verdict-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pe__verdict {
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+}
+.pe__verdict--good { color: var(--win); background: color-mix(in srgb, var(--win) 14%, transparent); }
+.pe__verdict--bad { color: var(--loss); background: color-mix(in srgb, var(--loss) 13%, transparent); }
+
+.pe__ties { display: flex; align-items: flex-start; gap: 10px; }
+.pe__faces { display: flex; flex-shrink: 0; padding-top: 1px; }
+.pe__faces > * + * { margin-left: -7px; }
+.pe__ties p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text); }
+.pe__tie-list { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
+
+.pe__rows { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.pe__rows > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.pe__rows dt { color: var(--muted); }
+.pe__rows dd { margin: 0; color: var(--text); }
+.pe__rows dd.pos { color: var(--win); }
+.pe__rows dd.neg { color: var(--loss); }
+.pe__rows .pe__total { margin-top: 4px; padding-top: 8px; box-shadow: inset 0 1px 0 var(--hair); font-weight: 600; }
+.pe__rows .pe__total dt { color: var(--text); }
+
+.pe__note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.pe__source { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+
+.pe__details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.pe__details summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+.pe__details h4 { margin: 12px 0 4px; font-size: 12.5px; font-weight: 500; color: var(--faint); }
+.pe__details ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
+.pe-ev {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.pe-ev:hover:not(:disabled) { background: var(--raised); }
+.pe-ev:disabled { cursor: default; }
+.pe-ev:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.pe-ev__what { flex: 1; }
+.pe-ev__after { color: var(--faint); }
+.pe-ev__gold { color: var(--muted); }
+.pe-ev__gold.pos { color: var(--win); }
+.pe-ev__gold.neg { color: var(--loss); }
+
+/* Resumen de la partida, encima de las tarjetas (pestaña Impacto). */
+.pe-sum { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--text); font-variant-numeric: tabular-nums; }

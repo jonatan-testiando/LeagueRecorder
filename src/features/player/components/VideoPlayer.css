@@ -1,14 +1,17 @@
 /* =========================================================================
    Reproductor de una partida — cromo de la pantalla.
 
-   Sigue la maqueta "Reproductor": barra superior de 56 px, cuerpo en rejilla
-   (vídeo + línea de tiempo + transporte a la izquierda, inspector a la
-   derecha) y un inspector de TRES pestañas. Solo tokens de index.css: el tema
-   claro llega aquí sin que este fichero se entere.
+   Sigue la maqueta «Revisión» (rediseño Post-partida): cabecera de 56 px con
+   la partida y las dos acciones, cuerpo en rejilla (vídeo, línea de tiempo y
+   transporte a la izquierda; inspector de tres pestañas a la derecha). Solo
+   tokens de index.css: el tema claro llega aquí sin que este fichero se entere.
+
+   Tipografía: todo en sans con cifras tabulares. La mono queda para lo que se
+   lee como código de máquina —los instantes del vídeo (`.u-time`) y los atajos
+   (`.u-kbd`)—, las dos utilidades globales de index.css.
 
    Vive junto al componente y no en index.css porque son clases de una sola
-   pantalla; lo compartido (.card, .btn, .badge, .field, .evrow, .rq-done,
-   .tp-b) sigue en index.css y aquí solo se afina.
+   pantalla; lo compartido (.btn, .badge, .insp, .drow, .tp-more) sigue allí.
    ========================================================================= */
 
 .vp {
@@ -20,62 +23,155 @@
   position: relative;
 }
 
-/* --- barra superior ----------------------------------------------------- */
+/* --- botones de la pantalla ---------------------------------------------- */
+/* Icono solo, con filo: volver. */
+.vp-iconbtn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  color: var(--muted);
+  cursor: pointer;
+}
+.vp-iconbtn:hover { background: var(--raised); color: var(--text); }
+.vp-iconbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+
+/* Botón de superficie: lámina elevada con filo. El oro es de UNA acción por
+   pantalla (guardar la nota); crear clip y marcar error van en superficie. */
+.vp-sbtn {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vp-sbtn:has(> .u-kbd:last-child) { padding-right: 8px; }
+.vp-sbtn:hover { background: color-mix(in srgb, var(--text) 6%, var(--raised)); }
+.vp-sbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.vp-sbtn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--text) 8%, var(--raised));
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong);
+}
+.vp-sbtn .u-kbd { background: var(--panel); }
+.vp-sbtn--sm { height: 32px; font-size: 13px; }
+.vp-sbtn--icon { width: 32px; padding: 0; justify-content: center; }
+
+/* --- cabecera de la partida ---------------------------------------------- */
 .vp-top {
   height: 56px;
   flex: none;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0 24px;
-  box-shadow: inset 0 -1px 0 var(--hair);
+  padding: 0 16px;
+  min-width: 0;
 }
-.vp-top__back {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  justify-content: center;
+/* Retrato con el aro del resultado y un filo del color del fondo entre los
+   dos, como el marco de un icono de invocador. */
+.vp-top__face {
+  width: 40px;
+  height: 40px;
   flex: none;
-}
-.vp-top__avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  object-fit: cover;
-  box-shadow: 0 0 0 1px var(--hair);
-  background: var(--sunken);
-  flex: none;
-  display: block;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ground);
 }
 .vp-top__block {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 .vp-top__title {
-  margin: 0;
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-  color: var(--text);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
   white-space: nowrap;
 }
-.vp-top__result { font-weight: 400; }
+.vp-top__title h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.vp-top__result { font-size: 14px; font-weight: 500; }
+.vp-top__lp {
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--win);
+  background: color-mix(in srgb, var(--win) 14%, transparent);
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+.vp-top__lp[data-down] {
+  color: var(--loss);
+  background: color-mix(in srgb, var(--loss) 14%, transparent);
+}
 .vp-top__meta {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vp-top__actions {
-  margin-left: auto;
+.vp-top__fill { flex: 1; min-width: 8px; }
+.vp-top__progress {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.vp-meter {
+  width: 72px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  overflow: hidden;
+}
+.vp-meter > div {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cool);
+  transition: width var(--t-base) var(--e-move);
+}
+.vp-top__actions {
+  display: flex;
+  align-items: center;
   gap: 8px;
   flex: none;
+}
+.vp-top__sep {
+  width: 1px;
+  height: 24px;
+  margin: 0 4px;
+  background: var(--hair);
 }
 
 /* --- cuerpo --------------------------------------------------------------- */
@@ -87,8 +183,8 @@
      lista larga tienen que caber, no empujar. Las columnas las pone el
      componente (la derecha es redimensionable). */
   grid-template-rows: minmax(0, 1fr);
-  gap: 18px;
-  padding: 18px 24px 22px;
+  gap: 16px;
+  padding: 0 16px 16px;
   /* La barra del recortador se ancla aquí: así también sale en pantalla
      completa, que es este mismo nodo. */
   position: relative;
@@ -105,266 +201,710 @@
 
 .vp-video {
   flex: 1;
-  min-height: 0;
+  min-height: 160px;
   position: relative;
   overflow: hidden;
-  border-radius: var(--radius-lg);
+  border-radius: 12px;
   background: var(--sunken);
+  display: flex;
+  flex-direction: column;
+}
+/* El filo va ENCIMA del vídeo: como sombra interior del marco quedaba debajo
+   de la imagen y no se veía. */
+.vp-video::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   box-shadow: inset 0 0 0 1px var(--hair);
-  display: flex;
-  flex-direction: column;
+  pointer-events: none;
+  z-index: 7;
 }
-.vp-body--fs .vp-video { border-radius: 0; box-shadow: none; }
+.vp-body--fs .vp-video { border-radius: 0; }
+.vp-body--fs .vp-video::after { display: none; }
 
-/* Línea de tiempo: cabecera (APM, miradas) y la tira con la curva y los
-   marcadores. El alto de la tira (56 px) lo fijan las dos filas de marcadores
-   en VideoPlayer.tsx; el resto es cabecera y el sitio del eje bajo la tira. */
-.vp-tl {
-  flex: none;
-  height: 112px;
-  position: relative;
-  border-radius: 8px;
-  background: var(--sunken);
-  box-shadow: var(--inset-sunken), inset 0 0 0 1px var(--hair);
-  padding: 8px 12px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.vp-tl__head {
+/* --- aviso del analizador sobre el vídeo --------------------------------- */
+.vp-notice {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 8;
+  max-width: min(560px, calc(100% - 32px));
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex: none;
-  min-height: 20px;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--flag) 16%, color-mix(in srgb, var(--ground) 78%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 32%, transparent);
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  animation: vp-notice-in var(--t-quick) var(--e-move) both;
 }
-.vp-tl__strip {
-  flex: 1;
-  min-height: 0;
-  position: relative;
+.vp-notice--fs {
+  position: static;
+  align-self: flex-start;
+  max-width: min(560px, 100%);
+}
+@keyframes vp-notice-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.vp-notice__icon { flex: none; color: var(--flag); }
+.vp-notice__text { font-size: 13.5px; line-height: 1.4; }
+.vp-notice__text b {
+  font-weight: 500;
+  color: color-mix(in srgb, var(--flag) 55%, var(--text));
+}
+.vp-notice__x {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
   cursor: pointer;
 }
+.vp-notice__x:hover { color: var(--text); background: color-mix(in srgb, var(--flag) 18%, transparent); }
+.vp-notice__x:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
 
-.vp-transport {
+/* --- línea de tiempo ------------------------------------------------------ */
+/* Tarjeta con el nombre de cada fila a la izquierda y la pista a la derecha.
+   Las alturas de las filas las ponen las constantes de VideoPlayer.tsx
+   (RULER_H, BAR_H, APM_H, LANE_H): la pista y el canal de nombres las
+   comparten. Sin overflow: la etiqueta de posición sube por encima. */
+.vp-tl {
+  flex: none;
+  position: relative;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+.vp-tl__gutter {
+  width: 48px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--faint);
+}
+.vp-tl__gutter > span { flex: none; }
+.vp-tl__g {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+.vp-tl__g b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.vp-tl__g--lane { justify-content: space-between; padding-top: 4px; }
+.vp-tl__looks { line-height: 12px; }
+
+.vp-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.vp-track__ruler { position: relative; }
+.vp-track__ruler .u-time {
+  position: absolute;
+  top: 0;
+  line-height: 16px;
+  color: var(--faint);
+}
+.vp-track__grid {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  pointer-events: none;
+}
+.vp-track__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 999px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+.vp-track__played {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 78%, var(--ground)), var(--brand));
+}
+.vp-track__apm {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+}
+.vp-track__lane { position: absolute; left: 0; right: 0; }
+.vp-track__guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 4;
+}
+/* Cabezal en oro: la línea atraviesa barra, curva y carril; el asa va sobre
+   la barra. */
+.vp-track__head {
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--brand);
+  pointer-events: none;
+  z-index: 20;
+}
+.vp-track__knob {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 82%, var(--text));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 21;
+}
+.vp-track__hover {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text) 40%, transparent);
+  pointer-events: none;
+  z-index: 15;
+}
+.vp-track__clip {
+  position: absolute;
+  bottom: 0;
+  background: color-mix(in srgb, var(--clip) 22%, transparent);
+  border-left: 2px solid var(--clip);
+  border-right: 2px solid var(--clip);
+  z-index: 12;
+}
+
+/* Marca de suceso. Círculo teñido del color de su trabajo con el glifo
+   dentro; si se sabe el campeón del otro lado, su retrato encima con el aro
+   del resultado. El filo del color del carril las recorta cuando se pisan. */
+.vp-mark {
+  position: absolute;
+  transform: translateX(-50%);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--mark);
+  background: color-mix(in srgb, var(--mark) 16%, var(--panel));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--mark) 70%, transparent), 0 0 0 2px var(--panel);
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
+}
+.vp-mark:hover { background: color-mix(in srgb, var(--mark) 28%, var(--panel)); }
+.vp-mark:focus-visible { outline: 2px solid var(--cool); outline-offset: 3px; }
+.vp-mark[data-on] { background: var(--mark); color: var(--panel); }
+.vp-mark__glyph { display: flex; }
+.vp-mark__face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--sunken);
+  box-shadow: 0 0 0 1.5px var(--ring), 0 0 0 3.5px var(--panel);
+}
+.vp-mark:hover .vp-mark__face { filter: brightness(1.12); }
+.vp-mark[data-on] .vp-mark__face {
+  box-shadow: 0 0 0 2px var(--brand), 0 0 0 4px var(--panel);
+}
+/* Hallazgo: rombo violeta. Es la única marca que no es un círculo. */
+.vp-mark--finding,
+.vp-mark--finding:hover,
+.vp-mark--finding[data-on] { background: transparent; box-shadow: none; }
+.vp-mark__diamond {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  background: color-mix(in srgb, var(--flag) 32%, var(--panel));
+  box-shadow: inset 0 0 0 1.5px var(--flag), 0 0 0 2.5px var(--panel),
+    0 0 14px color-mix(in srgb, var(--flag) 50%, transparent);
+}
+.vp-mark--finding:hover .vp-mark__diamond { background: color-mix(in srgb, var(--flag) 48%, var(--panel)); }
+.vp-mark--finding[data-on] .vp-mark__diamond { background: var(--flag); }
+
+/* Etiqueta al pasar por encima de la pista. */
+.vp-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  z-index: 100;
+  min-width: 120px;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--hair-strong);
+  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
+  pointer-events: none;
+}
+.vp-tip__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.vp-tip__apm { color: var(--muted); }
+.vp-tip__ev {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.vp-tip__ev span { color: var(--text); }
+
+/* --- transporte ----------------------------------------------------------- */
+.vp-transport {
+  height: 44px;
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.vp-transport--fs { height: auto; }
+.vp-transport__fill { flex: 1; min-width: 8px; }
+/* Las miradas al mapa (o el botón que las busca) ceden primero cuando la
+   columna estrecha: se recortan hasta quedarse en el icono, y los controles de
+   la derecha (velocidad, volumen, ajustes, pantalla completa) no se salen. */
+.vp-transport__aux {
+  flex: 0 1 auto;
+  min-width: 36px;
+  display: flex;
+  overflow: hidden;
+}
+.vp-transport__aux > * { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.vp-tbtn__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vp-looks > .u-metric { overflow: hidden; text-overflow: ellipsis; }
+
+.vp-play {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  margin-right: 6px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong);
+  color: var(--text);
+  cursor: pointer;
+}
+.vp-play:hover { background: color-mix(in srgb, var(--text) 8%, var(--raised)); }
+.vp-play:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+
+.vp-tbtn {
+  height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vp-tbtn svg { flex: none; }
+.vp-tbtn:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.vp-tbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.vp-tbtn:disabled { opacity: 0.6; cursor: default; }
+.vp-tbtn .u-kbd {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 -1px 0 var(--kbd-edge);
+}
+.vp-tbtn--icon { width: 36px; padding: 0; justify-content: center; }
+
+.vp-clock {
+  margin-left: 8px;
+  flex: none;
+  font-size: 13px;
+  color: var(--text);
+}
+.vp-clock b { font-weight: 500; }
+.vp-clock span { color: var(--faint); }
+
+.vp-looks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  margin-right: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.vp-looks svg { flex: none; }
+
+.vp-speeds {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.vp-speeds button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.vp-speeds button:hover { color: var(--text); }
+.vp-speeds button:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.vp-speeds button[data-on] {
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  color: var(--text);
+  font-weight: 500;
+}
+
+.vp-vol { margin-left: 4px; }
+
+/* Deslizadores del reproductor: pista hundida y asa de hueso. Con
+   `appearance: none` y sin asa propia, el asa desaparecía. */
+.vp-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  cursor: pointer;
+}
+.vp-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+.vp-range:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+.vp-range--wide { flex: 1; }
+
+.vp-more summary {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--muted);
+}
+.vp-keys { margin-top: 8px; display: grid; gap: 4px; }
+.vp-keys__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.vp-keys__row span { font-size: 12px; color: var(--faint); }
+
+/* Casilla propia: la nativa salía como un cuadrado claro sobre el panel. */
+.vp-check {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1.5px var(--hair-strong);
+  cursor: pointer;
+  transition: background-color var(--t-instant) var(--e-move), box-shadow var(--t-instant) var(--e-move);
+}
+.vp-check:hover { box-shadow: inset 0 0 0 1.5px var(--faint); }
+.vp-check:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.vp-check:checked { background: var(--cool); box-shadow: none; }
+.vp-check:checked::after {
+  content: "";
+  width: 8px;
+  height: 4px;
+  margin-top: -2px;
+  border-left: 2px solid var(--panel);
+  border-bottom: 2px solid var(--panel);
+  transform: rotate(-45deg);
 }
 
 /* --- inspector ------------------------------------------------------------ */
 .vp-insp {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 14px;
   min-height: 0;
   min-width: 0;
   position: relative;
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+  overflow: hidden;
 }
 
-/* Pestañas como segmentado: un carril hundido y la activa como lámina. */
+/* Pestañas subrayadas: la activa lleva 2 px de oro debajo. */
 .vp-tabs {
-  display: flex;
-  padding: 4px;
-  gap: 2px;
-  border-radius: 8px;
-  background: var(--sunken);
-  box-shadow: var(--inset-sunken);
+  height: 46px;
   flex: none;
+  display: flex;
+  gap: 24px;
+  padding: 0 20px;
+  box-shadow: inset 0 -1px 0 var(--hair);
 }
 .vp-tab {
-  flex: 1;
-  height: 30px;
+  position: relative;
+  height: 46px;
+  padding: 0;
   border: 0;
-  border-radius: 6px;
   background: transparent;
   color: var(--faint);
   font: inherit;
-  font-size: 13px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
-  transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move);
 }
 .vp-tab:hover { color: var(--text); }
-.vp-tab:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
-.vp-tab[data-on] {
-  background: var(--raised);
-  color: var(--text);
-  font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+.vp-tab:focus-visible { outline: 2px solid var(--cool); outline-offset: -4px; border-radius: 4px; }
+.vp-tab[data-on] { color: var(--text); }
+.vp-tab[data-on]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--brand);
 }
 
-.vp-pane {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-/* Partida e Impacto: la tarjeta ya pone el aire; el .insp no lo repite. */
-.vp-insp > .insp { padding: 0 2px 0 0; }
+/* Partida e Impacto: la lectura de siempre, con su propio desplazamiento. */
+.vp-insp > .insp { padding: 16px; }
 
-/* --- Revisión: el suceso destacado --------------------------------------- */
-/* Superficie de hallazgo sobre lámina elevada: el mismo brillo azul de
-   --media-sheen, pero saliendo de --raised para que se lea como tarjeta
-   dentro de la tarjeta. */
-.evfeat.vp-feat {
-  flex: none;
-  padding: 14px 16px;
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(
-    90deg,
-    var(--raised) 0%,
-    color-mix(in srgb, var(--flag) 9%, var(--raised)) 55%,
-    color-mix(in srgb, var(--flag) 22%, var(--raised)) 100%
-  );
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
-}
-.vp-feat__meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.vp-feat__meta .u-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vp-feat__name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 0;
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.vp-feat__desc {
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-.vp-feat__actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-
-/* --- Revisión: chips de filtro ------------------------------------------- */
+/* --- Revisión: chips de filtro -------------------------------------------- */
 .vp-filters {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  flex: none;
+  padding: 12px 16px;
 }
-.vp-filters__count { margin-left: auto; white-space: nowrap; }
-
 .vp-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 26px;
-  padding: 0 11px;
-  border-radius: var(--radius-full);
+  height: 28px;
+  padding: 0 10px;
   border: 0;
+  border-radius: 999px;
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--muted);
   font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+  font-size: 12.5px;
   white-space: nowrap;
+  cursor: pointer;
   transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move),
     box-shadow var(--t-instant) var(--e-move);
 }
 .vp-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
 .vp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.vp-chip[data-on],
-.vp-chip[aria-pressed="true"] {
+.vp-chip[data-on] {
   background: var(--raised);
   color: var(--text);
+  font-weight: 500;
   box-shadow: inset 0 0 0 1px var(--hair-strong);
 }
-.vp-chip__n {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
-}
-
-/* --- Revisión: la lista --------------------------------------------------- */
-.vp-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-/* Fila: hora · punto del tipo · texto · tono · hecho. Sobre .evrow para heredar
-   hover y selección; sin divisor y con radio, como pide la maqueta. */
-.evrow.vp-ev {
-  grid-template-columns: 44px 10px minmax(0, 1fr) auto auto;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 0;
-  border-radius: 8px;
-  flex: none;
-}
-.evrow.vp-ev[data-on] { box-shadow: inset 0 0 0 1px var(--hair); }
-.evrow.vp-ev:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
-.vp-ev__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  justify-self: center;
-}
-.vp-ev__text {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-.vp-ev__text .evrow__desc { flex: 1; }
-.vp-ev__done { display: flex; align-items: center; min-width: 14px; }
-.vp-ev[data-done] .evrow__label {
-  color: var(--faint);
-  text-decoration: line-through;
-  text-decoration-color: var(--hair-strong);
-}
-/* La casilla de "visto" es la de la cola de revisión; aquí la fila es .vp-ev. */
-.vp-ev[data-done] .rq-done { background: var(--cool); border-color: var(--cool); }
-.vp-ev[data-done] .rq-done::after {
-  content: "";
-  width: 7px;
-  height: 4px;
-  border-left: 1.5px solid var(--ground);
-  border-bottom: 1.5px solid var(--ground);
-  transform: rotate(-45deg) translate(1px, -1px);
-}
-.vp-ev .rq-done { margin-top: 0; }
+.vp-chip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.vp-chip__n { font-variant-numeric: tabular-nums; color: var(--faint); font-weight: 400; }
+.vp-chip[data-on] .vp-chip__n { color: var(--muted); }
 
 .vp-saveErr {
-  margin: 0;
-  font-size: var(--font-xs);
+  margin: 0 16px 8px;
+  font-size: 12.5px;
   color: var(--loss);
   flex: none;
 }
 
-/* --- Revisión: notas ------------------------------------------------------ */
+/* --- Revisión: el momento actual ------------------------------------------ */
+.vp-feat {
+  flex: none;
+  margin: 0 16px;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--raised) 55%, var(--panel));
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+/* Un hallazgo lleva el brillo violeta del analizador. */
+.vp-feat[data-finding] {
+  background: var(--media-sheen);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 22%, transparent), inset 0 1px 0 var(--rim);
+}
+.vp-feat__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.vp-feat__time { font-size: 12.5px; color: var(--muted); }
+.vp-feat[data-finding] .vp-feat__time { color: color-mix(in srgb, var(--flag) 55%, var(--text)); }
+.vp-feat__kicker { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+.vp-feat__fill { flex: 1; }
+.vp-feat__name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+.vp-feat__desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.vp-feat__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.vp-badge--finding {
+  color: color-mix(in srgb, var(--flag) 60%, var(--text));
+  background: color-mix(in srgb, var(--flag) 14%, transparent);
+}
+
+/* --- Revisión: la lista ---------------------------------------------------- */
+/* Los bordes de la lista se funden con el panel: una fila a medio desplazar
+   se lee como "hay más", no como algo cortado por la tarjeta de arriba. */
+.vp-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 8px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Que la fila del momento actual, al traerse a la vista, no quede dentro
+     del fundido de los bordes. */
+  scroll-padding: 18px 0 32px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 28px), transparent 100%);
+}
+/* Fila: hora · icono · frase · valoración · revisado. El botón es la fila
+   entera menos la casilla, que es su propio control. */
+.vp-ev {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding-right: 10px;
+  border-radius: 8px;
+  transition: background-color var(--t-instant) var(--e-move);
+}
+.vp-ev:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); }
+.vp-ev[data-on] {
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+}
+.vp-ev[data-on][data-finding] {
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px color-mix(in srgb, var(--flag) 22%, transparent);
+}
+.vp-ev__main {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.vp-ev__main:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
+.vp-ev__time { width: 40px; flex: none; color: var(--faint); }
+.vp-ev[data-on] .vp-ev__time { color: var(--text); }
+.vp-ev[data-on][data-finding] .vp-ev__time { color: color-mix(in srgb, var(--flag) 55%, var(--text)); }
+.vp-ev__icon { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; }
+.vp-ev__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp-ev[data-on] .vp-ev__text { font-weight: 500; }
+.vp-ev[data-done] .vp-ev__text { color: var(--faint); }
+.vp-ev .badge { flex: none; }
+.vp-ev__done { width: 16px; flex: none; display: flex; align-items: center; }
+
+/* --- Revisión: notas -------------------------------------------------------- */
 .vp-notes {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
+  gap: 10px;
+  padding: 14px 16px 16px;
   box-shadow: inset 0 1px 0 var(--hair);
 }
 .vp-notes__row {
@@ -372,28 +912,49 @@
   align-items: center;
   gap: 8px;
 }
-.field.vp-notes__field {
+.vp-notes__field {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 34px;
-  padding: 0 12px;
+  padding: 0 10px 0 6px;
+  border-radius: 10px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
   cursor: text;
+}
+.vp-notes__field:focus-within { box-shadow: inset 0 0 0 1px var(--cool), var(--inset-sunken); }
+.vp-notes__at {
+  flex: none;
+  color: var(--text);
+  background: var(--raised);
+  padding: 3px 7px;
+  border-radius: 6px;
 }
 .vp-notes__field input {
   flex: 1;
   min-width: 0;
-  background: transparent;
+  height: 30px;
+  padding: 0 2px;
   border: 0;
   outline: 0;
+  background: transparent;
   color: var(--text);
-  font: inherit;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 .vp-notes__field input::placeholder { color: var(--faint); }
+.btn.vp-notes__save {
+  height: 40px;
+  flex: none;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+}
 .vp-notes__list {
-  max-height: 132px;
+  max-height: 104px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -401,29 +962,29 @@
 }
 .vp-note {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  min-height: 30px;
+  padding: 2px 4px 2px 6px;
+  border-radius: 6px;
+  font-size: 13px;
   transition: background-color var(--t-instant) var(--e-move);
 }
-.vp-note:hover { background: var(--raised); }
+.vp-note:hover { background: color-mix(in srgb, var(--raised) 55%, transparent); }
+.vp-note__icon { flex: none; color: var(--faint); }
 .vp-note__time {
   flex: none;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--cool);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.5;
+  color: var(--faint);
   cursor: pointer;
 }
+.vp-note__time:hover { color: var(--text); }
+.vp-note__time:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; border-radius: 3px; }
 .vp-note__text {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
   line-height: 1.45;
   color: var(--text);
   word-break: break-word;
@@ -431,27 +992,121 @@
 .vp-note__input {
   flex: 1;
   min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
   background: var(--sunken);
-  box-shadow: var(--inset-sunken);
-  border: 1px solid var(--hair);
-  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
   color: var(--text);
   font: inherit;
   font-size: 13px;
-  padding: 2px 8px;
   outline: none;
 }
-.vp-note__input:focus-visible { border-color: var(--cool); }
+.vp-note__input:focus-visible { box-shadow: inset 0 0 0 1px var(--cool), var(--inset-sunken); }
 .vp-note__btn {
+  width: 28px;
+  height: 28px;
   flex: none;
-  display: flex;
-  padding: 2px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--faint);
   cursor: pointer;
-  transition: color var(--t-instant) var(--e-move);
 }
-.vp-note__btn:hover { color: var(--text); }
+.vp-note__btn:hover { color: var(--text); background: var(--raised); }
 .vp-note__btn:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+
+/* --- Partida: marcador de los 10 ------------------------------------------ */
+.vp-sb { margin-bottom: 14px; }
+.vp-sb__head,
+.vp-sb__row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 64px 36px 44px;
+  column-gap: 8px;
+  align-items: center;
+}
+.vp-sb__head {
+  padding: 0 6px 6px;
+  font-size: 12px;
+  color: var(--faint);
+  text-align: right;
+}
+.vp-sb__team {
+  grid-column: 1 / 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.vp-sb__team i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.vp-sb__team em { font-style: normal; font-size: 12px; font-weight: 500; }
+.vp-sb__row {
+  padding: 5px 6px;
+  border-radius: 8px;
+}
+.vp-sb__row[data-self] {
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+}
+.vp-sb__face {
+  width: 28px;
+  height: 28px;
+  display: block;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--sunken);
+}
+.vp-sb__face--empty { display: inline-block; }
+.vp-sb__who { display: flex; flex-direction: column; min-width: 0; }
+.vp-sb__name {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp-sb__row[data-self] .vp-sb__name { font-weight: 500; }
+.vp-sb__champ {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.vp-sb__kda { font-size: 13px; text-align: right; }
+.vp-sb__num { font-size: 12.5px; color: var(--muted); text-align: right; }
+
+/* --- Impacto: crédito real -------------------------------------------------- */
+/* Las cabeceras ya no son mono de 10 px en mayúsculas: en sans de 12 px
+   «% victoria» no cabía en 34 px y se partía en dos líneas. */
+.vp-insp .insp__legend,
+.vp-insp .insp__player {
+  grid-template-columns: 26px minmax(0, 1fr) 52px 64px 48px;
+}
+.vp-insp .insp__legend { font-size: 12px; white-space: nowrap; }
+.vp-insp .insp__player { padding: 4px 6px; border-radius: 8px; }
+.vp-insp .insp__playerNum { font-size: 12.5px; }
+/* «asesinatos», «objetivos»…: las claves son minúsculas porque se usan
+   también dentro de frases; como rótulo de fila van en tipo oración. */
+.vp-insp .imp__rowName { font-size: 12.5px; }
+.vp-insp .imp__rowName::first-letter { text-transform: uppercase; }
+
+/* --- Partida: objetivos y compras ------------------------------------------ */
+.vp-obj__legend span { font-size: 12px; color: var(--faint); }
+/* `.drow span` (index.css) pinta en --muted todo span de la fila: aquí hace
+   falta un escalón más de especificidad para que el glifo sea oro. */
+.drow .vp-obj__name { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.drow .vp-obj__icon { display: flex; color: var(--brand); }
+.vp-buy__time { color: var(--faint); }

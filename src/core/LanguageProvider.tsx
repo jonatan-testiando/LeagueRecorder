@@ -46,6 +46,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => { alive = false; };
   }, []);
 
+  // El idioma también en <html lang>: lo usan los lectores de pantalla y
+  // `formatDecimal` (coma en español, punto en inglés) para que las cifras se
+  // escriban igual en todas las pantallas.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const setLang = useCallback(
     async (next: Language) => {
       setLangState(next);

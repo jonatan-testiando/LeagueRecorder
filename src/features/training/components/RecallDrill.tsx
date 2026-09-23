@@ -270,7 +270,9 @@ export const RecallDrill: React.FC<{
           ))}
           <span style={styles.poolNote}>{t("{n} frames available", { n: frames.length })}</span>
         </div>
-        <button className="btn btn--primary" style={styles.bigBtn} onClick={start}>
+        {/* En superficie: el oro de la pantalla es el "Empezar" del primer
+            ejercicio, que va encima. */}
+        <button className="btn btn--ghost" style={styles.bigBtn} onClick={start}>
           <Play size={18} /> {t("Start")}
         </button>
       </div>
@@ -404,19 +406,17 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 500, color: "var(--text)" },
+  title: { margin: 0, fontSize: 16, fontWeight: 500, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 620 },
   optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
   optionLabel: {
-    fontSize: "var(--font-xs)",
-    fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 400,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
     width: 70,
   },
-  poolNote: { fontSize: "var(--font-xs)", color: "var(--faint)", marginLeft: "var(--space-3)" },
-  chip: { padding: "6px 14px", fontSize: "var(--font-xs)" },
+  poolNote: { fontSize: 13, color: "var(--faint)", marginLeft: "var(--space-3)", fontVariantNumeric: "tabular-nums" },
+  chip: { padding: "6px 14px", fontSize: 13, fontVariantNumeric: "tabular-nums" },
   bigBtn: { padding: "10px 20px", alignSelf: "flex-start", justifyContent: "center" },
   stage: {
     position: "relative",
@@ -436,7 +436,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--faint)",
     fontSize: "var(--font-lg)",
     fontWeight: 500,
-    letterSpacing: "0.04em",
   },
   questionText: { fontSize: "var(--font-md)", fontWeight: 500, color: "var(--text)" },
   options: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap" },
@@ -446,8 +445,8 @@ const styles: Record<string, React.CSSProperties> = {
   gradeBtn: { padding: "8px 18px", fontSize: "var(--font-sm)" },
   progressRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
   progressText: {
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
+    fontVariantNumeric: "tabular-nums",
     color: "var(--faint)",
     minWidth: 60,
   },
@@ -462,11 +461,9 @@ const styles: Record<string, React.CSSProperties> = {
   statRow: { display: "flex", gap: "var(--space-6)", flexWrap: "wrap" },
   stat: { display: "flex", flexDirection: "column", gap: 2 },
   statLabel: {
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    fontWeight: 500,
+    fontWeight: 400,
   },
-  statValue: { fontSize: "var(--font-2xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text)" },
+  statValue: { fontSize: 24, fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--text)" },
 };

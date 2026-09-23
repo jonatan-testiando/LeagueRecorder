@@ -364,9 +364,38 @@ export interface PressureWindow {
   gains: PressureEvidence[];
   losses: PressureEvidence[];
   death_gold: number;
-  assessment: "no_gain" | "cost_without_gain" | "gain_without_observed_cost" | "mixed";
+  /** Veredicto del valor neto ("good" | "even" | "bad"). Las cachés viejas
+   *  traían los otros cuatro; se recalculan solas al subir la versión. */
+  assessment: "good" | "even" | "bad" | "no_gain" | "cost_without_gain" | "gain_without_observed_cost" | "mixed";
   game_start: number;
   game_end: number;
+  /** Rivales que tuviste encima y cuánto tiempo cada uno. */
+  ties?: EnemyTie[];
+  /** Lo que valió el episodio en oro. Ver src-tauri/src/pressure_value.rs. */
+  value?: PressureValue;
+  /** Lo que el rival sacó lejos mientras tanto: contexto, no se resta. */
+  context?: PressureEvidence[];
+}
+
+export interface EnemyTie {
+  participant_id: number;
+  champion: string;
+  seconds: number;
+  farm_gold: number;
+}
+
+export interface PressureValue {
+  /** Suma de los segundos de cada rival atado. */
+  enemy_seconds: number;
+  farm_denied: number;
+  own_farm_lost: number;
+  death_farm_lost: number;
+  /** Kills de tu equipo en el sitio menos muertes de tu equipo en el sitio. */
+  local_gold: number;
+  team_elsewhere: number;
+  enemy_elsewhere: number;
+  net: number;
+  verdict: "good" | "even" | "bad";
 }
 
 export interface PressureEvidence {
@@ -376,6 +405,8 @@ export interface PressureEvidence {
   kind: "kill" | "death" | "tower" | "inhibitor" | "plate" | "epic";
   gold: number;
   after_episode: boolean;
+  /** Pasó donde estabas tú (resultado de la pelea), no lejos. */
+  local?: boolean;
 }
 
 export interface PressureEpisode {
@@ -416,8 +447,30 @@ export interface PressureSummary {
   with_gains: number;
   without_gains: number;
   deaths: number;
+  /** Segundos de rival atados, sumando a cada rival. */
+  enemy_seconds: number;
+  net_gold: number;
+  farm_denied: number;
+  own_farm_lost: number;
+  local_gold: number;
+  team_elsewhere: number;
+  enemy_elsewhere: number;
+  good: number;
+  even: number;
+  bad: number;
   episodes: PressureEpisode[];
 }
+
+/** Rango de Solo/Dúo ahora mismo (league-v4). null si no está clasificado. */
+export interface CurrentRank {
+  tier: string;
+  division: string;
+  lp: number;
+}
+
+export const getCurrentRank = async (): Promise<CurrentRank | null> => {
+  return await invoke<CurrentRank | null>("get_current_rank");
+};
 
 export const getPressureSummary = async (): Promise<PressureSummary> => {
   return await invoke<PressureSummary>("get_pressure_summary");

@@ -256,7 +256,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
               title={t("Jump to this moment")}
             >
               <span
-                className="u-metric"
+                className="u-time"
                 title={
                   g.precision > 0
                     ? t("Estimated by interpolating between minute frames: ±{n} s", { n: Math.round(g.precision) })
@@ -281,7 +281,7 @@ export const GankEfficiencyWidget: React.FC<GankEfficiencyWidgetProps> = ({
                     className="u-metric"
                     style={{
                       marginLeft: 6,
-                      fontSize: 10,
+                      fontSize: 12,
                       color: g.confidence >= CONFIDENT ? "var(--muted)" : "var(--faint)",
                     }}
                     title={t("How sure the detector is: it rises with the enemy on top of you, the ally present, and the time you held the lane.")}

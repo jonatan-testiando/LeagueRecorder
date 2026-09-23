@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
 import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
 import { PatternsPanel } from "./features/patterns/components/PatternsPanel";
+import { PlaylistBar } from "./features/patterns/components/PlaylistBar";
 import { HomePanel } from "./features/home/components/HomePanel";
 import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
 import { VodGallery } from "./features/vod/components/VodGallery";
@@ -13,9 +14,11 @@ import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { Titlebar } from "./components/Titlebar";
 import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
-import { BrandMark } from "./components/BrandMark";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
-import { RailStatus } from "./components/RailStatus";
+import { CaptureStatus } from "./components/CaptureStatus";
+import { RailProfile } from "./components/RailProfile";
+import { CommandPalette } from "./components/CommandPalette";
+import { isReviewed } from "./core/review";
 import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
 import { getVersion } from "@tauri-apps/api/app";
@@ -27,7 +30,7 @@ import {
   type PendingUpdate,
   type UpdateProgress,
 } from "./core/updates";
-import { useAppStore } from "./store/useAppStore";
+import { useAppStore, useErrorClips } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 
 type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
@@ -36,15 +39,16 @@ type Panel = "/home" | "/review" | "/clips" | "/errors" | "/patterns" | "/vod" |
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
-// dónde estás. Trazo de 1.6 y 17px en todos, para que pesen igual entre sí.
-const NAV_ICON = { size: 17, strokeWidth: 1.6 } as const;
+// dónde estás. Trazo de 1.8 y 18px en todos, para que pesen igual entre sí.
+const NAV_ICON = { size: 18, strokeWidth: 1.8 } as const;
 
 type NavItem = { key: Tab; path: string; label: string; icon: React.ReactNode };
 
 // El rail va en tres grupos, por lo que haces y no por tipo de fichero:
 // revisar (lo de cada partida), mejorar (lo que agrega partidas) y
-// herramientas. Ajustes deja de estar pegado abajo: el pie del rail es ahora el
-// estado de captura, que se ve desde cualquier sección.
+// herramientas. El pie del rail es la tarjeta de perfil (rango, LP, puesto,
+// región); el estado de captura subió a la barra de título, donde se ve
+// también con el reproductor abierto.
 const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Reviewing",
@@ -97,6 +101,24 @@ export const App: React.FC = () => {
   const selectedVod = useAppStore(state => state.selectedVod);
   const setSelectedVod = useAppStore(state => state.setSelectedVod);
   const refreshErrorClips = useAppStore(state => state.refreshErrorClips);
+  const { clips: errorClips } = useErrorClips();
+
+  // La paleta de comandos: Ctrl K (Cmd K en Mac) desde cualquier sitio, y el
+  // buscador de la barra de título. Durante el asistente de primer arranque no
+  // hay nada que buscar.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const onboardingPending = onboarding.done === false;
+  React.useEffect(() => {
+    if (onboardingPending) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onboardingPending]);
 
   React.useEffect(() => {
     getVersion().then(setAppVersion).catch(console.error);
@@ -142,6 +164,14 @@ export const App: React.FC = () => {
     navigate(path);
   };
 
+  // Partidas por revisar, junto a «Biblioteca». La MISMA cuenta que «Hoy» y el
+  // filtro de la biblioteca (`core/review.ts`): partidas propias —sin VODs
+  // importados— sin la cola de momentos tachada ni notas.
+  const toReview = useMemo(
+    () => matches.filter((m) => !m.is_vod && !isReviewed(m, errorClips)).length,
+    [matches, errorClips]
+  );
+
   const matchedNav = NAV_ITEMS.find(n => currentPath.startsWith(n.path));
   const activeTabKey: string = matchedNav
     ? matchedNav.key
@@ -157,7 +187,7 @@ export const App: React.FC = () => {
   // Los paneles se quedan montados una vez visitados para no perder su estado (el
   // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo
   // arranca el panel inicial, no las seis pestañas con sus fetches y sus listeners.
-  const [mountedPanels, setMountedPanels] = useState<Set<Panel>>(() => new Set<Panel>());
+  const [mountedPanels, setMountedPanels] = useState<Set<Panel>>(() => new Set());
   // useLayoutEffect y no useEffect: así el panel se monta antes de pintar y al
   // cambiar de pestaña no se ve un fotograma en blanco.
   React.useLayoutEffect(() => {
@@ -201,81 +231,93 @@ export const App: React.FC = () => {
     );
   }
 
+  // Con una partida abierta en el reproductor el rail se pliega a iconos: el
+  // vídeo necesita el ancho, y la navegación sigue a un clic.
+  const playerOpen =
+    (activePanel === "/review" && !!selectedMatch) ||
+    (activePanel === "/vod" && !!selectedVod) ||
+    (activePanel === "/errors" && !!selectedError);
+
   return (
     <>
-      <Titlebar />
+      <Titlebar
+        onSearch={() => setPaletteOpen(true)}
+        status={<CaptureStatus isRecording={isRecording} />}
+      />
       <div className="app-body" style={styles.appContainer}>
-      {/* Sidebar (Ascent Style) */}
-      <div style={styles.sidebar}>
-        {/* La marca propia sustituye al icono prestado de la libreria: un
-            marcapaginas, que es lo que se hace aqui — marcar el momento que
-            duele para volver a el. */}
-        <div style={styles.logoArea}>
-          <span style={{ color: "var(--brand)", display: "flex" }}>
-            <BrandMark size={18} />
-          </span>
-          <span style={styles.logoText}>LeagueRecorder</span>
-        </div>
-
-        <div style={styles.navLinks}>
+      {/* Rail. La marca se fue a la barra de título: aquí empieza la
+          navegación. */}
+      <nav className={`rail${playerOpen ? " rail--collapsed" : ""}`} aria-label={t("Sections")}>
+        <div className="rail__nav">
           {NAV_GROUPS.map((group) => (
             <React.Fragment key={group.label}>
-              <div className="nav-grp">{t(group.label)}</div>
-              {group.items.map((item) => (
-                <button
-                  key={item.key}
-                  onClick={() => goTo(item.path)}
-                  className={`nav-btn${activeTabKey === item.key ? " nav-btn--active" : ""}`}
-                >
-                  {item.icon}
-                  {t(item.label)}
-                </button>
-              ))}
+              <div className="nav-grp" aria-hidden={playerOpen ? true : undefined}>{t(group.label)}</div>
+              {group.items.map((item) => {
+                const activo = activeTabKey === item.key;
+                const cuenta = item.key === "review" && toReview > 0 ? toReview : 0;
+                const label = t(item.label);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => goTo(item.path)}
+                    className={`nav-btn${activo ? " nav-btn--active" : ""}`}
+                    aria-current={activo ? "page" : undefined}
+                    aria-label={cuenta ? `${label} · ${t("{n} to review", { n: cuenta })}` : label}
+                    title={playerOpen ? label : undefined}
+                  >
+                    {item.icon}
+                    <span className="nav-btn__label">{label}</span>
+                    {cuenta > 0 && (
+                      <span className="nav-btn__count" aria-hidden="true">{cuenta}</span>
+                    )}
+                  </button>
+                );
+              })}
             </React.Fragment>
           ))}
-          <RailStatus isRecording={isRecording} />
-          {pendingUpdate ? (
-            <button
-              className="updpill updpill--lista"
-              onClick={async () => {
-                // En Windows esto no vuelve: el instalador toma el relevo y la
-                // /R del NSIS relanza la app sola. El velo cubre ese tránsito —
-                // y se le dan unos segundos de escena ANTES de lanzar el
-                // instalador, porque el cierre real es tan rápido que sin la
-                // pausa el velo ni se ve y el reinicio parece un crash.
-                setInstalling(true);
-                await new Promise((r) => setTimeout(r, 4500));
-                try {
-                  await installPendingUpdate();
-                } catch (e) {
-                  console.error(e);
-                  setInstalling(false);
-                }
-              }}
-              title={t("Downloaded and ready. One click: it installs and the app comes back by itself.")}
-            >
-              <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <span className="updpill__dot" />
-                {t("Install v{v}", { v: pendingUpdate.version })}
-              </span>
-            </button>
-          ) : updProgress ? (
-            <div className="updpill" style={{ cursor: "default" }} title={t("Downloading in the background. You can keep using the app.")}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <span className="updpill__dot" />
-                <span>v{updProgress.version} · {updProgress.percent}%</span>
-              </div>
-              <div className="updpill__track">
-                <div className="updpill__fill" style={{ width: `${updProgress.percent}%` }} />
-              </div>
-            </div>
-          ) : appVersion ? (
-            <div className="u-meta" style={{ textAlign: "center", marginTop: "var(--space-2)" }}>
-              v{appVersion}
-            </div>
-          ) : null}
         </div>
-      </div>
+
+        <RailProfile collapsed={playerOpen} />
+        {pendingUpdate ? (
+          <button
+            className="updpill updpill--lista"
+            onClick={async () => {
+              // En Windows esto no vuelve: el instalador toma el relevo y la
+              // /R del NSIS relanza la app sola. El velo cubre ese tránsito —
+              // y se le dan unos segundos de escena ANTES de lanzar el
+              // instalador, porque el cierre real es tan rápido que sin la
+              // pausa el velo ni se ve y el reinicio parece un crash.
+              setInstalling(true);
+              await new Promise((r) => setTimeout(r, 4500));
+              try {
+                await installPendingUpdate();
+              } catch (e) {
+                console.error(e);
+                setInstalling(false);
+              }
+            }}
+            title={t("Downloaded and ready. One click: it installs and the app comes back by itself.")}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span className="updpill__dot" />
+              {t("Install v{v}", { v: pendingUpdate.version })}
+            </span>
+          </button>
+        ) : updProgress ? (
+          <div className="updpill" style={{ cursor: "default" }} title={t("Downloading in the background. You can keep using the app.")}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <span className="updpill__dot" />
+              <span>v{updProgress.version} · {updProgress.percent}%</span>
+            </div>
+            <div className="updpill__track">
+              <div className="updpill__fill" style={{ width: `${updProgress.percent}%` }} />
+            </div>
+          </div>
+        ) : appVersion ? (
+          <div className="rail-version">v{appVersion}</div>
+        ) : null}
+      </nav>
 
       {/* Main Content Area */}
       <div style={styles.mainContent}>
@@ -361,8 +403,18 @@ export const App: React.FC = () => {
             </div>
           </>
         )}
+
+        {/* Lista de reproducción entre partidas ("las 11 muertes seguidas"),
+            flotando abajo sobre el reproductor. La pinta Patrones; aquí solo
+            se le da el sitio. Sin lista activa no pinta nada, y el hueco no
+            se come los clics del vídeo. */}
+        <div className="playlist-dock">
+          <PlaylistBar />
+        </div>
       </div>
       </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
       {/* El tránsito de la actualización: el instalador cierra este proceso y
           la app vuelve sola en unos segundos. Sin el velo eso se lee como un
@@ -387,39 +439,11 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
     backgroundColor: "var(--bg-app)",
   },
-  sidebar: {
-    width: "224px",
-    // El rail no tapa el fondo: lo filtra. Su degradado va perdiendo opacidad
-    // hacia abajo, así que el lavado de color de la ventana se le ve por debajo
-    // y el rail no parte la pantalla en dos bloques planos.
-    background: "var(--rail)",
-    backdropFilter: "var(--glass-blur)",
-    borderRight: "1px solid var(--glass-line-soft)",
-    display: "flex",
-    flexDirection: "column",
-    padding: "14px 12px 12px",
-    boxSizing: "border-box",
-  },
-  logoArea: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    padding: "6px 10px 10px",
-  },
-  logoText: {
-    fontWeight: 500,
-    fontSize: "14px",
-    letterSpacing: "-0.01em",
-    color: "var(--text)",
-  },
-  navLinks: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-    flex: 1,
-  },
   mainContent: {
+    // Relativo: es el marco de la lista de reproducción flotante.
+    position: "relative",
     flex: 1,
+    minWidth: 0,
     height: "100%",
     overflow: "hidden",
     boxSizing: "border-box",

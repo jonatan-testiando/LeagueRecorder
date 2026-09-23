@@ -124,6 +124,16 @@ export function describeEventFull(ev: MatchEvent, t: Translate): EventText {
     }
   }
 
+  // Objetivos sin `detail`: el tipo y el bando bastan para componer la frase.
+  // Sin esto caían a la `description` del backend, que desde el cambio viene
+  // en inglés ("Your team killed Baron Nashor" en una interfaz en español;
+  // visto en la app real, no en el arnés).
+  if (!structured && has(ev.subtype) && (ev.subtype === "ally" || ev.subtype === "enemy")) {
+    if (ev.type === "BaronKill") return { text: objectiveLine(t, ev.subtype, t("Baron Nashor"), stolen), isLegacy: false };
+    if (ev.type === "HeraldKill") return { text: objectiveLine(t, ev.subtype, t("Rift Herald"), stolen), isLegacy: false };
+    if (ev.type === "DragonKill") return { text: objectiveLine(t, ev.subtype, t("Dragon"), stolen), isLegacy: false };
+  }
+
   // Sucesos sin datos que componer: la frase del backend ya está en inglés
   // desde el cambio, y en español en las partidas viejas.
   return { text: ev.description, isLegacy: !structured && ev.description.length > 0 };

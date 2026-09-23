@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FileWarning, Play, RefreshCw, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { AlertTriangle, FileWarning, Library, Play, RefreshCw, Trash2 } from "lucide-react";
 import { ErrorClipMetadata, deleteErrorClip } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useToast } from "../../../components/ui/Toaster";
 import { useT } from "../../../core/LanguageProvider";
-import { mmss } from "../../../core/time";
+import { matchAge, mmss } from "../../../core/time";
 import { ERROR_CATEGORIES } from "../../player/components/ErrorPlayer";
 
 import { streamUrl } from "../../../core/media";
 import { useErrorClips, useMatches } from "../../../store/useAppStore";
+import "./ClipsGallery.css";
 /**
  * Los errores marcados.
  *
@@ -27,10 +30,6 @@ import { useErrorClips, useMatches } from "../../../store/useAppStore";
  * La lista sale del store compartido y no de un fetch propio: así marcar un
  * error desde el reproductor se ve aquí sin recargar la ventana.
  */
-
-/** Quita los segundos: "2026-08-13 02:21:20" → "2026-08-13 02:21". */
-const trimSeconds = (d: string): string =>
-  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(d) ? d.slice(0, 16) : d;
 
 /** `match_20260813_022120` → `2026-08-13 02:21`. */
 const dateFromMatchId = (id: string): string | null => {
@@ -64,6 +63,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   const { clips: errors, loaded, error: loadError, refresh } = useErrorClips();
   const { matches } = useMatches();
   const t = useT();
+  const navigate = useNavigate();
   const { showConfirm } = useDialog();
   const { toast } = useToast();
   const [category, setCategory] = useState<string>("all");
@@ -84,6 +84,16 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
     for (const m of matches) map.set(m.id, m);
     return map;
   }, [matches]);
+
+  /** Cuántos errores hay de cada categoría, para decirlo en su píldora. */
+  const countByCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of errors) {
+      const cats = new Set((e.events ?? []).map((ev) => ev.category).filter(Boolean) as string[]);
+      for (const c of cats) map.set(c, (map.get(c) ?? 0) + 1);
+    }
+    return map;
+  }, [errors]);
 
   /** Categorías presentes de verdad. No se ofrece filtrar por lo que no hay. */
   const presentCategories = useMemo(() => {
@@ -143,8 +153,8 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
 
   if (!loaded) {
     return (
-      <div style={styles.container} className="panel-enter">
-        <div style={styles.center}>
+      <div className="cg panel-enter">
+        <div className="cg-center">
           <div className="spinner" />
         </div>
       </div>
@@ -152,13 +162,17 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   }
 
   return (
-    <div style={styles.container} className="panel-enter">
-      <div style={styles.header}>
-        <h1 style={styles.title}>{t("Errors")}</h1>
+    <div className="cg panel-enter">
+      <div className="cg__head">
+        <h1>{t("Errors")}</h1>
         {errors.length > 0 && (
-          <div className="u-meta" style={{ marginTop: 4 }}>
-            {errors.length} {t("flagged")} · {t("across")} {gameCount} {t(gameCount === 1 ? "game" : "games")}
-          </div>
+          <span className="cg__count">
+            {errors.length === 1
+              ? t("1 error flagged")
+              : gameCount === 1
+                ? t("{n} flagged in 1 game", { n: errors.length })
+                : t("{n} flagged across {m} games", { n: errors.length, m: gameCount })}
+          </span>
         )}
       </div>
 
@@ -166,8 +180,8 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
           ningún error" cuando lo que ha pasado es que no se ha podido leer el
           disco es la clase de mentira que hace desconfiar de todo lo demás. */}
       {loadError && (
-        <div style={styles.notice}>
-          <AlertTriangle size={14} color="var(--signal)" />
+        <div className="cg-notice">
+          <AlertTriangle size={15} color="var(--signal)" />
           <span style={{ flex: 1, minWidth: 0 }}>
             {t("Couldn't load your flagged errors: {msg}", { msg: loadError })}
           </span>
@@ -178,72 +192,71 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       )}
 
       {errors.length > 0 && (
-        <div style={styles.filters}>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-pressed={category === "all"}
-            onClick={() => setCategory("all")}
-          >
-            {t("All")}
-          </Button>
-          {presentCategories.map((c) => (
-            <Button
-              key={c}
-              variant="ghost"
-              size="sm"
-              aria-pressed={category === c}
-              onClick={() => setCategory(c)}
-            >
-              {t(c)}
-            </Button>
-          ))}
-          <span style={{ flex: 1 }} />
-          {SORTS.map((s) => (
-            <Button
-              key={s.key}
-              variant="ghost"
-              size="sm"
-              aria-pressed={sort === s.key}
-              onClick={() => setSort(s.key)}
-            >
-              {t(s.label)}
-            </Button>
-          ))}
+        <div className="cg__tools">
+          <div className="cg-seg" role="group" aria-label={t("Filter by category")}>
+            <button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")}>
+              {t("All")} <span className="cg-seg__n">{errors.length}</span>
+            </button>
+            {presentCategories.map((c) => (
+              <button key={c} type="button" aria-pressed={category === c} onClick={() => setCategory(c)}>
+                {t(c)} <span className="cg-seg__n">{countByCategory.get(c) ?? 0}</span>
+              </button>
+            ))}
+          </div>
+          <span className="cg__spacer" />
+          <span className="cg__toolLabel">{t("Sort")}</span>
+          <div className="cg-seg" role="group" aria-label={t("Sort")}>
+            {SORTS.map((s) => (
+              <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => setSort(s.key)}>
+                {t(s.label)}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {errors.length === 0 ? (
-        <EmptyState
-          icon={<AlertTriangle size={30} color="var(--faint)" />}
-          title={t("No errors flagged yet")}
-          text={t("Use the Error tool in the player to save a mistake and the lesson you took from it.")}
-        />
+        <div className="cg-center">
+          <EmptyState
+            icon={<AlertTriangle size={30} color="var(--faint)" />}
+            title={t("No errors flagged yet")}
+            text={t("When something goes wrong in a game, flag it from the player with the lesson you took. It waits here for your next review.")}
+            action={
+              <Button variant="primary" size="md" icon={<Library size={15} />} onClick={() => navigate("/review")}>
+                {t("Go to the Library")}
+              </Button>
+            }
+          />
+        </div>
       ) : visible.length === 0 ? (
-        <EmptyState
-          icon={<AlertTriangle size={30} color="var(--faint)" />}
-          title={t("No errors match this filter")}
-          text={t("Try another category, or go back to All.")}
-          action={
-            <Button variant="ghost" size="sm" onClick={() => setCategory("all")}>
-              {t("Clear filters")}
-            </Button>
-          }
-        />
+        <div className="cg-center">
+          <EmptyState
+            icon={<AlertTriangle size={30} color="var(--faint)" />}
+            title={t("No errors match this filter")}
+            text={t("Try another category, or go back to All.")}
+            action={
+              <Button variant="ghost" size="sm" onClick={() => setCategory("all")}>
+                {t("Clear filters")}
+              </Button>
+            }
+          />
+        </div>
       ) : (
-        <div style={styles.grid}>
-          {visible.map((err) => {
+        <div className="cg__list cg__list--flow">
+          {visible.map((err, i) => {
             const match = byId.get(err.match_id);
-            const when = match?.date ? trimSeconds(match.date) : dateFromMatchId(err.match_id);
+            const whenIso = match?.date ?? dateFromMatchId(err.match_id);
+            const when = whenIso ? matchAge(whenIso, t) : null;
             const first = err.events && err.events.length > 0 ? err.events[0] : null;
             const lesson = first ? first.text : err.note;
             const isBroken = broken.has(err.path);
+            const extra = (err.events?.length ?? 0) - 1;
 
             return (
               <div
                 key={err.path}
-                className="card card--interactive"
-                style={styles.card}
+                className="cg-row cg-row--button"
+                {...(i === visible.length - 1 ? { "data-nodivider": true } : {})}
                 role="button"
                 tabIndex={0}
                 onClick={() => onSelectError?.(err)}
@@ -251,68 +264,79 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                   if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectError?.(err); }
                 }}
               >
-                <div style={styles.thumb}>
+                <div className="cg-thumb">
                   {isBroken ? (
                     // Sin esto, un clip cuyo fichero ya no está se veía como un
                     // rectángulo negro: idéntico a uno que simplemente tarda.
-                    <div style={styles.brokenVeil}>
-                      <FileWarning size={22} color="var(--faint)" />
-                      <span className="u-meta" style={{ textAlign: "center", padding: "0 var(--space-2)" }}>
-                        {t("Video file missing")}
-                      </span>
+                    <div className="cg-thumb__broken">
+                      <FileWarning size={20} />
+                      <span>{t("Video file missing")}</span>
                     </div>
                   ) : (
                     <>
                       <video
                         src={streamUrl(err.path)}
-                        style={styles.video}
                         preload="metadata"
                         onError={() => setBroken((prev) => new Set(prev).add(err.path))}
                       />
-                      <div style={styles.thumbVeil}>
-                        <Play size={26} color="var(--text)" style={{ opacity: 0.85 }} />
+                      <div className="cg-thumb__veil">
+                        <span className="cg-thumb__play">
+                          <Play size={14} fill="currentColor" />
+                        </span>
                       </div>
                     </>
                   )}
                   {err.start_time !== undefined && err.start_time !== null && (
-                    <span style={styles.stamp}>{mmss(err.start_time)}</span>
+                    <span className="cg-thumb__stamp u-time">{mmss(err.start_time)}</span>
                   )}
                 </div>
 
-                <div style={styles.body}>
-                  {/* La lección es lo que se viene a leer aquí, así que va primero
-                      y con el peso del texto principal. */}
-                  {lesson ? (
-                    <p style={styles.lesson}>{lesson}</p>
-                  ) : (
-                    <p style={styles.lessonEmpty}>{t("No note yet — open it to write what you learned.")}</p>
-                  )}
-
-                  <div style={styles.meta}>
-                    {/* La categoría se GUARDA en inglés (es el identificador que
-                        conoce el backend) y se PINTA traducida. */}
-                    {first?.category && <Badge tone="loss">{t(first.category)}</Badge>}
-                    {match?.champion && (
-                      <span className="u-meta" style={{ color: "var(--muted)" }}>{match.champion}</span>
-                    )}
-                    {when && <span className="u-meta">{when}</span>}
-                    {err.events && err.events.length > 1 && (
-                      <span className="u-meta">+{err.events.length - 1} {t("more")}</span>
-                    )}
-                    <span style={{ flex: 1 }} />
-                    {/* La tarjeta entera es un botón que abre el clip, así que
+                <div className="cg-body">
+                  <div className="cg-top">
+                    <div className="cg-top__text">
+                      {/* La lección es lo que se viene a leer aquí, así que es
+                          el titular de la fila. */}
+                      {lesson ? (
+                        <p className="cg-title cg-title--wrap">{lesson}</p>
+                      ) : (
+                        <p className="cg-title cg-title--empty">{t("No note yet — open it to write what you learned.")}</p>
+                      )}
+                      {(match?.champion || when) && (
+                        <span className="cg-meta">
+                          {match?.champion && <ChampionAvatar champion={match.champion} size={20} />}
+                          <span>
+                            {match?.champion && <b>{match.champion}</b>}
+                            {match?.champion && when && " · "}
+                            {when}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    {/* La fila entera es un botón que abre el clip, así que
                         este de dentro tiene que parar la propagación: sin eso,
                         cancelar el borrado te dejaba en el reproductor. */}
                     <button
                       type="button"
-                      className="btn btn--ghost btn--sm"
+                      className="btn btn--icon btn--sm"
                       title={t("Delete flagged error")}
                       aria-label={t("Delete flagged error")}
                       onClick={(e) => { e.stopPropagation(); handleDelete(err); }}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={15} />
                     </button>
+                  </div>
+
+                  <div className="cg-chips">
+                    {/* La categoría se GUARDA en inglés (es el identificador que
+                        conoce el backend) y se PINTA traducida. */}
+                    {first?.category && <Badge tone="loss" emphasis="solid">{t(first.category)}</Badge>}
+                    {extra > 0 && (
+                      <Badge tone="neutral" emphasis="solid">
+                        {extra === 1 ? t("1 more note") : t("{n} more notes", { n: extra })}
+                      </Badge>
+                    )}
+                    {err.reviewed && <Badge tone="win" emphasis="solid">{t("Checked")}</Badge>}
                   </div>
                 </div>
               </div>
@@ -322,122 +346,4 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    padding: "var(--space-6) var(--space-8)",
-    height: "100%",
-    boxSizing: "border-box",
-    overflowY: "auto",
-    background: "transparent",
-  },
-  center: { display: "grid", placeItems: "center", height: "100%" },
-  header: { marginBottom: "var(--space-4)" },
-  title: { margin: 0, fontSize: "var(--font-xl)" },
-  notice: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    padding: "var(--space-3) var(--space-4)",
-    marginBottom: "var(--space-4)",
-    background: "color-mix(in srgb, var(--signal) 8%, var(--panel))",
-    border: "1px solid color-mix(in srgb, var(--signal) 28%, transparent)",
-    borderRadius: "var(--radius-md)",
-    color: "var(--muted)",
-    fontSize: "var(--font-xs)",
-    overflowWrap: "anywhere",
-  },
-  filters: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    flexWrap: "wrap",
-    padding: "var(--space-3) 0",
-    borderTop: "1px solid var(--line-soft)",
-    borderBottom: "1px solid var(--line-soft)",
-    marginBottom: "var(--space-4)",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(540px, 1fr))",
-    gap: "var(--space-3)",
-  },
-  /* Fila horizontal: la miniatura es el índice, el texto es la fila. */
-  card: {
-    overflow: "hidden",
-    display: "grid",
-    gridTemplateColumns: "224px 1fr",
-    height: 168,
-    padding: 0,
-    background: "var(--media-sheen)",
-  },
-  thumb: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "var(--sunken)",
-    position: "relative",
-    borderRight: "1px solid var(--line-soft)",
-  },
-  video: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
-  thumbVeil: {
-    position: "absolute",
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    background: "color-mix(in srgb, var(--sunken) 35%, transparent)",
-  },
-  brokenVeil: {
-    position: "absolute",
-    inset: 0,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "var(--space-2)",
-    background: "var(--sunken)",
-  },
-  stamp: {
-    position: "absolute",
-    right: "var(--space-2)",
-    bottom: "var(--space-2)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "10px",
-    color: "var(--text)",
-    background: "color-mix(in srgb, var(--sunken) 82%, transparent)",
-    border: "1px solid var(--line-soft)",
-    padding: "1px 6px",
-    borderRadius: "var(--radius-sm)",
-    fontVariantNumeric: "tabular-nums",
-  },
-  body: {
-    padding: "var(--space-3) var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: "var(--space-2)",
-    minWidth: 0,
-  },
-  lesson: {
-    margin: 0,
-    fontSize: "var(--font-sm)",
-    lineHeight: 1.5,
-    color: "var(--text)",
-    display: "-webkit-box",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 3,
-    overflow: "hidden",
-  },
-  lessonEmpty: {
-    margin: 0,
-    fontSize: "var(--font-xs)",
-    lineHeight: 1.5,
-    color: "var(--faint)",
-  },
-  meta: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    flexWrap: "wrap",
-  },
 };

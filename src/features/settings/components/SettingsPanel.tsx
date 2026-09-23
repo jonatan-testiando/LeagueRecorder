@@ -37,6 +37,9 @@ const VIDEO_DEFAULTS: Required<Pick<VideoSettings, "fps" | "quality">> & {
 /** Y los de almacenamiento (`AppConfig::default`). La carpeta NO se toca. */
 const STORAGE_DEFAULTS = { max_storage_gb: 100, auto_prune_days: 0 };
 
+/** Nombre técnico del codificador: igual en todos los idiomas. */
+const ENCODER_LABEL = "NVENC · GPU";
+
 /** Duración de la prueba rápida de grabación, en segundos. */
 const QUICK_TEST_SECONDS = 10;
 
@@ -194,6 +197,10 @@ export const SettingsPanel: React.FC = () => {
   // un cuelgue.
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [appVersion, setAppVersion] = useState<string>("");
+  // "Al día" solo se puede decir tras preguntar: el backend comprueba solo al
+  // arrancar, pero no avisa cuando NO encuentra nada. Hasta que se pulse
+  // "Buscar actualizaciones" en esta sesión, solo se sabe la versión.
+  const [upToDate, setUpToDate] = useState<boolean>(false);
   // Lo que el backend ya ha bajado por su cuenta y espera a que digas cuándo.
   const [pending, setPending] = useState<PendingUpdate | null>(null);
   const { showError, showSuccess, showConfirm } = useDialog();
@@ -596,6 +603,7 @@ export const SettingsPanel: React.FC = () => {
         setPending(found);
         setUpdateMsg("");
       } else {
+        setUpToDate(true);
         setUpdateMsg(t("Your app is already on the latest version."));
         showSuccess(t("Your app is already up to date."));
       }
@@ -634,6 +642,14 @@ export const SettingsPanel: React.FC = () => {
     : t("Auto");
 
   const audioReady = audio?.ready_for_game_audio ?? false;
+  // El motor libobs no elige dispositivo: captura el loopback de la salida por
+  // defecto y el backend lo nombra con el id interno de la fuente de OBS
+  // ("OBS wasapi_output_capture (loopback)"). Eso no se enseña tal cual.
+  const audioLabel = !audioReady
+    ? t("No capture device")
+    : !audio?.system_audio_device || /wasapi_output_capture/i.test(audio.system_audio_device)
+      ? t("Default Windows output")
+      : audio.system_audio_device;
   const diskPct = disk && disk.total_bytes > 0 ? Math.round((disk.used_bytes / disk.total_bytes) * 100) : null;
   // El aviso mira las DOS cosas: llenar la cuota solo borra lo viejo, pero
   // quedarse sin disco para la grabadora es que no se graba.
@@ -648,32 +664,21 @@ export const SettingsPanel: React.FC = () => {
       {/* Tira de diagnóstico: el estado no se ajusta, se comprueba. Es la
           superficie héroe de la pantalla y lleva el único botón primario. */}
       <section className="surface-hero stg-diag" aria-label={t("Diagnostics")}>
-        <div className="stg-diag__c">
-          <span className="u-label">{t("Recorder")}</span>
-          <span className="stg-diag__v">
-            <span className="stg-dot" data-tone={isRecording ? "rec" : recorderKnown ? "ok" : "bad"} />
-            <span>{isRecording ? t("Recording") : recorderKnown ? t("Idle") : "—"}</span>
-          </span>
-        </div>
+        {/* El grabador (grabando / en espera) y el disco libre ya se ven
+            siempre en la barra de título: aquí solo lo que comprueba la
+            cadena de captura y no está en ningún otro sitio. */}
         <div className="stg-diag__c">
           <span className="u-label">{t("Encoder")}</span>
           <span className="stg-diag__v">
             <span className="stg-dot" data-tone={recorderKnown ? "ok" : "bad"} />
-            <span>NVENC · GPU</span>
+            <span>{ENCODER_LABEL}</span>
           </span>
         </div>
         <div className="stg-diag__c">
           <span className="u-label">{t("Game sound")}</span>
           <span className="stg-diag__v" title={audio?.system_audio_device ?? undefined}>
             <span className="stg-dot" data-tone={audioReady ? "ok" : "bad"} />
-            <span>{audioReady ? audio?.system_audio_device : t("No capture device")}</span>
-          </span>
-        </div>
-        <div className="stg-diag__c">
-          <span className="u-label">{t("Disk")}</span>
-          <span className="stg-diag__v">
-            <span className="stg-dot" data-tone={disk === null || diskBad ? "bad" : "ok"} />
-            <span>{freeGb !== null ? t("{n} GB free", { n: freeGb.toFixed(1) }) : "—"}</span>
+            <span>{audioLabel}</span>
           </span>
         </div>
         {/* Deshabilitado mientras graba (una partida o una prueba manual): el
@@ -682,7 +687,7 @@ export const SettingsPanel: React.FC = () => {
         <button
           onClick={handleQuickTest}
           disabled={testBusy || isRecording}
-          className="btn btn--primary"
+          className="btn btn--primary btn--md"
           title={t("Records your screen for 10 seconds and saves it to the Library, so you can check video and sound before a real match.")}
         >
           {testLeft !== null ? t("Testing… {n} s left", { n: testLeft }) : t("10-second test")}
@@ -705,8 +710,11 @@ export const SettingsPanel: React.FC = () => {
       {!audioReady && (
         <details className="fold fold--warn">
           <summary>{t("How to enable game sound capture")}</summary>
+          {/* El motor es libobs: captura el loopback de la salida de audio por
+              defecto (wasapi_output_capture). No hay dispositivo virtual que
+              instalar; lo único que puede faltar es una salida activa. */}
           <p className="note">
-            {t("Install Screen Capturer Recorder (already in your Downloads folder): run the setup as administrator. It adds the virtual-audio-capturer device, which captures exactly what you hear. Then hit Re-detect. Meanwhile it records with the microphone if there is one.")}
+            {t("Game sound is captured from your default Windows output device (everything you hear through it), so there is nothing to install. If no device shows up, connect or enable your speakers or headphones, set them as the default output in Windows sound settings, and hit Re-detect. Until then, videos are recorded without sound.")}
           </p>
         </details>
       )}
@@ -784,7 +792,7 @@ export const SettingsPanel: React.FC = () => {
             data-tone={audioReady ? undefined : "bad"}
             title={audio?.system_audio_device ?? undefined}
           >
-            <span>{audioReady ? audio?.system_audio_device : t("No capture device")}</span>
+            <span>{audioLabel}</span>
           </span>
           <button className="btn btn--ghost btn--sm" onClick={refreshAudio} disabled={audioLoading}>
             <RefreshCw size={12} style={audioLoading ? { animation: "spin 1s linear infinite" } : undefined} />
@@ -809,7 +817,7 @@ export const SettingsPanel: React.FC = () => {
           <li>{t("It records locally with hardware encoding, at the resolution you picked, so your FPS is untouched.")}</li>
           <li>{t("It logs kills, deaths, assists and objectives with their timestamps.")}</li>
           <li>{t("It saves everything when the match ends, with no action from you.")}</li>
-          <li>{t("It needs ffmpeg on your Windows PATH; without it the recorder cannot start.")}</li>
+          <li>{t("The capture engine ships with the app, so there is nothing else to install.")}</li>
         </ul>
       </details>
     </>
@@ -846,7 +854,7 @@ export const SettingsPanel: React.FC = () => {
         </Row>
 
         <Row
-          label={t("Max Storage Quota (GB)")}
+          label={t("Max storage quota (GB)")}
           desc={t("Oldest matches are deleted first when the folder goes over this. Minimum {n} GB.").replace("{n}", String(MIN_STORAGE_GB))}
         >
           <input
@@ -866,7 +874,7 @@ export const SettingsPanel: React.FC = () => {
         </Row>
 
         <Row
-          label={t("Auto-prune Age (Days)")}
+          label={t("Auto-prune age (days)")}
           desc={t("Deletes matches older than this, with their clips. 0 disables it. Imported VODs and matches with favourited clips are never touched.")}
         >
           <input
@@ -1140,7 +1148,7 @@ export const SettingsPanel: React.FC = () => {
         {isDownloading ? (
           <div className="upd">
             <span className="upd__track"><span className="upd__fill" style={{ width: `${downloadProgress}%` }} /></span>
-            <span className="u-metric" style={{ fontSize: 11 }}>{downloadProgress}%</span>
+            <span className="u-metric" style={{ fontSize: 12 }}>{downloadProgress}%</span>
           </div>
         ) : pending ? (
           <button onClick={installUpdate} className="btn btn--ghost btn--sm">
@@ -1148,7 +1156,7 @@ export const SettingsPanel: React.FC = () => {
           </button>
         ) : (
           <button onClick={checkForUpdates} disabled={isUpdating} className="btn btn--ghost btn--sm">
-            {isUpdating ? t("Checking…") : t("Check for Updates")}
+            {isUpdating ? t("Checking…") : t("Check for updates")}
           </button>
         )}
       </Row>
@@ -1161,7 +1169,7 @@ export const SettingsPanel: React.FC = () => {
       <section className="card stg-card">
         {/* Grabar a mano no es un ajuste: es algo que se ejecuta. La prueba de
             10 segundos de Grabación es esta misma con nombre automático. */}
-        <Row label={t("Manual test recording")} desc={t("Checks that FFmpeg and GPU encoding work before trusting a real match.")}>
+        <Row label={t("Manual test recording")} desc={t("Checks that capture and GPU encoding work before trusting a real match.")}>
           {isRecording ? (
             <button onClick={handleStopManual} disabled={testBusy} className="btn btn--ghost btn--sm">
               {testLeft !== null ? t("Testing… {n} s left", { n: testLeft }) : t("Stop and save")}
@@ -1219,7 +1227,7 @@ export const SettingsPanel: React.FC = () => {
       <section className="card stg-card">
         <Row label={t("Game sound")} desc={t("Source recorded alongside the video. If the test has no sound, detect again.")}>
           <span className="stg-field" data-tone={audioReady ? undefined : "bad"} title={audio?.system_audio_device ?? undefined}>
-            <span>{audioReady ? audio?.system_audio_device : t("No capture device")}</span>
+            <span>{audioLabel}</span>
           </span>
         </Row>
         <div className="stg-row">
@@ -1280,16 +1288,22 @@ export const SettingsPanel: React.FC = () => {
             >
               {t(c.label)}
               {c.key === "storage" && diskPct !== null && (
-                <span className="u-meta stg-nav__meta">{diskPct} %</span>
+                // El aviso de disco que antes llevaba la tira de estado: el
+                // hueco libre ya está en la barra de título, pero que la cuota
+                // o el disco van justos se señala donde se arregla.
+                <span className="u-meta stg-nav__meta" {...(diskBad ? { "data-tone": "bad" } : {})}>{diskPct} %</span>
               )}
             </button>
           ))}
           <div className="stg-nav__foot">
             <span className="u-meta">
+              {/* "Al día" solo tras una comprobación de verdad en esta sesión. */}
               {appVersion
                 ? pending
                   ? t("Version {v} · update ready", { v: appVersion })
-                  : t("Version {v} · up to date", { v: appVersion })
+                  : upToDate
+                    ? t("Version {v} · up to date", { v: appVersion })
+                    : t("Version {v}", { v: appVersion })
                 : "—"}
             </span>
             {pending ? (
@@ -1298,7 +1312,7 @@ export const SettingsPanel: React.FC = () => {
               </button>
             ) : (
               <button type="button" className="stg-nav__link" onClick={checkForUpdates} disabled={isUpdating || isDownloading}>
-                {isUpdating ? t("Checking…") : t("Check for Updates")}
+                {isUpdating ? t("Checking…") : t("Check for updates")}
               </button>
             )}
           </div>

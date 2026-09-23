@@ -1252,6 +1252,48 @@ fn clasifica_error_riot(e: &str) -> String {
     }
 }
 
+/// Tu rango de Solo/Dúo AHORA, según league-v4.
+#[derive(serde::Serialize, Clone)]
+pub struct CurrentRank {
+    pub tier: String,
+    pub division: String,
+    pub lp: i32,
+}
+
+/// El rango actual, sin bajar partidas.
+///
+/// Existe porque el rail y Hoy enseñaban el rango guardado en la última
+/// partida GRABADA: si juegas sin grabar y cambias de rango, la app se quedaba
+/// en el de hace semanas mientras Patrones (que pregunta en vivo) decía otro.
+/// Visto con datos reales: "Maestro 16 LP" en el rail y "Diamante I 75 LP" en
+/// la escalada, a la vez. Una sola llamada a league-v4, guardada 5 minutos.
+#[tauri::command]
+pub async fn get_current_rank() -> Result<Option<CurrentRank>, String> {
+    static CACHE: std::sync::Mutex<Option<(std::time::Instant, Option<CurrentRank>)>> =
+        std::sync::Mutex::new(None);
+    if let Some((t, r)) = CACHE.lock().unwrap().as_ref() {
+        if t.elapsed() < std::time::Duration::from_secs(300) {
+            return Ok(r.clone());
+        }
+    }
+    let config = crate::storage::load_config();
+    if sin_credencial(&config) {
+        return Err("no_key".to_string());
+    }
+    let todas = crate::storage::load_all_matches();
+    let Some((puuid, plataforma)) = puuid_propio(&todas) else {
+        return Err("no_account".to_string());
+    };
+    let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    api.set_platform(&plataforma);
+    let r = api
+        .rango_solo(&plataforma, &puuid)
+        .await
+        .map(|(tier, division, lp)| CurrentRank { tier, division, lp });
+    *CACHE.lock().unwrap() = Some((std::time::Instant::now(), r.clone()));
+    Ok(r)
+}
+
 #[tauri::command]
 pub async fn get_season_form() -> Result<SeasonForm, String> {
     let config = crate::storage::load_config();
@@ -1371,6 +1413,19 @@ pub struct PressureSummary {
     pub with_gains: usize,
     pub without_gains: usize,
     pub deaths: usize,
+    /// Segundos de rival que tuviste atados, sumando a cada rival por separado.
+    pub enemy_seconds: f64,
+    /// Valor neto en oro de todos tus episodios. Ver `crate::pressure_value`.
+    pub net_gold: f64,
+    pub farm_denied: f64,
+    pub own_farm_lost: f64,
+    pub local_gold: f64,
+    pub team_elsewhere: f64,
+    /// Lo que el rival sacó lejos mientras tanto (contexto, no se resta).
+    pub enemy_elsewhere: f64,
+    pub good: usize,
+    pub even: usize,
+    pub bad: usize,
     pub episodes: Vec<PressureEpisode>,
 }
 
@@ -1387,7 +1442,7 @@ pub struct PressureEpisode {
 /// Formato de `pressure_v1.json`. Subir el número invalida todas las cachés de
 /// golpe, que es lo que hay que hacer cuando cambia el detector de presión: los
 /// resúmenes viejos serían de un algoritmo que ya no existe.
-const PRESSURE_CACHE_V: u32 = 2;
+const PRESSURE_CACHE_V: u32 = 3;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///
@@ -1476,7 +1531,9 @@ fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCach
 #[tauri::command]
 pub async fn get_pressure_summary() -> PressureSummary {
     let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0,
-        with_gains: 0, without_gains: 0, deaths: 0, episodes: Vec::new() };
+        with_gains: 0, without_gains: 0, deaths: 0, enemy_seconds: 0.0, net_gold: 0.0,
+        farm_denied: 0.0, own_farm_lost: 0.0, local_gold: 0.0, team_elsewhere: 0.0,
+        enemy_elsewhere: 0.0, good: 0, even: 0, bad: 0, episodes: Vec::new() };
     for mut m in crate::storage::load_all_matches() {
         if m.is_vod || m.riot_match_id.is_none() {
             continue;
@@ -1491,6 +1548,19 @@ pub async fn get_pressure_summary() -> PressureSummary {
             sum.gold += w.gold_elsewhere;
             sum.deaths += usize::from(w.died);
             if w.gains.is_empty() { sum.without_gains += 1; } else { sum.with_gains += 1; }
+            let v = &w.value;
+            sum.enemy_seconds += v.enemy_seconds;
+            sum.net_gold += v.net;
+            sum.farm_denied += v.farm_denied;
+            sum.own_farm_lost += v.own_farm_lost;
+            sum.local_gold += v.local_gold;
+            sum.team_elsewhere += v.team_elsewhere;
+            sum.enemy_elsewhere += v.enemy_elsewhere;
+            match v.verdict.as_str() {
+                "good" => sum.good += 1,
+                "bad" => sum.bad += 1,
+                _ => sum.even += 1,
+            }
             let (game_start, game_end) = (w.start, w.end);
             pressure_video_clock(&mut w, offset);
             sum.episodes.push(PressureEpisode { match_id: m.id.clone(), date: m.date.clone(), game_start, game_end, window: w });
@@ -1503,7 +1573,7 @@ pub async fn get_pressure_summary() -> PressureSummary {
 fn pressure_video_clock(w: &mut crate::pressure::PressureWindow, offset: f64) {
     w.start = (w.start + offset).max(0.0);
     w.end = (w.end + offset).max(0.0);
-    for event in w.gains.iter_mut().chain(w.losses.iter_mut()) {
+    for event in w.gains.iter_mut().chain(w.losses.iter_mut()).chain(w.context.iter_mut()) {
         event.time = (event.time + offset).max(0.0);
     }
 }

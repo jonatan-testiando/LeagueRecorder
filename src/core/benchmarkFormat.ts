@@ -44,6 +44,12 @@ export interface MetricMeta {
   /** Nombre corto para los resúmenes en prosa ("fuerte: visión, …"). */
   short: string;
   fmt: MetricFmt;
+  /**
+   * La palanca, dicha como lo que harías ("farming better"): remata la frase
+   * "Where you gain most: …" de la tarjeta de Patrones. Sin ella, la métrica
+   * no se propone como palanca (kills y asistencias no traen percentil).
+   */
+  lever?: string;
 }
 
 /**
@@ -53,21 +59,21 @@ export interface MetricMeta {
  * informa de nada y sólo alarga la cifra.
  */
 export const METRIC_META: Record<string, MetricMeta> = {
-  cs_per_min: { label: "CS / min", short: "CS", fmt: "rate1" },
-  kill_participation: { label: "Kill participation", short: "kill participation", fmt: "pct" },
-  deaths_per_game: { label: "Deaths", short: "deaths", fmt: "int" },
-  kda: { label: "KDA", short: "KDA", fmt: "rate1" },
-  gold_per_min: { label: "Gold / min", short: "gold", fmt: "rate0" },
-  damage_per_min: { label: "Damage / min", short: "damage", fmt: "rate0" },
-  damage_share: { label: "Damage share", short: "damage share", fmt: "pct" },
-  vision_score_per_min: { label: "Vision / min", short: "vision", fmt: "rate1" },
-  wards_per_min: { label: "Wards / min", short: "wards", fmt: "rate1" },
-  control_wards: { label: "Control wards", short: "control wards", fmt: "int" },
-  gold_diff_15: { label: "Gold @15", short: "gold @15", fmt: "diff" },
-  xp_diff_15: { label: "XP @15", short: "XP @15", fmt: "diff" },
-  cs_diff_15: { label: "CS @15", short: "CS @15", fmt: "diff" },
-  solo_kills: { label: "Solo kills", short: "solo kills", fmt: "int" },
-  turret_damage_per_min: { label: "Turret damage / min", short: "turret damage", fmt: "rate0" },
+  cs_per_min: { label: "CS / min", short: "CS", fmt: "rate1", lever: "farming better" },
+  kill_participation: { label: "Kill participation", short: "kill participation", fmt: "pct", lever: "joining more of your team's fights" },
+  deaths_per_game: { label: "Deaths", short: "deaths", fmt: "int", lever: "dying less" },
+  kda: { label: "KDA", short: "KDA", fmt: "rate1", lever: "trading better in fights" },
+  gold_per_min: { label: "Gold / min", short: "gold", fmt: "rate0", lever: "earning more gold" },
+  damage_per_min: { label: "Damage / min", short: "damage", fmt: "rate0", lever: "dealing more damage" },
+  damage_share: { label: "Damage share", short: "damage share", fmt: "pct", lever: "a bigger share of your team's damage" },
+  vision_score_per_min: { label: "Vision / min", short: "vision", fmt: "rate1", lever: "more vision" },
+  wards_per_min: { label: "Wards / min", short: "wards", fmt: "rate1", lever: "placing more wards" },
+  control_wards: { label: "Control wards", short: "control wards", fmt: "int", lever: "buying control wards" },
+  gold_diff_15: { label: "Gold @15", short: "gold @15", fmt: "diff", lever: "a stronger lane to minute 15" },
+  xp_diff_15: { label: "XP @15", short: "XP @15", fmt: "diff", lever: "more experience by minute 15" },
+  cs_diff_15: { label: "CS @15", short: "CS @15", fmt: "diff", lever: "out-farming your lane opponent" },
+  solo_kills: { label: "Solo kills", short: "solo kills", fmt: "int", lever: "winning more one-on-ones" },
+  turret_damage_per_min: { label: "Turret damage / min", short: "turret damage", fmt: "rate0", lever: "hitting towers more" },
   kills_per_game: { label: "Kills", short: "kills", fmt: "int" },
   assists_per_game: { label: "Assists", short: "assists", fmt: "int" },
 };
@@ -87,6 +93,17 @@ export const metricShort = (metric: string): string =>
  * entero, pero la media de veinte es 6,4 y redondearla a 6 se come justo la
  * diferencia que la fila existe para enseñar.
  */
+/**
+ * Decimal en el idioma de la interfaz: "8,7" en español, "8.7" en inglés. Hoy
+ * escribía "8,6" y Patrones "8.7" para la misma cifra; con dos formatos las
+ * cifras parecen de sitios distintos aunque no lo sean.
+ */
+export const formatDecimal = (value: number, digits = 1): string =>
+  value.toLocaleString(document.documentElement.lang === "en" ? "en-US" : "es-ES", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+
 export const formatMetricValue = (metric: string, value: number): string => {
   switch (METRIC_META[metric]?.fmt ?? "rate1") {
     case "pct":
@@ -97,9 +114,9 @@ export const formatMetricValue = (metric: string, value: number): string => {
     case "rate0":
       return String(Math.round(value));
     case "int":
-      return Number.isInteger(value) ? String(value) : value.toFixed(1);
+      return Number.isInteger(value) ? String(value) : formatDecimal(value);
     default:
-      return value.toFixed(1);
+      return formatDecimal(value);
   }
 };
 
@@ -162,3 +179,22 @@ export const sortByRelevance = <T extends { metric: string }>(
   };
   return [...rows].sort((a, b) => peso(a.metric) - peso(b.metric));
 };
+
+/**
+ * Las cuatro filas que se leen de un vistazo, según el puesto.
+ *
+ * La tarjeta de la última partida no puede enseñar diecisiete barras sin
+ * volver a ser una tabla; estas cuatro son las que un jugador de ese puesto
+ * mira primero. La lista entera sigue en la ficha de la media.
+ */
+export const headlineMetrics = (role?: string | null): string[] => {
+  switch (roleLabel(role)) {
+    case "Jungle": return ["kill_participation", "cs_per_min", "kda", "deaths_per_game"];
+    case "Support": return ["vision_score_per_min", "kill_participation", "kda", "deaths_per_game"];
+    default: return ["cs_per_min", "kill_participation", "kda", "deaths_per_game"];
+  }
+};
+
+/** Etiqueta de la palanca (clave de i18n), o null si la métrica no la tiene. */
+export const metricLever = (metric: string): string | null =>
+  METRIC_META[metric]?.lever ?? null;

@@ -2,9 +2,10 @@
 // no lógica, y ocupaban un tercio del archivo.
 //
 // Aquí queda solo lo que necesita un valor calculado o una posición absoluta
-// (marcadores, cursor, capas sobre el vídeo). El cromo de la pantalla —barra
-// superior, rejilla, línea de tiempo, inspector, filas y chips— vive en
-// VideoPlayer.css, que es donde caben hover, foco y estados por atributo.
+// (capas sobre el vídeo, la tira de miradas, la barra del recortador). El cromo
+// de la pantalla —cabecera, rejilla, línea de tiempo con sus marcas y cabezal,
+// transporte, inspector, filas y chips— vive en VideoPlayer.css, que es donde
+// caben hover, foco y estados por atributo.
 // Ningún color escrito a mano: todo son tokens de index.css, así el tema claro
 // llega aquí sin que este fichero se entere.
 
@@ -28,13 +29,8 @@ export const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     backgroundColor: "color-mix(in srgb, var(--sunken) 72%, transparent)",
   },
-  // En pantalla completa no hay baraja: tira y transporte flotan juntos sobre
-  // el video, dentro de fsBottom (que pone el degradado y la posición).
-  transportOverlay: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
+  // En pantalla completa no hay baraja: aviso, tira y transporte flotan juntos
+  // sobre el vídeo, dentro de fsBottom (que pone el degradado y la posición).
   fsBottom: {
     position: "absolute",
     bottom: 0,
@@ -48,22 +44,12 @@ export const styles: Record<string, React.CSSProperties> = {
     background:
       "linear-gradient(to top, color-mix(in srgb, var(--sunken) 92%, transparent), color-mix(in srgb, var(--sunken) 55%, transparent) 70%, transparent)",
   },
-  // La tira necesita alto propio: en la baraja lo heredaba del deck.
+  // La tira compacta (sin curva de APM) pone su propio alto. En bloque y no en
+  // columna flex: ahí su `flex: 1` (que en la tarjeta normal es el ANCHO) se
+  // comía la altura y el transporte se le montaba encima.
   fsTimeline: {
-    height: 64,
     position: "relative",
-    display: "flex",
-    flexDirection: "column",
-  },
-  volumeSlider: {
-    width: "80px",
-    accentColor: "var(--cool)",
-    cursor: "pointer",
-    height: "4px",
-    borderRadius: "2px",
-    appearance: "none",
-    background: "var(--sunken)",
-    boxShadow: "var(--inset-sunken)",
+    display: "block",
   },
   // Tira de saltos de cámara al pie del gráfico de APM.
   snapStrip: {
@@ -93,54 +79,6 @@ export const styles: Record<string, React.CSSProperties> = {
     opacity: 0.75,
     borderRadius: "1px",
   },
-  graphSvg: {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-    inset: 0,
-  },
-  // Marcador de suceso en la tira. Sin rebote ni sombra de contacto: el
-  // sistema no tiene ninguna de las dos.
-  eventNode: {
-    position: "absolute",
-    bottom: "24px",
-    width: "24px",
-    height: "24px",
-    borderRadius: "50%",
-    border: "2px solid",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    transition: "border-color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move)",
-    cursor: "pointer",
-  },
-  playhead: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: "2px",
-    backgroundColor: "var(--text)",
-    pointerEvents: "none",
-    zIndex: 20,
-    opacity: 0.9,
-    boxShadow: "0 0 8px color-mix(in srgb, var(--text) 60%, transparent)",
-  },
-  playheadHover: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    width: "1px",
-    backgroundColor: "var(--cool)",
-    pointerEvents: "none",
-    zIndex: 15,
-    opacity: 0.5,
-  },
-  axisMarks: {
-    position: "absolute",
-    bottom: "-15px",
-    left: 0,
-    right: 0,
-  },
   resizeHandle: {
     position: "absolute",
     left: "-3px",
@@ -159,7 +97,7 @@ export const styles: Record<string, React.CSSProperties> = {
   champIcon: {
     width: "26px",
     height: "26px",
-    borderRadius: "6px",
+    borderRadius: "50%",
     background: "var(--sunken)",
     flexShrink: 0,
     objectFit: "cover",
@@ -187,11 +125,12 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   clipTitle: {
     display: "block",
-    fontSize: "13px",
+    fontSize: "13.5px",
+    fontWeight: 500,
     color: "var(--text)",
     whiteSpace: "nowrap",
   },
-  clipRange: { display: "block", fontSize: "11px", color: "var(--faint)" },
+  clipRange: { display: "block", fontSize: "12px", color: "var(--faint)" },
   clipNote: {
     flex: 1,
     minWidth: 160,
@@ -210,6 +149,10 @@ export const styles: Record<string, React.CSSProperties> = {
 /**
  * Estilos de los widgets de análisis (mapa táctico, ganks, picos de poder,
  * tendencias, curva de oro, conciencia de mapa).
+ *
+ * Todo texto en sans con cifras tabulares y a 12 px como mínimo (rediseño
+ * Post-partida): la mono es solo de los instantes del vídeo y los atajos, y
+ * eso lo ponen las clases `.u-time` y `.u-kbd`, no estos objetos.
  *
  * Vienen de seis ficheros donde cada uno se había redibujado su propia tarjeta:
  * borde de color arriba, sombra grande, insignia con fondo translúcido y una
@@ -246,13 +189,20 @@ export const wstyles: Record<string, React.CSSProperties> = {
     gap: "var(--space-2)",
   },
   statValue: {
-    fontFamily: "var(--font-mono)",
+    fontFamily: "var(--font-sans)",
     fontSize: "15px",
     fontWeight: 500,
     color: "var(--text)",
     fontVariantNumeric: "tabular-nums",
   },
-  statDelta: { fontSize: "11px", display: "flex", alignItems: "center", gap: "4px" },
+  statDelta: {
+    fontFamily: "var(--font-sans)",
+    fontSize: "12px",
+    fontVariantNumeric: "tabular-nums",
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
 
   // --- mapa táctico -------------------------------------------------------
   mapFrame: {
@@ -298,7 +248,9 @@ export const wstyles: Record<string, React.CSSProperties> = {
     borderRadius: "var(--radius-sm)",
     background: "color-mix(in srgb, var(--ground) 88%, transparent)",
     border: "1px solid var(--hair-strong)",
-    fontSize: "11.5px",
+    fontFamily: "var(--font-sans)",
+    fontSize: "12px",
+    fontVariantNumeric: "tabular-nums",
     color: "var(--text)",
     pointerEvents: "none",
   },
@@ -320,6 +272,9 @@ export const wstyles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     textAlign: "left",
     color: "var(--text)",
+    fontFamily: "var(--font-sans)",
+    fontSize: "12.5px",
+    fontVariantNumeric: "tabular-nums",
   },
   buyIconSm: {
     width: "24px",
@@ -340,8 +295,9 @@ export const wstyles: Record<string, React.CSSProperties> = {
     borderRadius: "var(--radius-sm)",
     background: "color-mix(in srgb, var(--ground) 92%, transparent)",
     border: "1px solid var(--hair-strong)",
-    fontFamily: "var(--font-mono)",
-    fontSize: "11px",
+    fontFamily: "var(--font-sans)",
+    fontVariantNumeric: "tabular-nums",
+    fontSize: "12px",
     color: "var(--text)",
     pointerEvents: "none",
     whiteSpace: "nowrap",

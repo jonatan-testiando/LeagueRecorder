@@ -196,6 +196,26 @@ impl Positions {
         out
     }
 
+    /// Aliados dentro del radio en ese instante, contados del vídeo. Incluye
+    /// tu propio icono si está en el radio: quien llama lo descuenta.
+    pub fn allies_near(&self, sec: f64, x: f64, y: f64, radio: f64) -> Option<usize> {
+        let t_video = sec + self.video_offset;
+        let s = self
+            .samples
+            .iter()
+            .min_by(|a, b| (a.t - t_video).abs().total_cmp(&(b.t - t_video).abs()))?;
+        if (s.t - t_video).abs() > 1.0 {
+            return None;
+        }
+        Some(
+            s.icons
+                .iter()
+                .filter(|i| i.team == Some(self.self_team_id))
+                .filter(|i| ((i.x - x).powi(2) + (i.y - y).powi(2)).sqrt() <= radio)
+                .count(),
+        )
+    }
+
     /// Rivales dentro del radio en ese instante, contados del vídeo.
     ///
     /// A diferencia del estimador, aquí no hay incertidumbre que ponderar: o el

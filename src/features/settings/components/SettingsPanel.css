@@ -25,15 +25,15 @@
 }
 .stg__head h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1.1;
 }
 .stg__sub {
   margin: 0;
   color: var(--faint);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* Cuerpo: nav fija a la izquierda, contenido con su propio scroll. El scroll
@@ -63,7 +63,7 @@
   padding: 9px 12px;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.2;
   color: var(--muted);
@@ -88,7 +88,8 @@
   outline: 1px solid var(--cool);
   outline-offset: 1px;
 }
-.stg-nav__meta { margin-left: auto; }
+.stg-nav__meta { margin-left: auto; font-variant-numeric: tabular-nums; }
+.stg-nav__meta[data-tone="bad"] { color: var(--signal); }
 
 .stg-nav__foot {
   margin-top: auto;
@@ -103,7 +104,7 @@
   background: transparent;
   padding: 0;
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   color: var(--cool);
   cursor: pointer;
@@ -125,10 +126,11 @@
   max-width: 880px;
 }
 
-/* --- tira de diagnóstico (solo en Grabación) ------------------------------ */
+/* --- tira de diagnóstico (solo en Grabación) ------------------------------
+   Dos celdas: el grabador y el disco libre ya viven en la barra de título. */
 .stg-diag {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   gap: 20px;
   align-items: center;
   padding: 18px 22px;
@@ -175,7 +177,7 @@
   grid-column: 1 / -1;
   margin: 0;
 }
-@media (max-width: 1180px) {
+@media (max-width: 1000px) {
   .stg-diag { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stg-diag > .btn { grid-column: 1 / -1; justify-self: start; }
 }
@@ -210,7 +212,7 @@
 }
 .stg-row__help {
   margin: 3px 0 0;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   color: var(--faint);
   max-width: 56ch;
@@ -270,6 +272,8 @@
   box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 -2px 0 color-mix(in srgb, black 40%, transparent);
 }
 .stg-key[data-listening] {
+  /* "pulsa…" es una frase, no una tecla: va en la voz de la interfaz. */
+  font-family: var(--font-sans);
   color: var(--cool);
   box-shadow: inset 0 0 0 1px var(--cool), inset 0 -2px 0 color-mix(in srgb, black 40%, transparent);
 }
@@ -282,9 +286,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted);
 }
 .stg-list li[data-used] { color: var(--cool); }
 
 .stg-foot { margin: 0; }
+

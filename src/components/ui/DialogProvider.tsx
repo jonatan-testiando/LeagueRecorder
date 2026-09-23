@@ -260,21 +260,25 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     borderTop: "1px solid var(--line-soft)",
   },
+  // 13 px y radio de control (8): los botones del diálogo hablan como los del
+  // resto de la app desde «Post-partida», no un escalón por debajo.
   cancelBtn: {
     background: "transparent",
     border: "1px solid var(--line)",
-    color: "var(--muted)",
-    padding: "7px 15px",
-    borderRadius: "var(--radius-md)",
+    color: "var(--text)",
+    padding: "7px 16px",
+    borderRadius: 8,
     cursor: "pointer",
+    fontFamily: "var(--font-sans)",
     fontWeight: 500,
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
   },
   confirmBtn: {
-    padding: "7px 15px",
-    borderRadius: "var(--radius-md)",
+    padding: "7px 16px",
+    borderRadius: 8,
     cursor: "pointer",
+    fontFamily: "var(--font-sans)",
     fontWeight: 500,
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
   },
 };

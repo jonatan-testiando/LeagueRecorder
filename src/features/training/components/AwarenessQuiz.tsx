@@ -281,7 +281,7 @@ export const AwarenessQuiz: React.FC = () => {
   return (
     <div style={styles.list}>
       {error && <div style={styles.error}>{error}</div>}
-      {records.map((r) => (
+      {records.map((r, i) => (
         <div key={r.match_id} className="card card-interactive" style={styles.recordCard}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={styles.recordTitle}>
@@ -324,8 +324,10 @@ export const AwarenessQuiz: React.FC = () => {
               )}
             </div>
           </div>
+          {/* Oro solo en la primera (la partida más reciente): una acción de
+              oro por pantalla. Las demás, en superficie. */}
           <button
-            className="btn btn--primary"
+            className={i === 0 ? "btn btn--primary" : "btn btn--ghost"}
             style={styles.chip}
             onClick={() => openQuiz(r.match_id, r.answered)}
             disabled={busy}
@@ -340,7 +342,7 @@ export const AwarenessQuiz: React.FC = () => {
 
 const styles: Record<string, React.CSSProperties> = {
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  loadingTitle: { fontSize: "var(--font-sm)", color: "var(--muted)" },
+  loadingTitle: { fontSize: 14, color: "var(--muted)" },
   panel: {
     background: "var(--surface-1)",
     border: "1px solid var(--line-soft)",
@@ -365,7 +367,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     color: "var(--text)",
   },
-  recordDate: { fontSize: "var(--font-xs)", color: "var(--faint)", fontWeight: 500 },
+  recordDate: { fontSize: 13, color: "var(--faint)", fontWeight: 400, fontVariantNumeric: "tabular-nums" },
   recordMeta: {
     display: "flex",
     gap: "var(--space-4)",
@@ -376,9 +378,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     gap: 5,
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--muted)",
-    fontFamily: "var(--font-mono)",
+    fontVariantNumeric: "tabular-nums",
   },
   statsRow: {
     display: "flex",
@@ -389,14 +391,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stat: { display: "flex", flexDirection: "column", gap: 2 },
   statLabel: {
-    fontSize: "var(--font-xs)",
+    fontSize: 13,
     color: "var(--faint)",
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    fontWeight: 500,
+    fontWeight: 400,
   },
-  statValue: { fontSize: "var(--font-xl)", fontWeight: 800, fontFamily: "var(--font-mono)", color: "var(--text)" },
-  splitText: { fontSize: "var(--font-xs)", color: "var(--muted)", fontFamily: "var(--font-mono)" },
+  statValue: { fontSize: "var(--font-xl)", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--text)" },
+  splitText: { fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)" },
   question: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
   questionPrompt: {
@@ -416,22 +416,23 @@ const styles: Record<string, React.CSSProperties> = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "var(--font-xs)",
+    fontSize: 12,
     fontWeight: 500,
+    fontVariantNumeric: "tabular-nums",
     flexShrink: 0,
   },
   options: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap", paddingLeft: 36 },
-  option: { padding: "8px 18px", fontFamily: "var(--font-mono)", fontSize: "var(--font-sm)" },
-  chip: { padding: "6px 14px", fontSize: "var(--font-xs)", alignSelf: "flex-start" },
+  option: { padding: "8px 18px", fontSize: 14, fontVariantNumeric: "tabular-nums" },
+  chip: { padding: "6px 14px", fontSize: 13, alignSelf: "flex-start" },
   bigBtn: { padding: "10px 24px", alignSelf: "flex-start", justifyContent: "center" },
-  backBtn: { padding: "6px 12px", fontSize: "var(--font-xs)", alignSelf: "flex-start" },
+  backBtn: { padding: "6px 12px", fontSize: 13, alignSelf: "flex-start" },
   scoreBlock: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  bigScore: { fontSize: 64, fontWeight: 800, fontFamily: "var(--font-mono)", lineHeight: 1 },
+  bigScore: { fontSize: 64, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1 },
   scoreCaption: { fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 520 },
   answerList: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
   answerRow: { display: "flex", gap: "var(--space-3)", alignItems: "flex-start" },
   answerPrompt: { fontSize: "var(--font-sm)", color: "var(--text)" },
-  answerDetail: { fontSize: "var(--font-xs)", fontFamily: "var(--font-mono)", marginTop: 2 },
+  answerDetail: { fontSize: 13, fontVariantNumeric: "tabular-nums", marginTop: 2 },
   error: {
     padding: "var(--space-3)",
     borderRadius: "var(--radius-md)",

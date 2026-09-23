@@ -59,8 +59,8 @@ const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void }> = (
   return (
     <span style={styles.keyCapture}>
       <button
-        className={listening ? "btn btn--primary btn--sm" : "btn btn--ghost btn--sm"}
-        style={styles.keyBtn}
+        className="btn btn--ghost btn--sm"
+        style={listening ? { ...styles.keyBtn, ...styles.keyBtnListening } : styles.keyBtn}
         onClick={() => { setListening(true); setProblem(null); }}
         title={listening ? t("Press a key, or Escape to cancel") : t("Change key")}
       >
@@ -226,7 +226,10 @@ export const TrainingSetup: React.FC<{
         </div>
         <div style={styles.settingControls}>
           <button
-            className={draft.metronome_enabled ? "btn btn--primary btn--sm" : "btn btn--ghost btn--sm"}
+            // El oro es UNO por pantalla (Guardar): el encendido se marca con
+            // aria-pressed, como el resto de interruptores de la app.
+            className="btn btn--ghost btn--sm"
+            aria-pressed={draft.metronome_enabled}
             style={styles.chip}
             onClick={() => patch({ metronome_enabled: !draft.metronome_enabled })}
           >
@@ -261,7 +264,8 @@ export const TrainingSetup: React.FC<{
         </div>
         <div style={styles.settingControls}>
           <button
-            className={draft.awareness_quiz_enabled ? "btn btn--primary btn--sm" : "btn btn--ghost btn--sm"}
+            className="btn btn--ghost btn--sm"
+            aria-pressed={draft.awareness_quiz_enabled}
             style={styles.chip}
             onClick={() => patch({ awareness_quiz_enabled: !draft.awareness_quiz_enabled })}
           >
@@ -330,7 +334,7 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 720,
   },
   headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: "var(--font-lg)", fontWeight: 500, color: "var(--text)" },
+  title: { margin: 0, fontSize: 16, fontWeight: 500, color: "var(--text)" },
   desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)" },
   bindings: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
   bindingRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
@@ -341,6 +345,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "var(--font-mono)",
     fontSize: "var(--font-sm)",
     fontWeight: 500,
+  },
+  // Escuchando: "pulsa…" es una frase (sans) y el filo en jade, que es el
+  // color del foco; el oro queda para Guardar.
+  keyBtnListening: {
+    fontFamily: "var(--font-sans)",
+    color: "var(--cool)",
+    borderColor: "var(--cool)",
   },
   select: {
     flex: 1,
@@ -353,12 +364,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "var(--font-sm)",
     fontFamily: "var(--font-sans)",
   },
-  chip: { padding: "6px 14px", fontSize: "var(--font-xs)", alignSelf: "flex-start" },
+  chip: { padding: "6px 14px", fontSize: 13, alignSelf: "flex-start" },
   keyCapture: { display: "inline-flex", flexDirection: "column", gap: 4 },
-  keyProblem: { fontSize: "var(--font-xs)", color: "var(--loss)", maxWidth: 220 },
-  caveat: { marginTop: 4, fontSize: "var(--font-xs)", color: "var(--faint)", maxWidth: 420 },
+  keyProblem: { fontSize: 13, color: "var(--loss)", maxWidth: 220 },
+  caveat: { marginTop: 4, fontSize: 13, color: "var(--faint)", maxWidth: 420 },
   saveRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  dirtyHint: { fontSize: "var(--font-xs)", color: "var(--brand)" },
+  dirtyHint: { fontSize: 13, color: "var(--brand)" },
   divider: { height: 1, background: "var(--line-soft)" },
   settingRow: {
     display: "flex",
@@ -367,7 +378,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "var(--space-4)",
   },
   settingLabel: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" },
-  settingHint: { fontSize: "var(--font-xs)", color: "var(--faint)", marginTop: 2, maxWidth: 420 },
+  settingHint: { fontSize: 13, color: "var(--faint)", marginTop: 2, maxWidth: 420 },
   settingControls: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 },
   number: {
     width: 68,
@@ -377,9 +388,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "var(--radius-md)",
     padding: "8px 10px",
     fontSize: "var(--font-sm)",
-    fontFamily: "var(--font-mono)",
+    fontFamily: "var(--font-sans)",
+    fontVariantNumeric: "tabular-nums",
   },
-  unit: { fontSize: "var(--font-xs)", color: "var(--faint)", width: 24 },
+  unit: { fontSize: 13, color: "var(--faint)", width: 24 },
   saveBtn: { padding: "10px 24px", alignSelf: "flex-start" },
   error: {
     padding: "var(--space-3)",

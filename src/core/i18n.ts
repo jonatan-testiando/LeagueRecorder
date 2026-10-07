@@ -1817,6 +1817,8 @@ const ES: Record<string, string> = {
   "Per episode: the farm they lose chasing you, what your team takes elsewhere and the fight where you are, minus your own farm. A floor: enemy travel time and XP aren't counted.": "Por episodio: el farmeo que pierden persiguiéndote, lo que saca tu equipo en otra zona y la pelea donde estás, menos tu propio farmeo. Es un mínimo: no cuenta el viaje de los rivales ni la experiencia.",
   // Ruta de jungla (2026-10-07)
   // Recorrido y pestaña Partida rehecha (2026-10-07)
+  "On your recording": "En tu grabación",
+  "Allies and visible enemies": "Aliados y rivales a la vista",
   "Measure this game with video to see its route": "Mide esta partida con vídeo para ver su recorrido",
   "Back to the video": "Volver al vídeo",
   "Your route on the minimap": "Tu recorrido sobre el minimapa",

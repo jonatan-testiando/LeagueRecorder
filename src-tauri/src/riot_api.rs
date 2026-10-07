@@ -1444,7 +1444,8 @@ pub struct PressureEpisode {
 /// resúmenes viejos serían de un algoritmo que ya no existe.
 // v4 (2026-10-07): el minimapa invertía aliados y rivales en lado rojo.
 // v5 (2026-10-07): el farmeo perdido de jungla sale de la ruta medida.
-const PRESSURE_CACHE_V: u32 = 5;
+// v6 (2026-10-07): rastro por camino entre anclajes (minimap::follow).
+const PRESSURE_CACHE_V: u32 = 6;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///

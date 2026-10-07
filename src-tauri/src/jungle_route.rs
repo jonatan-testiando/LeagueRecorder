@@ -256,16 +256,7 @@ pub(crate) fn visitas_a_base(tl: &TimelineDto, pid: i32, muertos: &[(f64, f64, O
 pub fn build(tl: &TimelineDto, participants: &[ParticipantDto], pos: &Positions) -> Option<Route> {
     let pid = pos.self_participant_id;
     let equipo = participants.get((pid - 1) as usize)?.teamId;
-    let k = pid.to_string();
-    let anclas: Vec<(f64, f64, f64)> = tl
-        .info
-        .frames
-        .iter()
-        .filter_map(|f| {
-            let p = f.participantFrames.get(&k)?.position.as_ref()?;
-            Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
-        })
-        .collect();
+    let anclas = crate::minimap::anclas_de(tl, pid);
     let pista = pos.follow(&anclas);
     if pista.is_empty() {
         return None;
@@ -475,7 +466,7 @@ impl Route {
 
 /// Subir el número rehace todas las rutas guardadas.
 // v2: vueltas a base por compras, no por el icono en la fuente.
-const ROUTE_CACHE_V: u32 = 2;
+const ROUTE_CACHE_V: u32 = 3; // v3: rastro por camino entre anclajes (minimap::follow)
 
 #[derive(Serialize, Deserialize)]
 struct RouteCache {

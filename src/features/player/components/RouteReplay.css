@@ -5,21 +5,44 @@
   inset: 0;
   z-index: 6; /* encima del lienzo de la estela del ratón (5) */
   display: flex;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
   background: var(--ground);
-  /* El mapa se mide contra el contenedor: cuadrado, tan alto como quepa y
-     dejando sitio a la columna de la derecha. */
-  container-type: size;
 }
 .rr--center { display: grid; place-items: center; }
 
+/* Controles en una fila encima de los dos mapas. */
+.rr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.rr-group { display: inline-flex; align-items: center; gap: var(--space-2); }
+.rr-fill { flex: 1; }
+.rr-bar .tp-seg button { white-space: nowrap; }
+
+/* Los dos cuadrados (tu mapa dibujado y el minimapa de la grabación), lo más
+   grandes que quepan: el lado es el menor entre el alto disponible y la mitad
+   del ancho. Antes el de la grabación era una miniatura y sobraba media
+   pantalla a la derecha. */
+.rr-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-4);
+  container-type: size;
+}
+.rr-sq {
+  margin: 0;
+  flex: none;
+  width: min(100cqh - 28px, (100cqw - var(--space-4)) / 2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .rr-map {
   position: relative;
-  flex: none;
-  width: min(100cqh - 2 * var(--space-4), 100cqw - 2 * var(--space-4) - 260px - var(--space-4));
+  width: 100%;
   aspect-ratio: 1 / 1;
-  align-self: center;
   border-radius: var(--radius-md);
   overflow: hidden;
   /* Los muros del minimapa oficial son transparentes: los rellena esto. Mismo
@@ -29,6 +52,23 @@
 }
 .rr-map img, .rr-map svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .rr-map img { user-select: none; pointer-events: none; }
+.rr-crop {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-md);
+  background: #0B1018;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.rr-cap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 22px;
+  font-size: 12px;
+  color: var(--faint);
+}
 
 .rr-trail-halo path {
   fill: none;
@@ -57,26 +97,16 @@
 .rr-me__ring { fill: #0B1018; stroke: var(--brand); stroke-width: 90; }
 .rr-me--stale { opacity: 0.45; }
 
-.rr-side {
-  flex: 1 1 260px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  overflow-y: auto;
-}
-.rr-ctl { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
-.rr-ctl .tp-seg { flex-wrap: wrap; }
-.rr-ctl .tp-seg button { white-space: nowrap; }
 .rr-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
 
-.rr-legend { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .rr-grad {
+  width: 90px;
   height: 6px;
   border-radius: var(--radius-full);
   background: linear-gradient(to right, var(--cool), var(--brand));
 }
-.rr-grad-labels { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.rr-grad-to { margin-right: 6px; }
+
 .rr-keys { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
 .rr-keys span { display: inline-flex; align-items: center; gap: 6px; }
 .rr-k { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
@@ -90,27 +120,3 @@
 .rr-k--death::before { transform: rotate(45deg); }
 .rr-k--death::after { transform: rotate(-45deg); }
 
-.rr-fig { margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.rr-fig figcaption { font-size: 12px; color: var(--faint); }
-.rr-crop {
-  width: 100%;
-  max-width: 320px;
-  aspect-ratio: 1 / 1;
-  height: auto;
-  border-radius: var(--radius-sm);
-  background: #0B1018;
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.rr-preview {
-  display: block;
-  width: 100%;
-  max-width: 320px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  cursor: pointer;
-  background: #0B1018;
-}
-.rr-preview canvas { display: block; width: 100%; height: auto; }
-.rr-preview:hover { box-shadow: 0 0 0 2px var(--brand); }

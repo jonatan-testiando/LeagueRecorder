@@ -58,16 +58,7 @@ pub struct TrackResponse {
 pub fn build(tl: &TimelineDto, m: &MatchDto, pos: &Positions) -> Option<Track> {
     let pid = pos.self_participant_id;
     let yo = m.info.participants.get((pid - 1) as usize)?;
-    let k = pid.to_string();
-    let anclas: Vec<(f64, f64, f64)> = tl
-        .info
-        .frames
-        .iter()
-        .filter_map(|f| {
-            let p = f.participantFrames.get(&k)?.position.as_ref()?;
-            Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
-        })
-        .collect();
+    let anclas = crate::minimap::anclas_de(tl, pid);
     let pista = pos.follow(&anclas);
     if pista.is_empty() {
         return None;

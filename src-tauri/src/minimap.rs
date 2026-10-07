@@ -68,6 +68,32 @@ const RESCATE_MAX: f64 = 2500.0;
 /// primero al retomar un rastro.
 const MARGEN_RESCATE: f64 = 1200.0;
 
+/// Parámetros del camino entre anclajes, medidos escondiendo minutos de la
+/// API (`seguimiento_en_mis_partidas`).
+///
+/// Muestras que se pueden saltar sin ver tu icono (15 s a 2 Hz): al salir de
+/// la fuente el detector llega a pasar más de 4 s sin ver a nadie, y con un
+/// límite de 4 s tu camino real quedaba cortado.
+const SALTO_MAX: usize = 30;
+/// Coste por muestra saltada.
+const PENALIZA_HUECO: f64 = 300.0;
+/// Velocidad de andar normal (u/s). Lo que la supere se cobra `PESO_EXCESO`
+/// veces: sin esto el camino se quedaba en un compañero y "saltaba" de vuelta.
+const ANDAR: f64 = 500.0;
+const PESO_EXCESO: f64 = 20.0;
+/// Las posiciones exactas de un participante, una por minuto.
+pub fn anclas_de(tl: &crate::riot_api::TimelineDto, pid: i32) -> Vec<(f64, f64, f64)> {
+    let k = pid.to_string();
+    tl.info
+        .frames
+        .iter()
+        .filter_map(|f| {
+            let p = f.participantFrames.get(&k)?.position.as_ref()?;
+            Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
+        })
+        .collect()
+}
+
 /// Dónde estaba el jugador en un instante, según el vídeo.
 #[derive(Debug, Clone, Copy)]
 pub struct Fix {
@@ -124,17 +150,148 @@ impl Positions {
 
     /// Sigue al jugador grabado a lo largo de la partida.
     ///
-    /// No basta con coger el aliado más cercano a donde dice la API: entre
-    /// minutos esa posición es una interpolación, y con ese criterio el rastro
-    /// saltaba miles de unidades en dos segundos. Se ancla en cada minuto —donde
-    /// la API es exacta— y entre medias se propaga por continuidad, aceptando
-    /// sólo saltos que la velocidad permite.
+    /// Entre cada dos minutos exactos de la API se busca el CAMINO de iconos
+    /// aliados que une las dos posiciones con movimientos posibles (camino
+    /// mínimo en un grafo de muestras). Lo de antes —propagar por continuidad
+    /// desde el último minuto— se enganchaba a un compañero cuando salíais
+    /// juntos y no se soltaba: medido escondiendo minutos de la API, en el
+    /// 49 % de ellos el rastro estaba sobre otro icono. Un compañero que sale
+    /// contigo no acaba donde la API dice que estabas un minuto después, así
+    /// que su camino no conecta y se descarta solo.
+    ///
+    /// Donde no hay camino (iconos perdidos demasiado tiempo), o pasado el
+    /// último minuto, se usa la pasada por continuidad de siempre.
+    ///
+    /// Medido (2026-10-07, 26 partidas): escondiendo la mitad de los minutos
+    /// de la API, el rastro caía sobre otro icono en el 49 % de ellos con lo
+    /// de antes y en el 38 % con esto (error típico 1.382 → 158 u); con todos
+    /// los minutos y tus muertes como verdad, 31 % → 24 %. Lo que queda son
+    /// sobre todo peleas en grupo: sin saber qué icono eres tú, el camino
+    /// más corto a veces pasa por el grupo. Probado y DESCARTADO: seguir
+    /// también a los 4 compañeros con sus minutos de la API y penalizar los
+    /// iconos "suyos" — empeora (46-62 %), porque sus rastros fallan igual y
+    /// te roban tu icono. Lo que lo arreglaría de verdad es saber qué icono
+    /// eres (el recuadro blanco de la cámara, o el retrato), y eso exige
+    /// volver a medir los vídeos.
     pub fn follow(&self, anclas: &[(f64, f64, f64)]) -> Vec<Fix> {
-        let mut out = Vec::new();
-        let mut actual: Option<(f64, f64)> = None;
-        let mut visto = 0.0f64;
+        self.follow_con(anclas)
+    }
+
+    fn follow_con(&self, anclas: &[(f64, f64, f64)]) -> Vec<Fix> {
+        let mut anclas: Vec<(f64, f64, f64)> = anclas.to_vec();
+        anclas.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let respaldo = self.follow_pass(&anclas, false);
+        let mut out: Vec<Fix> = Vec::new();
+        let cubierto = |a: f64, b: f64, out: &mut Vec<Fix>, tramo: Option<Vec<Fix>>| {
+            match tramo {
+                Some(t) => out.extend(t),
+                None => out.extend(respaldo.iter().filter(|f| f.sec > a && f.sec < b).copied()),
+            }
+        };
+        let primera = anclas.first().map(|a| a.0).unwrap_or(f64::INFINITY);
+        cubierto(f64::NEG_INFINITY, primera, &mut out, None);
+        for par in anclas.windows(2) {
+            let tramo = self.camino(par[0], par[1]);
+            cubierto(par[0].0, par[1].0, &mut out, tramo);
+        }
+        if let Some(ultima) = anclas.last() {
+            // El propio instante del anclaje y lo que venga después.
+            out.extend(respaldo.iter().filter(|f| f.sec >= ultima.0 - 0.5).copied());
+        }
+        out.sort_by(|a, b| a.sec.total_cmp(&b.sec));
+        out.dedup_by(|a, b| (a.sec - b.sec).abs() < 1e-6);
+        out
+    }
+
+    /// Camino mínimo de iconos aliados entre dos anclajes exactos de la API.
+    ///
+    /// Nodos: (muestra, icono aliado). Aristas hacia los iconos de las
+    /// `SALTO_MAX` muestras siguientes cuyo salto cabe en la velocidad máxima
+    /// (o que caen en tu fuente: volver a base o reaparecer es un salto
+    /// legítimo). Coste: la distancia recorrida más una penalización por cada
+    /// muestra en la que tu icono no se vio. Incluye el instante de los dos
+    /// anclajes. `None` si no hay camino.
+    fn camino(&self, a: (f64, f64, f64), b: (f64, f64, f64)) -> Option<Vec<Fix>> {
+        let (salto_max, penaliza_hueco, andar, peso_exceso) = (SALTO_MAX, PENALIZA_HUECO, ANDAR, PESO_EXCESO);
+        let holgura = 300.0;
+        let fuente = if self.self_team_id == 100 { (400.0, 400.0) } else { (14400.0, 14450.0) };
+        let en_fuente = |x: f64, y: f64| (x - fuente.0).hypot(y - fuente.1) <= 1800.0;
+
+        // Muestras del tramo con sus iconos aliados. Las de los extremos se
+        // sustituyen por la posición exacta de la API: el camino tiene que
+        // salir y llegar ahí.
+        let mut capas: Vec<(f64, Vec<(f64, f64)>)> = vec![(a.0, vec![(a.1, a.2)])];
 
         for s in &self.samples {
+            let sec = s.t - self.video_offset;
+            if sec <= a.0 + 0.25 || sec >= b.0 - 0.25 {
+                continue;
+            }
+            let ic: Vec<(f64, f64)> = s
+                .icons
+                .iter()
+                .filter(|i| i.team == Some(self.self_team_id))
+                .map(|i| (i.x, i.y))
+                .collect();
+            capas.push((sec, ic));
+        }
+        capas.push((b.0, vec![(b.1, b.2)]));
+
+        let n = capas.len();
+        // coste[i][k], previo[i][k] = (capa, icono)
+        let mut coste: Vec<Vec<f64>> = capas.iter().map(|c| vec![f64::INFINITY; c.1.len()]).collect();
+        let mut previo: Vec<Vec<Option<(usize, usize)>>> = capas.iter().map(|c| vec![None; c.1.len()]).collect();
+        coste[0][0] = 0.0;
+        for i in 0..n {
+            for k in 0..capas[i].1.len() {
+                let c0 = coste[i][k];
+                if !c0.is_finite() {
+                    continue;
+                }
+                let (t0, (x0, y0)) = (capas[i].0, capas[i].1[k]);
+                for j in (i + 1)..(i + 1 + salto_max).min(n) {
+                    let dt = capas[j].0 - t0;
+                    for (q, &(x1, y1)) in capas[j].1.iter().enumerate() {
+                        let d = (x1 - x0).hypot(y1 - y0);
+                        let fuente_ok = en_fuente(x1, y1);
+                        if d > VELOCIDAD_MAX * dt + holgura && !fuente_ok {
+                            continue;
+                        }
+                        let exceso = if fuente_ok { 0.0 } else { (d - andar * dt - holgura).max(0.0) };
+                        let c = c0 + d.min(3000.0) + peso_exceso * exceso + penaliza_hueco * (j - i - 1) as f64;
+                        if c < coste[j][q] {
+                            coste[j][q] = c;
+                            previo[j][q] = Some((i, k));
+                        }
+                    }
+                }
+            }
+        }
+        if !coste[n - 1][0].is_finite() {
+            return None;
+        }
+        let mut camino = Vec::new();
+        let mut cur = Some((n - 1, 0usize));
+        while let Some((i, k)) = cur {
+            let (x, y) = capas[i].1[k];
+            camino.push(Fix { sec: capas[i].0, x, y, anchored: i == 0 || i == n - 1 });
+            cur = previo[i][k];
+        }
+        camino.reverse();
+        // El extremo final es el principio del tramo siguiente: no se repite.
+        camino.pop();
+        Some(camino)
+    }
+
+    /// Una pasada del seguimiento: hacia delante o (`atras`) desde el final.
+    fn follow_pass(&self, anclas: &[(f64, f64, f64)], atras: bool) -> Vec<Fix> {
+        let mut out = Vec::new();
+        let mut actual: Option<(f64, f64)> = None;
+        let mut visto = if atras { f64::INFINITY } else { 0.0f64 };
+        let muestras: Box<dyn Iterator<Item = &Sample>> =
+            if atras { Box::new(self.samples.iter().rev()) } else { Box::new(self.samples.iter()) };
+
+        for s in muestras {
             let sec = s.t - self.video_offset;
             let aliados: Vec<&Icon> = s
                 .icons
@@ -161,7 +318,7 @@ impl Positions {
                 continue;
             }
 
-            let dt = sec - visto;
+            let dt = (sec - visto).abs();
             if dt > HUECO_MAX {
                 actual = None;
             }
@@ -218,6 +375,9 @@ impl Positions {
             actual = Some((mejor.x, mejor.y));
             visto = sec;
             out.push(Fix { sec, x: mejor.x, y: mejor.y, anchored: false });
+        }
+        if atras {
+            out.reverse();
         }
         out
     }
@@ -773,5 +933,114 @@ mod tests {
     fn fichero_nuevo_no_se_toca() {
         let p = Positions::from_json(&fichero(200, r#","team_from":"ally_ring""#)).unwrap();
         assert_eq!(equipos(&p), vec![Some(100), Some(200), None]);
+    }
+
+    /// ¿Sigue el rastro a la persona correcta? La verdad son los minutos
+    /// exactos de la API: se esconden los impares, se sigue con los pares y se
+    /// mira dónde quedó el rastro en los escondidos. Compara la pasada sólo
+    /// hacia delante (lo de antes) con `follow` en los dos sentidos.
+    /// `MIS_PARTIDAS_DIR=... cargo test --lib seguimiento_en_mis_partidas -- --nocapture`
+    #[test]
+    fn seguimiento_en_mis_partidas() {
+        let Ok(dir) = std::env::var("MIS_PARTIDAS_DIR") else { return };
+        let mut err_ida = Vec::new();
+        let mut err_dos = Vec::new();
+        let (mut falta_ida, mut falta_dos, mut total) = (0, 0, 0);
+        for d in std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()) {
+            let (Ok(rtl), Ok(rp)) = (
+                std::fs::read_to_string(d.join("riot_timeline.json")),
+                std::fs::read_to_string(d.join("minimap_positions.json")),
+            ) else { continue };
+            let Ok(tl) = serde_json::from_str::<crate::riot_api::TimelineDto>(&rtl) else { continue };
+            let Some(pos) = Positions::from_json(&rp) else { continue };
+            let k = pos.self_participant_id.to_string();
+            let anclas: Vec<(f64, f64, f64)> = tl.info.frames.iter().filter_map(|f| {
+                let p = f.participantFrames.get(&k)?.position.as_ref()?;
+                Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
+            }).collect();
+            let usadas: Vec<_> = anclas.iter().enumerate().filter(|(i, _)| i % 2 == 0).map(|(_, a)| *a).collect();
+            let escondidas: Vec<_> = anclas.iter().enumerate().filter(|(i, _)| i % 2 == 1).map(|(_, a)| *a).collect();
+            let ida = pos.follow_pass(&usadas, false);
+            let dos = pos.follow(&usadas);
+            for (t, x, y) in escondidas {
+                total += 1;
+                let en = |r: &Vec<Fix>| r.iter().find(|f| (f.sec - t).abs() <= 0.5).map(|f| (f.x - x).hypot(f.y - y));
+                match en(&ida) { Some(e) => err_ida.push(e), None => falta_ida += 1 }
+                match en(&dos) { Some(e) => err_dos.push(e), None => falta_dos += 1 }
+                if let Some(e) = en(&dos) {
+                    if e > 1500.0 {
+                        // ¿Estaba tu icono en esa muestra?
+                        let m = pos.samples.iter().min_by(|p, q| ((p.t - pos.video_offset) - t).abs().total_cmp(&((q.t - pos.video_offset) - t).abs()));
+                        let visto = m.is_some_and(|m| m.icons.iter().any(|i| i.team == Some(pos.self_team_id) && (i.x - x).hypot(i.y - y) < 300.0));
+                        let muerto = tl.info.frames.iter().flat_map(|f| f.events.iter()).any(|e| e.event_type == "CHAMPION_KILL" && e.victimId == pos.self_participant_id && t - (e.timestamp as f64 / 1000.0) >= 0.0 && t - (e.timestamp as f64 / 1000.0) < 60.0);
+                        if std::env::var("TRK_DEBUG").is_ok() {
+                            println!("FALLO {} t={:.0} err={:.0} tu_icono_visible={} muerto_reciente={} verdad=({:.0},{:.0})", d.file_name().unwrap().to_string_lossy(), t, e, visto, muerto, x, y);
+                        }
+                    }
+                }
+            }
+        }
+        let resumen = |v: &mut Vec<f64>, falta: usize| {
+            v.sort_by(|a, b| a.total_cmp(b));
+            let mal = v.iter().filter(|e| **e > 1500.0).count();
+            format!("con rastro {}/{} · mediana {:.0} u · p90 {:.0} u · en otro icono (>1500 u) {} ({:.1}%)",
+                v.len(), v.len() + falta, v[v.len() / 2], v[v.len() * 9 / 10], mal, 100.0 * mal as f64 / v.len() as f64)
+        };
+        println!("{total} minutos escondidos");
+        println!("solo hacia delante: {}", resumen(&mut err_ida, falta_ida));
+        println!("camino entre anclajes: {}", resumen(&mut err_dos, falta_dos));
+    }
+
+    #[test]
+    fn traza_un_tramo() {
+        let Ok(dir) = std::env::var("TRK_TRAZA") else { return };
+        let d = std::path::Path::new(&dir);
+        let tl: crate::riot_api::TimelineDto = serde_json::from_str(&std::fs::read_to_string(d.join("riot_timeline.json")).unwrap()).unwrap();
+        let pos = Positions::from_json(&std::fs::read_to_string(d.join("minimap_positions.json")).unwrap()).unwrap();
+        let k = pos.self_participant_id.to_string();
+        let anclas: Vec<(f64, f64, f64)> = tl.info.frames.iter().enumerate().filter(|(i, _)| i % 2 == 0).filter_map(|(_, f)| {
+            let p = f.participantFrames.get(&k)?.position.as_ref()?;
+            Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
+        }).collect();
+        println!("anclas {:?}", &anclas[..2]);
+        let tramo = pos.camino(anclas[0], anclas[1]);
+        match tramo {
+            None => println!("SIN CAMINO"),
+            Some(t) => for f in t.iter().filter(|f| (f.sec * 2.0).round() as i64 % 10 == 0) { println!("{:.1} ({:.0},{:.0})", f.sec, f.x, f.y) },
+        }
+    }
+
+    /// Exactitud con TODOS los anclajes, como en producción. La verdad son tus
+    /// muertes: la API da la posición exacta al milisegundo, a mitad de minuto.
+    #[test]
+    fn seguimiento_en_tus_muertes() {
+        let Ok(dir) = std::env::var("MIS_PARTIDAS_DIR") else { return };
+        let (mut ida, mut camino, mut n) = (Vec::new(), Vec::new(), 0);
+        for d in std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()) {
+            let (Ok(rtl), Ok(rp)) = (
+                std::fs::read_to_string(d.join("riot_timeline.json")),
+                std::fs::read_to_string(d.join("minimap_positions.json")),
+            ) else { continue };
+            let Ok(tl) = serde_json::from_str::<crate::riot_api::TimelineDto>(&rtl) else { continue };
+            let Some(pos) = Positions::from_json(&rp) else { continue };
+            let anclas = anclas_de(&tl, pos.self_participant_id);
+            let a = pos.follow_pass(&anclas, false);
+            let b = pos.follow(&anclas);
+            for e in tl.info.frames.iter().flat_map(|f| f.events.iter()) {
+                if e.event_type != "CHAMPION_KILL" || e.victimId != pos.self_participant_id { continue }
+                let Some(p) = e.position.as_ref() else { continue };
+                // Justo ANTES de morir: después tu icono ya no está.
+                let t = e.timestamp as f64 / 1000.0 - 1.0;
+                n += 1;
+                let err = |r: &Vec<Fix>| r.iter().filter(|f| f.sec <= t + 0.6 && f.sec >= t - 2.0).last().map(|f| (f.x - p.x as f64).hypot(f.y - p.y as f64));
+                if let Some(x) = err(&a) { ida.push(x) }
+                if let Some(x) = err(&b) { camino.push(x) }
+            }
+        }
+        let r = |v: &mut Vec<f64>| { v.sort_by(|a, b| a.total_cmp(b)); let mal = v.iter().filter(|e| **e > 1500.0).count();
+            format!("con rastro {}/{} · mediana {:.0} u · en otro icono {} ({:.0}%)", v.len(), n, v[v.len() / 2], mal, 100.0 * mal as f64 / v.len() as f64) };
+        println!("{n} muertes");
+        println!("antes (solo hacia delante): {}", r(&mut ida));
+        println!("camino entre anclajes:      {}", r(&mut camino));
     }
 }

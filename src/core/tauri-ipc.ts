@@ -746,6 +746,8 @@ export interface HandReport {
   anchor_dy_px: number;
   screen_w: number;
   screen_h: number;
+  /** Partidas sumadas (versión de historial). 0 = una sola partida. */
+  matches?: number;
 }
 
 export const getHandReport = async (matchId: string): Promise<HandReport> => {
@@ -920,3 +922,38 @@ export interface GoldResponse {
 
 export const getGoldReport = async (matchId: string): Promise<GoldResponse> =>
   await invoke<GoldResponse>("get_gold_report", { matchId });
+
+/** Tu mano sobre tus últimas partidas (ver `hands::get_hand_career`). */
+export const getHandCareer = async (): Promise<HandReport> => await invoke<HandReport>("get_hand_career");
+
+// ------------------------------------------------------------ recorrido
+// Ver `src-tauri/src/track.rs`. Tiempos en segundos de PARTIDA; coordenadas de
+// juego (0..14870, y hacia arriba).
+
+export interface TrackOthers {
+  t: number;
+  /** Aliados [x, y]. */
+  a: [number, number][];
+  /** Rivales a la vista [x, y]. */
+  e: [number, number][];
+}
+
+export interface MatchTrack {
+  video_offset: number;
+  duration: number;
+  champion: string;
+  /** Tu rastro: [t, x, y]. */
+  me: [number, number, number][];
+  others: TrackOthers[];
+  clears: CampClear[];
+  deaths: { t: number; x: number; y: number }[];
+  recalls: number[];
+}
+
+export interface MatchTrackResponse {
+  status: "ok" | "no_minimap" | "no_riot" | "no_track";
+  track: MatchTrack | null;
+}
+
+export const getMatchTrack = async (matchId: string): Promise<MatchTrackResponse> =>
+  await invoke<MatchTrackResponse>("get_match_track", { matchId });

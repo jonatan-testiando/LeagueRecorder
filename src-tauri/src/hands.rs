@@ -135,6 +135,8 @@ pub struct HandReport {
     pub anchor_dy_px: f64,
     pub screen_w: u32,
     pub screen_h: u32,
+    /// Partidas sumadas. 0 = el informe de una sola partida.
+    pub matches: usize,
 }
 
 /// Percentil sobre una lista YA ordenada. Interpola entre vecinos.
@@ -396,6 +398,60 @@ pub async fn get_hand_report(match_id: String) -> Result<HandReport, String> {
     let m = crate::storage::get_match_metadata(&match_id)?;
     let escala = crate::storage::load_config().minimap_scale;
     Ok(analyze(&m, escala))
+}
+
+/// Partidas que suma la versión de historial: las últimas con estela.
+const PARTIDAS_HISTORIAL: usize = 10;
+
+/// Tu mano sobre tus últimas partidas, no sobre una.
+///
+/// La mecánica no cambia de una partida a otra, y una sola trae pocos clics
+/// reactivos para que su mediana diga algo: por eso este panel vive en
+/// Patrones. No hay cálculo nuevo: se juntan los clics de las últimas
+/// `PARTIDAS_HISTORIAL` partidas grabadas a la MISMA resolución (las
+/// coordenadas son píxeles de pantalla) y se pasa el mismo `analyze`. Cada
+/// partida se desplaza en el tiempo para que ningún par de clics cruce de una
+/// a otra.
+#[tauri::command]
+pub async fn get_hand_career() -> Result<HandReport, String> {
+    tokio::task::spawn_blocking(|| {
+        let escala = crate::storage::load_config().minimap_scale;
+        let mut base: Option<MatchMetadata> = None;
+        let mut n = 0;
+        for (i, ligera) in crate::storage::load_all_matches()
+            .into_iter()
+            .filter(|m| !m.is_vod)
+            .enumerate()
+        {
+            if n >= PARTIDAS_HISTORIAL || i > PARTIDAS_HISTORIAL * 3 {
+                break;
+            }
+            let Ok(m) = crate::storage::get_match_metadata(&ligera.id) else { continue };
+            if m.mouse_events.is_empty() || m.mouse_space_w == 0 {
+                continue;
+            }
+            match base.as_mut() {
+                None => base = Some(m),
+                Some(b) => {
+                    if (b.mouse_space_w, b.mouse_space_h) != (m.mouse_space_w, m.mouse_space_h) {
+                        continue;
+                    }
+                    let desplaza = 1.0e6 * (n as f64);
+                    b.mouse_events.extend(m.mouse_events.into_iter().map(|mut e| {
+                        e.t += desplaza;
+                        e
+                    }));
+                }
+            }
+            n += 1;
+        }
+        let base = base.ok_or_else(|| "Sin partidas con estela del ratón".to_string())?;
+        let mut r = analyze(&base, escala);
+        r.matches = n;
+        Ok(r)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

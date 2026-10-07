@@ -25,8 +25,9 @@ import { wstyles } from "./videoPlayerStyles";
 type Scope = "match" | "career";
 
 interface SpellDietWidgetProps {
-  matchId: string;
-  onSeek: (seconds: number) => void;
+  /** Sin partida: sólo el historial, sin selector (Patrones). */
+  matchId?: string;
+  onSeek?: (seconds: number) => void;
 }
 
 /**
@@ -90,7 +91,7 @@ const Fila: React.FC<{ s: SpellHit; max: number; t: ReturnType<typeof useT> }> =
 
 export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSeek }) => {
   const t = useT();
-  const [scope, setScope] = useState<Scope>("match");
+  const [scope, setScope] = useState<Scope>(matchId ? "match" : "career");
   const [report, setReport] = useState<SpellReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,7 +100,7 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
     let vivo = true;
     setLoading(true);
     setError(null);
-    const p = scope === "match" ? getSpellAutopsy(matchId) : getSpellDiet();
+    const p = scope === "match" && matchId ? getSpellAutopsy(matchId) : getSpellDiet();
     p.then((r) => vivo && setReport(r))
       .catch((e) => vivo && setError(String(e)))
       .finally(() => vivo && setLoading(false));
@@ -113,7 +114,7 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
     [report]
   );
 
-  const selector = (
+  const selector = !matchId ? null : (
     <div style={wstyles.toolbar}>
       <span className="tp-seg">
         {(["match", "career"] as Scope[]).map((s) => (
@@ -205,7 +206,7 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
               <button
                 key={i}
                 className="insp__press"
-                onClick={() => onSeek(Math.max(0, a.t_video - 5))}
+                onClick={() => onSeek?.(Math.max(0, a.t_video - 5))}
                 title={t("Jump to this moment")}
               >
                 <span className="u-time">{mmss(a.t_video)}</span>

@@ -22,16 +22,19 @@ export interface InspSectionProps {
   title: string;
   /** Contenido a la derecha del título (una cifra, un filtro). */
   aside?: React.ReactNode;
+  /** Cómo nace la primera vez (luego manda lo que el usuario dejó). */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }
 
-export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, children }) => {
+export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defaultOpen = true, children }) => {
   const [open, setOpen] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(KEY(id)) !== "0";
+      const v = localStorage.getItem(KEY(id));
+      return v === null ? defaultOpen : v !== "0";
     } catch {
-      // Modo privado o almacenamiento bloqueado: abierta, que es el defecto.
-      return true;
+      // Modo privado o almacenamiento bloqueado: lo que pida la sección.
+      return defaultOpen;
     }
   });
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { getHandReport, type HandReport } from "../../../core/tauri-ipc";
+import { getHandCareer, getHandReport, type HandReport } from "../../../core/tauri-ipc";
 import { useT } from "../../../core/LanguageProvider";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { wstyles } from "./videoPlayerStyles";
@@ -24,7 +24,8 @@ const RADIO_CORTO = 0.2;
 const ANCLA_DUDOSA = 0.6;
 
 interface HandWidgetProps {
-  matchId: string;
+  /** Sin partida: tus últimas partidas juntas (Patrones). */
+  matchId?: string;
 }
 
 /** Un punto del borde de la rosa, en coordenadas de SVG. */
@@ -59,7 +60,7 @@ export const HandWidget: React.FC<HandWidgetProps> = ({ matchId }) => {
   useEffect(() => {
     let vivo = true;
     setLoading(true);
-    getHandReport(matchId)
+    (matchId ? getHandReport(matchId) : getHandCareer())
       .then((r) => vivo && setReport(r))
       .catch(() => vivo && setReport(null))
       .finally(() => vivo && setLoading(false));
@@ -82,7 +83,7 @@ export const HandWidget: React.FC<HandWidgetProps> = ({ matchId }) => {
   if (!report || report.clicks === 0) {
     return (
       <EmptyState
-        title={t("No clicks recorded in this game")}
+        title={matchId ? t("No clicks recorded in this game") : t("No clicks recorded yet")}
         text={t("This panel needs the mouse trail of a game recorded here; imported VODs have no input behind them.")}
       />
     );
@@ -103,6 +104,9 @@ export const HandWidget: React.FC<HandWidgetProps> = ({ matchId }) => {
     <div style={wstyles.body}>
       <p className="note" style={{ marginTop: 0 }}>
         {t("Where your movement orders land relative to your champion. The angle decides the dodge; the distance decides how precisely you can aim it.")}
+        {!!report.matches && (
+          <> {t("Your last {n} games together: {c} clicks.", { n: report.matches, c: report.clicks.toLocaleString() })}</>
+        )}
       </p>
 
       {report.anchor_conf < ANCLA_DUDOSA && (

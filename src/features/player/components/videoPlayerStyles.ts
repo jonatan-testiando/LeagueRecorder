@@ -102,9 +102,6 @@ export const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     objectFit: "cover",
   },
-  perfItem: { width: "26px", height: "26px", borderRadius: "6px", background: "var(--sunken)" },
-  perfItemEmpty: { width: "26px", height: "26px", borderRadius: "6px", background: "color-mix(in srgb, var(--text) 4%, transparent)" },
-  buyIcon: { width: "30px", height: "30px", borderRadius: "6px", background: "var(--sunken)" },
 
   // --- barra del recortador ---------------------------------------------
   clipBar: {
@@ -204,85 +201,7 @@ export const wstyles: Record<string, React.CSSProperties> = {
     gap: "4px",
   },
 
-  // --- mapa táctico -------------------------------------------------------
-  mapFrame: {
-    position: "relative",
-    width: "100%",
-    aspectRatio: "1 / 1",
-    background: "var(--sunken)",
-    borderRadius: "var(--radius-md)",
-    overflow: "hidden",
-    border: "1px solid var(--hair)",
-  },
-  mapImg: {
-    width: "100%",
-    height: "100%",
-    objectFit: "fill",
-    position: "absolute",
-    inset: 0,
-    // El mapa es el FONDO de los marcadores: bajado de brillo, los puntos se
-    // leen sin necesidad de rodearlos de un halo.
-    filter: "brightness(0.7) saturate(0.8)",
-  },
-  // Botón, no div: se llega con el tabulador y se dispara con Enter.
-  mapDot: {
-    position: "absolute",
-    transform: "translate(-50%, -50%)",
-    width: "14px",
-    height: "14px",
-    padding: 0,
-    borderRadius: "var(--radius-full)",
-    border: "1.5px solid var(--ground)",
-    cursor: "pointer",
-  },
-  mapTip: {
-    position: "absolute",
-    left: "var(--space-2)",
-    right: "var(--space-2)",
-    bottom: "var(--space-2)",
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "var(--space-3)",
-    padding: "6px var(--space-3)",
-    borderRadius: "var(--radius-sm)",
-    background: "color-mix(in srgb, var(--ground) 88%, transparent)",
-    border: "1px solid var(--hair-strong)",
-    fontFamily: "var(--font-sans)",
-    fontSize: "12px",
-    fontVariantNumeric: "tabular-nums",
-    color: "var(--text)",
-    pointerEvents: "none",
-  },
 
-  // --- picos de poder -----------------------------------------------------
-  buyGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
-    gap: "var(--space-2)",
-  },
-  buyCell: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "5px var(--space-2)",
-    borderRadius: "var(--radius-sm)",
-    background: "transparent",
-    border: "1px solid var(--hair)",
-    cursor: "pointer",
-    textAlign: "left",
-    color: "var(--text)",
-    fontFamily: "var(--font-sans)",
-    fontSize: "12.5px",
-    fontVariantNumeric: "tabular-nums",
-  },
-  buyIconSm: {
-    width: "24px",
-    height: "24px",
-    borderRadius: "var(--radius-sm)",
-    background: "var(--sunken)",
-    flexShrink: 0,
-  },
 
   // --- curva de oro / XP --------------------------------------------------
   chartWrap: { position: "relative", width: "100%", height: "120px" },

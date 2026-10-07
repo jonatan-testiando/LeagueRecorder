@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, TeamObjectives, ItemPurchase } from "../../../types";
+import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, ItemPurchase } from "../../../types";
 import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { outcome, queueKey, lpDeltas } from "../../../core/matchStats";
@@ -8,7 +8,7 @@ import {
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, Flag, Check, RotateCcw,
   Trash2, RefreshCw, FileText,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
-  BarChart3
+  BarChart3, Map as MapIcon
 } from "lucide-react";
 import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
@@ -16,15 +16,11 @@ import { clock, relativeDay } from "../../../core/time";
 import { GoldXpChart } from "./GoldXpChart";
 import { PressureEpisodeCard } from "./PressureEpisodeCard";
 import { formatGold, formatSeconds } from "./pressureFormat";
-import { TacticalMap } from "./TacticalMap";
-import { MapAwarenessWidget } from "./MapAwarenessWidget";
-import { PowerSpikeWidget } from "./PowerSpikeWidget";
 import { JungleRouteWidget } from "./JungleRouteWidget";
-import { GoldSection } from "./GoldSection";
+import { RouteReplay } from "./RouteReplay";
+import { DeathsSection } from "./DeathsSection";
+import { GoldPurchases } from "./GoldPurchases";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
-import { HandWidget } from "./HandWidget";
-import { SpellDietWidget } from "./SpellDietWidget";
-import { PerformanceTrendsWidget } from "./PerformanceTrendsWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { InspSection } from "./InspSection";
 import { BenchmarkWidget } from "./BenchmarkWidget";
@@ -35,8 +31,7 @@ import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
 import { useClipExporter } from "../hooks/useClipExporter";
 import {
-  eventMeta, toneLabelAndIcon, ChampFace, IconFinding,
-  IconDragon, IconBaron, IconHerald, IconTower, type Tone,
+  eventMeta, toneLabelAndIcon, ChampFace, IconFinding, type Tone,
 } from "./eventMeta";
 import { buildQueue, analyzerFindings, type Moment, type Finding } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
@@ -50,7 +45,6 @@ import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import { mix } from "../../../core/color";
 import {
-  itemIcon,
   DDRAGON_VER,
   streamUrl,
   smoothLinePath,
@@ -160,29 +154,6 @@ interface VideoPlayerProps {
    */
   onBack?: () => void;
 }
-
-/**
- * Fila del inspector: etiqueta a la izquierda, cifra a la derecha, en sans con
- * cifras tabulares. Todas las cifras de la columna caen en la misma vertical,
- * que es lo que permite recorrerlas de un vistazo en vez de buscarlas dentro de
- * azulejos.
- */
-const InspRow: React.FC<{
-  label: string;
-  value: React.ReactNode;
-  /** Color solo cuando el signo significa algo (una diferencia). */
-  tone?: string;
-  /** Matiz corto a la derecha del valor. */
-  note?: string;
-}> = ({ label, value, tone, note }) => (
-  <div className="drow">
-    <span>{label}</span>
-    <b className="u-metric" style={tone ? { color: tone } : undefined}>
-      {value}
-      {note && <em className="drow__note">{note}</em>}
-    </b>
-  </div>
-);
 
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
 const diffTone = (n: number): string => (n >= 0 ? "var(--win)" : "var(--loss)");
@@ -320,8 +291,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   });
   const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
   const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
-  const [objectives, setObjectives] = useState<TeamObjectives[]>(match.objectives ?? []);
   const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
+  /** Qué ocupa el escenario: el vídeo o el Recorrido sobre el minimapa. El
+   *  vídeo sigue sonando debajo en los dos casos. */
+  const [stage, setStage] = useState<"video" | "route">("video");
   const [syncing, setSyncing] = useState<boolean>(false);
   const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad" | "pending">("all");
   const [showEsportsHud, setShowEsportsHud] = useState<boolean>(true);
@@ -373,7 +346,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           setCurrentMatch({ ...full, comments: full.comments ?? match.comments });
           if (full.mouse_events) setMouseEvents(full.mouse_events);
           if (full.participants) setParticipants(full.participants);
-          if (full.objectives) setObjectives(full.objectives);
           if (full.item_purchases) setItemPurchases(full.item_purchases);
         }
       })
@@ -391,7 +363,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
   useEffect(() => {
     setParticipants(match.participants ?? []);
-    setObjectives(match.objectives ?? []);
     setItemPurchases(match.item_purchases ?? []);
   }, [match.id, match.participants, match.objectives, match.item_purchases]);
 
@@ -540,7 +511,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       const updated = await syncMatchNow(match.id);
       setCurrentMatch(updated);
       setParticipants(updated.participants ?? []);
-      setObjectives(updated.objectives ?? []);
       setItemPurchases(updated.item_purchases ?? []);
     } catch (e) {
       showError(t("Couldn't sync with Riot: {msg}", { msg: String(e) }));
@@ -907,6 +877,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         case "ArrowLeft": clipEndRef.current = null; seekTo(v.currentTime - 5, false); break;
         case "m": setMuted((m) => !m); break;
         case "f": toggleFullscreen(); break;
+        case "r": if (hasVideo) { e.preventDefault(); setStage((x) => (x === "route" ? "video" : "route")); } break;
         case "n": e.preventDefault(); goToAdjacentEvent(1); break;
         case "p": e.preventDefault(); goToAdjacentEvent(-1); break;
         // Los dos botones de la cabecera, sin soltar el teclado.
@@ -1038,12 +1009,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const isJungler = sameRole(participants.find((p) => p.is_self)?.role, "JUNGLE");
   const hasGankMarkers = (match.timeline_markers ?? []).some((m) => m.event_type === "gank_attempt");
 
-  // Rendimiento del jugador y agregados de su equipo (para el panel "Your Performance").
+  // El jugador grabado: su puesto decide el baremo de rango.
   const selfP = participants.find((p) => p.is_self);
-  const myTeam = selfP ? participants.filter((p) => p.team_id === selfP.team_id) : [];
-  const teamKills = myTeam.reduce((s, p) => s + p.kills, 0);
-  const teamDamage = myTeam.reduce((s, p) => s + (p.damage ?? 0), 0);
-  const durMin = duration > 0 ? duration / 60 : 0;
 
   // La estela del ratón vive en su hook: canvas, rAF y sincronía.
   const { canvasRef, mouseSync, updateMouseSync } = useMouseTrailCanvas(videoRef, match, mouseEvents);
@@ -1405,6 +1372,21 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
       <span className="vp-transport__fill" />
 
+      {/* El Recorrido: la partida dibujada sobre el minimapa. */}
+      {hasVideo && (
+        <button
+          type="button"
+          className="vp-tbtn vp-tbtn--text"
+          aria-pressed={stage === "route"}
+          onClick={() => setStage((x) => (x === "route" ? "video" : "route"))}
+          title={`${t(stage === "route" ? "Back to the video" : "Your route on the minimap")} (R)`}
+          style={stage === "route" ? { color: "var(--brand)" } : undefined}
+        >
+          <MapIcon size={14} />
+          <span className="vp-tbtn__label">{t("Route")}</span>
+        </button>
+      )}
+
       {/* Lo primero que cede si no cabe: se queda en el icono. */}
       {!isFullscreen && <span className="vp-transport__aux">{lookStats}</span>}
 
@@ -1711,6 +1693,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               visible={showEsportsHud && hasVideo}
             />
 
+            {hasVideo && stage === "route" && (
+              <RouteReplay
+                matchId={match.id}
+                videoRef={videoRef}
+                onSeek={(secs) => seekTo(secs, false)}
+                onClose={() => setStage("video")}
+              />
+            )}
+
             {!isFullscreen && noticeEl}
 
             {isFullscreen && (
@@ -2009,60 +2000,59 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
         {tab === "match" && (
           <div className="insp">
-            {/* El veredicto que abría la pestaña («Victoria · Gwen · 27:30») se
-                ha ido: lo dice la cabecera de la pantalla, a la vista siempre. */}
+            {/* Rehecha el 2026-10-07 tras medirla: 15 secciones y ~6.700 px de
+                alto. Se quitó lo repetido ("Tu partida", "Objetivos"), lo que
+                habla de muchas partidas y no de esta se fue a Patrones ("Tu
+                mano", "Lo que te comes", las tendencias), y lo que hablaba de
+                lo mismo se juntó: tus muertes en una lista, y compras, picos
+                de poder y vueltas a base en otra. "Muertes en el mapa" la
+                sustituye el Recorrido (botón Recorrido, tecla R). */}
 
-            {/* ------------------------------------------------ tu partida */}
-            <section>
-              <div className="sect__head">
-                <span className="u-label">{t("Your game")}</span>
-                <i className="sect__rule" />
-              </div>
-              {match.kda && <InspRow label={t("KDA")} value={match.kda} />}
-              {!!match.apm && <InspRow label={t("APM")} value={Math.round(match.apm)} />}
-              {!!match.gold_earned && (
-                <InspRow label={t("Gold")} value={`${(match.gold_earned / 1000).toFixed(1)}k`} />
-              )}
-              {selfP && (
-                <>
-                  <InspRow
-                    label={t("Kill participation")}
-                    value={teamKills > 0 ? `${Math.round(((selfP.kills + selfP.assists) / teamKills) * 100)}%` : "—"}
+            {/* ------------------------------------------------- la curva */}
+            {((match.minute_frames && match.minute_frames.length > 1) ||
+              match.gold_diff_15 != null || match.xp_diff_15 != null) && (
+              <InspSection id="lead" title={t("Lead over time")}>
+                {match.minute_frames && match.minute_frames.length > 1 && (
+                  <GoldXpChart
+                    frames={match.minute_frames}
+                    videoOffset={match.video_offset ?? 0}
+                    onSeek={(secs) => seekTo(secs, false)}
                   />
-                  <InspRow label={t("CS / min")} value={durMin > 0 ? (selfP.cs / durMin).toFixed(1) : "—"} />
-                  <InspRow
-                    label={t("Damage to champions")}
-                    value={`${((selfP.damage ?? 0) / 1000).toFixed(1)}k`}
-                    note={teamDamage > 0 ? `${Math.round((100 * (selfP.damage ?? 0)) / teamDamage)}% ${t("of team")}` : undefined}
-                  />
-                  <InspRow label={t("Vision score")} value={selfP.vision_score ?? 0} />
-                </>
-              )}
-              {selfP && (selfP.items ?? []).some((it) => it > 0) && (
-                <div className="insp__items">
-                  {Array.from({ length: 7 }).map((_, k) => {
-                    const it = (selfP.items ?? [])[k] ?? 0;
-                    return it > 0 ? (
-                      <img
-                        key={k}
-                        src={itemIcon(ddragonVer, it)}
-                        alt=""
-                        style={styles.perfItem}
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                      />
-                    ) : (
-                      <span key={k} style={styles.perfItemEmpty} />
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+                )}
+                {/* El minuto 15 era una sección aparte con los mismos
+                    números que la curva: ahora es una línea debajo. */}
+                {(match.gold_diff_15 != null || match.xp_diff_15 != null || match.jungle_cs_diff_15 != null) && (
+                  <p className="note vp-at15">
+                    {t("At minute 15:")}{" "}
+                    {([
+                      [t("gold"), match.gold_diff_15],
+                      [t("XP"), match.xp_diff_15],
+                      [t("jungle CS"), match.jungle_cs_diff_15],
+                    ] as [string, number | null | undefined][])
+                      .filter(([, v]) => v != null)
+                      .map(([l, v], i) => (
+                        <React.Fragment key={l}>
+                          {i > 0 && " · "}
+                          {l} <b className="u-metric" style={{ color: diffTone(v as number) }}>{signed(v as number)}</b>
+                        </React.Fragment>
+                      ))}
+                    {match.lane_result && (
+                      <>
+                        {". "}
+                        {t(
+                          match.lane_result === "Win" ? "You came out of lane ahead."
+                            : match.lane_result === "Loss" ? "You came out of lane behind."
+                            : "You came out of lane even."
+                        )}
+                      </>
+                    )}
+                  </p>
+                )}
+              </InspSection>
+            )}
 
-            {/* -------------------------------------- frente a tu rango
-                Va justo detrás de "Tu partida" a propósito: las cifras de
-                arriba no dicen si son buenas, y ésta es la respuesta. El
-                widget pide los baremos al MONTARSE, y `InspSection` no monta
-                sus hijos si está plegada: cerrarla no gasta nada. */}
+            {/* -------------------------------------- frente a tu rango.
+                Cuatro métricas, las de tu puesto; el resto a un clic. */}
             <InspSection id="benchmarks" title={t("Versus your rank")}>
               {match.is_vod || !match.riot_match_id ? (
                 <EmptyState
@@ -2075,56 +2065,51 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   matchId={match.id}
                   role={selfP?.role}
                   tierBucket={match.tier_bucket}
+                  limit={4}
                 />
               )}
             </InspSection>
 
-            {/* -------------------------------------------- fase temprana */}
-            {(match.gold_diff_15 != null || match.xp_diff_15 != null ||
-              match.jungle_cs_diff_15 != null || match.gank_impact_15 != null) && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Early game")} · {t("minute 15")}</span>
-                  <i className="sect__rule" />
-                </div>
-                {match.gold_diff_15 != null && (
-                  <InspRow
-                    label={t("Gold difference")}
-                    value={signed(match.gold_diff_15)}
-                    tone={diffTone(match.gold_diff_15)}
-                  />
-                )}
-                {match.xp_diff_15 != null && (
-                  <InspRow label={t("XP difference")} value={signed(match.xp_diff_15)} tone={diffTone(match.xp_diff_15)} />
-                )}
-                {match.jungle_cs_diff_15 != null && (
-                  <InspRow
-                    label={t("Jungle CS difference")}
-                    value={signed(match.jungle_cs_diff_15)}
-                    tone={diffTone(match.jungle_cs_diff_15)}
-                  />
-                )}
-                {match.gank_impact_15 != null && (
-                  <InspRow label={t("Gank pressure")} value={`${match.gank_impact_15}%`} />
-                )}
-                {/* El resultado de linea era una pildora de color; es una frase. */}
-                {match.lane_result && (
-                  <p className="note">
-                    {t(
-                      match.lane_result === "Win" ? "You came out of lane ahead."
-                        : match.lane_result === "Loss" ? "You came out of lane behind."
-                        : "You came out of lane even."
-                    )}
-                  </p>
-                )}
-              </section>
+            {/* ------------------------------------------------ tus muertes */}
+            {!match.is_vod && (
+              <InspSection id="deaths" title={t("Your deaths")}>
+                <DeathsSection
+                  matchId={match.id}
+                  markers={match.timeline_markers}
+                  cameraSnaps={cameraSnaps}
+                  videoOffset={match.video_offset ?? 0}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+              </InspSection>
             )}
 
-            {/* ------------------------------------------------- la curva */}
-            {match.minute_frames && match.minute_frames.length > 1 && (
-              <InspSection id="lead" title={t("Lead over time")}>
-                <GoldXpChart
-                  frames={match.minute_frames}
+            {/* La ruta sale del rastro del minimapa: sólo para jungla. */}
+            {isJungler && !match.is_vod && (
+              <InspSection id="route" title={t("Jungle route")}>
+                <JungleRouteWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
+              </InspSection>
+            )}
+
+            {/* Los ganks sólo cuando significan algo: un support al que le salen
+                cero emboscadas no necesita una sección que le diga cero. */}
+            {(isJungler || hasGankMarkers) && (
+              <InspSection id="ganks" title={t("Ganks")}>
+                <GankEfficiencyWidget
+                  markers={match.timeline_markers}
+                  gankImpact15={match.gank_impact_15}
+                  onSeek={(secs) => seekTo(secs, false)}
+                />
+              </InspSection>
+            )}
+
+            {/* ------------------------------------- oro, compras y bases */}
+            {!match.is_vod && (
+              <InspSection id="gold" title={t("Your gold and purchases")}>
+                <GoldPurchases
+                  matchId={match.id}
+                  itemPurchases={itemPurchases}
+                  markers={match.timeline_markers}
+                  ddragonVer={ddragonVer}
                   videoOffset={match.video_offset ?? 0}
                   onSeek={(secs) => seekTo(secs, false)}
                 />
@@ -2133,11 +2118,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
             {/* --------------------------------------------- el marcador */}
             {participants.length > 0 ? (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Scoreboard")}</span>
-                  <i className="sect__rule" />
-                </div>
+              // Consulta, no lectura: nace plegado.
+              <InspSection id="scoreboard" title={t("Scoreboard")} defaultOpen={false}>
                 {/* Un bloque por equipo: su nombre y resultado hacen de cabecera
                     de las columnas. La cara del campeón y el icono de su
                     posición dicen quién era cada uno antes que el nick. */}
@@ -2186,7 +2168,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                     </div>
                   );
                 })}
-              </section>
+              </InspSection>
             ) : match.is_vod ? (
               // Antes, en un VOD, aquí no salía nada: un hueco entre dos
               // secciones que se leía como "esto está roto".
@@ -2211,144 +2193,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               </section>
             )}
 
-            {/* ------------------------------------------------ objetivos */}
-            {objectives.length > 0 && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Objectives")}</span>
-                  <i className="sect__rule" />
-                </div>
-                {/* "Equipo Azul" no cabe en una columna de 40px: se parte en
-                    dos lineas encima de las cifras. Aqui basta el color. Cada
-                    fila lleva el glifo de la línea de tiempo, en oro. */}
-                <div className="drow drow--3 insp__objLegend vp-obj__legend">
-                  <span />
-                  <span>{t("Blue")}</span>
-                  <span>{t("Red")}</span>
-                </div>
-                {([
-                  ["Dragons", "dragons", <IconDragon size={15} />],
-                  ["Barons", "barons", <IconBaron size={15} />],
-                  ["Heralds", "heralds", <IconHerald size={15} />],
-                  ["Towers", "towers", <IconTower size={15} />],
-                  ["Inhibitors", "inhibitors", <IconTower size={15} />],
-                ] as const).map(([label, key, icon]) => {
-                  const blue = objectives.find((o) => o.team_id === 100);
-                  const red = objectives.find((o) => o.team_id === 200);
-                  return (
-                    <div key={key} className="drow drow--3 vp-obj">
-                      <span className="vp-obj__name">
-                        <span className="vp-obj__icon">{icon}</span>
-                        {t(label)}
-                      </span>
-                      <b style={{ color: (blue?.[key] ?? 0) >= (red?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
-                        {blue?.[key] ?? 0}
-                      </b>
-                      <b style={{ color: (red?.[key] ?? 0) > (blue?.[key] ?? 0) ? "var(--text)" : "var(--faint)" }}>
-                        {red?.[key] ?? 0}
-                      </b>
-                    </div>
-                  );
-                })}
-              </section>
-            )}
-
-            {/* -------------------------------------------------- compras */}
-            {itemPurchases.length > 0 && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Item purchases")}</span>
-                  <i className="sect__rule" />
-                </div>
-                <div className="insp__buys">
-                  {itemPurchases.map((ip, i) => (
-                    <button
-                      key={i}
-                      className="insp__buy"
-                      onClick={() => seekTo(ip.time, false)}
-                      title={`${clock(ip.time)} · ${t("Jump to this moment")}`}
-                    >
-                      <img
-                        src={itemIcon(ddragonVer, ip.item_id)}
-                        alt=""
-                        style={styles.buyIcon}
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                      />
-                      <span className="u-time vp-buy__time">{clock(ip.time)}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Los cinco widgets de analítica vivían aquí dentro de un
-                desplegable cerrado llamado "Más análisis". Esconder por defecto
-                lo que ya has calculado es la forma más cara de no enseñarlo:
-                nadie abre un cajón para averiguar si dentro hay algo.
-                Ahora son secciones, abiertas, y en el orden en que se leen —
-                cómo va la partida, luego los ganks, luego lo del mapa. Se pueden
-                cerrar, y se quedan cerradas; que es distinto de nacer así. */}
-            <InspSection id="trends" title={t("Trends on {champion}", { champion: match.champion })}>
-              <PerformanceTrendsWidget currentMatch={match} />
-            </InspSection>
-
-            {/* Los ganks sólo cuando significan algo: un support al que le salen
-                cero emboscadas no necesita una sección que le diga cero. */}
-            {(isJungler || hasGankMarkers) && (
-              <InspSection id="ganks" title={t("Ganks")}>
-                <GankEfficiencyWidget
-                  markers={match.timeline_markers}
-                  gankImpact15={match.gank_impact_15}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
-              </InspSection>
-            )}
-
-            {/* Sólo aparece en partidas grabadas con la captura de oro. */}
-            {!match.is_vod && <GoldSection matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />}
-
-            {/* La ruta sale del rastro del minimapa: sólo para jungla. */}
-            {isJungler && !match.is_vod && (
-              <InspSection id="route" title={t("Jungle route")}>
-                <JungleRouteWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
-              </InspSection>
-            )}
-
-            <InspSection id="spikes" title={t("Power spikes")}>
-              <PowerSpikeWidget
-                itemPurchases={itemPurchases}
-                markers={match.timeline_markers}
-                ddragonVer={ddragonVer}
-                onSeek={(secs) => seekTo(secs, false)}
-              />
-            </InspSection>
-
-            <InspSection id="deaths-map" title={t("Deaths on the map")}>
-              <TacticalMap
-                markers={match.timeline_markers ?? []}
-                onSeek={(secs) => seekTo(secs, false)}
-              />
-            </InspSection>
-
-            <InspSection id="awareness" title={t("Map awareness before deaths")}>
-              <MapAwarenessWidget
-                cameraSnaps={cameraSnaps}
-                markers={match.timeline_markers}
-                onSeek={(secs) => seekTo(secs, false)}
-              />
-            </InspSection>
-
-            {/* Las dos caras de la mecánica: qué te comes y cómo estabas
-                clicando cuando te lo comiste. Van juntas y en este orden porque
-                la primera plantea el problema y la segunda enseña la mano con
-                la que lo resolviste (o no). */}
-            <InspSection id="spells" title={t("Spells you ate")}>
-              <SpellDietWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
-            </InspSection>
-
-            <InspSection id="hand" title={t("Your hand")}>
-              <HandWidget matchId={match.id} />
-            </InspSection>
 
             {!match.is_vod && participants.length > 0 && (
               <button className="btn btn--ghost btn--sm insp__resync" onClick={handleSync} disabled={syncing}>

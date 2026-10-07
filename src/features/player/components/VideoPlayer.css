@@ -1110,3 +1110,6 @@
 .drow .vp-obj__name { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
 .drow .vp-obj__icon { display: flex; color: var(--brand); }
 .vp-buy__time { color: var(--faint); }
+
+/* "Al minuto 15", debajo de la curva de ventaja. */
+.vp-at15 { margin: var(--space-2) 0 0; line-height: 1.6; }

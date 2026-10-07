@@ -134,9 +134,9 @@ export function buildQueue(
 }
 
 /**
- * Segundos que se miran antes de cada muerte. El mismo número que usa el panel
- * «Conciencia de mapa antes de morir» (MapAwarenessWidget): si uno dijera 10 y
- * el otro 12, la misma muerte saldría ciega en un sitio y no en el otro.
+ * Segundos que se miran antes de cada muerte. El mismo número que usa «Tus muertes»
+ * (DeathsSection), que lo importa de aquí: si uno dijera 10 y el otro 12, la
+ * misma muerte saldría ciega en un sitio y no en el otro.
  */
 export const BLIND_LOOKBACK_S = 10;
 

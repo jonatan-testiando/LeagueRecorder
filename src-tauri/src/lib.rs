@@ -13,6 +13,7 @@ mod app_update;
 mod dataset_generator;
 mod gank;
 mod gold;
+mod track;
 mod hands;
 mod jungle_route;
 mod minimap;
@@ -339,6 +340,8 @@ pub fn run() {
             jungle_route::get_jungle_route,
             jungle_route::get_jungle_routes,
             gold::get_gold_report,
+            track::get_match_track,
+            hands::get_hand_career,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,
             spells::get_spell_autopsy,

@@ -83,7 +83,7 @@ export interface TeamObjectives {
 }
 
 export interface ItemPurchase {
-  time: number; // segundos de partida
+  time: number; // segundos de VÍDEO: riot_api.rs las pasa al eje del vídeo al guardarlas
   item_id: number;
 }
 

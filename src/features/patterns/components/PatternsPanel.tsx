@@ -40,6 +40,8 @@ import {
   Flag,
   Gauge,
   GitCompareArrows,
+  Hand,
+  Zap,
   Map as MapIcon,
   Play,
   Route as RouteIcon,
@@ -58,6 +60,9 @@ import {
 import { RiftMap, riftPercent, RIFT_SQUARE_PCT } from "./RiftMap";
 import { getJungleRoutes, JUNGLE_AGREEMENT_MIN, type JungleRouteGame } from "../../../core/tauri-ipc";
 import { ACTIVITY_ORDER, activityLabel, BUDGET_PARTS } from "../../player/jungleRoute";
+import { HandWidget } from "../../player/components/HandWidget";
+import { SpellDietWidget } from "../../player/components/SpellDietWidget";
+import { PerformanceTrendsWidget } from "../../player/components/PerformanceTrendsWidget";
 import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
@@ -479,6 +484,11 @@ export const PatternsPanel: React.FC = () => {
   const propias = useMemo(
     () => inRange(filterByRole(own, rol), rango, parcheActual),
     [own, rol, rango, parcheActual]
+  );
+  /** Tu partida más reciente de la ventana (para las tendencias por campeón). */
+  const ultima = useMemo(
+    () => (propias.length ? [...propias].sort((a, b) => fechaMs(b) - fechaMs(a))[0] : null),
+    [propias]
   );
   /** Los ids de la ventana: lo que traen otras fuentes se recorta con ellos. */
   const idsRango = useMemo(() => new Set(propias.map((m) => m.id)), [propias]);
@@ -1814,6 +1824,59 @@ export const PatternsPanel: React.FC = () => {
                 {sampleLabel(conf, propias.length, t)} · {t("Comparisons, not causes: with this sample they point, they don't prove.")}
               </p>
             </div>
+          </Ficha>
+
+          {/* ------------------------- lo que vino de la pestaña Partida.
+              Las tres hablan de muchas partidas, no de una: allí sobraban.
+              Montan al abrirse (piden datos al backend, "Tu mano" lee la
+              estela de diez partidas). */}
+          {ultima && (
+            <Ficha
+              id="tendencias"
+              icon={<TrendingUp size={14} aria-hidden="true" />}
+              label={t("Your last game on {champion}", { champion: ultima.champion })}
+              value={<span className="pp-ex-soft">{t("against your own average on that champion")}</span>}
+              open={abiertas.has("tendencias")}
+              onToggle={() => toggle("tendencias")}
+            >
+              {abiertas.has("tendencias") && (
+                <div className="card pp-card">
+                  <PerformanceTrendsWidget currentMatch={ultima} />
+                </div>
+              )}
+            </Ficha>
+          )}
+
+          <Ficha
+            id="mano"
+            icon={<Hand size={14} aria-hidden="true" />}
+            label={t("Your hand")}
+            value={<span className="pp-ex-soft">{t("how you click to move, over your last games")}</span>}
+            open={abiertas.has("mano")}
+            onToggle={() => toggle("mano")}
+          >
+            {abiertas.has("mano") && (
+              <div className="card pp-card">
+                {/* Pensado para el panel estrecho del reproductor: a todo el
+                    ancho la rosa ocupaba media pantalla. */}
+                <div className="pp-narrow"><HandWidget /></div>
+              </div>
+            )}
+          </Ficha>
+
+          <Ficha
+            id="hechizos"
+            icon={<Zap size={14} aria-hidden="true" />}
+            label={t("Spells you ate")}
+            value={<span className="pp-ex-soft">{t("what kills you, across your synced games")}</span>}
+            open={abiertas.has("hechizos")}
+            onToggle={() => toggle("hechizos")}
+          >
+            {abiertas.has("hechizos") && (
+              <div className="card pp-card">
+                <SpellDietWidget />
+              </div>
+            )}
           </Ficha>
 
           {/* -------------------------------------------------- tus etiquetas */}

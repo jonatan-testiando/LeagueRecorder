@@ -46,10 +46,14 @@ export interface BenchmarkWidgetProps {
   role?: string | null;
   /** "bajo" | "medio" | "alto". null = baremo sólo por puesto. */
   tierBucket?: string | null;
+  /** Cuántas métricas enseñar antes de "ver todas". Sin él, todas. Las
+   *  primeras son las más relevantes para tu puesto (`sortByRelevance`). */
+  limit?: number;
 }
 
-export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role, tierBucket }) => {
+export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role, tierBucket, limit }) => {
   const t = useT();
+  const [todas, setTodas] = useState(false);
   const [rows, setRows] = useState<MetricComparison[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
@@ -137,7 +141,7 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
       {resumen && <p style={styles.resumen}>{resumen}</p>}
 
       <div style={styles.lista}>
-        {ordenadas.map((m) => {
+        {(limit && !todas ? ordenadas.filter((m) => METRIC_META[m.metric]).slice(0, limit) : ordenadas).map((m) => {
           if (!METRIC_META[m.metric]) return null;
           const p = effectivePercentile(m);
           const color = tono(p);
@@ -175,6 +179,13 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
           );
         })}
       </div>
+      {limit != null && ordenadas.filter((m) => METRIC_META[m.metric]).length > limit && (
+        <button type="button" className="btn btn--ghost btn--sm" style={styles.mas} onClick={() => setTodas((x) => !x)}>
+          {todas
+            ? t("Show fewer")
+            : t("Show all {n} metrics", { n: ordenadas.filter((m) => METRIC_META[m.metric]).length })}
+        </button>
+      )}
     </div>
   );
 };
@@ -264,6 +275,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
     textAlign: "right",
   },
+  mas: { marginTop: "var(--space-2)" },
   cargando: {
     display: "grid",
     placeItems: "center",

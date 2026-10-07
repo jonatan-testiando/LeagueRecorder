@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
-  getJungleRoute,
   getJungleRoutes,
   JUNGLE_AGREEMENT_MIN,
   type JungleRoute,
-  type JungleRouteResponse,
 } from "../../../core/tauri-ipc";
+import { useJungleRoute } from "../useMatchData";
 import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { EmptyState } from "../../../components/ui/EmptyState";
@@ -32,20 +31,12 @@ const LEAD_IN = 3;
 
 export const JungleRouteWidget: React.FC<Props> = ({ matchId, onSeek }) => {
   const t = useT();
-  const [resp, setResp] = useState<JungleRouteResponse | null>(null);
+  // Compartida con "Tus muertes" y el Recorrido: se pide una vez.
+  const resp = useJungleRoute(matchId);
   const [mediana, setMediana] = useState<number | null>(null);
-  const [error, setError] = useState(false);
 
   useEffect(() => {
     let vivo = true;
-    setResp(null);
-    setError(false);
-    getJungleRoute(matchId)
-      .then((r) => vivo && setResp(r))
-      .catch((e) => {
-        console.error("get_jungle_route", e);
-        if (vivo) setError(true);
-      });
     // La referencia: tu primer clear de siempre. Va aparte y puede fallar sin
     // que el resto del panel lo note.
     getJungleRoutes()
@@ -61,10 +52,10 @@ export const JungleRouteWidget: React.FC<Props> = ({ matchId, onSeek }) => {
     return () => { vivo = false; };
   }, [matchId]);
 
-  if (error) {
+  if (resp === null) {
     return <EmptyState title={t("Could not read the route")} text={t("Try opening the game again.")} />;
   }
-  if (!resp) {
+  if (resp === undefined) {
     return <div className="jr-loading"><div className="spinner" /></div>;
   }
   if (resp.status === "no_minimap") {

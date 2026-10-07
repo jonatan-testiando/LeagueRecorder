@@ -661,3 +661,6 @@
 .pp-route-row:hover { background: var(--bg-hover); }
 .pp-route-row:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
 .pp-route-sub { margin: 4px 0 0; font-size: 13px; font-weight: 500; color: var(--text); }
+
+/* Widgets que vienen del reproductor y no deben estirarse. */
+.pp-narrow { max-width: 560px; }

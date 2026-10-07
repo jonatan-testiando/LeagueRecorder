@@ -47,21 +47,6 @@ export const rankLabel = (tier?: string | null, division?: string | null): strin
   return apex || !division ? bonito : `${bonito} ${division}`;
 };
 
-/**
- * Versión con la que se pide la imagen del mapa (`img/map/map11.png`).
- *
- * Estaba clavada a "14.1.1" en DOS sitios distintos —TacticalMap y
- * PatternsPanel— sin decir por qué, que es la forma en que una versión clavada
- * se queda clavada para siempre. Vive aquí para que se cambie en un solo sitio,
- * y sólo se usa como RESPALDO: `mapImageUrl` acepta la versión viva que la
- * pantalla ya haya resuelto, y quien la pinte debería pasarla.
- */
-export const DDRAGON_MAP_FALLBACK = "14.1.1";
-
-/** URL de la imagen de un mapa de Data Dragon (11 = Grieta del Invocador). */
-export const mapImageUrl = (version?: string | null, mapId = 11): string =>
-  ddragonUrl(`/cdn/${version || DDRAGON_MAP_FALLBACK}/img/map/map${mapId}.png`);
-
 let versionPromise: Promise<string> | null = null;
 let champMapPromise: Promise<{ version: string; map: Map<string, string> }> | null = null;
 

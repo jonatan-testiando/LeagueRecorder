@@ -16,7 +16,7 @@ import React from "react";
  * Geometría: el contenedor mide 580 × 500 y el cuadrado del mapa (500) va
  * centrado, con 40 de aire a cada lado. Las coordenadas normalizadas son las de
  * Riot sobre `RIFT_W`/`RIFT_H`, que es lo que abarca la imagen (lo mismo que
- * hace `TacticalMap` en el reproductor). Quien pinte encima convierte con
+ * hace el Recorrido del reproductor). Quien pinte encima convierte con
  * `riftPercent`.
  */
 

@@ -42,6 +42,7 @@ import {
   GitCompareArrows,
   Map as MapIcon,
   Play,
+  Route as RouteIcon,
   Swords,
   TrendingUp,
   Users,
@@ -55,6 +56,8 @@ import {
   useRankBenchmarks,
 } from "./RankBenchmarkCard";
 import { RiftMap, riftPercent, RIFT_SQUARE_PCT } from "./RiftMap";
+import { getJungleRoutes, JUNGLE_AGREEMENT_MIN, type JungleRouteGame } from "../../../core/tauri-ipc";
+import { ACTIVITY_ORDER, activityLabel, BUDGET_PARTS } from "../../player/jungleRoute";
 import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
@@ -406,6 +409,8 @@ export const PatternsPanel: React.FC = () => {
   const { matches, loaded: matchesLoaded } = useMatches();
   const [clips, setClips] = useState<ErrorClipMetadata[]>([]);
   const [zonas, setZonas] = useState<ZoneHistoryRow[]>([]);
+  /** Rutas de jungla medidas con vídeo (ver `jungle_route.rs`). */
+  const [rutas, setRutas] = useState<JungleRouteGame[]>([]);
   const { data: presion, error: pressureError, retry: retryPressure } = usePressureSummary("/patterns");
   const [forma, setForma] = useState<SeasonForm | null>(null);
   const [formaError, setFormaError] = useState<string | null>(null);
@@ -447,6 +452,10 @@ export const PatternsPanel: React.FC = () => {
       })
       .catch(console.error)
       .finally(() => alive && setLoading(false));
+    // Las rutas tampoco esperan a nadie: la primera vez se calculan (~1 s).
+    getJungleRoutes()
+      .then((r) => alive && setRutas(r))
+      .catch((e) => console.error("Jungle routes", e));
     // La forma de temporada va aparte: puede tardar (hasta 20 detalles de la
     // API la primera vez) y la página no tiene por qué esperarla.
     getSeasonForm()
@@ -549,6 +558,59 @@ export const PatternsPanel: React.FC = () => {
   }, [fase, peak]);
   const calientes = useMemo(() => hotSpots(resaltadas), [resaltadas]);
   const partidasConMapa = useMemo(() => new Set(muertes.map((d) => d.matchId)).size, [muertes]);
+
+  // Rutas de la ventana, sólo las de fiar (el rastro siguió a tu icono).
+  const rutasRango = useMemo(
+    () => rutas.filter((r) => idsRango.has(r.match_id) && r.route.agreement >= JUNGLE_AGREEMENT_MIN),
+    [rutas, idsRango]
+  );
+  // Qué hacías en cada muerte resaltada, cuando su partida tiene ruta. La
+  // muerte del mapa y la de la ruta son la misma con relojes que pueden
+  // bailar un segundo: se emparejan a menos de 5 s.
+  const quehacias = useMemo(() => {
+    const porPartida = new Map(rutasRango.map((r) => [r.match_id, r.route]));
+    const cuenta = new Map<string, number>();
+    let n = 0;
+    for (const d of resaltadas) {
+      const r = porPartida.get(d.matchId);
+      if (!r) continue;
+      const m = r.deaths.find((x) => Math.abs(x.time - d.gameSec) <= 5);
+      if (!m) continue;
+      n += 1;
+      cuenta.set(m.activity, (cuenta.get(m.activity) ?? 0) + 1);
+    }
+    const filas = ACTIVITY_ORDER.filter((a) => cuenta.has(a))
+      .map((a) => ({ a, n: cuenta.get(a) as number }))
+      .sort((x, y) => y.n - x.n);
+    return { n, filas };
+  }, [rutasRango, resaltadas]);
+  const resumenRuta = useMemo(() => {
+    if (rutasRango.length === 0) return null;
+    const med = (xs: number[]) => {
+      const o = [...xs].sort((a, b) => a - b);
+      return o.length ? o[Math.floor(o.length / 2)] : null;
+    };
+    const completos = rutasRango.filter((r) => r.route.full_clear && r.route.first_clear_end != null);
+    const delays = rutasRango.flatMap((r) => (r.route.mean_delay != null ? [r.route.mean_delay] : []));
+    const muertesTotales = new Map<string, number>();
+    for (const r of rutasRango) {
+      for (const d of r.route.deaths) muertesTotales.set(d.activity, (muertesTotales.get(d.activity) ?? 0) + 1);
+    }
+    const presupuesto = Object.fromEntries(
+      BUDGET_PARTS.map((p) => [p.key, rutasRango.reduce((a, r) => a + r.route.budget[p.key], 0) / rutasRango.length])
+    ) as Record<(typeof BUDGET_PARTS)[number]["key"], number>;
+    return {
+      n: rutasRango.length,
+      completos: completos.length,
+      primerClear: med(completos.map((r) => r.route.first_clear_end as number)),
+      invasiones: rutasRango.reduce((a, r) => a + r.route.invades, 0) / rutasRango.length,
+      retraso: med(delays),
+      presupuesto,
+      muertes: ACTIVITY_ORDER.filter((a) => muertesTotales.has(a))
+        .map((a) => ({ a, n: muertesTotales.get(a) as number }))
+        .sort((x, y) => y.n - x.n),
+    };
+  }, [rutasRango]);
 
   const abrirPartida = (id: string, seek?: number) => {
     const m = matches.find((x) => x.id === id);
@@ -857,6 +919,22 @@ export const PatternsPanel: React.FC = () => {
       presionTxt
     );
 
+  const valorRuta: React.ReactNode =
+    resumenRuta === null ? (
+      t("Measure your jungle games with video to see your route")
+    ) : (
+      <>
+        <span className="pp-ex-strong">
+          {resumenRuta.primerClear != null
+            ? t("First clear {m}", { m: mmss(resumenRuta.primerClear) })
+            : t("{n} routes", { n: resumenRuta.n })}
+        </span>
+        <span className="pp-ex-soft">
+          {" · "}{t("{n} of {total} full clears", { n: resumenRuta.completos, total: resumenRuta.n })}
+        </span>
+      </>
+    );
+
   const valorPool: React.ReactNode =
     pool.length < 2 ? (
       faltan(2 - propias.length)
@@ -1115,6 +1193,22 @@ export const PatternsPanel: React.FC = () => {
                   </span>
                 </span>
               )}
+              {/* Con 3 o más muertes con ruta, qué estabas haciendo. */}
+              {quehacias.n >= 3 && (
+                <span className="pp-legend-item">
+                  <RouteIcon size={12} aria-hidden="true" style={{ color: "var(--muted)" }} />
+                  <span>
+                    {t("You were:")}{" "}
+                    {quehacias.filas.slice(0, 3).map((f, i) => (
+                      <React.Fragment key={f.a}>
+                        {i > 0 && " · "}
+                        <span className="pp-legend-strong">{activityLabel(f.a, t)}</span> {f.n}
+                      </React.Fragment>
+                    ))}
+                    <span className="pp-legend-soft"> {t("({n} deaths with a measured route)", { n: quehacias.n })}</span>
+                  </span>
+                </span>
+              )}
             </div>
           )}
         </section>
@@ -1352,6 +1446,119 @@ export const PatternsPanel: React.FC = () => {
             ) : (
               <PressureBreakdown summary={presion} onOpen={abrirPartida} />
             )}
+          </Ficha>
+
+          {/* ------------------------------------------- la ruta de jungla.
+              Sale del rastro del minimapa: sólo partidas medidas con vídeo,
+              y sólo las de fiar (ver `JUNGLE_AGREEMENT_MIN`). */}
+          <Ficha
+            id="ruta"
+            icon={<RouteIcon size={14} aria-hidden="true" />}
+            label={t("Jungle route")}
+            value={valorRuta}
+            open={abiertas.has("ruta")}
+            onToggle={() => toggle("ruta")}
+            disabled={resumenRuta === null}
+          >
+            {resumenRuta !== null && (() => {
+              const filas = rutasRango.slice(0, 12);
+              const totalP = BUDGET_PARTS.reduce((a, p) => a + resumenRuta.presupuesto[p.key], 0) || 1;
+              const maxM = Math.max(1, ...resumenRuta.muertes.map((m) => m.n));
+              return (
+                <div className="card pp-card">
+                  <div className="pp-cardhead">
+                    <h3 className="pp-cardtitle">{t("Jungle route")}</h3>
+                    <span className="pp-meta">{`${resumenRuta.n} ${t(resumenRuta.n === 1 ? "game" : "games")}`}</span>
+                  </div>
+                  <p className="pp-prose pp-num">
+                    {resumenRuta.primerClear != null &&
+                      t("Your full clear ends at {m} (median).", { m: mmss(resumenRuta.primerClear) })}{" "}
+                    {t("{x} enemy camps per game.", { x: formatDecimal(resumenRuta.invasiones) })}{" "}
+                    {resumenRuta.retraso != null &&
+                      t("Your camps wait {s} for you after they respawn.", { s: mmss(resumenRuta.retraso) })}
+                  </p>
+
+                  <div className="pp-route-budget" aria-hidden="true">
+                    {BUDGET_PARTS.map((p) =>
+                      resumenRuta.presupuesto[p.key] > 0 ? (
+                        <span key={p.key} style={{ width: `${(resumenRuta.presupuesto[p.key] / totalP) * 100}%`, background: p.tone }} />
+                      ) : null
+                    )}
+                  </div>
+                  <div className="pp-route-legend">
+                    {BUDGET_PARTS.filter((p) => resumenRuta.presupuesto[p.key] >= 30).map((p) => (
+                      <span key={p.key}>
+                        <i style={{ background: p.tone }} />
+                        {t(p.label)} <b className="pp-num">{Math.round(resumenRuta.presupuesto[p.key] / 60)} min</b>
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="pp-route-rows">
+                    <span className="pp-cap">{t("Game")}</span>
+                    <span className="pp-cap" style={{ textAlign: "right" }}>{t("First clear")}</span>
+                    <span className="pp-cap" style={{ textAlign: "right" }}>{t("Invades")}</span>
+                    <span className="pp-cap" style={{ textAlign: "right" }} title={t("on average, from respawn to you")}>{t("Camp delay")}</span>
+                    {filas.map((g) => {
+                      const fc = g.route.first_clear_end;
+                      const lento = fc != null && resumenRuta.primerClear != null && fc - resumenRuta.primerClear > 15;
+                      const primero = g.route.clears[0];
+                      return (
+                        <button
+                          key={g.match_id}
+                          type="button"
+                          className="pp-route-row"
+                          onClick={() => abrirPartida(g.match_id, primero ? Math.max(0, primero.start + g.route.video_offset - 3) : undefined)}
+                          title={t("Open this game at its first camp")}
+                        >
+                          <span className="pp-meta pp-num">{g.date.slice(5, 10)} · {g.champion}</span>
+                          <span className="pp-num" style={{ textAlign: "right", color: lento ? "var(--loss)" : "var(--text)" }}>
+                            {fc != null ? mmss(fc) : "—"}
+                            {!g.route.full_clear && (
+                              <span className="pp-meta" title={t("{n} camps", { n: g.route.first_clear_camps })}>
+                                {" · "}{g.route.first_clear_camps}/6
+                              </span>
+                            )}
+                          </span>
+                          <span className="pp-num" style={{ textAlign: "right" }}>{g.route.invades}</span>
+                          <span className="pp-num" style={{ textAlign: "right", color: "var(--muted)" }}>
+                            {g.route.mean_delay != null ? mmss(g.route.mean_delay) : "—"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {resumenRuta.muertes.length > 0 && (
+                    <>
+                      <h4 className="pp-route-sub">{t("What you were doing when you died")}</h4>
+                      <div className="pp-cats">
+                        {resumenRuta.muertes.map((m) => (
+                          <div key={m.a} className="pp-cat">
+                            <div style={{ minWidth: 0 }}>
+                              <div className="pp-cat-label">{activityLabel(m.a, t)}</div>
+                              <div className="pp-track">
+                                <span
+                                  className="pp-fill"
+                                  style={{
+                                    width: `${(m.n / maxM) * 100}%`,
+                                    background: m.a === "farming" || m.a === "invading" ? "var(--loss)" : "var(--muted)",
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <span className="pp-num pp-cat-n">{m.n}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  <p className="pp-note">
+                    {t("From your icon on the minimap, checked minute by minute against the jungle monsters Riot counts. Only games measured with video.")}
+                  </p>
+                </div>
+              );
+            })()}
           </Ficha>
 
           {/* ------------------------------------------ tu pool y tus rivales */}

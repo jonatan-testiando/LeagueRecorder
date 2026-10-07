@@ -215,8 +215,12 @@ def nms(cajas, iou_max=0.7):
     return [(float(cajas[i, 0]), float(cajas[i, 1])) for i in guardados]
 
 
-def equipo_de(mm, cx, cy, radio=9):
-    """100 (azul) o 200 (rojo) según el aro, o None si no está claro.
+def equipo_de(mm, cx, cy, mi_equipo, radio=9):
+    """teamId (100/200) según el aro, o None si no está claro.
+
+    En el minimapa el aro azul es SIEMPRE tu equipo y el rojo el rival, juegues
+    en el lado que juegues. Hasta el 2026-10-07 esto devolvía azul = 100 a
+    secas, y en lado rojo invertía aliados y rivales (ver `minimap_equipos.py`).
 
     Se muestrea el anillo y no el centro: el interior es el retrato del campeón
     y su color no dice nada del bando.
@@ -239,7 +243,9 @@ def equipo_de(mm, cx, cy, radio=9):
                 rojo += 1
     if azul + rojo < 4:
         return None
-    return 100 if azul > rojo else 200
+    rival = 200 if mi_equipo == 100 else 100
+    return mi_equipo if azul > rojo else rival
+
 
 
 PARCIAL_CADA = 200  # muestras entre volcados del fichero parcial
@@ -338,6 +344,9 @@ def main():
         "video_offset": offset,
         "self_participant_id": yo_pid,
         "self_team_id": mi_equipo,
+        # Sin esta marca, quien lea el fichero lo trata como del detector viejo
+        # (azul = 100). También impide reanudar un .part de antes del arreglo.
+        "team_from": "ally_ring",
     }
     salida = [] if a.sin_reanudar else reanudar(parcial, cabecera)
     # Se retoma en el fotograma siguiente al último guardado.
@@ -374,7 +383,7 @@ def main():
                 iconos.append({
                     "x": round(cx / w * MAPA, 1),
                     "y": round((1 - cy / h) * MAPA, 1),
-                    "team": equipo_de(fr, cx, cy),
+                    "team": equipo_de(fr, cx, cy, mi_equipo),
                 })
             salida.append({"t": round(t, 2), "icons": iconos})
         lote.clear()

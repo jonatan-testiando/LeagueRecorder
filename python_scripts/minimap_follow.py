@@ -21,6 +21,8 @@ import json
 import math
 import os
 
+from minimap_equipos import cargar_posiciones  # aro azul = aliado (2026-10-07)
+
 # Cuánto puede moverse alguien por segundo sin romper la física. Unos 400 de
 # velocidad base, más margen para destellos y desplazamientos.
 VELOCIDAD_MAX = 1800.0
@@ -102,7 +104,7 @@ def rivales_cerca(positions, pista, radio=2200.0):
 if __name__ == "__main__":
     import sys
     d = sys.argv[1]
-    P = json.load(open(os.path.join(d, "minimap_positions.json"), encoding="utf-8"))
+    P = cargar_posiciones(os.path.join(d, "minimap_positions.json"))
     T = json.load(open(os.path.join(d, "riot_timeline.json"), encoding="utf-8"))
     pista = seguir(P, T)
     tot = len(P["samples"])

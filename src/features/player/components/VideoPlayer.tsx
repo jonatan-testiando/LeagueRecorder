@@ -19,6 +19,8 @@ import { formatGold, formatSeconds } from "./pressureFormat";
 import { TacticalMap } from "./TacticalMap";
 import { MapAwarenessWidget } from "./MapAwarenessWidget";
 import { PowerSpikeWidget } from "./PowerSpikeWidget";
+import { JungleRouteWidget } from "./JungleRouteWidget";
+import { GoldSection } from "./GoldSection";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { HandWidget } from "./HandWidget";
 import { SpellDietWidget } from "./SpellDietWidget";
@@ -2299,6 +2301,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   gankImpact15={match.gank_impact_15}
                   onSeek={(secs) => seekTo(secs, false)}
                 />
+              </InspSection>
+            )}
+
+            {/* Sólo aparece en partidas grabadas con la captura de oro. */}
+            {!match.is_vod && <GoldSection matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />}
+
+            {/* La ruta sale del rastro del minimapa: sólo para jungla. */}
+            {isJungler && !match.is_vod && (
+              <InspSection id="route" title={t("Jungle route")}>
+                <JungleRouteWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
               </InspSection>
             )}
 

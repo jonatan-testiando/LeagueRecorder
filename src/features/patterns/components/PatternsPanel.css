@@ -619,3 +619,45 @@
   .pp-two { grid-template-columns: minmax(0, 1fr); }
   .pp-avg-name { flex-basis: 110px; }
 }
+
+/* ------------------------------------------------- ruta de jungla (Explorar) */
+.pp-legend-soft { color: var(--faint); }
+.pp-route-budget {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--sunken);
+}
+.pp-route-budget span { height: 100%; }
+.pp-route-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+.pp-route-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pp-route-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.pp-route-legend b { font-weight: 500; color: var(--text); }
+.pp-route-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 80px 72px;
+  gap: 2px 12px;
+  align-items: baseline;
+  font-size: 13px;
+}
+/* Cada fila es un botón que ocupa las cuatro columnas de la rejilla. */
+.pp-route-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  padding: 5px 6px;
+  margin: 0 -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pp-route-row > span { white-space: nowrap; }
+.pp-route-row:hover { background: var(--bg-hover); }
+.pp-route-row:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.pp-route-sub { margin: 4px 0 0; font-size: 13px; font-weight: 500; color: var(--text); }

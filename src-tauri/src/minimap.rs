@@ -9,7 +9,8 @@
 //! Rendimiento medido sobre partidas que no se usaron para entrenar: ve el 75%
 //! de los iconos, y de lo que señala el 99% es real. El equipo sale del color
 //! del aro (96% de los iconos) — no hace falta saber qué campeón es cada uno
-//! para responder "cuántos rivales tenía encima".
+//! para responder "cuántos rivales tenía encima". Ojo: el aro dice ALIADO
+//! (azul) o RIVAL (rojo), no lado del mapa; ver [`Positions::from_json`].
 //!
 //! Es **opcional**: si el fichero no existe, todo sigue funcionando con la
 //! estimación a partir de la API. Nunca debe ser un requisito, porque depende de
@@ -41,6 +42,11 @@ pub struct Positions {
     pub self_participant_id: i32,
     pub self_team_id: i32,
     pub samples: Vec<Sample>,
+    /// Cómo se escribió `team`. `"ally_ring"`: ya traducido a 100/200 sabiendo
+    /// que el aro azul es tu equipo. Ausente: ficheros anteriores al
+    /// 2026-10-07, que ponían azul = 100 a secas.
+    #[serde(default)]
+    pub team_from: Option<String>,
 }
 
 /// Cuánto puede moverse alguien por segundo sin romper la física del juego.
@@ -93,7 +99,27 @@ impl Positions {
     pub fn load(match_id: &str) -> Option<Self> {
         let ruta = crate::storage::get_match_dir(match_id).join("minimap_positions.json");
         let raw = std::fs::read_to_string(ruta).ok()?;
-        serde_json::from_str(&raw).ok()
+        Self::from_json(&raw)
+    }
+
+    /// Parsea un `minimap_positions.json` dejando `team` en teamId de verdad.
+    ///
+    /// En el minimapa el aro azul es SIEMPRE tu equipo y el rojo el rival,
+    /// juegues en el lado que juegues. El detector anterior traducía azul = 100
+    /// sin más, así que en las partidas de lado rojo (14 de 26 el 2026-10-07)
+    /// el rastro seguía a un rival como si fueras tú —a 3.000-5.000 u de tu
+    /// posición exacta de la API, frente a 89 en lado azul— y la presión
+    /// contaba aliados como rivales. Los ficheros viejos se corrigen aquí, al
+    /// leerlos, sin reprocesar el vídeo.
+    pub fn from_json(raw: &str) -> Option<Self> {
+        let mut p: Self = serde_json::from_str(raw).ok()?;
+        if p.team_from.is_none() && p.self_team_id == 200 {
+            for i in p.samples.iter_mut().flat_map(|s| s.icons.iter_mut()) {
+                i.team = i.team.map(|t| if t == 100 { 200 } else { 100 });
+            }
+        }
+        p.team_from = Some("ally_ring".into());
+        Some(p)
     }
 
     /// Sigue al jugador grabado a lo largo de la partida.
@@ -712,5 +738,40 @@ fn python(app: &tauri::AppHandle) -> (String, Option<std::path::PathBuf>) {
             )
         }
         None => (crate::cv_analyzer::python_command(app), None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fichero(self_team: i32, marca: &str) -> String {
+        format!(
+            r#"{{"fps":2.0,"video_offset":0.0,"self_participant_id":7,"self_team_id":{self_team}{marca},
+               "samples":[{{"t":1.0,"icons":[{{"x":1.0,"y":1.0,"team":100}},{{"x":2.0,"y":2.0,"team":200}},{{"x":3.0,"y":3.0,"team":null}}]}}]}}"#
+        )
+    }
+
+    fn equipos(p: &Positions) -> Vec<Option<i32>> {
+        p.samples[0].icons.iter().map(|i| i.team).collect()
+    }
+
+    #[test]
+    fn lado_rojo_viejo_se_invierte() {
+        // Aro azul (= tu equipo) venía como 100 aunque jugaras en el 200.
+        let p = Positions::from_json(&fichero(200, "")).unwrap();
+        assert_eq!(equipos(&p), vec![Some(200), Some(100), None]);
+    }
+
+    #[test]
+    fn lado_azul_viejo_no_cambia() {
+        let p = Positions::from_json(&fichero(100, "")).unwrap();
+        assert_eq!(equipos(&p), vec![Some(100), Some(200), None]);
+    }
+
+    #[test]
+    fn fichero_nuevo_no_se_toca() {
+        let p = Positions::from_json(&fichero(200, r#","team_from":"ally_ring""#)).unwrap();
+        assert_eq!(equipos(&p), vec![Some(100), Some(200), None]);
     }
 }

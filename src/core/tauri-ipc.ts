@@ -396,6 +396,9 @@ export interface PressureValue {
   enemy_elsewhere: number;
   net: number;
   verdict: "good" | "even" | "bad";
+  /** Jungla con ruta medida: fracción del episodio con algún campamento tuyo
+   *  esperándote. `own_farm_lost` ya va multiplicado por ella. */
+  camps_waiting?: number | null;
 }
 
 export interface PressureEvidence {
@@ -820,3 +823,100 @@ export const getSpellAutopsy = async (matchId: string): Promise<SpellReport> => 
 export const getSpellDiet = async (): Promise<SpellReport> => {
   return await invoke<SpellReport>("get_spell_diet");
 };
+
+// ------------------------------------------------------------ ruta de jungla
+// Ver `src-tauri/src/jungle_route.rs`. Todos los tiempos en segundos de
+// PARTIDA; para saltar al vídeo se suma `video_offset`.
+
+export interface CampClear {
+  /** "blue" | "gromp" | "wolves" | "raptors" | "red" | "krugs" | "scuttle_top" | "scuttle_bot" */
+  camp: string;
+  side: "own" | "enemy" | "river";
+  start: number;
+  end: number;
+}
+
+export interface JungleTimeBudget {
+  farming: number;
+  moving: number;
+  lane: number;
+  base: number;
+  dead: number;
+  unknown: number;
+}
+
+export interface JungleDeath {
+  time: number;
+  /** "farming" | "invading" | "scuttle" | "lane" | "river" | "own_jungle" | "enemy_jungle" | "base" */
+  activity: string;
+  camp: string | null;
+}
+
+export interface JungleRoute {
+  video_offset: number;
+  game_duration: number;
+  clears: CampClear[];
+  first_clear_camps: number;
+  first_clear_end: number | null;
+  full_clear: boolean;
+  recalls: number[];
+  budget: JungleTimeBudget;
+  invades: number;
+  scuttles: number;
+  mean_delay: number | null;
+  delays: number;
+  deaths: JungleDeath[];
+  coverage: number;
+  /** De los minutos con súbditos de jungla según la API, en cuántos vio un campamento el rastro. */
+  agreement: number;
+}
+
+export interface JungleRouteResponse {
+  status: "ok" | "not_jungle" | "no_minimap" | "no_riot" | "no_track";
+  route: JungleRoute | null;
+}
+
+export interface JungleRouteGame {
+  match_id: string;
+  date: string;
+  champion: string;
+  result: string;
+  route: JungleRoute;
+}
+
+/** Por debajo de esto la ruta se marca como dudosa. Igual que `ACUERDO_MIN` en Rust. */
+export const JUNGLE_AGREEMENT_MIN = 0.6;
+
+export const getJungleRoute = async (matchId: string): Promise<JungleRouteResponse> =>
+  await invoke<JungleRouteResponse>("get_jungle_route", { matchId });
+
+export const getJungleRoutes = async (): Promise<JungleRouteGame[]> =>
+  await invoke<JungleRouteGame[]>("get_jungle_routes");
+
+// ------------------------------------------------------------ oro en directo
+// Ver `src-tauri/src/gold.rs`. Tiempos en segundos de PARTIDA.
+
+export interface GoldIncome {
+  passive: number;
+  camps: number;
+  farm: number;
+  takedowns: number;
+  objectives: number;
+  other: number;
+}
+
+export interface GoldReport {
+  income: GoldIncome;
+  recalls: { time: number; gold: number; spent: number }[];
+  deaths: { time: number; unspent: number }[];
+  video_offset: number;
+  samples: number;
+}
+
+export interface GoldResponse {
+  status: "ok" | "no_series" | "no_riot";
+  report: GoldReport | null;
+}
+
+export const getGoldReport = async (matchId: string): Promise<GoldResponse> =>
+  await invoke<GoldResponse>("get_gold_report", { matchId });

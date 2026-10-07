@@ -55,6 +55,8 @@ import json
 import math
 import os
 
+from minimap_equipos import cargar_posiciones  # aro azul = aliado (2026-10-07)
+
 # Lo que alguien puede recorrer por segundo sin romper la física del juego.
 VELOCIDAD_MAX = 1800.0
 
@@ -224,7 +226,7 @@ def main():
     d = a.match
     mt = json.load(open(os.path.join(d, "riot_match.json"), encoding="utf-8"))
     tl = json.load(open(os.path.join(d, "riot_timeline.json"), encoding="utf-8"))
-    pos = json.load(open(os.path.join(d, "minimap_positions.json"), encoding="utf-8"))
+    pos = cargar_posiciones(os.path.join(d, "minimap_positions.json"))
     ps = mt["info"]["participants"]
     mi_equipo = pos["self_team_id"]
 

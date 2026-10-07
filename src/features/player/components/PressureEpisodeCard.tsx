@@ -130,7 +130,16 @@ export function PressureEpisodeCard({ window: w, gameStart, gameEnd, onSeek, lab
             <dd className={v.local_gold > 0 ? "pos" : v.local_gold < 0 ? "neg" : ""}>{formatGold(v.local_gold, true)}</dd>
           </div>
           <div>
-            <dt>{t("Your own farm meanwhile")}</dt>
+            <dt
+              title={v.camps_waiting != null
+                ? t("You had camps waiting for {p}% of this stretch: only that time counts as lost farm.", { p: Math.round(v.camps_waiting * 100) })
+                : undefined}
+            >
+              {t("Your own farm meanwhile")}
+              {v.camps_waiting != null && (
+                <span className="pe__aside"> · {t("camps waiting {p}%", { p: Math.round(v.camps_waiting * 100) })}</span>
+              )}
+            </dt>
             <dd className="neg">{formatGold(-v.own_farm_lost, true)}</dd>
           </div>
           {v.death_farm_lost > 0 && (

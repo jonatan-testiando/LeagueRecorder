@@ -84,3 +84,4 @@
 
 /* Resumen de la partida, encima de las tarjetas (pestaña Impacto). */
 .pe-sum { margin: 4px 0 0; font-size: 14px; line-height: 1.5; color: var(--text); font-variant-numeric: tabular-nums; }
+.pe__aside { color: var(--faint); font-weight: 400; }

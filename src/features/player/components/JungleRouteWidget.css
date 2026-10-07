@@ -1,0 +1,109 @@
+/* Ruta de jungla (JungleRouteWidget). Prefijo `jr-`. Solo tokens de index.css. */
+
+.jr-loading { display: grid; place-items: center; padding: var(--space-6) 0; }
+
+.jr-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.jr-warn svg { flex: none; margin-top: 2px; color: var(--loss); }
+
+/* La tira: la partida entera de izquierda a derecha. */
+.jr-strip {
+  position: relative;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.jr-camp {
+  position: absolute;
+  top: 7px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  opacity: 0.85;
+  cursor: pointer;
+  transition: opacity var(--t-quick) var(--e-move), transform var(--t-instant) var(--e-move);
+}
+.jr-camp:hover, .jr-camp:focus-visible { opacity: 1; transform: scaleY(1.25); z-index: 2; }
+.jr-camp:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.jr-tick {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  padding: 0;
+  border: 0;
+  transform: translateX(-1px);
+}
+.jr-tick--base { background: var(--muted); opacity: 0.7; }
+.jr-tick--death { background: var(--loss); cursor: pointer; z-index: 3; }
+.jr-tick--death::after { content: ""; position: absolute; inset: 0 -5px; }
+
+.jr-legend, .jr-budget-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.jr-legend span, .jr-budget-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.jr-legend i, .jr-budget-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.jr-legend .jr-legend-base { width: 2px; height: 10px; background: var(--muted); }
+.jr-legend .jr-legend-death { width: 2px; height: 10px; background: var(--loss); }
+.jr-budget-legend b { font-weight: 500; color: var(--text); }
+
+.jr-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.jr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.jr-chip:hover { border-color: var(--hair-strong); background: var(--bg-hover); }
+.jr-chip i { width: 7px; height: 7px; border-radius: 50%; }
+.jr-chip .u-time { color: var(--muted); }
+
+.jr-budget {
+  display: flex;
+  height: 10px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--sunken);
+}
+.jr-budget span { height: 100%; }
+
+.jr-death {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 6px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.jr-death:hover { background: var(--bg-hover); }
+.jr-death .u-time { color: var(--muted); min-width: 40px; }
+.jr-death-camp { color: var(--muted); }

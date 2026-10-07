@@ -103,6 +103,12 @@ pub struct PressureValue {
     pub net: f64,
     /// "good" | "even" | "bad".
     pub verdict: String,
+    /// Sólo jungla con ruta medida: fracción del episodio en que tenías algún
+    /// campamento vivo esperándote. `own_farm_lost` ya va multiplicado por
+    /// ella — si te persiguen justo después de limpiar, no pierdes farmeo
+    /// porque no había nada que farmear. `None`: se usó el ritmo a secas.
+    #[serde(default)]
+    pub camps_waiting: Option<f64>,
 }
 
 /// Quién estaba vivo en cada instante.
@@ -449,4 +455,15 @@ mod tests {
         assert!(valor_evento(&ev(json!({"type": "BUILDING_KILL", "buildingType": "TOWER_BUILDING", "towerType": "OUTER_TURRET"}))).unwrap().1 > 0.0);
         assert_eq!(valor_evento(&ev(json!({"type": "CHAMPION_KILL", "bounty": 300, "shutdownBounty": 150}))).unwrap().1, 450.0);
     }
+}
+
+/// Afina el farmeo perdido de un jungla con su ruta medida (ver
+/// `PressureValue::camps_waiting`). Lo demás del neto no cambia.
+pub fn ajustar_con_ruta(v: &mut PressureValue, ruta: &crate::jungle_route::Route, start: f64, end: f64) {
+    let f = ruta.camp_waiting_fraction(start, end);
+    let antes = v.own_farm_lost;
+    v.own_farm_lost = antes * f;
+    v.net += antes - v.own_farm_lost;
+    v.verdict = veredicto(v.net).to_string();
+    v.camps_waiting = Some(f);
 }

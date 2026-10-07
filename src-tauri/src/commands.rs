@@ -148,6 +148,8 @@ pub struct ActiveMatchState {
     pub events: Mutex<Vec<MatchEvent>>,
     pub is_auto_recording: Mutex<bool>,
     pub apm_samples: Mutex<Vec<(f64, u64)>>, // (tiempo de juego, acciones acumuladas)
+    /// (tiempo de juego, oro actual), una por vuelta del bucle (~1 s). Ver `gold.rs`.
+    pub gold_samples: Mutex<Vec<(f64, f64)>>,
     pub mouse_events: Mutex<Vec<MouseEventData>>,
     pub recording_start: Mutex<Option<std::time::Instant>>,
     pub game_time_offset: Mutex<Option<f64>>,
@@ -169,6 +171,7 @@ impl Default for ActiveMatchState {
             events: Mutex::new(Vec::new()),
             is_auto_recording: Mutex::new(false),
             apm_samples: Mutex::new(Vec::new()),
+            gold_samples: Mutex::new(Vec::new()),
             mouse_events: Mutex::new(Vec::new()),
             recording_start: Mutex::new(None),
             game_time_offset: Mutex::new(None),
@@ -723,6 +726,7 @@ pub fn spawn_background_monitor(
                         crate::overlay::show(&app);
                     }
                     active_match.apm_samples.lock().await.clear();
+                    active_match.gold_samples.lock().await.clear();
                     active_match.mouse_events.lock().await.clear();
                     ult_state.mouse_events.lock().unwrap().clear();
 
@@ -853,7 +857,7 @@ pub fn spawn_background_monitor(
 
                     // Actualizar el tiempo de juego (el nivel de la R ya no se usa:
                     // la detección de ultimate se retiró, ver `ultimate.rs`).
-                    if let Ok((gt, _r_level)) = api_client.get_live_state().await {
+                    if let Ok((gt, _r_level, oro)) = api_client.get_live_state().await {
                         let mut offset_guard = active_match.game_time_offset.lock().await;
                         // El reloj de /allgamedata se queda clavado en ~0 (pero no en 0 exacto)
                         // mientras dura la pantalla de carga. Con `gt > 0.0` el offset se fijaba
@@ -876,6 +880,14 @@ pub fn spawn_background_monitor(
                         // Muestrear el contador de acciones para el APM.
                         let actions = ult_state.actions.load(Ordering::Relaxed);
                         active_match.apm_samples.lock().await.push((gt, actions));
+                        // Tu oro, segundo a segundo: de dónde sale, con cuánto
+                        // vuelves a base y con cuánto mueres. Ver `gold.rs`.
+                        if let Some(oro) = oro {
+                            let mut g = active_match.gold_samples.lock().await;
+                            if gt > 0.0 && g.last().is_none_or(|(t, _)| gt > *t) {
+                                g.push((gt, oro));
+                            }
+                        }
                     }
 
                     // --- Entrenamiento de cámara ---
@@ -1267,6 +1279,10 @@ async fn finalize_match(
     );
     crate::camera_input::write_report(&metadata, &miradas);
     metadata.camera_snaps = miradas.iter().map(|l| l.t).collect();
+
+    // El oro va en su propio fichero: la metadata se lee entera al listar la
+    // biblioteca y no necesita 2.000 muestras por partida.
+    crate::gold::write(&dir, &active_match.gold_samples.lock().await);
 
     match save_match_metadata(&metadata) {
         Ok(_) => {

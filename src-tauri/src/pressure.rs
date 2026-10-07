@@ -788,6 +788,21 @@ pub fn analyse(
     }
     finalize(&mut windows, tl, participants);
     valorar(&mut windows, tl, participants);
+    // Jungla con vídeo: el farmeo perdido sale de los campamentos que de verdad
+    // te esperaban, no del ritmo medio (ver `jungle_route`). Sólo si la ruta es
+    // de fiar: con el rastro siguiendo a otro icono diría cualquier cosa.
+    if let Some(pos) = video {
+        let yo = pos.self_participant_id;
+        if crate::jungle_route::es_jungla(participants, yo) {
+            if let Some(ruta) = crate::jungle_route::build(tl, participants, pos)
+                .filter(|r| r.agreement >= crate::jungle_route::ACUERDO_MIN)
+            {
+                for w in windows.iter_mut().filter(|w| w.participant_id == yo) {
+                    crate::pressure_value::ajustar_con_ruta(&mut w.value, &ruta, w.start, w.end);
+                }
+            }
+        }
+    }
     windows
 }
 
@@ -1707,7 +1722,7 @@ mod comparativa {
                 continue;
             };
             let Ok(raw) = std::fs::read_to_string(&pos_p) else { continue };
-            let Ok(pos) = serde_json::from_str::<crate::minimap::Positions>(&raw) else {
+            let Some(pos) = crate::minimap::Positions::from_json(&raw) else {
                 continue;
             };
             partidas.push((tl, ps, pos));
@@ -1799,7 +1814,7 @@ mod comparativa {
                 continue;
             };
             let Ok(raw) = std::fs::read_to_string(&pos_p) else { continue };
-            let Ok(pos) = serde_json::from_str::<crate::minimap::Positions>(&raw) else {
+            let Some(pos) = crate::minimap::Positions::from_json(&raw) else {
                 continue;
             };
 

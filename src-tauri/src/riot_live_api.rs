@@ -158,7 +158,9 @@ impl LolApiClient {
 
     /// Devuelve (tiempo de juego en segundos, nivel de la ultimate R) en una sola llamada.
     /// Se usa para alinear los eventos de ultimate y comprobar si la R ya está disponible.
-    pub async fn get_live_state(&self) -> Result<(f64, i32), String> {
+    /// `(reloj de partida, nivel de la R, oro actual)`. El oro sale de la misma
+    /// respuesta: guardarlo no cuesta una petición más (ver `gold.rs`).
+    pub async fn get_live_state(&self) -> Result<(f64, i32, Option<f64>), String> {
         let url = format!("{}/allgamedata", self.base_url);
         let resp = self
             .client
@@ -180,7 +182,11 @@ impl LolApiClient {
             .and_then(|r| r.get("abilityLevel"))
             .and_then(|l| l.as_i64())
             .unwrap_or(0) as i32;
-        Ok((game_time, r_level))
+        let gold = v
+            .get("activePlayer")
+            .and_then(|a| a.get("currentGold"))
+            .and_then(|g| g.as_f64());
+        Ok((game_time, r_level, gold))
     }
 
     /// Respuesta cruda de `/allgamedata`, para quien necesite más campos que los

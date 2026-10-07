@@ -55,6 +55,8 @@ import json
 import math
 import os
 
+from minimap_equipos import cargar_posiciones  # aro azul = aliado (2026-10-07)
+
 import cv2
 import numpy as np
 
@@ -124,7 +126,7 @@ def main():
     vid = os.path.join(d, nombre + ".mp4")
     mt = json.load(open(os.path.join(d, "riot_match.json"), encoding="utf-8"))
     tl = json.load(open(os.path.join(d, "riot_timeline.json"), encoding="utf-8"))
-    pos = json.load(open(os.path.join(d, "minimap_positions.json"), encoding="utf-8"))
+    pos = cargar_posiciones(os.path.join(d, "minimap_positions.json"))
     offset = pos["video_offset"]
     mi_equipo = pos["self_team_id"]
 

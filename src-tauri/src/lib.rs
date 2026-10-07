@@ -12,7 +12,9 @@ mod cv_analyzer;
 mod app_update;
 mod dataset_generator;
 mod gank;
+mod gold;
 mod hands;
+mod jungle_route;
 mod minimap;
 mod obs_client;
 mod occupancy;
@@ -334,6 +336,9 @@ pub fn run() {
             camera_snaps::get_camera_zones,
             camera_snaps::get_camera_looks,
             camera_snaps::get_blind_spot,
+            jungle_route::get_jungle_route,
+            jungle_route::get_jungle_routes,
+            gold::get_gold_report,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,
             spells::get_spell_autopsy,

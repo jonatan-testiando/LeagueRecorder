@@ -1442,7 +1442,9 @@ pub struct PressureEpisode {
 /// Formato de `pressure_v1.json`. Subir el número invalida todas las cachés de
 /// golpe, que es lo que hay que hacer cuando cambia el detector de presión: los
 /// resúmenes viejos serían de un algoritmo que ya no existe.
-const PRESSURE_CACHE_V: u32 = 3;
+// v4 (2026-10-07): el minimapa invertía aliados y rivales en lado rojo.
+// v5 (2026-10-07): el farmeo perdido de jungla sale de la ruta medida.
+const PRESSURE_CACHE_V: u32 = 5;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///
@@ -1471,7 +1473,7 @@ fn pressure_cache_path(id: &str) -> std::path::PathBuf {
 /// las posiciones del minimapa), la huella cambia y la caché se rehace sola. Un
 /// fichero que no existe cuenta como 0, así que "aún no hay minimapa" y "ya lo
 /// hay" son huellas distintas.
-fn huella_de_fuentes(id: &str) -> u64 {
+pub(crate) fn huella_de_fuentes(id: &str) -> u64 {
     let dir = crate::storage::get_match_dir(id);
     let mtime = |p: std::path::PathBuf| -> u64 {
         std::fs::metadata(&p)

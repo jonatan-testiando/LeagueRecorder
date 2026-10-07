@@ -217,14 +217,14 @@
    derecha es más alta, la Grieta se queda centrada sobre su propio suelo en vez
    de dejar un hueco de panel debajo de la leyenda. */
 .pp-rift-wrap {
-  /* Tokens del mapa. Salen de los del tema: el suelo es el fondo con un poco
-     de jade, el río el fondo con un poco de azul de equipo. */
-  --rift-blue: #6096E6;
+  /* Tokens del mapa. El minimapa oficial trae los muros transparentes: los
+     rellena el fondo de esta superficie, que también es lo que rodea al mapa.
+     En partida son negro puro; aquí un marino casi negro, igual de oscuro a la
+     vista sin el negro puro que cansa. Oscuro también en el tema claro: el
+     minimapa del juego no tiene versión papel. `--rift-ground` es el anillo de
+     los puntos, para que se despeguen de las calles beige. */
   --rift-ground: color-mix(in srgb, var(--cool) 8%, var(--ground));
-  --rift-wall: color-mix(in srgb, black 30%, var(--rift-ground));
-  --rift-river: color-mix(in srgb, var(--rift-blue) 16%, var(--ground));
-  --rift-river-core: color-mix(in srgb, var(--rift-blue) 24%, var(--ground));
-  --rift-pit: color-mix(in srgb, var(--rift-blue) 10%, var(--ground));
+  --rift-wall: #0B1018;
   position: relative;
   flex: 1 1 auto;
   display: flex;
@@ -235,22 +235,16 @@
   background: var(--rift-wall);
 }
 :root[data-theme="light"] .pp-rift-wrap {
-  --rift-blue: #2F63B5;
-  --rift-ground: color-mix(in srgb, var(--cool) 10%, var(--sunken));
-  --rift-wall: color-mix(in srgb, var(--text) 14%, var(--rift-ground));
-  --rift-river: color-mix(in srgb, var(--rift-blue) 18%, var(--sunken));
-  --rift-river-core: color-mix(in srgb, var(--rift-blue) 26%, var(--sunken));
-  --rift-pit: color-mix(in srgb, var(--rift-blue) 10%, var(--sunken));
+  --rift-ground: #1A2230;
+  --rift-wall: #141B26;
 }
-/* Textura mínima y el filo, encima de todo lo pintado (sobre toda la
-   superficie: si solo cubriera el mapa, se vería dónde acaba). */
+/* El filo, encima de todo lo pintado. Sin trama: sobre el minimapa oficial
+   solo ensuciaba la imagen. */
 .pp-rift-wrap::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: 12px;
-  background-image: radial-gradient(color-mix(in srgb, var(--text) 5%, transparent) 1px, transparent 1.3px);
-  background-size: 12px 12px;
   box-shadow: inset 0 0 0 1px var(--hair);
   pointer-events: none;
   z-index: 5;
@@ -261,7 +255,16 @@
   aspect-ratio: 580 / 500;
   flex: none;
 }
-.pp-rift-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* El minimapa oficial (512 px) estirado al cuadrado central; `left`/`width`
+   los pone RiftMap con la misma geometría que `riftPercent`. */
+.pp-rift-img {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
 .pp-halo {
   position: absolute;
   aspect-ratio: 1 / 1;

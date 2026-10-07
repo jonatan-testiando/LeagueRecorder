@@ -26,7 +26,7 @@ pub fn handle(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
     // disco pidiéndolo por su ruta absoluta. Solo se sirve lo que es nuestro:
     // la carpeta de grabaciones (con sus VODsReviews/ y recortes/) y los datos
     // de la app. Todo lo demás, 403.
-    if !ruta_permitida(&decoded) {
+    if !ruta_permitida(&decoded) && !vod_importado(&decoded) {
         eprintln!("stream: ruta fuera de las carpetas de la app, rechazada: {decoded}");
         return fail(StatusCode::FORBIDDEN);
     }
@@ -139,6 +139,76 @@ pub fn ruta_permitida(ruta: &str) -> bool {
             .map(|r| objetivo.starts_with(&r))
             .unwrap_or(false)
     })
+}
+
+/// ¿Es `ruta` el vídeo de un VOD importado?
+///
+/// Un VOD se analiza donde el usuario lo tenga (Descargas, otro disco...) y no se
+/// copia a la carpeta de grabaciones, así que el corral de [`ruta_permitida`] lo
+/// rechazaba con 403 y el reproductor decía "falta el fichero o está dañado" con
+/// el análisis recién terminado. Se abre la puerta a esos ficheros concretos —
+/// los que figuran como `video_path` en `VODsReviews/` — y a nada más.
+///
+/// Va aparte de `ruta_permitida` a propósito: esa también decide qué se puede
+/// BORRAR, y el original de un VOD es del usuario.
+///
+/// Cada vídeo llega en cientos de peticiones de rango, así que la lista se
+/// guarda en memoria y solo se relee de disco cuando una ruta no está en ella
+/// (un VOD recién importado).
+fn vod_importado(ruta: &str) -> bool {
+    use std::collections::HashSet;
+    use std::sync::Mutex;
+
+    static VODS: Mutex<Option<HashSet<PathBuf>>> = Mutex::new(None);
+
+    let Ok(objetivo) = std::fs::canonicalize(ruta) else {
+        return false;
+    };
+    let mut cache = VODS.lock().unwrap_or_else(|e| e.into_inner());
+    if cache.as_ref().is_some_and(|s| s.contains(&objetivo)) {
+        return true;
+    }
+    let vods = videos_de_vods();
+    let encontrado = vods.contains(&objetivo);
+    *cache = Some(vods);
+    encontrado
+}
+
+/// Rutas canónicas de los vídeos de todos los VOD importados.
+fn videos_de_vods() -> std::collections::HashSet<PathBuf> {
+    // Solo el campo que importa: el resto (la estela entera) se salta sin
+    // construirlo.
+    #[derive(serde::Deserialize)]
+    struct SoloVideo {
+        video_path: String,
+    }
+    let leer = |json: &Path| -> Option<PathBuf> {
+        let m: SoloVideo = serde_json::from_str(&std::fs::read_to_string(json).ok()?).ok()?;
+        std::fs::canonicalize(m.video_path).ok()
+    };
+
+    let mut jsons = Vec::new();
+    if let Ok(entradas) = std::fs::read_dir(crate::storage::get_reviews_dir()) {
+        for e in entradas.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                // Una carpeta por análisis; los .json de dentro son el suyo
+                // (y, si los hubiera, los de sus clips, que no tienen
+                // `video_path` de VOD y no casan con nada fuera del corral).
+                if let Ok(dentro) = std::fs::read_dir(&p) {
+                    jsons.extend(dentro.flatten().map(|d| d.path()));
+                }
+            } else {
+                // Análisis sueltos en la raíz, de antes de las carpetas.
+                jsons.push(p);
+            }
+        }
+    }
+    jsons
+        .iter()
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("json"))
+        .filter_map(|p| leer(p))
+        .collect()
 }
 
 /// Parsea "bytes=START-END" devolviendo (start, Option<end>).

@@ -1445,7 +1445,8 @@ pub struct PressureEpisode {
 // v4 (2026-10-07): el minimapa invertía aliados y rivales en lado rojo.
 // v5 (2026-10-07): el farmeo perdido de jungla sale de la ruta medida.
 // v6 (2026-10-07): rastro por camino entre anclajes (minimap::follow).
-const PRESSURE_CACHE_V: u32 = 6;
+// v7 (2026-10-07): rastro con el recuadro de la cámara.
+const PRESSURE_CACHE_V: u32 = 7;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///

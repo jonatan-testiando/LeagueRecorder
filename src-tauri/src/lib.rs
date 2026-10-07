@@ -341,6 +341,7 @@ pub fn run() {
             jungle_route::get_jungle_routes,
             gold::get_gold_report,
             track::get_match_track,
+            track::export_route_video,
             hands::get_hand_career,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,

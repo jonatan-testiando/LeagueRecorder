@@ -1,61 +1,71 @@
-/* El Recorrido (RouteReplay). Prefijo `rr-`. Solo tokens de index.css. */
+/* El Recorrido (RouteReplay). Prefijo `rr-`. Solo tokens de index.css.
+   No tapa el vídeo: convierte `.vp-video` en una rejilla y el <video> de
+   siempre ocupa la celda de la izquierda. `--rr-mm` (ancho del minimapa) lo
+   pone el componente: fracción guardada del ancho, con tope en el alto. */
 
-.rr {
-  position: absolute;
-  inset: 0;
-  z-index: 6; /* encima del lienzo de la estela del ratón (5) */
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4) var(--space-4);
+.vp-video.vp-video--route {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 12px var(--rr-mm, 42%);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "bar bar bar"
+    "video handle mm";
+  row-gap: var(--space-3);
+  padding: var(--space-3);
   background: var(--ground);
 }
-.rr--center { display: grid; place-items: center; }
+.vp-video.vp-video--route > video { grid-area: video; min-height: 0; border-radius: var(--radius-md); background: #0B1018; }
 
-/* Controles en una fila encima de los dos mapas. */
-.rr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
-.rr-group { display: inline-flex; align-items: center; gap: var(--space-2); }
+.rr-bar {
+  grid-area: bar;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  position: relative;
+  z-index: 8;
+}
+.rr-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .rr-fill { flex: 1; }
 .rr-bar .tp-seg button { white-space: nowrap; }
 
-/* Los dos cuadrados (tu mapa dibujado y el minimapa de la grabación), lo más
-   grandes que quepan: el lado es el menor entre el alto disponible y la mitad
-   del ancho. Antes el de la grabación era una miniatura y sobraba media
-   pantalla a la derecha. */
-.rr-stage {
-  flex: 1;
+/* Tirador para cambiar el tamaño del minimapa. */
+.rr-handle {
+  grid-area: handle;
+  cursor: col-resize;
+  position: relative;
+  touch-action: none;
+}
+.rr-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 48px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-full);
+  background: var(--hair-strong);
+  transition: background var(--t-quick) var(--e-move);
+}
+.rr-handle:hover::after { background: var(--brand); }
+
+/* El minimapa: un cuadrado tan grande como quepa en su celda. */
+.rr-mm {
+  grid-area: mm;
+  margin: 0;
   min-height: 0;
   display: flex;
+  flex-direction: column;
   justify-content: center;
-  align-items: center;
-  gap: var(--space-4);
+  gap: 6px;
   container-type: size;
 }
-.rr-sq {
-  margin: 0;
-  flex: none;
-  width: min(100cqh - 28px, (100cqw - var(--space-4)) / 2);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.rr-map {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  /* Los muros del minimapa oficial son transparentes: los rellena esto. Mismo
-     marino casi negro que el mapa de Patrones. */
-  background: #0B1018;
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.rr-map img, .rr-map svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.rr-map img { user-select: none; pointer-events: none; }
 .rr-crop {
   display: block;
-  width: 100%;
+  width: min(100cqw, 100cqh - 34px);
   aspect-ratio: 1 / 1;
+  margin: 0 auto;
   border-radius: var(--radius-md);
   background: #0B1018;
   box-shadow: inset 0 0 0 1px var(--hair);
@@ -64,55 +74,20 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 4px 10px;
   min-height: 22px;
   font-size: 12px;
   color: var(--faint);
 }
-
-.rr-trail-halo path {
-  fill: none;
-  stroke: #0B1018;
-  stroke-width: 130;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.55;
-}
-.rr-trail path {
-  fill: none;
-  stroke-width: 70;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.9;
-}
-.rr-mark { cursor: pointer; }
-.rr-mark circle { stroke: #0B1018; stroke-width: 50; }
-.rr-mark--base rect { fill: var(--muted); stroke: #0B1018; stroke-width: 50; }
-.rr-mark--death path { stroke: var(--loss); stroke-width: 90; stroke-linecap: round; }
-.rr-mark--death .rr-hit { fill: transparent; stroke: none; }
-.rr-mark:hover { filter: brightness(1.3); }
-
-.rr-ally { fill: color-mix(in srgb, #6096E6 70%, transparent); stroke: #6096E6; stroke-width: 50; }
-.rr-enemy { fill: color-mix(in srgb, var(--loss) 70%, transparent); stroke: var(--loss); stroke-width: 50; }
-.rr-me__ring { fill: #0B1018; stroke: var(--brand); stroke-width: 90; }
-.rr-me--stale { opacity: 0.45; }
-
-.rr-check { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); cursor: pointer; }
-
+.rr-cap span { display: inline-flex; align-items: center; gap: 6px; }
 .rr-grad {
-  width: 90px;
+  width: 70px;
   height: 6px;
   border-radius: var(--radius-full);
   background: linear-gradient(to right, var(--cool), var(--brand));
 }
-.rr-grad-to { margin-right: 6px; }
-
-.rr-keys { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
-.rr-keys span { display: inline-flex; align-items: center; gap: 6px; }
 .rr-k { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-.rr-k--ally { background: #6096E6; }
-.rr-k--enemy { background: var(--loss); }
-.rr-k--base { background: var(--muted); border-radius: 2px; }
 .rr-k--death { background: none; position: relative; }
 .rr-k--death::before, .rr-k--death::after {
   content: ""; position: absolute; left: 4px; top: 0; width: 2px; height: 9px; background: var(--loss);
@@ -120,3 +95,18 @@
 .rr-k--death::before { transform: rotate(45deg); }
 .rr-k--death::after { transform: rotate(-45deg); }
 
+/* Descarga: un desplegable pegado al botón. */
+.rr-dl { position: relative; }
+.rr-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 340px;
+  padding: var(--space-3);
+}
+.rr-pop-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.rr-pop-row .u-label { min-width: 70px; }

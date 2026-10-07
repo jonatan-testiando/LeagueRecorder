@@ -466,7 +466,7 @@ impl Route {
 
 /// Subir el número rehace todas las rutas guardadas.
 // v2: vueltas a base por compras, no por el icono en la fuente.
-const ROUTE_CACHE_V: u32 = 3; // v3: rastro por camino entre anclajes (minimap::follow)
+const ROUTE_CACHE_V: u32 = 4; // v4: rastro con el recuadro de la cámara
 
 #[derive(Serialize, Deserialize)]
 struct RouteCache {

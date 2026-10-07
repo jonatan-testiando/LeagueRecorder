@@ -248,6 +248,47 @@ def equipo_de(mm, cx, cy, mi_equipo, radio=9):
 
 
 
+def camara_de(mm):
+    """El recuadro blanco de la cámara: (x0, y0, x1, y1) en píxeles del recorte.
+
+    Es la pista más fuerte de cuál de los iconos aliados eres TÚ: con la
+    cámara en tu campeón, estás en su centro. Sin ella, el seguimiento sólo
+    podía elegir por continuidad entre los aliados y en las peleas en grupo
+    acababa encima de un compañero (ver `minimap.rs`, `seguimiento_*`).
+
+    El recuadro es un trazo de 1-2 px: se buscan líneas LARGAS horizontales y
+    verticales (los números blancos de los temporizadores son trazos cortos y
+    la apertura morfológica los borra) y, de lo que quede, un MARCO —blanco en
+    el borde, vacío dentro— de un tamaño razonable. Cuando la cámara está
+    junto al borde del mapa el recuadro sale cortado: se devuelve tal cual, y
+    quien lo use reconstruye el centro con el tamaño típico de la partida.
+    `None` si no se encuentra.
+    """
+    hsv = cv2.cvtColor(mm, cv2.COLOR_BGR2HSV)
+    blanco = cv2.inRange(hsv, (0, 0, 190), (180, 50, 255))
+    alto, ancho = blanco.shape
+    lh = cv2.morphologyEx(blanco, cv2.MORPH_OPEN,
+                          cv2.getStructuringElement(cv2.MORPH_RECT, (max(10, ancho // 10), 1)))
+    lv = cv2.morphologyEx(blanco, cv2.MORPH_OPEN,
+                          cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(8, alto // 14))))
+    lineas = cv2.dilate(cv2.bitwise_or(lh, lv), np.ones((3, 3), np.uint8))
+    cnts, _ = cv2.findContours(lineas, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    mejor = None
+    for c in cnts:
+        x, y, w, h = cv2.boundingRect(c)
+        if not (0.10 * ancho <= w <= 0.6 * ancho and 0.06 * alto <= h <= 0.5 * alto):
+            continue
+        dentro = lineas[y + 3:y + h - 3, x + 3:x + w - 3]
+        if dentro.size and dentro.mean() / 255 > 0.35:
+            continue  # no es un marco: es una mancha blanca
+        if mejor is None or w * h > mejor[2] * mejor[3]:
+            mejor = (x, y, w, h)
+    if mejor is None:
+        return None
+    x, y, w, h = mejor
+    return (x, y, x + w, y + h)
+
+
 PARCIAL_CADA = 200  # muestras entre volcados del fichero parcial
 
 
@@ -347,6 +388,8 @@ def main():
         # Sin esta marca, quien lea el fichero lo trata como del detector viejo
         # (azul = 100). También impide reanudar un .part de antes del arreglo.
         "team_from": "ally_ring",
+        # Cada muestra trae `cam`, el recuadro de la cámara (ver camara_de).
+        "camera": 1,
     }
     salida = [] if a.sin_reanudar else reanudar(parcial, cabecera)
     # Se retoma en el fotograma siguiente al último guardado.
@@ -385,7 +428,14 @@ def main():
                     "y": round((1 - cy / h) * MAPA, 1),
                     "team": equipo_de(fr, cx, cy, mi_equipo),
                 })
-            salida.append({"t": round(t, 2), "icons": iconos})
+            muestra = {"t": round(t, 2), "icons": iconos}
+            cam = camara_de(fr)
+            if cam:
+                x0, y0, x1, y1 = cam
+                # [x_min, y_min, x_max, y_max] en coordenadas de juego (y arriba).
+                muestra["cam"] = [round(x0 / w * MAPA), round((1 - y1 / h) * MAPA),
+                                  round(x1 / w * MAPA), round((1 - y0 / h) * MAPA)]
+            salida.append(muestra)
         lote.clear()
         tiempos.clear()
 

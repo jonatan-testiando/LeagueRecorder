@@ -33,6 +33,12 @@ pub struct Sample {
     /// Segundos de **vídeo**.
     pub t: f64,
     pub icons: Vec<Icon>,
+    /// Recuadro de la cámara `[x_min, y_min, x_max, y_max]` en coordenadas de
+    /// juego, si el detector lo encontró. Sólo en ficheros medidos desde el
+    /// 2026-10-07 (`camera: 1` en la cabecera); ver `camara_de` en
+    /// `minimap_positions.py`.
+    #[serde(default)]
+    pub cam: Option<[f64; 4]>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +87,21 @@ const PENALIZA_HUECO: f64 = 300.0;
 /// veces: sin esto el camino se quedaba en un compañero y "saltaba" de vuelta.
 const ANDAR: f64 = 500.0;
 const PESO_EXCESO: f64 = 20.0;
+/// Recargo por cada 1.000 u que separan un icono del centro de la cámara (con
+/// tope en `CAMARA_TOPE`). Suave a propósito: el usuario mira otras partes del
+/// mapa ~9 veces por minuto y durante ese segundo la cámara no está sobre él.
+///
+/// Medido (2026-10-07, 16 partidas re-medidas con el recuadro): minutos de la
+/// API escondidos con el rastro en otro icono 41 % → 3,5 %; en tus muertes
+/// 19 % → 0 %. Con 150 la precisión es igual y la cobertura baja (67 % frente
+/// a 72 %); con 75 suben los fallos (6,8 %); con 1.000 el camino se salta
+/// casi todo cuando miras a otra parte.
+const PESO_CAMARA: f64 = 100.0;
+const CAMARA_TOPE: f64 = 4000.0;
+fn clave_ms(sec: f64) -> i64 {
+    (sec * 1000.0).round() as i64
+}
+
 /// Las posiciones exactas de un participante, una por minuto.
 pub fn anclas_de(tl: &crate::riot_api::TimelineDto, pid: i32) -> Vec<(f64, f64, f64)> {
     let k = pid.to_string();
@@ -177,6 +198,48 @@ impl Positions {
         self.follow_con(anclas)
     }
 
+    /// Centro de la cámara en cada muestra que lo tiene, por tiempo (ms).
+    ///
+    /// Junto al borde del mapa el recuadro sale cortado y su centro aparente
+    /// se va hacia dentro: se reconstruye desde el lado que sí se ve con el
+    /// tamaño típico del recuadro en ESTA partida (la mediana de los que no
+    /// tocan el borde; depende de la resolución y del zoom).
+    fn centros_de_camara(&self) -> std::collections::HashMap<i64, (f64, f64)> {
+        const MARGEN: f64 = 150.0;
+        const MAPA: f64 = 14870.0;
+        let enteras: Vec<[f64; 4]> = self
+            .samples
+            .iter()
+            .filter_map(|s| s.cam)
+            .filter(|c| c[0] > MARGEN && c[1] > MARGEN && c[2] < MAPA - MARGEN && c[3] < MAPA - MARGEN)
+            .collect();
+        if enteras.len() < 10 {
+            return Default::default();
+        }
+        let mediana = |mut v: Vec<f64>| {
+            v.sort_by(|a, b| a.total_cmp(b));
+            v[v.len() / 2]
+        };
+        let ancho = mediana(enteras.iter().map(|c| c[2] - c[0]).collect());
+        let alto = mediana(enteras.iter().map(|c| c[3] - c[1]).collect());
+        let eje = |lo: f64, hi: f64, lado: f64| {
+            if lo <= MARGEN && hi - lo < lado * 0.9 {
+                hi - lado / 2.0
+            } else if hi >= MAPA - MARGEN && hi - lo < lado * 0.9 {
+                lo + lado / 2.0
+            } else {
+                (lo + hi) / 2.0
+            }
+        };
+        self.samples
+            .iter()
+            .filter_map(|s| {
+                let c = s.cam?;
+                Some((clave_ms(s.t - self.video_offset), (eje(c[0], c[2], ancho), eje(c[1], c[3], alto))))
+            })
+            .collect()
+    }
+
     fn follow_con(&self, anclas: &[(f64, f64, f64)]) -> Vec<Fix> {
         let mut anclas: Vec<(f64, f64, f64)> = anclas.to_vec();
         anclas.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -188,10 +251,11 @@ impl Positions {
                 None => out.extend(respaldo.iter().filter(|f| f.sec > a && f.sec < b).copied()),
             }
         };
+        let camaras = self.centros_de_camara();
         let primera = anclas.first().map(|a| a.0).unwrap_or(f64::INFINITY);
         cubierto(f64::NEG_INFINITY, primera, &mut out, None);
         for par in anclas.windows(2) {
-            let tramo = self.camino(par[0], par[1]);
+            let tramo = self.camino(par[0], par[1], &camaras);
             cubierto(par[0].0, par[1].0, &mut out, tramo);
         }
         if let Some(ultima) = anclas.last() {
@@ -211,8 +275,14 @@ impl Positions {
     /// legítimo). Coste: la distancia recorrida más una penalización por cada
     /// muestra en la que tu icono no se vio. Incluye el instante de los dos
     /// anclajes. `None` si no hay camino.
-    fn camino(&self, a: (f64, f64, f64), b: (f64, f64, f64)) -> Option<Vec<Fix>> {
+    fn camino(
+        &self,
+        a: (f64, f64, f64),
+        b: (f64, f64, f64),
+        camaras: &std::collections::HashMap<i64, (f64, f64)>,
+    ) -> Option<Vec<Fix>> {
         let (salto_max, penaliza_hueco, andar, peso_exceso) = (SALTO_MAX, PENALIZA_HUECO, ANDAR, PESO_EXCESO);
+        let peso_camara = PESO_CAMARA;
         let holgura = 300.0;
         let fuente = if self.self_team_id == 100 { (400.0, 400.0) } else { (14400.0, 14450.0) };
         let en_fuente = |x: f64, y: f64| (x - fuente.0).hypot(y - fuente.1) <= 1800.0;
@@ -221,6 +291,8 @@ impl Positions {
         // sustituyen por la posición exacta de la API: el camino tiene que
         // salir y llegar ahí.
         let mut capas: Vec<(f64, Vec<(f64, f64)>)> = vec![(a.0, vec![(a.1, a.2)])];
+        // Recargo de cada icono por estar lejos de donde mira la cámara.
+        let mut recargo: Vec<Vec<f64>> = vec![vec![0.0]];
 
         for s in &self.samples {
             let sec = s.t - self.video_offset;
@@ -233,9 +305,19 @@ impl Positions {
                 .filter(|i| i.team == Some(self.self_team_id))
                 .map(|i| (i.x, i.y))
                 .collect();
+            let cam = camaras.get(&clave_ms(sec));
+            recargo.push(
+                ic.iter()
+                    .map(|(x, y)| {
+                        cam.map(|(cx, cy)| peso_camara * (cx - x).hypot(cy - y).min(CAMARA_TOPE) / 1000.0)
+                            .unwrap_or(0.0)
+                    })
+                    .collect(),
+            );
             capas.push((sec, ic));
         }
         capas.push((b.0, vec![(b.1, b.2)]));
+        recargo.push(vec![0.0]);
 
         let n = capas.len();
         // coste[i][k], previo[i][k] = (capa, icono)
@@ -258,7 +340,7 @@ impl Positions {
                             continue;
                         }
                         let exceso = if fuente_ok { 0.0 } else { (d - andar * dt - holgura).max(0.0) };
-                        let c = c0 + d.min(3000.0) + peso_exceso * exceso + penaliza_hueco * (j - i - 1) as f64;
+                        let c = c0 + d.min(3000.0) + peso_exceso * exceso + penaliza_hueco * (j - i - 1) as f64 + recargo[j][q];
                         if c < coste[j][q] {
                             coste[j][q] = c;
                             previo[j][q] = Some((i, k));
@@ -489,6 +571,21 @@ pub fn ruta(match_id: &str) -> std::path::PathBuf {
     crate::storage::get_match_dir(match_id).join("minimap_positions.json")
 }
 
+/// ¿Se midió con el detector actual (el que guarda el recuadro de la cámara)?
+///
+/// Los ficheros de antes del 2026-10-07 no lo traen, y sin él el rastro cae en
+/// otro icono ~40 % de las veces frente a ~3 % (ver `PESO_CAMARA`). Siguen
+/// valiendo —todo funciona con ellos—, pero el lote los vuelve a medir. La
+/// cabecera va al principio del JSON (el script la escribe antes que las
+/// muestras): basta leer un trozo, no varios megas.
+pub fn es_actual(match_id: &str) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(ruta(match_id)) else { return false };
+    let mut buf = [0u8; 1024];
+    let n = f.read(&mut buf).unwrap_or(0);
+    String::from_utf8_lossy(&buf[..n]).contains("\"camera\"")
+}
+
 /// Ruta del volcado a medias, que es lo que permite reanudar.
 fn ruta_parcial(match_id: &str) -> std::path::PathBuf {
     crate::storage::get_match_dir(match_id).join("minimap_positions.json.part")
@@ -602,6 +699,23 @@ pub fn pendientes(app: &tauri::AppHandle) -> Vec<String> {
         .collect()
 }
 
+/// Partidas ya medidas con el detector anterior (sin el recuadro de la
+/// cámara) que se pueden volver a medir, de la más nueva a la más vieja.
+pub fn desactualizadas(app: &tauri::AppHandle) -> Vec<String> {
+    if recursos(app).is_none() {
+        return Vec::new();
+    }
+    let mut ms: Vec<crate::storage::MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.is_vod && m.riot_match_id.is_some())
+        .collect();
+    ms.sort_by(|a, b| b.date.cmp(&a.date));
+    ms.into_iter()
+        .filter(|m| ruta(&m.id).exists() && !es_actual(&m.id) && hay_con_que(&m.id))
+        .map(|m| m.id)
+        .collect()
+}
+
 pub fn estado_lote() -> Option<Lote> {
     lote().lock().ok().and_then(|l| l.clone())
 }
@@ -615,7 +729,9 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
             return Ok(l.clone());
         }
     }
-    let ids = pendientes(app);
+    // Primero las que no tienen nada medido; luego las del detector anterior.
+    let mut ids = pendientes(app);
+    ids.extend(desactualizadas(app));
     let inicial = Lote { total: ids.len(), activo: !ids.is_empty(), ..Default::default() };
     *lote().lock().map_err(|_| "estado interno corrupto")? = Some(inicial.clone());
     if ids.is_empty() {
@@ -650,7 +766,7 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
             let parado = LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst);
             if let Ok(mut l) = lote().lock() {
                 if let Some(l) = l.as_mut() {
-                    if ruta(&id).exists() {
+                    if es_actual(&id) {
                         l.hechas += 1;
                     } else if !parado {
                         l.fallidas += 1;
@@ -709,8 +825,8 @@ pub fn cancelar_todo() {
 /// parar y lo hecho no se pierde.
 pub fn spawn_processing(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
     let dir = crate::storage::get_match_dir(match_id);
-    if ruta(match_id).exists() {
-        return Ok(()); // ya procesada
+    if ruta(match_id).exists() && es_actual(match_id) {
+        return Ok(()); // ya procesada con el detector actual
     }
     {
         let mut curso = en_curso().lock().map_err(|_| "estado interno corrupto")?;
@@ -953,6 +1069,8 @@ mod tests {
             ) else { continue };
             let Ok(tl) = serde_json::from_str::<crate::riot_api::TimelineDto>(&rtl) else { continue };
             let Some(pos) = Positions::from_json(&rp) else { continue };
+            // Para comparar con/sin cámara sobre las mismas partidas.
+            if std::env::var("TRK_SOLO_CAM").is_ok() && pos.samples.iter().all(|s| s.cam.is_none()) { continue }
             let k = pos.self_participant_id.to_string();
             let anclas: Vec<(f64, f64, f64)> = tl.info.frames.iter().filter_map(|f| {
                 let p = f.participantFrames.get(&k)?.position.as_ref()?;
@@ -1003,7 +1121,7 @@ mod tests {
             Some((f.timestamp as f64 / 1000.0, p.x as f64, p.y as f64))
         }).collect();
         println!("anclas {:?}", &anclas[..2]);
-        let tramo = pos.camino(anclas[0], anclas[1]);
+        let tramo = pos.camino(anclas[0], anclas[1], &pos.centros_de_camara());
         match tramo {
             None => println!("SIN CAMINO"),
             Some(t) => for f in t.iter().filter(|f| (f.sec * 2.0).round() as i64 % 10 == 0) { println!("{:.1} ({:.0},{:.0})", f.sec, f.x, f.y) },
@@ -1023,6 +1141,8 @@ mod tests {
             ) else { continue };
             let Ok(tl) = serde_json::from_str::<crate::riot_api::TimelineDto>(&rtl) else { continue };
             let Some(pos) = Positions::from_json(&rp) else { continue };
+            // Para comparar con/sin cámara sobre las mismas partidas.
+            if std::env::var("TRK_SOLO_CAM").is_ok() && pos.samples.iter().all(|s| s.cam.is_none()) { continue }
             let anclas = anclas_de(&tl, pos.self_participant_id);
             let a = pos.follow_pass(&anclas, false);
             let b = pos.follow(&anclas);

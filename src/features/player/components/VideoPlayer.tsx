@@ -1379,7 +1379,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           className="vp-tbtn vp-tbtn--text"
           aria-pressed={stage === "route"}
           onClick={() => setStage((x) => (x === "route" ? "video" : "route"))}
-          title={`${t(stage === "route" ? "Back to the video" : "Your route on the minimap")} (R)`}
+          title={`${t(stage === "route" ? "Back to the video" : "Your video next to your recording's minimap")} (R)`}
           style={stage === "route" ? { color: "var(--brand)" } : undefined}
         >
           <MapIcon size={14} />
@@ -1636,7 +1636,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         style={{ gridTemplateColumns: isFullscreen ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${sidebarWidth}px` }}
       >
         <div className="vp-left">
-          <div className="vp-video">
+          <div className={hasVideo && stage === "route" ? "vp-video vp-video--route" : "vp-video"}>
             {/* Sin vídeo no se monta el elemento: un `<video src="">` dispara un
                 error de carga y acabaríamos enseñando "el fichero está dañado"
                 para una partida que nunca llegó a grabarse. Son dos cosas
@@ -1684,25 +1684,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 />
               </div>
             )}
-            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker ? 1 : 0, transition: "opacity var(--t-quick) var(--e-move)" }} />
+            {/* La estela del ratón va pegada al vídeo a pantalla completa: en el
+                Recorrido el vídeo es una celda y no cuadraría. */}
+            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker && stage !== "route" ? 1 : 0, display: stage === "route" ? "none" : undefined, transition: "opacity var(--t-quick) var(--e-move)" }} />
 
             {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
             <EsportsPlayerOverlay
               currentTime={currentTime}
               match={currentMatch}
-              visible={showEsportsHud && hasVideo}
+              visible={showEsportsHud && hasVideo && stage !== "route"}
             />
 
             {hasVideo && stage === "route" && (
-              <RouteReplay
-                matchId={match.id}
-                videoRef={videoRef}
-                onSeek={(secs) => seekTo(secs, false)}
-                onClose={() => setStage("video")}
-              />
+              <RouteReplay matchId={match.id} videoRef={videoRef} onClose={() => setStage("video")} />
             )}
 
-            {!isFullscreen && noticeEl}
+            {!isFullscreen && stage !== "route" && noticeEl}
 
             {isFullscreen && (
               <div style={styles.fsBottom}>

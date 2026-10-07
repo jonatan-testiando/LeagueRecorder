@@ -22,6 +22,8 @@ import { useT } from "../../../core/LanguageProvider";
 export const MeasureWithVideo: React.FC = () => {
   const t = useT();
   const [pending, setPending] = useState<number | null>(null);
+  /** Medidas con el detector anterior (sin el recuadro de la cámara). */
+  const [outdated, setOutdated] = useState(0);
   const [batch, setBatch] = useState<MinimapBatch | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +34,7 @@ export const MeasureWithVideo: React.FC = () => {
         .then((s) => {
           if (!vivo) return;
           setPending(s.pending);
+          setOutdated(s.outdated ?? 0);
           setBatch(s.batch);
         })
         .catch(() => {});
@@ -71,6 +74,29 @@ export const MeasureWithVideo: React.FC = () => {
         <p className="mv__note">
           {t("One after another, about 4 min each. You can keep using the app; the figures update as each one finishes.")}
         </p>
+      </div>
+    );
+  }
+
+  if (pending === 0 && outdated > 0) {
+    return (
+      <div className="mv">
+        <div className="mv__row">
+          <span>
+            {outdated === 1
+              ? t("1 game was measured with the previous detector.")
+              : t("{n} games were measured with the previous detector.", { n: outdated })}
+          </span>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={empezar}>
+            {outdated === 1 ? t("Measure it again") : t("Measure them again")}
+          </button>
+        </div>
+        <p className="mv__note">
+          {t("The new one also reads the camera box, so it follows YOUR icon instead of a teammate's: wrong in ~40% of moments before, ~3% now. About {min} min in total.", {
+            min: outdated * 4,
+          })}
+        </p>
+        {error && <p className="mv__note mv__note--err">{error}</p>}
       </div>
     );
   }

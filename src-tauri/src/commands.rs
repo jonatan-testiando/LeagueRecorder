@@ -350,6 +350,9 @@ pub async fn get_minimap_status(
 #[derive(serde::Serialize)]
 pub struct MinimapBatchStatus {
     pub pending: usize,
+    /// Medidas con el detector anterior (sin el recuadro de la cámara): el
+    /// lote también las vuelve a medir.
+    pub outdated: usize,
     pub batch: Option<crate::minimap::Lote>,
 }
 
@@ -357,6 +360,7 @@ pub struct MinimapBatchStatus {
 pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStatus, String> {
     Ok(MinimapBatchStatus {
         pending: crate::minimap::pendientes(&app).len(),
+        outdated: crate::minimap::desactualizadas(&app).len(),
         batch: crate::minimap::estado_lote(),
     })
 }

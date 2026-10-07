@@ -436,6 +436,8 @@ export interface MinimapBatch {
 export interface MinimapBatchStatus {
   /** Partidas propias sincronizadas que se pueden medir y aún no lo están. */
   pending: number;
+  /** Medidas con el detector anterior (sin el recuadro de la cámara). */
+  outdated?: number;
   batch: MinimapBatch | null;
 }
 
@@ -957,3 +959,14 @@ export interface MatchTrackResponse {
 
 export const getMatchTrack = async (matchId: string): Promise<MatchTrackResponse> =>
   await invoke<MatchTrackResponse>("get_match_track", { matchId });
+
+/** Genera un MP4 del minimapa de la grabación con tu estela, acelerado
+ *  `speed` veces, entre dos segundos de PARTIDA. Devuelve la ruta. Progreso
+ *  en el evento `route_export_progress` (`[matchId, 0..100]`). */
+export const exportRouteVideo = async (
+  matchId: string,
+  speed: number,
+  from: number,
+  to: number,
+  trail: "off" | "recent" | "sofar"
+): Promise<string> => await invoke<string>("export_route_video", { matchId, speed, from, to, trail });

@@ -849,6 +849,8 @@ export interface HitOpener {
   reaction: { key: string; secs: number } | null;
   effect: HitEffect | null;
   died: boolean;
+  /** Hacia dónde te movías respecto al rival más cercano en pantalla. */
+  line: "lateral" | "away" | "toward" | "offscreen" | null;
 }
 
 export interface HitsReport {
@@ -865,6 +867,12 @@ export interface HitsReport {
   reaction_known: number;
   reaction_n: number;
   reaction_p50: number | null;
+  /** Aperturas con la línea de fuego medida (denominador de las tres siguientes). */
+  line_known: number;
+  line_lateral: number;
+  line_away: number;
+  line_toward: number;
+  line_offscreen: number;
   effects: { effect: HitEffect; times: number; icon_url: string | null }[];
   list: HitOpener[];
 }
@@ -874,6 +882,52 @@ export const getHitsTaken = async (matchId: string): Promise<HitsReport> =>
 
 export const getHitsTakenCareer = async (): Promise<HitsReport> =>
   await invoke<HitsReport>("get_hits_taken_career");
+
+/** Dónde estaba el choque de oleadas de un carril: 0 = tu base, 1 = la suya. */
+export interface LanePush {
+  lane: "top" | "mid" | "bot";
+  push: number | null;
+}
+
+export interface WavesReport {
+  /** "ok", "no_waves", "reading", "unreadable" o "no_riot". */
+  status: string;
+  matches: number;
+  /** `[t_partida, top, mid, bot]`, -1 donde no se vio oleada. */
+  series: [number, number, number, number][];
+  invades: { t_game: number; t_video: number; camp: string; lanes: LanePush[]; verdict: "prio" | "half" | "none" | "early" | "unknown"; died: boolean }[];
+  ganks: { t_game: number; t_video: number; lane: "top" | "mid" | "bot"; push: number | null; setup: "good" | "even" | "dive" | "unknown"; outcome: "success" | "neutral" | "failed" }[];
+  objectives: { t_game: number; t_video: number; kind: string; ours: boolean; lanes: LanePush[]; verdict: "prio" | "half" | "none" | "unknown" }[];
+}
+
+/** Oleadas y macro de una partida (las lee del vídeo si faltan: segundos). */
+export const getWaves = async (matchId: string): Promise<WavesReport> =>
+  await invoke<WavesReport>("get_waves", { matchId });
+
+export const getWavesCareer = async (): Promise<WavesReport> =>
+  await invoke<WavesReport>("get_waves_career");
+
+export interface AimBucket {
+  key: string;
+  n: number;
+  known: number;
+  hits: number;
+}
+
+/** Puntería (ver `barras.rs`): sólo en partidas con las teclas grabadas. */
+export interface AimReport {
+  /** "ok", "no_keys", "no_bars" o "no_match". */
+  status: string;
+  matches: number;
+  presses: number;
+  aimed: number;
+  by_aim: AimBucket[];
+  by_key: AimBucket[];
+  list: { t_video: number; key: string; aim: "direct" | "lead" | "behind" | "still"; offset_deg: number; hit: boolean | null }[];
+}
+
+export const getAim = async (matchId: string): Promise<AimReport> =>
+  await invoke<AimReport>("get_aim", { matchId });
 
 /** Lee el HUD de una partida (vida y efectos). El avance llega por `hud_progress`. */
 export const readMatchHud = async (matchId: string): Promise<void> =>

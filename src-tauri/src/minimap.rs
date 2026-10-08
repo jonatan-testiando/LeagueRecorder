@@ -733,7 +733,11 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
     // luego las que sólo esperan a que se lea su HUD (ver `crate::hud`).
     let mut ids = pendientes(app);
     ids.extend(desactualizadas(app));
-    for id in crate::hud::pendientes(app) {
+    for id in crate::hud::pendientes(app)
+        .into_iter()
+        .chain(crate::oleadas::pendientes(app))
+        .chain(crate::barras::pendientes(app))
+    {
         if !ids.contains(&id) {
             ids.push(id);
         }
@@ -771,16 +775,33 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
                     std::thread::sleep(std::time::Duration::from_millis(1000));
                 }
             }
+            // Las oleadas: segundos, sólo fotogramas clave.
+            if !LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst) && crate::oleadas::falta(&app, &id) {
+                if let Err(e) = crate::oleadas::procesar(&app, &id) {
+                    log::warn!("lote: oleadas de {id}: {e}");
+                }
+            }
             // La vida y los efectos, del mismo vídeo (bloquea hasta acabar).
             if !LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst) && crate::hud::falta(&app, &id) {
                 if let Err(e) = crate::hud::procesar(&app, &id) {
                     log::warn!("lote: HUD de {id}: {e}");
                 }
             }
+            // Las barras sobre los campeones, en las peleas y las pulsaciones:
+            // va detrás del HUD porque las peleas salen de él.
+            if !LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst) && crate::barras::falta(&app, &id) {
+                if let Err(e) = crate::barras::procesar(&app, &id) {
+                    log::warn!("lote: barras de {id}: {e}");
+                }
+            }
             let parado = LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst);
             if let Ok(mut l) = lote().lock() {
                 if let Some(l) = l.as_mut() {
-                    if es_actual(&id) && !crate::hud::falta(&app, &id) {
+                    if es_actual(&id)
+                        && !crate::hud::falta(&app, &id)
+                        && !crate::oleadas::falta(&app, &id)
+                        && !crate::barras::falta(&app, &id)
+                    {
                         l.hechas += 1;
                     } else if !parado {
                         l.fallidas += 1;

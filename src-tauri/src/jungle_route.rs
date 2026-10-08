@@ -140,6 +140,15 @@ pub struct Route {
 pub const ACUERDO_MIN: f64 = 0.6;
 
 /// ¿Jugó de jungla el jugador grabado?
+/// Dónde está un campamento, por su nombre y el equipo dueño de esa jungla
+/// (100/200; los cangrejos valen con cualquiera).
+pub fn posicion_campamento(key: &str, equipo: i32) -> Option<(f64, f64)> {
+    CAMPS
+        .iter()
+        .find(|c| c.key == key && (c.side == equipo || c.side == 0))
+        .map(|c| (c.x, c.y))
+}
+
 pub fn es_jungla(participants: &[ParticipantDto], pid: i32) -> bool {
     participants
         .get((pid - 1) as usize)

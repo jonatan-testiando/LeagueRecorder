@@ -16,6 +16,8 @@ mod gold;
 mod track;
 mod hud;
 mod golpes;
+mod oleadas;
+mod barras;
 mod hands;
 mod jungle_route;
 mod minimap;
@@ -347,6 +349,9 @@ pub fn run() {
             hud::read_match_hud,
             golpes::get_hits_taken,
             golpes::get_hits_taken_career,
+            oleadas::get_waves,
+            oleadas::get_waves_career,
+            barras::get_aim,
             hands::get_hand_career,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,

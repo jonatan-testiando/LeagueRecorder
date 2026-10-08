@@ -147,6 +147,9 @@ pub struct Apertura {
     pub reaction: Option<Reaccion>,
     pub effect: Option<Efecto>,
     pub died: bool,
+    /// Hacia dónde te movías respecto al rival más cercano en pantalla:
+    /// "lateral", "away", "toward" u "offscreen" ([`crate::barras`]).
+    pub line: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -176,6 +179,14 @@ pub struct GolpesReport {
     pub reaction_known: usize,
     pub reaction_n: usize,
     pub reaction_p50: Option<f64>,
+    /// Aperturas con la línea de fuego medida (rival en pantalla y orden de
+    /// movimiento): el denominador de las tres siguientes.
+    pub line_known: usize,
+    pub line_lateral: usize,
+    pub line_away: usize,
+    pub line_toward: usize,
+    /// Te llegó sin ningún rival en tu pantalla.
+    pub line_offscreen: usize,
     pub effects: Vec<EfectoCuenta>,
     pub list: Vec<Apertura>,
     #[serde(skip)]
@@ -275,6 +286,7 @@ pub struct Entrada<'a> {
     pub pos: &'a Positions,
     pub meta: &'a crate::storage::MatchMetadata,
     pub escala_minimapa: f64,
+    pub barras: Option<&'a crate::barras::Barras>,
 }
 
 pub fn analizar(e: &Entrada) -> GolpesReport {
@@ -401,7 +413,20 @@ pub fn analizar(e: &Entrada) -> GolpesReport {
             reaction,
             effect: efecto_en(tv),
             died,
+            line: e.barras.and_then(|b| crate::barras::linea_de_fuego(b, e.meta, tv)),
         };
+        match ap.line {
+            Some("offscreen") => r.line_offscreen += 1,
+            Some(l) => {
+                r.line_known += 1;
+                match l {
+                    "lateral" => r.line_lateral += 1,
+                    "away" => r.line_away += 1,
+                    _ => r.line_toward += 1,
+                }
+            }
+            None => {}
+        }
         r.openers += 1;
         if let Some(s) = ap.straight {
             r.straight_known += 1;
@@ -483,7 +508,26 @@ fn de_partida(match_id: &str, escala: f64) -> GolpesReport {
         return estado("no_riot");
     };
     let Some(pos) = Positions::load(match_id) else { return estado("no_minimap") };
-    analizar(&Entrada { hud_raw: &hud_raw, tl: &tl, m: &m, pos: &pos, meta: &meta, escala_minimapa: escala })
+    let barras = crate::barras::Barras::load(match_id);
+    analizar(&Entrada {
+        hud_raw: &hud_raw,
+        tl: &tl,
+        m: &m,
+        pos: &pos,
+        meta: &meta,
+        escala_minimapa: escala,
+        barras: barras.as_ref(),
+    })
+}
+
+/// Instantes de vídeo de las peleas que te empezaron: alrededor de ellos se
+/// leen las barras de vida ([`crate::barras`]).
+pub(crate) fn aperturas(match_id: &str) -> Vec<f64> {
+    de_partida(match_id, crate::storage::load_config().minimap_scale)
+        .list
+        .iter()
+        .map(|a| a.t_video)
+        .collect()
 }
 
 /// Las peleas que te empezaron en una partida.
@@ -527,6 +571,11 @@ pub async fn get_hits_taken_career() -> GolpesReport {
             total.matches_with_keys += r.matches_with_keys;
             total.reaction_known += r.reaction_known;
             total.reaction_n += r.reaction_n;
+            total.line_known += r.line_known;
+            total.line_lateral += r.line_lateral;
+            total.line_away += r.line_away;
+            total.line_toward += r.line_toward;
+            total.line_offscreen += r.line_offscreen;
             total.reacciones.extend(r.reacciones);
             todas.extend(r.list);
         }
@@ -606,7 +655,9 @@ mod tests {
             let pos = Positions::from_json(&rp).unwrap();
             let meta: crate::storage::MatchMetadata = serde_json::from_str(&rm).unwrap();
             let t0 = std::time::Instant::now();
-            let r = analizar(&Entrada { hud_raw: &hud, tl: &tl, m: &m, pos: &pos, meta: &meta, escala_minimapa: 1.0 });
+            let barras = std::fs::read_to_string(d.join(crate::barras::FICHERO)).ok().and_then(|r| crate::barras::Barras::from_json(&r));
+            let r = analizar(&Entrada { hud_raw: &hud, tl: &tl, m: &m, pos: &pos, meta: &meta, escala_minimapa: 1.0, barras: barras.as_ref() });
+            println!("   línea de fuego: lateral {} · huyendo {} · hacia él {} · fuera de pantalla {} (de {} medidas)", r.line_lateral, r.line_away, r.line_toward, r.line_offscreen, r.line_known);
             println!(
                 "{id} {} · {} golpes de campeón · {} aperturas · recto {}/{} · niebla {} · muerte {} · efectos {:?} · {:?}",
                 r.status, r.hits, r.openers, r.straight, r.straight_known, r.from_fog, r.died,

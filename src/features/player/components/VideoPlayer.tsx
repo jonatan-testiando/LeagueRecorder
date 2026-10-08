@@ -20,6 +20,8 @@ import { JungleRouteWidget } from "./JungleRouteWidget";
 import { RouteReplay } from "./RouteReplay";
 import { DeathsSection } from "./DeathsSection";
 import { HitsTaken } from "./HitsTaken";
+import { WavesSection } from "./WavesSection";
+import { AimSection } from "./AimSection";
 import { GoldPurchases } from "./GoldPurchases";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
@@ -2085,6 +2087,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             {!match.is_vod && (
               <InspSection id="hits" title={t("Hits you take")}>
                 <HitsTaken matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
+              </InspSection>
+            )}
+
+            {/* Cómo apuntas: de las teclas grabadas y las barras de vida. */}
+            {!match.is_vod && (
+              <InspSection id="aim" title={t("Your aim")} defaultOpen={false}>
+                <AimSection matchId={match.id} videoOffset={match.video_offset ?? 0} onSeek={(secs) => seekTo(secs, false)} />
+              </InspSection>
+            )}
+
+            {/* Dónde estaban las oleadas, y las decisiones que dependen de ello. */}
+            {!match.is_vod && (
+              <InspSection id="waves" title={t("Waves and macro")} defaultOpen={false}>
+                <WavesSection matchId={match.id} videoOffset={match.video_offset ?? 0} onSeek={(secs) => seekTo(secs, false)} />
               </InspSection>
             )}
 

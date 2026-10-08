@@ -42,6 +42,10 @@ export const HitsCareer: React.FC = () => {
     [t("From the fog"), `${pct(r.from_fog, r.openers)}%`, t("no enemy visible in the 4 s before")],
     [t("Ended in your death"), `${pct(r.died, r.openers)}%`, t("of those fights")],
   ];
+  if (r.line_known > 0) {
+    filas.push([t("Moving sideways"), `${pct(r.line_lateral, r.line_known)}%`, t("at random it would be ~67%")]);
+    filas.push([t("Fleeing along their line"), `${pct(r.line_away, r.line_known)}%`, t("the easiest to hit")]);
+  }
   if (r.matches_with_keys > 0 && r.reaction_p50 != null) {
     filas.push([t("Reaction"), t("{s} s", { s: r.reaction_p50.toFixed(2) }), t("{n} of {m} with a key", { n: r.reaction_n, m: r.reaction_known })]);
   }

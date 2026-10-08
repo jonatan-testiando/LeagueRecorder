@@ -118,7 +118,7 @@ export const MeasureWithVideo: React.FC = () => {
           </button>
         </div>
         <p className="mv__note">
-          {t("Reads your health bar and the effects enemies put on you, for \"Hits you take\". About {min} min in total.", {
+          {t("Reads your health bar, the effects enemies put on you and the waves, for \"Hits you take\" and \"Waves and macro\". About {min} min in total.", {
             min: hudPending * 3,
           })}
         </p>

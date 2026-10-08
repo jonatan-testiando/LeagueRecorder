@@ -1,0 +1,24 @@
+/* "Oleadas y macro" (WavesSection) y su ficha de Patrones. Prefijo `ws-`;
+   las filas reusan las de DeathsSection (`ds-`). Solo tokens de index.css. */
+
+.ws-strip { display: flex; flex-direction: column; gap: 4px; }
+.ws-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.ws-lane { font-size: 11px; color: var(--muted); }
+.ws-svg {
+  display: block;
+  width: 100%;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--sunken);
+  cursor: pointer;
+}
+.ws-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; padding-left: 38px; font-size: 11px; color: var(--muted); }
+.ws-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ws-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.ws-soft { color: var(--faint); font-size: 12px; }
+.ws-group { display: flex; flex-direction: column; gap: 2px; }
+.ws-tag--good { background: color-mix(in srgb, var(--cool) 16%, transparent); color: var(--cool); }
+.ws-career { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--space-3); }
+.ws-stat { display: flex; flex-direction: column; gap: 4px; }
+.ws-stat strong { font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ws-stat small { font-size: 12px; font-weight: 400; color: var(--muted); }

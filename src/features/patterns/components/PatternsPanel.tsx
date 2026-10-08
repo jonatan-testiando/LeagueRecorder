@@ -49,6 +49,7 @@ import {
   Swords,
   TrendingUp,
   Users,
+  Waves,
 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
 import { useAppStore, useMatches, type PlaylistItem } from "../../../store/useAppStore";
@@ -64,6 +65,7 @@ import { ACTIVITY_ORDER, activityLabel, BUDGET_PARTS } from "../../player/jungle
 import { HandWidget } from "../../player/components/HandWidget";
 import { SpellDietWidget } from "../../player/components/SpellDietWidget";
 import { HitsCareer } from "../../player/components/HitsCareer";
+import { WavesCareer } from "../../player/components/WavesCareer";
 import { PerformanceTrendsWidget } from "../../player/components/PerformanceTrendsWidget";
 import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
@@ -1892,6 +1894,21 @@ export const PatternsPanel: React.FC = () => {
             {abiertas.has("golpes") && (
               <div className="card pp-card">
                 <HitsCareer />
+              </div>
+            )}
+          </Ficha>
+
+          <Ficha
+            id="oleadas"
+            icon={<Waves size={14} aria-hidden="true" />}
+            label={t("Waves and macro")}
+            value={<span className="pp-ex-soft">{t("invades, ganks and objectives against the waves, over your last games")}</span>}
+            open={abiertas.has("oleadas")}
+            onToggle={() => toggle("oleadas")}
+          >
+            {abiertas.has("oleadas") && (
+              <div className="card pp-card">
+                <WavesCareer />
               </div>
             )}
           </Ficha>

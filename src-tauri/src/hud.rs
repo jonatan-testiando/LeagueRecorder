@@ -289,8 +289,21 @@ pub async fn read_match_hud(app: tauri::AppHandle, match_id: String) -> Result<(
         return Err("Esta partida no tiene con qué: falta el vídeo o los datos de Riot.".into());
     }
     std::thread::spawn(move || {
+        use tauri::Emitter;
         if let Err(e) = procesar(&app, &match_id) {
             log::warn!("hud: {match_id}: {e}");
+            return;
+        }
+        // Con las peleas ya sabidas, las barras sobre los campeones en ellas
+        // (la línea de fuego). Al acabar se avisa otra vez para que la
+        // sección se refresque con ella.
+        if crate::barras::falta(&app, &match_id) {
+            match crate::barras::procesar(&app, &match_id) {
+                Ok(()) => {
+                    let _ = app.emit("hud_progress", (match_id.clone(), 100.0));
+                }
+                Err(e) => log::warn!("barras: {match_id}: {e}"),
+            }
         }
     });
     Ok(())

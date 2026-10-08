@@ -131,6 +131,15 @@ export const HitsTaken: React.FC<Props> = ({ matchId, onSeek }) => {
           t("{p}% ended in your death", { p: pct(r.died, r.openers) }),
         ].filter(Boolean).join(" · ")}
       </p>
+      {r.line_known > 0 && (
+        <p className="note" style={{ margin: 0 }}>
+          {t("When the first hit landed you were moving sideways in {lat}% of them, away along their line in {away}% and towards them in {tow}% (moving at random, sideways would be about 67%).", {
+            lat: pct(r.line_lateral, r.line_known),
+            away: pct(r.line_away, r.line_known),
+            tow: pct(r.line_toward, r.line_known),
+          })}
+        </p>
+      )}
 
       <div className="ht-stats">
         <div className="ht-stat">
@@ -175,6 +184,10 @@ export const HitsTaken: React.FC<Props> = ({ matchId, onSeek }) => {
                 {a.died && <span className="ds-tag ds-tag--bad">{t("ended in your death")}</span>}
                 {a.straight === true && <span className="ds-tag ds-tag--bad">{t("straight line")}</span>}
                 {a.from_fog && <span className="ds-tag">{t("from the fog")}</span>}
+                {a.line === "lateral" && <span className="ds-tag">{t("moving sideways")}</span>}
+                {a.line === "away" && <span className="ds-tag ds-tag--bad">{t("fleeing along their line")}</span>}
+                {a.line === "toward" && <span className="ds-tag">{t("moving towards them")}</span>}
+                {a.line === "offscreen" && <span className="ds-tag">{t("enemy off your screen")}</span>}
                 {a.enemies_near > 1 && <span className="ds-tag">{t("{n} enemies close", { n: a.enemies_near })}</span>}
                 {a.reaction && (
                   <span className="ds-tag">{t("{key} after {s} s", { key: a.reaction.key, s: a.reaction.secs.toFixed(2) })}</span>
@@ -191,7 +204,7 @@ export const HitsTaken: React.FC<Props> = ({ matchId, onSeek }) => {
         </button>
       )}
       <p className="note" style={{ margin: 0 }}>
-        {t("A fight starts with the first hit of 5%+ of your health after 5 s without taking any, with an enemy within reach on the minimap. From the fog: no enemy was visible near you in the 4 s before. Missed abilities can't be counted: nothing records them.")}
+        {t("A fight starts with the first hit of 5%+ of your health after 5 s without taking any, with an enemy within reach on the minimap. From the fog: no enemy was visible near you in the 4 s before. Sideways or along their line: your last move order against the closest enemy on your screen, from the health bars above the champions. Missed abilities can't be counted: nothing records them.")}
       </p>
     </div>
   );

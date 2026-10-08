@@ -207,7 +207,7 @@ fn giro(a: f64, b: f64) -> f64 {
 ///
 /// `ordenes` son los clics derechos ya filtrados por [`crate::hands::ordenes`]:
 /// `(t, x, y, radio, rumbo)`, ordenados por tiempo.
-fn ventana_de_mano(ordenes: &[(f64, f64, f64, f64, f64)], t_video: f64) -> Option<HandWindow> {
+pub(crate) fn ventana_de_mano(ordenes: &[(f64, f64, f64, f64, f64)], t_video: f64) -> Option<HandWindow> {
     if ordenes.is_empty() {
         return None;
     }

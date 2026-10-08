@@ -438,6 +438,8 @@ export interface MinimapBatchStatus {
   pending: number;
   /** Medidas con el detector anterior (sin el recuadro de la cámara). */
   outdated?: number;
+  /** Sin el HUD leído (vida y efectos, para "Golpes que te comes"). */
+  hud_pending?: number;
   batch: MinimapBatch | null;
 }
 
@@ -824,6 +826,59 @@ export const getSpellAutopsy = async (matchId: string): Promise<SpellReport> => 
 };
 
 /** Lo mismo sobre todo el historial ya sincronizado. No gasta cuota de API. */
+/** Lo que te puso un golpe, si su icono se reconoció en la fila de efectos. */
+export interface HitEffect {
+  champion: string;
+  /** "Q", "W", "E", "R", "P" o el invocador ("Ignite"); null si no se sabe. */
+  ability: string | null;
+  icon: string;
+}
+
+/** Una pelea que te empezó un rival (ver `golpes.rs`). */
+export interface HitOpener {
+  t_game: number;
+  t_video: number;
+  hit_pct: number;
+  hit_hp: number | null;
+  hp_before_pct: number;
+  fight_pct: number;
+  fight_hits: number;
+  enemies_near: number;
+  from_fog: boolean;
+  straight: boolean | null;
+  reaction: { key: string; secs: number } | null;
+  effect: HitEffect | null;
+  died: boolean;
+}
+
+export interface HitsReport {
+  /** "ok", "no_hud", "reading", "hud_unreadable", "no_minimap" o "no_riot". */
+  status: string;
+  matches: number;
+  hits: number;
+  openers: number;
+  straight: number;
+  straight_known: number;
+  from_fog: number;
+  died: number;
+  matches_with_keys: number;
+  reaction_known: number;
+  reaction_n: number;
+  reaction_p50: number | null;
+  effects: { effect: HitEffect; times: number; icon_url: string | null }[];
+  list: HitOpener[];
+}
+
+export const getHitsTaken = async (matchId: string): Promise<HitsReport> =>
+  await invoke<HitsReport>("get_hits_taken", { matchId });
+
+export const getHitsTakenCareer = async (): Promise<HitsReport> =>
+  await invoke<HitsReport>("get_hits_taken_career");
+
+/** Lee el HUD de una partida (vida y efectos). El avance llega por `hud_progress`. */
+export const readMatchHud = async (matchId: string): Promise<void> =>
+  await invoke<void>("read_match_hud", { matchId });
+
 export const getSpellDiet = async (): Promise<SpellReport> => {
   return await invoke<SpellReport>("get_spell_diet");
 };

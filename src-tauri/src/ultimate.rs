@@ -86,6 +86,23 @@ pub fn spawn_keyboard_listener(
                         training.note_key(key);
                     }
 
+                    // Habilidades e invocadores: se guardan en la estela con la
+                    // posición del cursor, como un clic más (`key_q`…`key_f`).
+                    // Sólo esas seis teclas y sólo grabando: es lo que dice cuándo
+                    // reaccionaste a un golpe, y nada más del teclado sale de aquí.
+                    // Con Ctrl es subir de nivel la habilidad, no lanzarla.
+                    if is_counting && is_new_press && !ctrl_pressed.load(Ordering::Relaxed) {
+                        if let Some(evt) = tecla_de_juego(key) {
+                            let (x, y) = *state.current_mouse_pos.lock().unwrap();
+                            state.mouse_events.lock().unwrap().push((
+                                Instant::now(),
+                                x,
+                                y,
+                                evt.to_string(),
+                            ));
+                        }
+                    }
+
                     // Atajo de replay: guarda los últimos 30 s que el buffer tiene
                     // en memoria. Solo mientras hay grabación (sin buffer no hay
                     // nada que clipar) y con antirrebote, porque la tecla se
@@ -184,6 +201,22 @@ pub fn spawn_keyboard_listener(
             );
         }
     });
+}
+
+/// El evento de estela de una tecla de habilidad o invocador, o `None` si la
+/// tecla no es de esas. Son las teclas por defecto del juego; quien las tenga
+/// cambiadas no verá su reacción medida, pero tampoco una inventada.
+pub(crate) fn tecla_de_juego(key: rdev::Key) -> Option<&'static str> {
+    use rdev::Key;
+    Some(match key {
+        Key::KeyQ => "key_q",
+        Key::KeyW => "key_w",
+        Key::KeyE => "key_e",
+        Key::KeyR => "key_r",
+        Key::KeyD => "key_d",
+        Key::KeyF => "key_f",
+        _ => return None,
+    })
 }
 
 /// ¿Está el atajo de replay dentro de su ventana de antirrebote? Si no lo está,

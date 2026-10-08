@@ -729,9 +729,15 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
             return Ok(l.clone());
         }
     }
-    // Primero las que no tienen nada medido; luego las del detector anterior.
+    // Primero las que no tienen nada medido; luego las del detector anterior;
+    // luego las que sólo esperan a que se lea su HUD (ver `crate::hud`).
     let mut ids = pendientes(app);
     ids.extend(desactualizadas(app));
+    for id in crate::hud::pendientes(app) {
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
     let inicial = Lote { total: ids.len(), activo: !ids.is_empty(), ..Default::default() };
     *lote().lock().map_err(|_| "estado interno corrupto")? = Some(inicial.clone());
     if ids.is_empty() {
@@ -755,18 +761,26 @@ pub fn lanzar_lote(app: &tauri::AppHandle) -> Result<Lote, String> {
                 }
             }
             publicar(&app);
-            let lanzado = spawn_processing(&app, &id).is_ok();
-            // Espera a que termine (el hilo de `spawn_processing` se quita del
-            // registro al acabar, bien o mal).
-            while lanzado
-                && en_curso().lock().map(|m| m.contains_key(&id)).unwrap_or(false)
-            {
-                std::thread::sleep(std::time::Duration::from_millis(1000));
+            if !(ruta(&id).exists() && es_actual(&id)) {
+                let lanzado = spawn_processing(&app, &id).is_ok();
+                // Espera a que termine (el hilo de `spawn_processing` se quita del
+                // registro al acabar, bien o mal).
+                while lanzado
+                    && en_curso().lock().map(|m| m.contains_key(&id)).unwrap_or(false)
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                }
+            }
+            // La vida y los efectos, del mismo vídeo (bloquea hasta acabar).
+            if !LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst) && crate::hud::falta(&app, &id) {
+                if let Err(e) = crate::hud::procesar(&app, &id) {
+                    log::warn!("lote: HUD de {id}: {e}");
+                }
             }
             let parado = LOTE_PARAR.load(std::sync::atomic::Ordering::SeqCst);
             if let Ok(mut l) = lote().lock() {
                 if let Some(l) = l.as_mut() {
-                    if es_actual(&id) {
+                    if es_actual(&id) && !crate::hud::falta(&app, &id) {
                         l.hechas += 1;
                     } else if !parado {
                         l.fallidas += 1;
@@ -792,6 +806,7 @@ pub fn parar_lote() {
     LOTE_PARAR.store(true, std::sync::atomic::Ordering::SeqCst);
     if let Some(actual) = estado_lote().and_then(|l| l.actual) {
         cancelar(&actual);
+        crate::hud::cancelar(&actual);
     }
 }
 
@@ -810,6 +825,7 @@ pub fn cancelar_todo() {
     for id in ids {
         cancelar(&id);
     }
+    crate::hud::cancelar_todo();
 }
 
 /// Lanza el procesado del vídeo de una partida para extraer posiciones densas.

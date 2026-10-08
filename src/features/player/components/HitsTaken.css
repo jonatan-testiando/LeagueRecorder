@@ -1,0 +1,40 @@
+/* "Golpes que te comes" (HitsTaken). Prefijo `ht-`; las filas reusan las de
+   DeathsSection (`ds-`). Solo tokens de index.css. */
+
+.ht-stats { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); }
+.ht-stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ht-stat strong { font-size: 15px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.ht-stat small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.ht-effects { display: flex; flex-wrap: wrap; gap: 4px; }
+.ht-effect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 8px 0 3px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  color: var(--text);
+}
+.ht-effect img { width: 18px; height: 18px; border-radius: 4px; }
+.ht-more { align-self: flex-start; }
+
+/* Sin el HUD leído: el aviso con su botón, y la barra mientras se lee. */
+.ht-read {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.ht-read__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--text); }
+.ht-read__track { height: 6px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--muted) 14%, transparent); overflow: hidden; }
+.ht-read__track > i { display: block; height: 100%; border-radius: var(--radius-full); background: var(--brand); transition: width var(--t-slow) var(--e-move); }
+.ht-read__note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
+.ht-read__note--err { color: var(--loss); }
+
+/* Resumen de varias partidas (HitsCareer). */
+.ht-career { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-3); }

@@ -146,6 +146,12 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
       if (typeof pct !== "number" || pct < 0 || pct >= 100) setMinimap(null);
       else setMinimap({ pct, at: Date.now() });
     });
+    // La lectura del HUD (golpes que te comes) va detrás, sobre el mismo vídeo.
+    const paraHud = listen<[string, number]>("hud_progress", (e) => {
+      const pct = e.payload?.[1];
+      if (typeof pct !== "number" || pct < 0 || pct >= 100) setMinimap(null);
+      else setMinimap({ pct, at: Date.now() });
+    });
     const cada = setInterval(() => {
       refreshDisk();
       refreshAudio();
@@ -156,6 +162,7 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
       paraClave.then((f) => f()).catch(() => {});
       paraAlerta.then((f) => f()).catch(() => {});
       paraMinimapa.then((f) => f()).catch(() => {});
+      paraHud.then((f) => f()).catch(() => {});
     };
   }, [refreshDisk, refreshAudio]);
 

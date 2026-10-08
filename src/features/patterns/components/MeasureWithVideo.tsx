@@ -24,6 +24,8 @@ export const MeasureWithVideo: React.FC = () => {
   const [pending, setPending] = useState<number | null>(null);
   /** Medidas con el detector anterior (sin el recuadro de la cámara). */
   const [outdated, setOutdated] = useState(0);
+  /** Con el minimapa al día pero sin el HUD leído (golpes que te comes). */
+  const [hudPending, setHudPending] = useState(0);
   const [batch, setBatch] = useState<MinimapBatch | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,6 +37,7 @@ export const MeasureWithVideo: React.FC = () => {
           if (!vivo) return;
           setPending(s.pending);
           setOutdated(s.outdated ?? 0);
+          setHudPending(s.hud_pending ?? 0);
           setBatch(s.batch);
         })
         .catch(() => {});
@@ -94,6 +97,29 @@ export const MeasureWithVideo: React.FC = () => {
         <p className="mv__note">
           {t("The new one also reads the camera box, so it follows YOUR icon instead of a teammate's: wrong in ~40% of moments before, ~3% now. About {min} min in total.", {
             min: outdated * 4,
+          })}
+        </p>
+        {error && <p className="mv__note mv__note--err">{error}</p>}
+      </div>
+    );
+  }
+
+  if (pending === 0 && outdated === 0 && hudPending > 0) {
+    return (
+      <div className="mv">
+        <div className="mv__row">
+          <span>
+            {hudPending === 1
+              ? t("1 game doesn't have its hits read yet.")
+              : t("{n} games don't have their hits read yet.", { n: hudPending })}
+          </span>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={empezar}>
+            {hudPending === 1 ? t("Read it") : t("Read them")}
+          </button>
+        </div>
+        <p className="mv__note">
+          {t("Reads your health bar and the effects enemies put on you, for \"Hits you take\". About {min} min in total.", {
+            min: hudPending * 3,
           })}
         </p>
         {error && <p className="mv__note mv__note--err">{error}</p>}

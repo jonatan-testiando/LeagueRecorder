@@ -14,6 +14,8 @@ mod dataset_generator;
 mod gank;
 mod gold;
 mod track;
+mod hud;
+mod golpes;
 mod hands;
 mod jungle_route;
 mod minimap;
@@ -342,6 +344,9 @@ pub fn run() {
             gold::get_gold_report,
             track::get_match_track,
             track::export_route_video,
+            hud::read_match_hud,
+            golpes::get_hits_taken,
+            golpes::get_hits_taken_career,
             hands::get_hand_career,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,

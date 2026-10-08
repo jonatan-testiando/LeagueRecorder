@@ -19,6 +19,7 @@ import { formatGold, formatSeconds } from "./pressureFormat";
 import { JungleRouteWidget } from "./JungleRouteWidget";
 import { RouteReplay } from "./RouteReplay";
 import { DeathsSection } from "./DeathsSection";
+import { HitsTaken } from "./HitsTaken";
 import { GoldPurchases } from "./GoldPurchases";
 import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
@@ -2077,6 +2078,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   videoOffset={match.video_offset ?? 0}
                   onSeek={(secs) => seekTo(secs, false)}
                 />
+              </InspSection>
+            )}
+
+            {/* Las peleas que te empezaron: de la barra de vida del HUD. */}
+            {!match.is_vod && (
+              <InspSection id="hits" title={t("Hits you take")}>
+                <HitsTaken matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
               </InspSection>
             )}
 

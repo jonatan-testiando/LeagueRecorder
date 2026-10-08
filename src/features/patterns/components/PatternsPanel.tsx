@@ -45,6 +45,7 @@ import {
   Map as MapIcon,
   Play,
   Route as RouteIcon,
+  Crosshair,
   Swords,
   TrendingUp,
   Users,
@@ -62,6 +63,7 @@ import { getJungleRoutes, JUNGLE_AGREEMENT_MIN, type JungleRouteGame } from "../
 import { ACTIVITY_ORDER, activityLabel, BUDGET_PARTS } from "../../player/jungleRoute";
 import { HandWidget } from "../../player/components/HandWidget";
 import { SpellDietWidget } from "../../player/components/SpellDietWidget";
+import { HitsCareer } from "../../player/components/HitsCareer";
 import { PerformanceTrendsWidget } from "../../player/components/PerformanceTrendsWidget";
 import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
@@ -1875,6 +1877,21 @@ export const PatternsPanel: React.FC = () => {
             {abiertas.has("hechizos") && (
               <div className="card pp-card">
                 <SpellDietWidget />
+              </div>
+            )}
+          </Ficha>
+
+          <Ficha
+            id="golpes"
+            icon={<Crosshair size={14} aria-hidden="true" />}
+            label={t("Hits you take")}
+            value={<span className="pp-ex-soft">{t("the fights enemies start on you, over your last games")}</span>}
+            open={abiertas.has("golpes")}
+            onToggle={() => toggle("golpes")}
+          >
+            {abiertas.has("golpes") && (
+              <div className="card pp-card">
+                <HitsCareer />
               </div>
             )}
           </Ficha>

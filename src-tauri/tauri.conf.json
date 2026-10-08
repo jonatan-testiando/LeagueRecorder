@@ -41,6 +41,7 @@
       "../python_scripts/analyzer.py": "python_scripts/analyzer.py",
       "../python_scripts/camera_snaps.py": "python_scripts/camera_snaps.py",
       "../python_scripts/minimap_positions.py": "python_scripts/minimap_positions.py",
+      "../python_scripts/hud_vida.py": "python_scripts/hud_vida.py",
       "../python_scripts/yolo_backend.py": "python_scripts/yolo_backend.py",
       "../models/minimap_icons.onnx": "models/minimap_icons.onnx",
       "../models/cursor_multi_fp32.onnx": "models/cursor_multi_fp32.onnx",

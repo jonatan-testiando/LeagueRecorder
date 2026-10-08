@@ -353,6 +353,9 @@ pub struct MinimapBatchStatus {
     /// Medidas con el detector anterior (sin el recuadro de la cámara): el
     /// lote también las vuelve a medir.
     pub outdated: usize,
+    /// Con el minimapa al día pero sin el HUD leído (vida y efectos, para
+    /// "Golpes que te comes"): el lote también las lee.
+    pub hud_pending: usize,
     pub batch: Option<crate::minimap::Lote>,
 }
 
@@ -361,6 +364,7 @@ pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStat
     Ok(MinimapBatchStatus {
         pending: crate::minimap::pendientes(&app).len(),
         outdated: crate::minimap::desactualizadas(&app).len(),
+        hud_pending: crate::hud::pendientes(&app).len(),
         batch: crate::minimap::estado_lote(),
     })
 }

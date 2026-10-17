@@ -16,6 +16,7 @@ mod gold;
 mod track;
 mod hud;
 mod golpes;
+mod franja;
 mod oleadas;
 mod barras;
 mod hands;
@@ -349,6 +350,7 @@ pub fn run() {
             hud::read_match_hud,
             golpes::get_hits_taken,
             golpes::get_hits_taken_career,
+            franja::get_episode_strip,
             oleadas::get_waves,
             oleadas::get_waves_career,
             barras::get_aim,

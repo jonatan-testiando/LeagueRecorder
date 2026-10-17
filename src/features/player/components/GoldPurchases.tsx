@@ -25,7 +25,7 @@ const MISMA_VISITA_S = 45;
 /** Ventana en la que una compra se considera responsable de una participación. */
 const PICO_S = 180;
 /** Menos que esto al volver no da para un componente. */
-const VUELTA_CORTA = 500;
+export const VUELTA_CORTA = 500;
 const PRIMERA_PAGINA = 6;
 
 const PARTES: { key: keyof GoldIncome; label: string; tone: string }[] = [

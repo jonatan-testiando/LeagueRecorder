@@ -29,7 +29,7 @@ export const WavesCareer: React.FC = () => {
   if (!r || r.status !== "ok" || r.matches === 0) {
     return (
       <p className="note" style={{ margin: 0 }}>
-        {t("No game has its waves read yet. Open a game's Waves and macro section, or measure them with the video (above).")}
+        {t("No game has its waves read yet. Open a game's Game tab, or measure them with the video (above).")}
       </p>
     );
   }

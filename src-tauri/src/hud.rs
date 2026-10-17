@@ -23,6 +23,27 @@ pub fn ruta(match_id: &str) -> PathBuf {
     crate::storage::get_match_dir(match_id).join(FICHERO)
 }
 
+/// Por debajo de esta fracción de fotogramas con barra verde, el HUD no estaba
+/// donde se le buscó (otra escala de HUD en el juego): la vida no se puede
+/// leer y un 0 no quiere decir nada. Muerto también da 0, pero nadie pasa más
+/// de media partida muerto. Ver la cabecera de `hud_vida.py`.
+pub const LEGIBLE: f64 = 0.5;
+
+#[derive(serde::Deserialize)]
+struct Vida {
+    fps: f64,
+    hud_ok: f64,
+    hp: Vec<i32>,
+}
+
+/// La serie de vida de un `hud_vida.json`: `(fps, hp)`, con `hp[i]` en
+/// milésimas de la barra en el segundo de VÍDEO `i / fps`. `None` si el
+/// fichero no se entiende o el HUD no es legible (`LEGIBLE`).
+pub fn vida(raw: &str) -> Option<(f64, Vec<i32>)> {
+    let v: Vida = serde_json::from_str(raw).ok()?;
+    (v.hud_ok >= LEGIBLE && v.fps > 0.0).then_some((v.fps, v.hp))
+}
+
 /// Procesos de lectura en marcha, por partida, con su PID para poder pararlos.
 fn en_curso() -> &'static std::sync::Mutex<std::collections::HashMap<String, (u32, bool)>> {
     static M: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, (u32, bool)>>> =

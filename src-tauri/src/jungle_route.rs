@@ -531,6 +531,15 @@ fn calcular(id: &str) -> RouteResponse {
     resp(status, c.route)
 }
 
+/// La ruta de una partida, la MISMA que enseña `get_jungle_route` (de la caché
+/// si está al día). Quien cuente algo de la ruta en otra pestaña tiene que
+/// salir de aquí y no volver a llamar a `build`: las oleadas lo hacían, con el
+/// rastro del momento y su propio filtro de acuerdo, y la misma partida daba
+/// «Invasiones 14» en la ruta y «6 de 13» en las oleadas.
+pub fn ruta_de_partida(id: &str) -> Option<Route> {
+    calcular(id).route
+}
+
 /// La ruta de jungla de una partida.
 #[tauri::command]
 pub async fn get_jungle_route(match_id: String) -> RouteResponse {

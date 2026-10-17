@@ -49,9 +49,12 @@ export interface BenchmarkWidgetProps {
   /** Cuántas métricas enseñar antes de "ver todas". Sin él, todas. Las
    *  primeras son las más relevantes para tu puesto (`sortByRelevance`). */
   limit?: number;
+  /** Dentro de otro bloque (Ventaja): sin la línea de "contra quién" encima;
+   *  va en el `title` del resumen, que es lo que se lee. */
+  compact?: boolean;
 }
 
-export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role, tierBucket, limit }) => {
+export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role, tierBucket, limit, compact }) => {
   const t = useT();
   const [todas, setTodas] = useState(false);
   const [rows, setRows] = useState<MetricComparison[] | null>(null);
@@ -137,8 +140,8 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
 
   return (
     <div>
-      {subtitulo && <p className="note" style={styles.sub}>{subtitulo}</p>}
-      {resumen && <p style={styles.resumen}>{resumen}</p>}
+      {subtitulo && !(compact && resumen) && <p className="note" style={styles.sub}>{subtitulo}</p>}
+      {resumen && <p style={styles.resumen} title={compact ? subtitulo ?? undefined : undefined}>{resumen}</p>}
 
       <div style={styles.lista}>
         {(limit && !todas ? ordenadas.filter((m) => METRIC_META[m.metric]).slice(0, limit) : ordenadas).map((m) => {

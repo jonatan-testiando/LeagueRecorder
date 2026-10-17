@@ -295,7 +295,7 @@ pub fn analizar(e: &Entrada) -> GolpesReport {
         r.status = "hud_unreadable".into();
         return r;
     };
-    if hud.hud_ok < 0.5 || hud.fps <= 0.0 {
+    if hud.hud_ok < crate::hud::LEGIBLE || hud.fps <= 0.0 {
         r.status = "hud_unreadable".into();
         return r;
     }

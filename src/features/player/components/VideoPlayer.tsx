@@ -6,27 +6,18 @@ import { outcome, queueKey, lpDeltas } from "../../../core/matchStats";
 import {
   ArrowLeft, Eye, EyeOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, Flag, Check, RotateCcw,
-  Trash2, RefreshCw, FileText,
+  Trash2, FileText,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
-  BarChart3, Map as MapIcon
+  Map as MapIcon, Video as VideoIcon
 } from "lucide-react";
-import { cancelMatchMinimap, getAllErrorClips, getCameraLooks, getCameraZones, getMatchAttribution, getMatchDetails, getMatchPressure, getMinimapStatus, processMatchMinimap, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinimapStatus, type PlayerCredit, type PressureWindow, type ZoneStat } from "../../../core/tauri-ipc";
+import { getAllErrorClips, getCameraLooks, getMatchDetails, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock, relativeDay } from "../../../core/time";
-import { GoldXpChart } from "./GoldXpChart";
-import { PressureEpisodeCard } from "./PressureEpisodeCard";
-import { formatGold, formatSeconds } from "./pressureFormat";
-import { JungleRouteWidget } from "./JungleRouteWidget";
 import { RouteReplay } from "./RouteReplay";
-import { DeathsSection } from "./DeathsSection";
-import { HitsTaken } from "./HitsTaken";
-import { WavesSection } from "./WavesSection";
-import { AimSection } from "./AimSection";
-import { GoldPurchases } from "./GoldPurchases";
-import { GankEfficiencyWidget } from "./GankEfficiencyWidget";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
-import { InspSection } from "./InspSection";
-import { BenchmarkWidget } from "./BenchmarkWidget";
+import { MatchTab } from "./MatchTab";
+import { ImpactTab } from "./ImpactTab";
+import type { MapFocus, OpenMap } from "../mapFocus";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
@@ -38,12 +29,10 @@ import {
 } from "./eventMeta";
 import { buildQueue, analyzerFindings, type Moment, type Finding } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
-import { individualEvents, eventChampion, withChampionNames, champLabel } from "../../../core/matchEvents";
-import { champIcon, ddragonUrl } from "../../../core/ddragon";
-import { sameRole } from "../../../core/roles";
+import { individualEvents, eventChampion, withChampionNames } from "../../../core/matchEvents";
+import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
 import { useMatches } from "../../../store/useAppStore";
-import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../components/PositionIcon";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import { mix } from "../../../core/color";
@@ -158,8 +147,6 @@ interface VideoPlayerProps {
   onBack?: () => void;
 }
 
-const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
-const diffTone = (n: number): string => (n >= 0 ? "var(--win)" : "var(--loss)");
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   // El componente pasaba de 2100 líneas con todo dentro; ahora compone tres
@@ -227,20 +214,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     match.video_path ? "review" : "match"
   );
 
-  // Reparto de credito por dano real. Se pide al abrir la pestana de la partida
-  // y no antes: la primera vez puede costar dos llamadas a la API, luego sale de
-  // cache en disco.
-  const [credits, setCredits] = useState<PlayerCredit[] | null>(null);
-  const [creditsErr, setCreditsErr] = useState<string | null>(null);
-  // Tramos de presion absorbida. Se piden junto al credito, en la misma pestana.
-  const [pressure, setPressure] = useState<PressureWindow[] | null>(null);
-  const [pressureErr, setPressureErr] = useState<string | null>(null);
-  // Procesado del minimapa: en que punto esta y como va la pasada actual.
-  const [mmStatus, setMmStatus] = useState<MinimapStatus | null>(null);
-  const [mmPct, setMmPct] = useState<number | null>(null);
-  const [mmErr, setMmErr] = useState<string | null>(null);
-  // Reparto de tus miradas por carril. Sale de la posición del clic de minimapa.
-  const [zonas, setZonas] = useState<ZoneStat[]>([]);
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
   // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
@@ -295,9 +268,20 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
   const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
   const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
-  /** Qué ocupa el escenario: el vídeo o el Recorrido sobre el minimapa. El
-   *  vídeo sigue sonando debajo en los dos casos. */
-  const [stage, setStage] = useState<"video" | "route">("video");
+  /** Qué ocupa el escenario: el vídeo o el Mapa (el minimapa de la grabación
+   *  ampliado junto al vídeo). El vídeo sigue sonando en los dos casos. */
+  const [stage, setStageRaw] = useState<"video" | "route">("video");
+  /** Lo que el Mapa enseña al abrirse desde una fila de Partida o Impacto. */
+  const [mapFocus, setMapFocus] = useState<MapFocus | null>(null);
+  const setStage = useCallback((next: "video" | "route" | ((x: "video" | "route") => "video" | "route")) => {
+    setStageRaw((prev) => {
+      const v = typeof next === "function" ? next(prev) : next;
+      // Volver al vídeo cierra el foco: al reabrir el Mapa a mano se espera
+      // el mapa de siempre, no la última invasión que se miró.
+      if (v === "video") setMapFocus(null);
+      return v;
+    });
+  }, []);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [eventFilter, setEventFilter] = useState<"all" | "good" | "neutral" | "bad" | "pending">("all");
   const [showEsportsHud, setShowEsportsHud] = useState<boolean>(true);
@@ -316,6 +300,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
    */
   const hasVideo = !!match.video_path;
   const noVideoReason = ((match as unknown as { recording_error?: string }).recording_error ?? "").trim();
+
+  /** Abre el Mapa en un momento: salta el vídeo un poco antes y reproduce,
+   *  para ver llegar la jugada. Sin vídeo no hay minimapa que enseñar: salta
+   *  sólo el tiempo (no hace nada visible, pero tampoco rompe). */
+  const openMap: OpenMap = useCallback(
+    (focus) => {
+      const offset = match.video_offset ?? 0;
+      if (hasVideo) {
+        setMapFocus(focus);
+        setStageRaw("route");
+      }
+      seekTo(Math.max(0, focus.t + offset - (focus.lead ?? 5)), true);
+    },
+    [hasVideo, match.video_offset, seekTo]
+  );
+
+  /**
+   * Un solo reloj en todo el reproductor: el de la PARTIDA, el que se ve en el
+   * HUD del juego. Antes la lista de Revisión, la regla y el transporte iban
+   * en tiempo de vídeo y la pestaña Partida en tiempo de partida: el mismo gank
+   * salía a las 9:13 en un sitio y a las 10:11 en otro (58 s de pantalla de
+   * carga). Lo que se GUARDA y se busca sigue en tiempo de vídeo; esto es sólo
+   * cómo se enseña. Antes de empezar la partida (la pantalla de carga) sale en
+   * negativo.
+   */
+  const gameOffset = match.video_offset ?? 0;
+  const gclock = useCallback(
+    (videoSecs: number) => {
+      const g = videoSecs - gameOffset;
+      return g < 0 ? `−${clock(-g)}` : clock(g);
+    },
+    [gameOffset]
+  );
 
   /** Abre el explorador con el fichero seleccionado. */
   const revealVideo = useCallback(() => {
@@ -522,116 +539,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     }
   };
 
-  // El reparto de credito se pide al abrir la pestana de la partida, una sola
-  // vez por partida. Si falla no se reintenta en bucle: se guarda el motivo y se
-  // enseña, que es mas util que un panel vacio.
-  // OJO con las dependencias: `credits` NO puede estar aqui. Al estarlo, en
-  // cuanto la atribucion respondia y hacia setCredits, el efecto se re-ejecutaba
-  // y su limpieza ponia vivo=false, descartando la respuesta de presion que
-  // seguia en vuelo. Funcionaba mientras las dos iban a la API (la presion
-  // ganaba la carrera) y se rompio al cachear, cuando la atribucion paso a
-  // responder primero. El "ya pedido" se lleva en un ref, que no dispara
-  // re-ejecuciones.
-  //
-  // `intento` sube al pulsar Reintentar: es lo que permite volver a pedirlo sin
-  // reabrir la pestaña. Un fallo de la API dejaba el panel muerto hasta cambiar
-  // de partida y volver.
-  const pedidoRef = useRef<string | null>(null);
-  const [intento, setIntento] = useState(0);
-  const reintentar = useCallback(() => {
-    pedidoRef.current = null;
-    setCredits(null);
-    setCreditsErr(null);
-    setPressure(null);
-    setPressureErr(null);
-    setIntento((n) => n + 1);
-  }, []);
-  useEffect(() => {
-    if (tab !== "impact" || match.is_vod) return;
-    if (pedidoRef.current === match.id) return;
-    pedidoRef.current = match.id;
-    let vivo = true;
-    getMatchAttribution(match.id)
-      .then((rows) => { if (vivo) setCredits(rows); })
-      .catch((e) => { if (vivo) setCreditsErr(String(e)); });
-    // El error se ENSENA, no se traga: tragarselo hacia que un fallo del comando
-    // y "esta partida no tuvo tramos" fueran indistinguibles.
-    //
-    // Aqui se lanzaba ADEMAS el procesado del video (dos minutos de Python) solo
-    // por entrar en la pestana. Salia con consola propia -la ventana negra- y
-    // cerrarla mataba el trabajo antes de que escribiera nada, asi que a la
-    // siguiente visita vuelta a empezar. Ahora se pide desde el panel.
-    getCameraZones(match.id)
-      .then((z) => { if (vivo) setZonas(z); })
-      .catch(() => { if (vivo) setZonas([]); });
-    getMatchPressure(match.id)
-      .then((ws) => { if (vivo) setPressure(ws); })
-      .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
-    return () => { vivo = false; };
-  }, [tab, match.id, match.is_vod, intento]);
-
-  // Estado del procesado del video. Se consulta al abrir Impacto (y al cambiar
-  // de partida) y se mantiene al dia con el evento de progreso del backend.
-  useEffect(() => {
-    if (tab !== "impact" || match.is_vod) return;
-    let vivo = true;
-    setMmErr(null);
-    getMinimapStatus(match.id)
-      .then((st) => {
-        if (!vivo) return;
-        setMmStatus(st);
-        // Si quedo trabajo a medias, la barra arranca donde se quedo: lo hecho
-        // no se repite, y empezar de cero haria pensar que si.
-        setMmPct(st.state === "en_curso" ? st.saved_progress ?? 0 : null);
-      })
-      .catch(() => { if (vivo) setMmStatus(null); });
-    return () => { vivo = false; };
-  }, [tab, match.id, match.is_vod]);
-
-  useEffect(() => {
-    const un = listen<[string, number]>("minimap_progress", (e) => {
-      const [id, pct] = e.payload;
-      if (id !== match.id) return;
-      if (pct < 0) {
-        // -1 es "termino mal". Sin distinguirlo, el unico aviso de un fallo era
-        // una barra congelada a la mitad.
-        setMmPct(null);
-        setMmErr(t("The video analysis failed. Check the log for details."));
-        getMinimapStatus(match.id).then(setMmStatus).catch(() => {});
-        return;
-      }
-      setMmPct(pct);
-      if (pct >= 100) {
-        setMmPct(null);
-        getMinimapStatus(match.id).then(setMmStatus).catch(() => {});
-        // Los tramos se recalculan: ahora tienen el video detras y sus bordes
-        // dejan de ser una cota inferior.
-        getMatchPressure(match.id).then(setPressure).catch(() => {});
-      }
-    });
-    return () => { un.then((f) => f()).catch(() => {}); };
-  }, [match.id, t]);
-
-  const empezarMinimapa = async () => {
-    setMmErr(null);
-    setMmPct(mmStatus?.saved_progress ?? 0);
-    try {
-      await processMatchMinimap(match.id);
-      setMmStatus(await getMinimapStatus(match.id));
-    } catch (e) {
-      setMmPct(null);
-      setMmErr(t("Couldn't start the video analysis: {msg}", { msg: String(e) }));
-    }
-  };
-
-  const pararMinimapa = async () => {
-    try {
-      await cancelMatchMinimap(match.id);
-    } finally {
-      setMmPct(null);
-      setMmStatus(await getMinimapStatus(match.id).catch(() => null));
-    }
-  };
 
   // --- Redimensionar el panel lateral arrastrando su borde izquierdo ---
   // El ancho se mide contra el borde derecho del propio panel, no contra la
@@ -668,13 +575,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   // Elegimos un paso "redondo" para tener ~4-6 marcas legibles.
   const axisMarks = React.useMemo(() => {
     if (!isFinite(duration) || duration <= 0) return [];
+    // En tiempo de PARTIDA (ver `gclock`): el 0 de la regla es el 00:00 del
+    // juego, no el primer fotograma del vídeo. Se devuelven en tiempo de vídeo
+    // para colocarlos.
+    const juego = duration - gameOffset;
     const steps = [15, 30, 60, 120, 300, 600, 900]; // 15s..15min
-    let step = steps.find((paso) => duration <= paso * 6) ?? Math.ceil(duration / 6);
+    let step = steps.find((paso) => juego <= paso * 6) ?? Math.ceil(juego / 6);
     if (step <= 0) step = 15; // prevent infinite loop
     const marks: number[] = [];
-    for (let t = 0; t < duration; t += step) marks.push(t);
+    for (let t = 0; t < juego; t += step) marks.push(t + gameOffset);
     return marks;
-  }, [duration]);
+  }, [duration, gameOffset]);
   
   // --- Saltos de cámara (entrenamiento de teclas de aliado) ---
   // Los tiempos viven en la metadata; el resumen (checks/min, hueco ciego) se pide
@@ -718,6 +629,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     }
   };
 
+  /** Todas tus miradas al mapa (segundos de vídeo): saltos de cámara y clics
+   *  de minimapa. La cola de Revisión y la pestaña Partida cuentan lo mismo. */
+  const allLooks = React.useMemo(() => {
+    // Las dos listas suelen ser los MISMOS clics (los saltos de cámara salen
+    // de los clics de minimapa grabados; las miradas les añaden el carril):
+    // sin quitar repetidos, "3 miradas al mapa" eran 6. Se unen por décima.
+    const vistos = new Set<number>();
+    const out: number[] = [];
+    for (const t of [...cameraSnaps, ...cameraLooks.map((l) => l.t)]) {
+      const k = Math.round(t * 10);
+      if (vistos.has(k)) continue;
+      vistos.add(k);
+      out.push(t);
+    }
+    return out.sort((a, b) => a - b);
+  }, [cameraSnaps, cameraLooks]);
+
   // --- Hallazgos del analizador -------------------------------------------
   // Lecturas de lo que hiciste sacadas de datos ya grabados (miradas al mapa,
   // saltos de cámara), no sucesos de Riot. Van en violeta en la línea de tiempo,
@@ -726,7 +654,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     const deaths = timedEvents
       .filter((e) => e.type === "ChampionKill" && e.subtype === "death")
       .map((e) => e.time);
-    const looks = [...cameraSnaps, ...cameraLooks.map((l) => l.t)];
+    const looks = allLooks;
     return analyzerFindings(deaths, looks, moments, t);
   }, [timedEvents, cameraSnaps, cameraLooks, moments, t]);
 
@@ -1007,14 +935,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const result = outcome(match.result);
   const isWin = result === "victory";
 
-  // Quién ve la sección de ganks: el jungla siempre (es su trabajo) y cualquiera
-  // que tenga emboscadas detectadas.
-  const isJungler = sameRole(participants.find((p) => p.is_self)?.role, "JUNGLE");
-  const hasGankMarkers = (match.timeline_markers ?? []).some((m) => m.event_type === "gank_attempt");
-
-  // El jugador grabado: su puesto decide el baremo de rango.
-  const selfP = participants.find((p) => p.is_self);
-
   // La estela del ratón vive en su hook: canvas, rAF y sincronía.
   const { canvasRef, mouseSync, updateMouseSync } = useMouseTrailCanvas(videoRef, match, mouseEvents);
 
@@ -1054,19 +974,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             es la duración, pegado a la derecha; el que lo pisaría se calla. */}
         <div className="vp-track__ruler" style={{ height: RULER_H }}>
           {axisMarks
-            .filter((m) => m === 0 || ((duration - m) / duration) * (trackSize.w || 1000) >= 68)
-            .map((m) => (
-              <span
-                key={m}
-                className="u-time"
-                style={{ left: `${(m / duration) * 100}%`, transform: m === 0 ? "none" : "translateX(-50%)" }}
-              >
-                {clock(m)}
-              </span>
-            ))}
+            .filter((m) => ((duration - m) / duration) * (trackSize.w || 1000) >= 68)
+            .map((m) => {
+              // El 00:00 del juego cae a unos segundos del borde (la pantalla
+              // de carga): si no cabe centrado, se pega a la izquierda.
+              const pegado = (m / duration) * (trackSize.w || 1000) < 24;
+              return (
+                <span
+                  key={m}
+                  className="u-time"
+                  style={{ left: `${(m / duration) * 100}%`, transform: pegado ? "none" : "translateX(-50%)" }}
+                >
+                  {gclock(m)}
+                </span>
+              );
+            })}
           {duration > 0 && (
             <span className="u-time" style={{ left: "100%", transform: "translateX(-100%)" }}>
-              {clock(duration)}
+              {gclock(duration)}
             </span>
           )}
         </div>
@@ -1118,7 +1043,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                       <div
                         key={i}
                         style={{ ...styles.snapTick, left: `${(l.t / duration) * 100}%` }}
-                        title={`${carril} · ${clock(l.t)}`}
+                        title={`${carril} · ${gclock(l.t)}`}
                       />
                     ))}
                 </div>
@@ -1168,7 +1093,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               };
               if (it.finding) {
                 const f = it.finding;
-                const label = `${clock(f.time)} · ${f.title}`;
+                const label = `${gclock(f.time)} · ${f.title}`;
                 return (
                   <button
                     key={`${it.key}:${i}`}
@@ -1189,7 +1114,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               const meta = eventMeta(ev, 12);
               const champ = eventChampion(ev, participants);
               const desc = describeEvent(withChampionNames(ev, participants), t);
-              const label = [`${clock(ev.time)} · ${t(meta.label)}`, desc].filter(Boolean).join(" – ");
+              const label = [`${gclock(ev.time)} · ${t(meta.label)}`, desc].filter(Boolean).join(" – ");
               const glyph = <span className="vp-mark__glyph">{meta.icon}</span>;
               return (
                 <button
@@ -1233,7 +1158,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         {hoverPct !== null && hoverClientX !== null && (
           <div className="vp-tip" style={{ left: `${hoverPct * 100}%` }}>
             <div className="vp-tip__head">
-              <span className="u-time">{clock(hoverPct * duration)}</span>
+              <span className="u-time">{gclock(hoverPct * duration)}</span>
               {apmSeries.length > 0 && (
                 <span className="u-metric vp-tip__apm">
                   {t("{n} APM", {
@@ -1369,26 +1294,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       {/* Centésimas: en una herramienta de revisión hace falta señalar un
           instante, no un minuto. */}
       <span className="u-time vp-clock">
-        <b>{clock(currentTime)}.{String(Math.floor((currentTime % 1) * 100)).padStart(2, "0")}</b>
-        <span> / {clock(duration)}</span>
+        <b>{gclock(currentTime)}.{String(Math.floor((Math.abs(currentTime - gameOffset) % 1) * 100)).padStart(2, "0")}</b>
+        <span> / {duration > 0 ? gclock(duration) : clock(0)}</span>
       </span>
 
       <span className="vp-transport__fill" />
-
-      {/* El Recorrido: la partida dibujada sobre el minimapa. */}
-      {hasVideo && (
-        <button
-          type="button"
-          className="vp-tbtn vp-tbtn--text"
-          aria-pressed={stage === "route"}
-          onClick={() => setStage((x) => (x === "route" ? "video" : "route"))}
-          title={`${t(stage === "route" ? "Back to the video" : "Your video next to your recording's minimap")} (R)`}
-          style={stage === "route" ? { color: "var(--brand)" } : undefined}
-        >
-          <MapIcon size={14} />
-          <span className="vp-tbtn__label">{t("Route")}</span>
-        </button>
-      )}
 
       {/* Lo primero que cede si no cabe: se queda en el icono. */}
       {!isFullscreen && <span className="vp-transport__aux">{lookStats}</span>}
@@ -1505,7 +1415,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   })();
   const metaLine = [
     match.is_vod ? null : t(queueKey(match.queue)),
-    clock(duration),
+    // La duración de la PARTIDA, no la del vídeo (que suma la pantalla de carga).
+    // `game_duration` guarda lo que duró la GRABACIÓN (30:40 con 58 s de
+    // pantalla de carga): con el vídeo cargado manda la misma cuenta que el
+    // transporte, para que no digan dos duraciones distintas.
+    duration > 0 ? gclock(duration) : clock(match.game_duration),
     when,
     rankText,
   ]
@@ -1603,6 +1517,33 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         )}
         {hasVideo && (
           <div className="vp-top__actions">
+            {/* Vídeo o Mapa, a la vista y no escondido en la barra de
+                transporte: el Mapa es donde viven las estadísticas de mapa
+                (cada fila de Partida e Impacto lo abre en su momento). */}
+            <div className="vp-stage" role="group" aria-label={t("View")}>
+              <button
+                type="button"
+                className="vp-stage__btn"
+                aria-pressed={stage === "video"}
+                onClick={() => setStage("video")}
+                title={t("The video on its own")}
+              >
+                <VideoIcon size={15} />
+                {t("Video")}
+              </button>
+              <button
+                type="button"
+                className="vp-stage__btn"
+                aria-pressed={stage === "route"}
+                aria-keyshortcuts="R"
+                onClick={() => setStage("route")}
+                title={t("Your video next to your recording's minimap, with your trail and the waves")}
+              >
+                <MapIcon size={15} />
+                {t("Map")}
+                <kbd className="u-kbd">R</kbd>
+              </button>
+            </div>
             <span className="vp-top__sep" aria-hidden="true" />
             <button
               type="button"
@@ -1699,7 +1640,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             />
 
             {hasVideo && stage === "route" && (
-              <RouteReplay matchId={match.id} videoRef={videoRef} onClose={() => setStage("video")} />
+              <RouteReplay
+                matchId={match.id}
+                videoRef={videoRef}
+                onClose={() => setStage("video")}
+                focus={mapFocus}
+                onClearFocus={() => setMapFocus(null)}
+                selfTeam={participants.find((p) => p.is_self)?.team_id}
+                videoOffset={match.video_offset ?? 0}
+              />
             )}
 
             {!isFullscreen && stage !== "route" && noticeEl}
@@ -1809,14 +1758,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                   aria-label={t("Current moment")}
                 >
                   <div className="vp-feat__meta">
-                    <span className="u-time vp-feat__time">{clock(featured.time)}</span>
+                    <span className="u-time vp-feat__time">{gclock(featured.time)}</span>
                     <span className="vp-feat__kicker">{t("Current moment")}</span>
                     <span className="vp-feat__fill" />
                     {chipFor(featured)}
                   </div>
                   <h3 className="vp-feat__name">{featured.text}</h3>
                   <p className="vp-feat__desc">
-                    {featured.detail || `${featured.label} · ${t("minute")} ${Math.floor(featured.time / 60)}`}
+                    {featured.detail || `${featured.label} · ${t("minute")} ${Math.max(0, Math.floor((featured.time - gameOffset) / 60))}`}
                   </p>
                   <div className="vp-feat__actions">
                     {featured.moment && (
@@ -1885,7 +1834,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                         onClick={() => jumpToClip(r.time)}
                         title={r.detail ? `${r.text} · ${r.detail}` : r.text}
                       >
-                        <span className="u-time vp-ev__time">{clock(r.time)}</span>
+                        <span className="u-time vp-ev__time">{gclock(r.time)}</span>
                         <span className="vp-ev__icon" style={{ color: r.color }}>{r.icon}</span>
                         <span className="vp-ev__text">{r.text}</span>
                         {chipFor(r)}
@@ -1897,7 +1846,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                             className="vp-check"
                             checked={r.moment.reviewed}
                             onChange={() => toggleReviewed(r.moment!)}
-                            aria-label={t("Reviewed: {what}", { what: `${clock(r.time)} · ${r.text}` })}
+                            aria-label={t("Reviewed: {what}", { what: `${gclock(r.time)} · ${r.text}` })}
                           />
                         )}
                       </span>
@@ -1920,14 +1869,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 <div className="vp-notes__row">
                   <label className="vp-notes__field">
                     <span className="u-time vp-notes__at" title={t("Will be anchored to this moment")}>
-                      {clock(currentTime)}
+                      {gclock(currentTime)}
                     </span>
                     <input
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") addComment(); }}
                       placeholder={t("What would you do differently here…")}
-                      aria-label={t("Note for {time}", { time: clock(currentTime) })}
+                      aria-label={t("Note for {time}", { time: gclock(currentTime) })}
                     />
                   </label>
                   <button
@@ -1951,7 +1900,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                           onClick={() => seekTo(c.time, false)}
                           title={t("Jump to this moment")}
                         >
-                          {clock(c.time)}
+                          {gclock(c.time)}
                         </button>
                         {editingNote === i ? (
                           <>
@@ -1998,590 +1947,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           );
         })()}
 
+        {/* Partida: qué pasó. Ver MatchTab.tsx. */}
         {tab === "match" && (
-          <div className="insp">
-            {/* Rehecha el 2026-10-07 tras medirla: 15 secciones y ~6.700 px de
-                alto. Se quitó lo repetido ("Tu partida", "Objetivos"), lo que
-                habla de muchas partidas y no de esta se fue a Patrones ("Tu
-                mano", "Lo que te comes", las tendencias), y lo que hablaba de
-                lo mismo se juntó: tus muertes en una lista, y compras, picos
-                de poder y vueltas a base en otra. "Muertes en el mapa" la
-                sustituye el Recorrido (botón Recorrido, tecla R). */}
-
-            {/* ------------------------------------------------- la curva */}
-            {((match.minute_frames && match.minute_frames.length > 1) ||
-              match.gold_diff_15 != null || match.xp_diff_15 != null) && (
-              <InspSection id="lead" title={t("Lead over time")}>
-                {match.minute_frames && match.minute_frames.length > 1 && (
-                  <GoldXpChart
-                    frames={match.minute_frames}
-                    videoOffset={match.video_offset ?? 0}
-                    onSeek={(secs) => seekTo(secs, false)}
-                  />
-                )}
-                {/* El minuto 15 era una sección aparte con los mismos
-                    números que la curva: ahora es una línea debajo. */}
-                {(match.gold_diff_15 != null || match.xp_diff_15 != null || match.jungle_cs_diff_15 != null) && (
-                  <p className="note vp-at15">
-                    {t("At minute 15:")}{" "}
-                    {([
-                      [t("gold"), match.gold_diff_15],
-                      [t("XP"), match.xp_diff_15],
-                      [t("jungle CS"), match.jungle_cs_diff_15],
-                    ] as [string, number | null | undefined][])
-                      .filter(([, v]) => v != null)
-                      .map(([l, v], i) => (
-                        <React.Fragment key={l}>
-                          {i > 0 && " · "}
-                          {l} <b className="u-metric" style={{ color: diffTone(v as number) }}>{signed(v as number)}</b>
-                        </React.Fragment>
-                      ))}
-                    {match.lane_result && (
-                      <>
-                        {". "}
-                        {t(
-                          match.lane_result === "Win" ? "You came out of lane ahead."
-                            : match.lane_result === "Loss" ? "You came out of lane behind."
-                            : "You came out of lane even."
-                        )}
-                      </>
-                    )}
-                  </p>
-                )}
-              </InspSection>
-            )}
-
-            {/* -------------------------------------- frente a tu rango.
-                Cuatro métricas, las de tu puesto; el resto a un clic. */}
-            <InspSection id="benchmarks" title={t("Versus your rank")}>
-              {match.is_vod || !match.riot_match_id ? (
-                <EmptyState
-                  icon={<BarChart3 size={26} color="var(--faint)" />}
-                  title={t("No benchmarks for this game yet")}
-                  text={t("Sync with Riot to compare against your rank")}
-                />
-              ) : (
-                <BenchmarkWidget
-                  matchId={match.id}
-                  role={selfP?.role}
-                  tierBucket={match.tier_bucket}
-                  limit={4}
-                />
-              )}
-            </InspSection>
-
-            {/* ------------------------------------------------ tus muertes */}
-            {!match.is_vod && (
-              <InspSection id="deaths" title={t("Your deaths")}>
-                <DeathsSection
-                  matchId={match.id}
-                  markers={match.timeline_markers}
-                  cameraSnaps={cameraSnaps}
-                  videoOffset={match.video_offset ?? 0}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
-              </InspSection>
-            )}
-
-            {/* Las peleas que te empezaron: de la barra de vida del HUD. */}
-            {!match.is_vod && (
-              <InspSection id="hits" title={t("Hits you take")}>
-                <HitsTaken matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
-              </InspSection>
-            )}
-
-            {/* Cómo apuntas: de las teclas grabadas y las barras de vida. */}
-            {!match.is_vod && (
-              <InspSection id="aim" title={t("Your aim")} defaultOpen={false}>
-                <AimSection matchId={match.id} videoOffset={match.video_offset ?? 0} onSeek={(secs) => seekTo(secs, false)} />
-              </InspSection>
-            )}
-
-            {/* Dónde estaban las oleadas, y las decisiones que dependen de ello. */}
-            {!match.is_vod && (
-              <InspSection id="waves" title={t("Waves and macro")} defaultOpen={false}>
-                <WavesSection matchId={match.id} videoOffset={match.video_offset ?? 0} onSeek={(secs) => seekTo(secs, false)} />
-              </InspSection>
-            )}
-
-            {/* La ruta sale del rastro del minimapa: sólo para jungla. */}
-            {isJungler && !match.is_vod && (
-              <InspSection id="route" title={t("Jungle route")}>
-                <JungleRouteWidget matchId={match.id} onSeek={(secs) => seekTo(secs, false)} />
-              </InspSection>
-            )}
-
-            {/* Los ganks sólo cuando significan algo: un support al que le salen
-                cero emboscadas no necesita una sección que le diga cero. */}
-            {(isJungler || hasGankMarkers) && (
-              <InspSection id="ganks" title={t("Ganks")}>
-                <GankEfficiencyWidget
-                  markers={match.timeline_markers}
-                  gankImpact15={match.gank_impact_15}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
-              </InspSection>
-            )}
-
-            {/* ------------------------------------- oro, compras y bases */}
-            {!match.is_vod && (
-              <InspSection id="gold" title={t("Your gold and purchases")}>
-                <GoldPurchases
-                  matchId={match.id}
-                  itemPurchases={itemPurchases}
-                  markers={match.timeline_markers}
-                  ddragonVer={ddragonVer}
-                  videoOffset={match.video_offset ?? 0}
-                  onSeek={(secs) => seekTo(secs, false)}
-                />
-              </InspSection>
-            )}
-
-            {/* --------------------------------------------- el marcador */}
-            {participants.length > 0 ? (
-              // Consulta, no lectura: nace plegado.
-              <InspSection id="scoreboard" title={t("Scoreboard")} defaultOpen={false}>
-                {/* Un bloque por equipo: su nombre y resultado hacen de cabecera
-                    de las columnas. La cara del campeón y el icono de su
-                    posición dicen quién era cada uno antes que el nick. */}
-                {[100, 200].map((teamId) => {
-                  const team = participants.filter((p) => p.team_id === teamId);
-                  if (team.length === 0) return null;
-                  const won = team[0].win;
-                  const tone = won ? "var(--win)" : "var(--loss)";
-                  return (
-                    <div key={teamId} className="vp-sb">
-                      <div className="vp-sb__head">
-                        <span className="vp-sb__team">
-                          <i style={{ background: tone }} />
-                          {t(teamId === 100 ? "Blue Team" : "Red Team")}
-                          <em style={{ color: tone }}>{t(won ? "Victory" : "Defeat")}</em>
-                        </span>
-                        <span>{t("K/D/A")}</span>
-                        <span>{t("CS")}</span>
-                        <span>{t("Gold")}</span>
-                      </div>
-                      {team.map((p, i) => {
-                        const pos = normalizePosition(p.role);
-                        return (
-                          <div key={i} className="vp-sb__row" data-self={p.is_self || undefined}>
-                            <ChampFace
-                              champion={p.champion}
-                              size={28}
-                              className="vp-sb__face"
-                              fallback={<span className="vp-sb__face vp-sb__face--empty" />}
-                            />
-                            <span className="vp-sb__who">
-                              <span className="vp-sb__name">{p.is_self ? t("You") : (p.name || champLabel(p.champion))}</span>
-                              <span className="vp-sb__champ">
-                                {pos && (
-                                  <PositionIcon position={pos} size={12} color="var(--faint)" title={t(POSITION_LABEL[pos])} />
-                                )}
-                                {champLabel(p.champion)}
-                              </span>
-                            </span>
-                            <span className="u-metric vp-sb__kda">{p.kills}/{p.deaths}/{p.assists}</span>
-                            <span className="u-metric vp-sb__num">{p.cs}</span>
-                            <span className="u-metric vp-sb__num">{(p.gold / 1000).toFixed(1)}k</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </InspSection>
-            ) : match.is_vod ? (
-              // Antes, en un VOD, aquí no salía nada: un hueco entre dos
-              // secciones que se leía como "esto está roto".
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Scoreboard")}</span>
-                  <i className="sect__rule" />
-                </div>
-                <EmptyState
-                  title={t("No scoreboard for an imported VOD")}
-                  text={t("The 10-player scoreboard comes from your own game synced with Riot. An imported video has no match behind it.")}
-                />
-              </section>
-            ) : (
-              <section>
-                <p className="note">{t("The 10-player scoreboard is not loaded yet.")}</p>
-                <button className="btn btn--primary btn--sm" onClick={handleSync} disabled={syncing}>
-                  <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-                  {syncing ? t("Syncing…") : t("Sync with Riot")}
-                </button>
-                <p className="note">{t("Needs your Riot API key set in Settings.")}</p>
-              </section>
-            )}
-
-
-            {!match.is_vod && participants.length > 0 && (
-              <button className="btn btn--ghost btn--sm insp__resync" onClick={handleSync} disabled={syncing}>
-                <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-                {syncing ? t("Updating…") : t("Refresh Riot data")}
-              </button>
-            )}
-          </div>
+          <MatchTab
+            match={currentMatch}
+            participants={participants}
+            itemPurchases={itemPurchases}
+            ddragonVer={ddragonVer}
+            // Las mismas miradas que cuenta la cola de Revisión (saltos de
+            // cámara + clics de minimapa): si no, "sin mirar el mapa" diría
+            // una cosa aquí y otra allí.
+            cameraSnaps={allLooks}
+            syncing={syncing}
+            onSync={handleSync}
+            seekTo={seekTo}
+            onOpenMap={openMap}
+          />
         )}
 
-        {/* Impacto responde "que significo", frente a Partida que responde
-            "que paso". Estaban mezcladas en la misma columna y lo mas
-            diferencial quedaba al final de un scroll largo. */}
-        {tab === "impact" && match.is_vod && (
-          // La pestaña entera estaba condicionada a `!match.is_vod` sin decir
-          // nada: en un VOD se abría vacía y parecía un fallo.
-          <div className="insp">
-            <EmptyState
-              title={t("No impact for an imported VOD")}
-              text={t("Impact needs a recorded game synced with Riot; imported VODs have no match data behind them.")}
-            />
-          </div>
-        )}
-
-        {tab === "impact" && !match.is_vod && (
-          <div className="insp">
-            {/* --------------------------------------- tu impacto
-                El puesto y el percentil ya existian, pero solo en la columna de
-                la biblioteca: quien abria esta pestana veia la tabla de los diez
-                y tenia que buscarse. Y un puesto suelto no se puede revisar, asi
-                que va con el desglose de DONDE salio. */}
-            {!match.is_vod && credits !== null && (() => {
-              const yo = participants.findIndex((p) => p.is_self) + 1;
-              const mio = credits.find((c) => c.participant_id === yo);
-              if (!mio) return null;
-              const puesto =
-                [...credits]
-                  .sort((a, b) => b.role_percentile - a.role_percentile)
-                  .findIndex((c) => c.participant_id === yo) + 1;
-              const partes: [string, number][] = [
-                [t("kills"), mio.wpa_kills],
-                [t("objectives"), mio.wpa_objectives],
-                [t("structures"), mio.wpa_structures],
-                [t("deaths"), mio.wpa_deaths],
-              ];
-              // Todas las barras contra la misma escala: la parte mas grande de
-              // esta partida llena medio carril. Escalar cada una por su cuenta
-              // haria que una aportacion minuscula pareciera enorme.
-              const escala = Math.max(...partes.map(([, v]) => Math.abs(v)), 0.01);
-              return (
-                <section>
-                  <div className="sect__head">
-                    <span className="u-label">{t("Your impact")}</span>
-                    <i className="sect__rule" />
-                  </div>
-                  <div className="imp__head">
-                    <span
-                      className="imp__rank"
-                      style={{ color: puesto === 1 ? "var(--win)" : puesto >= 8 ? "var(--loss)" : undefined }}
-                    >
-                      {/* El "º" es la abreviatura ORDINAL española, y salía
-                          igual con la interfaz en inglés ("3º"). */}
-                      {puesto === 1 ? t("MVP") : t("#{n}", { n: puesto })}
-                    </span>
-                    <span className="u-meta">{t("of")} {credits.length}</span>
-                    <span
-                      className="u-metric imp__pct"
-                      style={{ color: mio.role_percentile >= 50 ? "var(--win)" : "var(--loss)" }}
-                      title={`${t("win %")}: ${mio.wpa >= 0 ? "+" : ""}${(mio.wpa * 100).toFixed(1)} · ${mio.role}`}
-                    >
-                      {Math.round(mio.role_percentile)}
-                    </span>
-                    <span className="u-meta">{t("vs role")}</span>
-                  </div>
-                  <p className="note">
-                    {t("Win probability you added, and where it came from. The four parts add up to your total.")}
-                  </p>
-                  {partes.map(([nombre, v]) => {
-                    const ancho = (Math.abs(v) / escala) * 50;
-                    const color = v >= 0 ? "var(--win)" : "var(--loss)";
-                    return (
-                      <div key={nombre} className="imp__row">
-                        <span className="imp__rowName">{nombre}</span>
-                        <span className="imp__track">
-                          <span
-                            className="imp__bar"
-                            style={{
-                              background: color,
-                              width: `${ancho}%`,
-                              left: v >= 0 ? "50%" : `${50 - ancho}%`,
-                            }}
-                          />
-                        </span>
-                        <span className="u-metric imp__rowNum" style={{ color }}>
-                          {v >= 0 ? "+" : ""}{(v * 100).toFixed(1)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  <div className="imp__total">
-                    <span className="u-label">{t("Total")}</span>
-                    <span
-                      className="u-metric"
-                      style={{ color: mio.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
-                    >
-                      {mio.wpa >= 0 ? "+" : ""}{(mio.wpa * 100).toFixed(1)}
-                    </span>
-                  </div>
-                </section>
-              );
-            })()}
-
-            {/* --------------------------------------- credito real
-                El marcador reparte el oro de un asesinato entero al que remata.
-                Aqui se reparte por el dano que puso cada uno, que es quien hizo
-                el trabajo. El desfase entre ambos es la columna que importa. */}
-            {!match.is_vod && (credits !== null || creditsErr !== null) && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Real credit")}</span>
-                  <i className="sect__rule" />
-                </div>
-                {creditsErr !== null ? (
-                  <>
-                    <p className="note">{t("Couldn't work out the credit split: {msg}", { msg: creditsErr })}</p>
-                    <button className="btn btn--ghost btn--sm" onClick={reintentar}>
-                      <RefreshCw size={13} /> {t("Retry")}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="note">
-                      {t("Kill gold as the scoreboard hands it out (last hit) versus how it splits by damage actually dealt.")}
-                    </p>
-                    <div className="insp__legend u-label">
-                      <span>{t("Player")}</span><span>{t("Gap")}</span><span>{t("Win %")}</span><span>{t("Vs. role")}</span>
-                    </div>
-                    {/* Separado por bandos: la lista de los 10 mezclados ordena
-                        bien pero no se puede leer como rendimiento si no sabes
-                        quien jugaba contigo. Dentro de cada bando, por desfase. */}
-                    {(() => {
-                      const selfTeam = participants.find((p) => p.is_self)?.team_id;
-                      const grupos: Array<[string, PlayerCredit[]]> =
-                        selfTeam === undefined
-                          ? [["", [...credits!]]]
-                          : [
-                              [t("Your team"), credits!.filter((c) => c.team_id === selfTeam)],
-                              [t("Enemy team"), credits!.filter((c) => c.team_id !== selfTeam)],
-                            ];
-                      return grupos.map(([titulo, filas]) =>
-                        filas.length === 0 ? null : (
-                          <div key={titulo} className="insp__team">
-                            {titulo !== "" && (
-                              <div className="insp__teamHead"><span>{titulo}</span></div>
-                            )}
-                            {[...filas]
-                              .sort((a, b) => b.role_percentile - a.role_percentile)
-                              .map((c) => {
-                                // Por indice, no por nombre de campeon: en Blind
-                                // Pick los dos equipos pueden llevar el mismo y
-                                // saldrian dos "Tu". `participant_id` es 1..10 en
-                                // el mismo orden que Riot.
-                                const self = participants[c.participant_id - 1]?.is_self ?? false;
-                                const tone = c.credit_gap >= 0 ? "var(--win)" : "var(--loss)";
-                                return (
-                                  <div key={c.participant_id} className={`insp__player${self ? " insp__player--self" : ""}`}>
-                                    <img
-                                      src={champIcon(c.champion)}
-                                      alt={c.champion}
-                                      style={styles.champIcon}
-                                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                                    />
-                                    <span className="insp__playerName">
-                                      {self ? `${t("You")} · ${c.champion}` : c.champion}
-                                    </span>
-                                    <span className="u-metric insp__playerNum" style={{ color: tone }}
-                                      title={`${t("scoreboard")}: ${Math.round(c.killing_blow_gold)} · ${t("real")}: ${Math.round(c.damage_credit_gold)}`}>
-                                      {c.credit_gap >= 0 ? "+" : ""}{Math.round(c.credit_gap)}
-                                    </span>
-                                    <span className="u-metric insp__playerNum"
-                                      style={{ color: c.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
-                                      title={`${t("gold")}: ${Math.round(c.total_value)} (${t("objectives")}: ${Math.round(c.objective_gold)})`}>
-                                      {c.wpa >= 0 ? "+" : ""}{(c.wpa * 100).toFixed(1)}
-                                    </span>
-                                    <span className="u-metric insp__playerNum"
-                                      style={{ color: c.role_percentile >= 50 ? "var(--win)" : "var(--loss)" }}
-                                      title={`${t("win %")}: ${c.wpa >= 0 ? "+" : ""}${(c.wpa * 100).toFixed(1)} · ${c.role}`}>
-                                      {Math.round(c.role_percentile)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        ),
-                      );
-                    })()}
-                    {/* El coste real de morir: no es "-1 muerte", es el rato que
-                        estuviste fuera de la partida, que crece con el reloj. */}
-                    {(() => {
-                      const peor = credits!
-                        .flatMap((c) => c.deaths_detail.map((d) => ({ c, d })))
-                        .sort((a, b) => b.d.seconds_dead - a.d.seconds_dead)[0];
-                      if (!peor) return null;
-                      return (
-                        <p className="note">
-                          {t("Most expensive death")}: {peor.c.champion} · {t("minute")} {Math.round(peor.d.minute)} · {Math.round(peor.d.seconds_dead)}s
-                        </p>
-                      );
-                    })()}
-                  </>
-                )}
-              </section>
-            )}
-
-            {/* --------------------------------------- dónde miraste
-                El clic de minimapa lleva posición, así que la pregunta deja de
-                ser "¿miraste?" y pasa a ser "¿miraste DÓNDE?". El hueco por
-                carril es lo que se corrige jugando: un número global no dice
-                hacia qué lado tienes el punto ciego. */}
-            {zonas.length > 0 && (() => {
-              const CARRILES: Record<string, string> = { top: "Top", mid: "Mid", bot: "Bot" };
-              const masMirado = Math.max(...zonas.map((z) => z.per_minute), 0.01);
-              const peor = zonas.reduce((a, b) => (b.longest_gap_secs > a.longest_gap_secs ? b : a));
-              return (
-                <section>
-                  <div className="sect__head">
-                    <span className="u-label">{t("Where you looked")}</span>
-                    <i className="sect__rule" />
-                  </div>
-                  <p className="note">
-                    {t("Your minimap clicks, by lane. The gap is the longest stretch you left that lane unwatched.")}
-                  </p>
-                  {zonas.map((z) => {
-                    // Sólo se marca el PEOR. Con datos reales los tres huecos
-                    // pasan de dos minutos, así que pintarlos todos de rojo era
-                    // gritar sin decir cuál corregir.
-                    const malo = z.key === peor.key && z.longest_gap_secs > 120;
-                    return (
-                      <div key={z.key} className="imp__row">
-                        <span className="imp__rowName">{t(CARRILES[z.key] ?? z.key)}</span>
-                        <span className="imp__track">
-                          <span
-                            className="imp__bar"
-                            style={{
-                              background: "var(--cool)",
-                              width: `${(z.per_minute / masMirado) * 50}%`,
-                              left: "50%",
-                            }}
-                          />
-                        </span>
-                        <span
-                          className="u-metric imp__rowNum"
-                          style={{ color: malo ? "var(--loss)" : "var(--muted)" }}
-                          title={`${z.looks} ${t("looks")} · ${z.per_minute.toFixed(1)}/min`}
-                        >
-                          {clock(z.longest_gap_secs)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  <p className="note">
-                    {t("Longest blind spot")}: {t(CARRILES[peor.key] ?? peor.key)} · {clock(peor.longest_gap_secs)}
-                  </p>
-                </section>
-              );
-            })()}
-
-            {/* --------------------------------------- procesado del vídeo
-                Lo que convierte los tramos de abajo de "al menos tanto" en una
-                duración medida. Antes se lanzaba solo al entrar aquí, sin
-                decirlo y sin poder pararlo; ahora se pide, se ve y se corta. */}
-            {!match.is_vod && mmStatus !== null && (
-              <section>
-                <div className="sect__head">
-                  <span className="u-label">{t("Video analysis")}</span>
-                  <i className="sect__rule" />
-                </div>
-                {mmStatus.state === "hecha" ? (
-                  <p className="note">
-                    {t("Positions read from the video: the stretches below are measured, not estimated.")}
-                  </p>
-                ) : mmStatus.state === "no_disponible" ? (
-                  <p className="note">
-                    {t("Not available for this game: it needs the video, the detector and the Riot data.")}
-                  </p>
-                ) : mmPct !== null ? (
-                  <>
-                    <div className="mm__bar">
-                      <div className="mm__fill" style={{ width: `${Math.max(2, mmPct)}%` }} />
-                    </div>
-                    <div className="mm__row">
-                      <span className="u-metric">{Math.round(mmPct)}%</span>
-                      <span className="u-meta">{t("reading the minimap, about two minutes")}</span>
-                      <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto" }} onClick={pararMinimapa}>
-                        {t("Stop")}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p className="note">
-                      {t("Without it each stretch is a lower bound: the API only gives one position per minute. Takes about two minutes and can be stopped; what it has done is kept.")}
-                    </p>
-                    <button className="btn btn--primary btn--sm" onClick={empezarMinimapa}>
-                      {mmStatus.saved_progress
-                        ? `${t("Resume analysis")} (${Math.round(mmStatus.saved_progress)}%)`
-                        : t("Analyze the video")}
-                    </button>
-                  </>
-                )}
-                {mmErr !== null && <p className="note" style={{ color: "var(--loss)" }}>{mmErr}</p>}
-              </section>
-            )}
-
-            {/* --------------------------------------- presión absorbida
-                Los tramos en los que tuviste más rivales encima que aliados, y
-                lo que tu equipo sacó al otro lado del mapa mientras tanto. En un
-                marcador esto no existe: si acabas muerto, es "+1 muerte".
-
-                Sólo se muestran los tuyos. Se detectan para los 10, pero los de
-                los demás no ayudan a revisar tu partida. */}
-            {!match.is_vod && (pressure !== null || pressureErr !== null) && (() => {
-              const yo = participants.findIndex((p) => p.is_self) + 1;
-              const mios = (pressure ?? []).filter(w => w.participant_id === yo).sort((a, b) => a.start - b.start);
-              return (
-                <section>
-                  <div className="sect__head">
-                    <span className="u-label">{t("Pressure you absorbed")}</span>
-                    <i className="sect__rule" />
-                  </div>
-                  {/* El resumen de la partida: cuánto rival ataste y lo que valió en
-                      total. Cada tarjeta de abajo es un sumando que se puede ver. */}
-                  {mios.length > 0 && mios.some(w => w.value) ? (() => {
-                    const neto = mios.reduce((a, w) => a + (w.value?.net ?? 0), 0);
-                    const atado = mios.reduce((a, w) => a + (w.value?.enemy_seconds ?? 0), 0);
-                    return (
-                      <p className="pe-sum">
-                        {t("They came for you {n} times. You tied up {time} of enemy time and it was worth {gold} gold in total.", {
-                          n: mios.length,
-                          time: formatSeconds(atado),
-                          gold: formatGold(neto, true),
-                        })}
-                      </p>
-                    );
-                  })() : (
-                    <p className="note">{t("When 2 or more enemies come for you: how long you kept them busy and what it was worth in gold.")}</p>
-                  )}
-                  {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
-                  {pressureErr !== null && (
-                    <>
-                      <p className="note">{t("Couldn't load the pressure stretches: {msg}", { msg: pressureErr })}</p>
-                      <button className="btn btn--ghost btn--sm" onClick={reintentar}>
-                        <RefreshCw size={13} /> {t("Retry")}
-                      </button>
-                    </>
-                  )}
-                  {pressureErr === null && mios.length === 0 && (
-                    <p className="note">{t("No stretches detected in this game.")}</p>
-                  )}
-                  {mios.map(w => <PressureEpisodeCard key={w.participant_id + ":" + w.start}
-                    window={w} gameStart={w.game_start}
-                    gameEnd={w.game_end}
-                    onSeek={match.video_path ? time => seekTo(Math.max(0, time - 5), true) : undefined} />)}
-
-                </section>
-              );
-            })()}
-          </div>
+        {/* Impacto: qué significó. Ver ImpactTab.tsx. */}
+        {tab === "impact" && (
+          <ImpactTab match={match} participants={participants} seekTo={seekTo} onOpenMap={openMap} />
         )}
 
         </aside>
@@ -2604,7 +1990,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 {t(exportType === "clip" ? "Export video clip" : "Mark error")}
               </span>
               <span className="u-time" style={styles.clipRange}>
-                {clock(clipStart)} – {clock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
+                {gclock(clipStart)} – {gclock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
               </span>
             </span>
           </span>

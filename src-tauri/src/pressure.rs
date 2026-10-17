@@ -195,6 +195,15 @@ pub struct PressureEvidence {
     /// Pasó donde estabas tú (resultado de la pelea), no lejos.
     #[serde(default)]
     pub local: bool,
+    /// Dónde pasó, en coordenadas de juego: la `position` del evento en la
+    /// timeline de Riot. Sin esto el reproductor sabía que tu equipo tiró una
+    /// torre mientras te sujetaban, pero no podía pintarla en el mapa al lado
+    /// de tu episodio. `None` si el evento no la trae; las cachés anteriores a
+    /// la v8 de `pressure_v1.json` tampoco (de ahí el `default`).
+    #[serde(default)]
+    pub x: Option<f64>,
+    #[serde(default)]
+    pub y: Option<f64>,
 }
 
 impl PressureWindow {
@@ -822,6 +831,35 @@ const UNE_VIDEO: f64 = 10.0;
 /// tres no es que vinieran a por ti: es el final de una pelea que se perdió.
 const ANTES_DE_PELEA: f64 = 8.0;
 
+/// Rivales y aliados (sin contarte) a menos de `RIVAL_ENCIMA_VIDEO` en cada
+/// instante del rastro en que estabas vivo, contados con iconos del minimapa.
+///
+/// Es el recuento con el que `detectar_con_video` decide si hay presión, y el
+/// mismo que dibuja la franja de un episodio ([`crate::franja`]): sale de un
+/// único sitio para que lo que se enseña sea exactamente lo que abrió el
+/// episodio (mismo radio, mismo equipo por el aro ya corregido en
+/// `Positions::from_json`, mismo descuento de tu icono).
+///
+/// Muerto no se cuenta: tu icono no está en el minimapa y el rastro no dice
+/// dónde estás. A los demás muertos no se les filtra aparte: se cuentan los
+/// iconos que se ven, y el juego no pinta a los muertos en el minimapa.
+pub(crate) fn encima_por_instante(
+    pos: &crate::minimap::Positions,
+    pista: &[crate::minimap::Fix],
+    vivos: &crate::pressure_value::Vivos,
+) -> Vec<(crate::minimap::Fix, usize, usize)> {
+    let yo = pos.self_participant_id;
+    pista
+        .iter()
+        .filter(|f| vivos.alive(yo, f.sec))
+        .filter_map(|f| {
+            let e = pos.enemies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO)?;
+            let a = pos.allies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO)?;
+            Some((*f, e, a.saturating_sub(1))) // tu propio icono
+        })
+        .collect()
+}
+
 /// Episodios del jugador grabado sacados directamente del minimapa.
 ///
 /// Por qué no basta con ajustar los de la API: medido en 14 partidas con
@@ -856,17 +894,7 @@ pub fn detectar_con_video(
     let muertes = muertes_de(tl);
 
     let mut instantes: Vec<(f64, f64, f64, usize)> = Vec::new();
-    for f in &pista {
-        if !vivos.alive(yo, f.sec) {
-            continue;
-        }
-        let (Some(e), Some(a)) = (
-            pos.enemies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO),
-            pos.allies_near(f.sec, f.x, f.y, RIVAL_ENCIMA_VIDEO),
-        ) else {
-            continue;
-        };
-        let otros = a.saturating_sub(1); // tu propio icono
+    for (f, e, otros) in encima_por_instante(pos, &pista, &vivos) {
         if e >= MINIMO_RIVALES && e > otros + 1 {
             instantes.push((f.sec, f.x, f.y, e));
         }
@@ -1072,6 +1100,7 @@ fn finalize(windows: &mut Vec<PressureWindow>, tl: &TimelineDto, participants: &
                     id: format!("{fi}:{ei}"), time: sec, game_time: sec,
                     kind: if own_death { "death".into() } else { kind.into() },
                     gold, after_episode: sec > w.end, local: matches!(caja, "local_gain" | "loss"),
+                    x: pos.map(|p| p.0), y: pos.map(|p| p.1),
                 };
                 match caja {
                     "gain" => {
@@ -1214,6 +1243,23 @@ mod regression {
         assert!(lejos[0].after_episode);
         assert_eq!(ws[0].gains.iter().filter(|g| g.local).count(), 1);
         assert!(ws[0].value.local_gold > 0.0 && ws[0].value.team_elsewhere > 0.0);
+    }
+
+    #[test]
+    fn la_evidencia_lleva_donde_paso() {
+        let mut ws = vec![window(100.0, 120.0)];
+        finalize(&mut ws, &timeline(json!([tower(118),
+            {"type":"CHAMPION_KILL","timestamp":120000,"killerId":2,"victimId":1,"bounty":300}
+        ])), &players());
+        assert_eq!((ws[0].gains[0].x, ws[0].gains[0].y), (Some(10000.0), Some(10000.0)));
+        // Un evento sin `position` no se inventa una.
+        assert_eq!((ws[0].losses[0].x, ws[0].losses[0].y), (None, None));
+        // Y una caché de antes de la v8, sin los campos, se sigue leyendo.
+        let vieja: PressureEvidence = serde_json::from_value(json!({
+            "id": "1:2", "time": 1.0, "game_time": 1.0, "kind": "tower", "gold": 250.0, "after_episode": false
+        })).unwrap();
+        assert_eq!((vieja.x, vieja.y), (None, None));
+        assert_eq!(serde_json::to_value(&vieja).unwrap()["x"], serde_json::Value::Null);
     }
 
     #[test]

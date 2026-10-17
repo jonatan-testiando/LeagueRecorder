@@ -12,13 +12,12 @@ interface GoldXpChartProps {
   onSeek: (seconds: number) => void;
 }
 
-type MetricMode = "team_gold" | "self_gold" | "self_xp";
-
-const MODES: { key: MetricMode; label: string }[] = [
-  { key: "team_gold", label: "Team gold" },
-  { key: "self_gold", label: "Your gold" },
-  { key: "self_xp", label: "Your XP" },
-];
+/*
+ * Sólo el oro del equipo. Tenía un selector con "Tu oro" y "Tu XP" (contra tu
+ * rival directo): eso es el duelo de línea, no la partida, y desde el
+ * 2026-10-17 vive en Impacto → "Tú contra tu rival". Una curva y una pregunta:
+ * ¿quién iba por delante y cuándo cambió?
+ */
 
 /**
  * Suelo de la escala. Sin él, una partida igualada (±80 de oro) se dibujaba
@@ -34,20 +33,9 @@ const WIDTH = 600;
 
 export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, onSeek }) => {
   const t = useT();
-  const [mode, setMode] = useState<MetricMode>("team_gold");
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const values = useMemo(
-    () =>
-      (frames ?? []).map((f) => {
-        switch (mode) {
-          case "team_gold": return f.team_gold_diff;
-          case "self_gold": return f.self_gold_diff;
-          case "self_xp": return f.self_xp_diff;
-        }
-      }),
-    [frames, mode]
-  );
+  const values = useMemo(() => (frames ?? []).map((f) => f.team_gold_diff), [frames]);
 
   if (!frames || frames.length < 2) {
     return (
@@ -93,25 +81,12 @@ export const GoldXpChart: React.FC<GoldXpChartProps> = ({ frames, videoOffset, o
   };
 
   const hoverP = hoverIndex !== null ? points[hoverIndex] : null;
-  const unit = mode === "self_xp" ? t("XP") : t("g");
+  const unit = t("g");
 
   return (
     // Sin tarjeta ni título: los pone la sección del inspector que la contiene.
     <div style={wstyles.body}>
-      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <div className="tp-seg">
-          {MODES.map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setMode(m.key)}
-              aria-pressed={mode === m.key}
-              data-on={mode === m.key ? "" : undefined}
-            >
-              {t(m.label)}
-            </button>
-          ))}
-        </div>
-      </div>
+      <span className="u-label">{t("Team gold")}</span>
 
       <div style={wstyles.chartWrap}>
         <svg

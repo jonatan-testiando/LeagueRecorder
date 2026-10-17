@@ -983,6 +983,19 @@ fn parche_de(game_version: &str) -> Option<String> {
     (corto.len() == 2).then(|| corto.join("."))
 }
 
+/// Puesto (1-10) de `yo` en el reparto y su percentil de rol.
+///
+/// Ordena por el percentil de rol, que es lo comparable entre puestos, pero el
+/// percentil se satura en 100: en una partida con +36,4 de WPA y un Senna con
+/// +10,8, los dos daban 100 y el que más aportó salía «2º de 10» por el orden
+/// de llegada. Empatados en percentil, manda el WPA.
+fn puesto_de_impacto(filas: &[crate::attribution::PlayerCredit], yo: i32) -> Option<(i32, f64)> {
+    let mut orden: Vec<&crate::attribution::PlayerCredit> = filas.iter().collect();
+    orden.sort_by(|a, b| b.role_percentile.total_cmp(&a.role_percentile).then(b.wpa.total_cmp(&a.wpa)));
+    let pos = orden.iter().position(|c| c.participant_id == yo)?;
+    Some((pos as i32 + 1, orden[pos].role_percentile))
+}
+
 fn impacto(
     metadata: &mut crate::storage::MatchMetadata,
     tl: &TimelineDto,
@@ -1005,11 +1018,9 @@ fn impacto(
     // no se puede hacer al pintar una lista.
     if let Some(idx) = metadata.participants.iter().position(|p| p.is_self) {
         let yo = (idx + 1) as i32;
-        let mut orden: Vec<&crate::attribution::PlayerCredit> = filas.iter().collect();
-        orden.sort_by(|a, b| b.role_percentile.total_cmp(&a.role_percentile));
-        if let Some(pos) = orden.iter().position(|c| c.participant_id == yo) {
-            let nuevo_rank = Some(pos as i32 + 1);
-            let nuevo_pct = orden.get(pos).map(|c| (c.role_percentile * 10.0).round() / 10.0);
+        if let Some((rank, pct)) = puesto_de_impacto(&filas, yo) {
+            let nuevo_rank = Some(rank);
+            let nuevo_pct = Some((pct * 10.0).round() / 10.0);
             let nuevo_parche = parche_de(&info.gameVersion).or(metadata.patch.clone());
             // Los hechizos de invocador no existían cuando se guardaron las
             // partidas viejas; el DTO cacheado los trae, así que se reponen aquí.
@@ -1049,7 +1060,9 @@ fn impacto(
 }
 
 /// Versión del barrido de impacto. Subirlo lo obliga a repasar la biblioteca.
-pub const IMPACT_BACKFILL_V: u32 = 1;
+// v2 (2026-10-17): el puesto desempata por WPA cuando el percentil se satura;
+// los puestos guardados con la v1 podían dejar 2º al que más aportó.
+pub const IMPACT_BACKFILL_V: u32 = 2;
 
 /// Rellena el puesto de impacto de las partidas viejas, sin tocar la API.
 ///
@@ -1446,7 +1459,10 @@ pub struct PressureEpisode {
 // v5 (2026-10-07): el farmeo perdido de jungla sale de la ruta medida.
 // v6 (2026-10-07): rastro por camino entre anclajes (minimap::follow).
 // v7 (2026-10-07): rastro con el recuadro de la cámara.
-const PRESSURE_CACHE_V: u32 = 7;
+// v8 (2026-10-17): cada suceso del episodio (gains/losses/context) lleva dónde
+// pasó (x, y de la timeline), para pintar en el mapa lo que hizo tu equipo
+// mientras te sujetaban. Las cachés viejas no lo traen: se rehacen.
+const PRESSURE_CACHE_V: u32 = 8;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///
@@ -2251,6 +2267,58 @@ mod tests_nota {
         p.visionScore = vis;
         p.teamId = team;
         p
+    }
+
+    #[test]
+    fn con_el_percentil_saturado_el_puesto_lo_decide_el_wpa() {
+        let fila = |pid: i32, pct: f64, wpa: f64| crate::attribution::PlayerCredit {
+            participant_id: pid, role_percentile: pct, wpa, ..Default::default()
+        };
+        // La Senna llega antes en la lista, como en la partida del fallo.
+        let filas = [fila(9, 100.0, 0.108), fila(3, 100.0, 0.364), fila(1, 80.0, 0.05)];
+        assert_eq!(puesto_de_impacto(&filas, 3), Some((1, 100.0)));
+        assert_eq!(puesto_de_impacto(&filas, 9), Some((2, 100.0)));
+        assert_eq!(puesto_de_impacto(&filas, 1), Some((3, 80.0)));
+        assert_eq!(puesto_de_impacto(&filas, 5), None);
+    }
+
+    /// El puesto de cada partida con lo que hay en disco, al lado del guardado
+    /// (sin escribir nada):
+    /// `MIS_PARTIDAS_DIR=... cargo test --lib puesto_en_mis_partidas -- --nocapture`
+    #[test]
+    fn puesto_en_mis_partidas() {
+        let Ok(dir) = std::env::var("MIS_PARTIDAS_DIR") else { return };
+        let mut dirs: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).collect();
+        dirs.sort();
+        for d in dirs {
+            let id = d.file_name().unwrap().to_string_lossy().to_string();
+            let (Ok(raw), Ok(rtl), Ok(rmeta)) = (
+                std::fs::read_to_string(d.join("riot_match.json")),
+                std::fs::read_to_string(d.join("riot_timeline.json")),
+                std::fs::read_to_string(d.join(format!("{id}.json"))),
+            ) else { continue };
+            let m: MatchDto = serde_json::from_str(&raw).unwrap();
+            let tl: TimelineDto = serde_json::from_str(&rtl).unwrap();
+            let meta: crate::storage::MatchMetadata = serde_json::from_str(&rmeta).unwrap();
+            let Some(idx) = meta.participants.iter().position(|p| p.is_self) else { continue };
+            let mut filas = crate::attribution::analyze(&tl, &m.info.participants);
+            if let Some(tramo) = meta.tier_bucket.as_deref() {
+                for c in filas.iter_mut() {
+                    c.role_percentile = crate::baselines::percentil_en_tramo(tramo, &c.role, c.wpa);
+                }
+            }
+            let yo = (idx + 1) as i32;
+            let Some((rank, pct)) = puesto_de_impacto(&filas, yo) else { continue };
+            let wpa = filas.iter().find(|c| c.participant_id == yo).map(|c| c.wpa).unwrap_or(0.0);
+            let saturados = filas.iter().filter(|c| c.role_percentile >= 100.0).count();
+            println!(
+                "{id} {} · puesto guardado {:?} → {rank} · percentil {pct:.1} · WPA {:+.1} · con 100: {saturados}",
+                meta.champion, meta.impact_rank, wpa * 100.0
+            );
+            if id == "match_20260905_040502" {
+                assert_eq!(rank, 1, "el que más aportó tiene que salir 1º");
+            }
+        }
     }
 
     #[test]

@@ -251,7 +251,9 @@ fn empujes(serie: &[Instante], lanes: &[Lane], t: f64, antes: f64) -> Vec<LanePu
     lanes.iter().map(|&l| LanePush { lane: l.key(), push: en(serie, l, t, antes) }).collect()
 }
 
-pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f64, pos: Option<&crate::minimap::Positions>) -> WavesReport {
+/// `ruta` es la de [`crate::jungle_route::ruta_de_partida`], la que enseña la
+/// pestaña de la ruta: las invasiones salen de ella y no de rehacerla aquí.
+pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f64, ruta: Option<&crate::jungle_route::Route>) -> WavesReport {
     let Some(yo) = m.info.participants.get((pid - 1) as usize) else {
         return WavesReport { status: "no_riot".into(), ..Default::default() };
     };
@@ -271,28 +273,38 @@ pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f6
 
     let muertes = crate::jungle_route::muertes(tl, pid);
 
-    // 1. Invasiones: campamentos tuyos hechos en la jungla rival.
-    if let Some(pos) = pos {
-        if crate::jungle_route::es_jungla(&m.info.participants, pid) {
-            let rival = if equipo == 100 { 200 } else { 100 };
-            let clears = crate::jungle_route::build(tl, &m.info.participants, pos)
-                .filter(|r| r.agreement >= crate::jungle_route::ACUERDO_MIN)
-                .map(|r| r.clears)
-                .unwrap_or_default();
-            for c in clears.iter().filter(|c| c.side == "enemy") {
-                let Some((x, y)) = crate::jungle_route::posicion_campamento(&c.camp, rival) else { continue };
-                let lanes = empujes(&serie, &carriles_de(x, y), c.start, 8.0);
-                let verdict = if c.start < PRIMERAS_OLEADAS { "early" } else { veredicto(&lanes) };
-                let died = muertes.iter().any(|(d, _, _)| *d >= c.start - 2.0 && *d <= c.end + 15.0);
-                r.invades.push(InvadeCheck {
-                    t_game: c.start,
-                    t_video: c.start + desfase,
-                    camp: c.camp.clone(),
-                    lanes,
-                    verdict,
-                    died,
-                });
-            }
+    // 1. Invasiones: campamentos tuyos hechos en la jungla rival. TODAS las de
+    // la ruta, una por una, para que `invades.len() == ruta.invades` siempre:
+    // si no, la pestaña de la ruta y la de las oleadas cuentan cosas distintas.
+    //
+    // Tampoco se filtran por el acuerdo de la ruta (antes sí, con
+    // `ACUERDO_MIN`): con una ruta dudosa la pestaña de la ruta ya lo avisa y
+    // sigue enseñando sus invasiones, y quitarlas sólo aquí daba un número
+    // distinto en cada sitio para la misma partida. Lo dudoso es la ruta, no
+    // el empuje de los carriles, que sale del minimapa por su lado.
+    if let Some(ruta) = ruta {
+        let rival = if equipo == 100 { 200 } else { 100 };
+        for c in ruta.clears.iter().filter(|c| c.side == "enemy") {
+            // Un campamento sin posición conocida no tiene carriles cercanos
+            // que mirar, pero la invasión existió: sale como "unknown".
+            let sitio = crate::jungle_route::posicion_campamento(&c.camp, rival);
+            let lanes = sitio.map(|(x, y)| empujes(&serie, &carriles_de(x, y), c.start, 8.0)).unwrap_or_default();
+            let verdict = if c.start < PRIMERAS_OLEADAS {
+                "early"
+            } else if sitio.is_none() {
+                "unknown"
+            } else {
+                veredicto(&lanes)
+            };
+            let died = muertes.iter().any(|(d, _, _)| *d >= c.start - 2.0 && *d <= c.end + 15.0);
+            r.invades.push(InvadeCheck {
+                t_game: c.start,
+                t_video: c.start + desfase,
+                camp: c.camp.clone(),
+                lanes,
+                verdict,
+                died,
+            });
         }
     }
 
@@ -442,8 +454,9 @@ fn de_partida(match_id: &str) -> WavesReport {
     let Some(pid) = m.info.participants.iter().position(|p| p.championName == meta.champion).map(|i| i as i32 + 1) else {
         return estado("no_riot");
     };
-    let pos = crate::minimap::Positions::load(match_id);
-    analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), pos.as_ref())
+    // La ruta de la pestaña de la ruta (caché incluida), no una rehecha aquí.
+    let ruta = crate::jungle_route::ruta_de_partida(match_id);
+    analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref())
 }
 
 /// Oleadas y macro de una partida. Si faltan por leer y se puede, las lee
@@ -524,6 +537,46 @@ mod tests {
         assert_eq!(p[0].len(), 1);
     }
 
+    /// Las invasiones de las oleadas son las de la ruta, todas: también con la
+    /// ruta dudosa, con un campamento sin posición conocida y antes de que
+    /// choquen las oleadas. Así fue el fallo: «Invasiones 14» en la ruta y
+    /// «6 de 13» en las oleadas para la misma partida.
+    #[test]
+    fn las_invasiones_son_las_de_la_ruta() {
+        use serde_json::json;
+        let jugador = |team: i32| json!({
+            "puuid": "x", "teamId": team, "championName": "Test", "kills": 0, "deaths": 0,
+            "assists": 0, "goldEarned": 0, "totalDamageDealtToChampions": 0, "win": false,
+            "teamPosition": "JUNGLE"
+        });
+        let m: MatchDto = serde_json::from_value(json!({
+            "info": {"gameDuration": 1800, "participants": [jugador(100), jugador(200)]}
+        })).unwrap();
+        let tl: TimelineDto = serde_json::from_value(json!({"info": {"frames": [{"timestamp": 0, "events": []}]}})).unwrap();
+        let clear = |camp: &str, side: &str, start: f64| json!({"camp": camp, "side": side, "start": start, "end": start + 8.0});
+        let ruta: crate::jungle_route::Route = serde_json::from_value(json!({
+            "video_offset": 0.0, "game_duration": 1800.0,
+            "clears": [
+                clear("raptors", "enemy", 60.0),
+                clear("blue", "own", 100.0),
+                clear("wolves", "enemy", 300.0),
+                clear("campamento_nuevo", "enemy", 400.0),
+            ],
+            "first_clear_camps": 1, "first_clear_end": 108.0, "full_clear": false, "recalls": [],
+            "budget": {"farming": 0.0, "moving": 0.0, "lane": 0.0, "base": 0.0, "dead": 0.0, "unknown": 0.0},
+            "invades": 3, "scuttles": 0, "mean_delay": null, "delays": 0, "deaths": [],
+            "coverage": 0.5, "agreement": 0.3
+        })).unwrap();
+        let raw = r#"{"frames":[{"t":300,"a":[],"e":[]}]}"#;
+        let r = analizar(raw, &tl, &m, 1, 0.0, Some(&ruta));
+        assert_eq!(r.invades.len(), ruta.invades);
+        let v: Vec<(&str, &str)> = r.invades.iter().map(|i| (i.camp.as_str(), i.verdict)).collect();
+        assert_eq!(v, [("raptors", "early"), ("wolves", "unknown"), ("campamento_nuevo", "unknown")]);
+        assert!(r.invades[2].lanes.is_empty());
+        // Sin ruta (no es jungla, o sin rastro), ninguna.
+        assert!(analizar(raw, &tl, &m, 1, 0.0, None).invades.is_empty());
+    }
+
     /// `MIS_PARTIDAS_DIR=... cargo test --lib oleadas_en_mis_partidas -- --nocapture`
     #[test]
     fn oleadas_en_mis_partidas() {
@@ -540,13 +593,35 @@ mod tests {
             let tl: TimelineDto = serde_json::from_str(&rtl).unwrap();
             let meta: crate::storage::MatchMetadata = serde_json::from_str(&rmeta).unwrap();
             let pid = m.info.participants.iter().position(|p| p.championName == meta.champion).unwrap() as i32 + 1;
-            let pos = std::fs::read_to_string(d.join("minimap_positions.json")).ok().and_then(|r| crate::minimap::Positions::from_json(&r));
-            let r = analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), pos.as_ref());
+            // La ruta como la enseña la app: por la carpeta de partidas de la
+            // configuración, que en la máquina del usuario es esta misma. Si
+            // no lo es, se rehace aquí con `build` (y la comparación de abajo
+            // deja de decir nada de la caché).
+            let misma_carpeta = std::fs::canonicalize(crate::storage::get_videos_dir()).ok()
+                == std::fs::canonicalize(&dir).ok();
+            let ruta = if misma_carpeta {
+                crate::jungle_route::ruta_de_partida(&id)
+            } else {
+                std::fs::read_to_string(d.join("minimap_positions.json"))
+                    .ok()
+                    .and_then(|r| crate::minimap::Positions::from_json(&r))
+                    .filter(|p| crate::jungle_route::es_jungla(&m.info.participants, p.self_participant_id))
+                    .and_then(|p| crate::jungle_route::build(&tl, &m.info.participants, &p))
+            };
+            let r = analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref());
             let visto = |i: usize| r.series.iter().filter(|s| s[i] >= 0.0).count() as f64 / r.series.len().max(1) as f64;
             println!(
                 "{id} equipo {} · carriles vistos top {:.0}% mid {:.0}% bot {:.0}%",
                 m.info.participants[(pid - 1) as usize].teamId, 100.0 * visto(1), 100.0 * visto(2), 100.0 * visto(3)
             );
+            if let Some(ruta) = &ruta {
+                let prio = r.invades.iter().filter(|i| i.verdict == "prio").count();
+                println!(
+                    "   ruta: invasiones {} (acuerdo {:.0}%) · oleadas: invasiones con prioridad {prio} de {}",
+                    ruta.invades, ruta.agreement * 100.0, r.invades.len()
+                );
+                assert_eq!(r.invades.len(), ruta.invades, "{id}: las oleadas y la ruta cuentan invasiones distintas");
+            }
             for s in r.series.iter().step_by(15) {
                 println!("   {:>5.0}s top {:>5.2} mid {:>5.2} bot {:>5.2}", s[0], s[1], s[2], s[3]);
             }

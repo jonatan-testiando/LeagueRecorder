@@ -1,10 +1,11 @@
 /* Episodio de presión absorbida. Tipografía «Post-partida»: sans con cifras
-   tabulares, mono solo en las marcas de tiempo (.u-time). */
+   tabulares, mono solo en las marcas de tiempo (.u-time). Primero la frase,
+   luego la franja y las acciones, y la cuenta plegada al final. */
 .pe {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 10px;
+  padding: 14px;
   margin-top: 12px;
   border-radius: 12px;
   background: var(--panel);
@@ -14,31 +15,54 @@
 .pe--good { background: linear-gradient(90deg, color-mix(in srgb, var(--win) 9%, var(--panel)) 0%, var(--panel) 60%); }
 .pe--bad { background: linear-gradient(90deg, color-mix(in srgb, var(--loss) 8%, var(--panel)) 0%, var(--panel) 60%); }
 
-.pe__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pe__head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
 .pe__when { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-size: 13px; color: var(--muted); }
+.pe__when .u-time { color: var(--text); }
 .pe__label { color: var(--text); font-weight: 500; margin-right: 6px; }
-.pe__net { display: flex; align-items: baseline; gap: 6px; }
-.pe__net strong { font-size: 24px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
-.pe--good .pe__net strong { color: var(--win); }
-.pe--bad .pe__net strong { color: var(--loss); }
-.pe__net span { font-size: 13px; color: var(--faint); }
+.pe__est { color: var(--faint); cursor: help; }
 
-.pe__verdict-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+/* El veredicto con el neto: pequeño, a la derecha. Es la conclusión de la
+   cuenta plegada, no el titular. */
 .pe__verdict {
   font-size: 12.5px;
   font-weight: 500;
-  padding: 3px 10px;
+  padding: 2px 9px;
   border-radius: 999px;
+  white-space: nowrap;
   color: var(--muted);
   background: color-mix(in srgb, var(--muted) 12%, transparent);
 }
 .pe__verdict--good { color: var(--win); background: color-mix(in srgb, var(--win) 14%, transparent); }
 .pe__verdict--bad { color: var(--loss); background: color-mix(in srgb, var(--loss) 13%, transparent); }
 
-.pe__ties { display: flex; align-items: flex-start; gap: 10px; }
+.pe__story { display: flex; align-items: flex-start; gap: 10px; }
+.pe__story p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); }
 .pe__faces { display: flex; flex-shrink: 0; padding-top: 1px; }
 .pe__faces > * + * { margin-left: -7px; }
-.pe__ties p { margin: 0; font-size: 13.5px; line-height: 1.45; color: var(--text); }
+
+.pe__actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.pe__actions .btn { gap: 6px; }
+
+/* La cuenta, plegada. Mismo gesto que la segunda lectura del inspector
+   (.insp__more): un + que pasa a − al abrir. */
+.pe__details { box-shadow: inset 0 1px 0 var(--hair); padding-top: 8px; }
+.pe__details summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--faint);
+}
+.pe__details summary::-webkit-details-marker { display: none; }
+.pe__details summary::after { content: "+"; margin-left: auto; font-size: 13px; }
+.pe__details[open] summary::after { content: "−"; }
+.pe__details summary:hover { color: var(--text); }
+.pe__details summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
+.pe__detailsBody { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.pe__details h4 { margin: 4px 0 0; font-size: 12.5px; font-weight: 500; color: var(--faint); }
+.pe__details ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+
 .pe__tie-list { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
 
 .pe__rows { margin: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -52,11 +76,6 @@
 
 .pe__note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .pe__source { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
-
-.pe__details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
-.pe__details summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
-.pe__details h4 { margin: 12px 0 4px; font-size: 12.5px; font-weight: 500; color: var(--faint); }
-.pe__details ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 
 .pe-ev {
   width: 100%;

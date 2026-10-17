@@ -1,0 +1,42 @@
+/* Franja de un episodio de presión (EpisodeStrip.tsx): vida arriba, rivales y
+   aliados abajo desde la misma línea, el tiempo de partida debajo. */
+.es { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.es__plot { position: relative; }
+.es__svg { display: block; width: 100%; border-radius: 6px; overflow: hidden; cursor: crosshair; }
+.es__svg[data-seek] { cursor: pointer; }
+/* Mientras llega: el hueco que ocupará, para que la tarjeta no salte. */
+.es__wait { border-radius: 6px; background: var(--sunken); opacity: 0.5; }
+
+.es__skull {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  display: flex;
+  padding: 1px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--loss);
+  pointer-events: none;
+}
+
+.es__axis {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.es__axis > .u-time { color: var(--faint); }
+.es__read { color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+.es__read .u-time { color: var(--text); }
+.es__legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 12px; }
+.es__key { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.es__sw { display: inline-block; flex: none; border-radius: 2px; }
+.es__sw--hp { width: 12px; height: 3px; background: var(--cool); }
+.es__sw--en { width: 6px; height: 9px; background: var(--loss); }
+.es__sw--al { width: 6px; height: 6px; background: color-mix(in srgb, var(--muted) 45%, transparent); }
+
+.es__note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint); }
+.es--compact .es__axis { min-height: 16px; }

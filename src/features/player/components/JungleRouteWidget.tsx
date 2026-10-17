@@ -1,56 +1,45 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { AlertTriangle } from "lucide-react";
-import {
-  getJungleRoutes,
-  JUNGLE_AGREEMENT_MIN,
-  type JungleRoute,
-} from "../../../core/tauri-ipc";
+import { JUNGLE_AGREEMENT_MIN, type JungleRoute } from "../../../core/tauri-ipc";
 import { useJungleRoute } from "../useMatchData";
 import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { EmptyState } from "../../../components/ui/EmptyState";
-import { activityLabel, BUDGET_PARTS, campLabel, SIDE_TONE } from "../jungleRoute";
+import { BUDGET_PARTS } from "../jungleRoute";
+import type { MapFocus, OpenMap } from "../mapFocus";
+import { useFirstClearMedian } from "./matchMoves";
 import { wstyles } from "./videoPlayerStyles";
 import "./JungleRouteWidget.css";
+import "./MatchTab.css";
 
 /**
- * Tu ruta de jungla: qué campamento, cuándo, y en qué se te fue el tiempo.
+ * Tu ruta de jungla: tu primera vuelta, lo que tardas en volver a tus
+ * campamentos, tus bases y en qué se te fue el tiempo.
  *
  * Sale del rastro del minimapa (2 veces por segundo) cruzado con los súbditos
  * de jungla que la API cuenta por minuto. El cálculo vive en
  * `src-tauri/src/jungle_route.rs`; aquí sólo se pinta.
+ *
+ * Desde el 2026-10-17 es más corta. Se fueron: la tira de campamentos (la
+ * ruta la dibuja el Mapa, sobre el minimapa de verdad), las fichas de la
+ * primera vuelta (la fila "Primer clear" abre el Mapa con ella), la caja de
+ * invasiones (la cifra la da la lista de movimientos, la única) y "qué hacías
+ * al morir" (lo dice cada muerte en el bloque Muertes).
  */
 
 interface Props {
   matchId: string;
-  onSeek: (videoSeconds: number) => void;
+  onOpenMap: OpenMap;
 }
 
-/** Segundos que se retrocede al saltar: interesa llegar, no el último golpe. */
-const LEAD_IN = 3;
+/** Cuánto de distinto a tu mediana es "como siempre". */
+export const CLEAR_COMO_SIEMPRE_S = 10;
 
-export const JungleRouteWidget: React.FC<Props> = ({ matchId, onSeek }) => {
+export const JungleRouteWidget: React.FC<Props> = ({ matchId, onOpenMap }) => {
   const t = useT();
-  // Compartida con "Tus muertes" y el Recorrido: se pide una vez.
+  // Compartida con "Tus muertes" y el resumen: se pide una vez.
   const resp = useJungleRoute(matchId);
-  const [mediana, setMediana] = useState<number | null>(null);
-
-  useEffect(() => {
-    let vivo = true;
-    // La referencia: tu primer clear de siempre. Va aparte y puede fallar sin
-    // que el resto del panel lo note.
-    getJungleRoutes()
-      .then((rs) => {
-        if (!vivo) return;
-        const fc = rs
-          .filter((g) => g.match_id !== matchId && g.route.full_clear && g.route.agreement >= JUNGLE_AGREEMENT_MIN)
-          .map((g) => g.route.first_clear_end as number)
-          .sort((a, b) => a - b);
-        setMediana(fc.length >= 3 ? fc[Math.floor(fc.length / 2)] : null);
-      })
-      .catch(() => {});
-    return () => { vivo = false; };
-  }, [matchId]);
+  const mediana = useFirstClearMedian(matchId) ?? null;
 
   if (resp === null) {
     return <EmptyState title={t("Could not read the route")} text={t("Try opening the game again.")} />;
@@ -76,25 +65,32 @@ export const JungleRouteWidget: React.FC<Props> = ({ matchId, onSeek }) => {
       />
     );
   }
-  return <Ruta r={resp.route} mediana={mediana} onSeek={onSeek} />;
+  return <Ruta r={resp.route} mediana={mediana} onOpenMap={onOpenMap} />;
 };
 
-const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onSeek: (s: number) => void }> = ({ r, mediana, onSeek }) => {
+/** El foco del Mapa para la primera vuelta: del primer campamento al último. */
+export function firstClearFocus(r: JungleRoute, detail: string | undefined, t: ReturnType<typeof useT>): MapFocus | null {
+  if (r.first_clear_end == null || r.clears.length === 0) return null;
+  return {
+    kind: "moment",
+    t: r.clears[0].start,
+    until: r.first_clear_end,
+    lead: 3,
+    title: t("First clear"),
+    detail,
+  };
+}
+
+const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onOpenMap: OpenMap }> = ({ r, mediana, onOpenMap }) => {
   const t = useT();
-  const ir = (gameSec: number) => onSeek(Math.max(0, gameSec + r.video_offset - LEAD_IN));
-  const dur = Math.max(1, r.game_duration);
-  const pct = (s: number) => `${Math.min(100, Math.max(0, (s / dur) * 100))}%`;
-
-  // La primera vuelta, tal como la cuenta el backend: hasta su último
-  // campamento propio. Se reconstruye aquí sólo para pintar las fichas.
-  const primera = useMemo(() => {
-    if (r.first_clear_end == null) return [];
-    return r.clears.filter((c) => c.start <= (r.first_clear_end as number)).slice(0, 8);
-  }, [r]);
-
   const totalBudget = BUDGET_PARTS.reduce((a, p) => a + r.budget[p.key], 0) || 1;
   const dudosa = r.agreement < JUNGLE_AGREEMENT_MIN;
   const delta = r.first_clear_end != null && mediana != null ? r.first_clear_end - mediana : null;
+  // Rojo si tardaste más que de costumbre, verde si menos; "como siempre", gris.
+  const tonoMediana =
+    delta == null || Math.abs(delta) <= CLEAR_COMO_SIEMPRE_S ? undefined : delta > 0 ? "mt-bad" : "mt-good";
+  const camps = r.full_clear ? t("all 6 camps") : t("{n} camps", { n: r.first_clear_camps });
+  const foco = firstClearFocus(r, camps, t);
 
   return (
     <div style={wstyles.body}>
@@ -107,99 +103,41 @@ const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onSeek: (s: numbe
         </p>
       )}
 
-      <div style={wstyles.statGrid}>
-        <div style={wstyles.statBox}>
-          <span className="u-label">{t("First clear")}</span>
-          <span style={wstyles.statValue}>{r.first_clear_end != null ? mmss(r.first_clear_end) : "—"}</span>
-          <span className="note">
-            {r.full_clear
-              ? t("all 6 camps")
-              : t("{n} camps", { n: r.first_clear_camps })}
-            {delta != null && (
-              <span style={{ color: delta > 10 ? "var(--loss)" : delta < -10 ? "var(--win)" : undefined }}>
-                {" · "}
-                {t("your median {m}", { m: mmss(mediana as number) })}
-              </span>
-            )}
-          </span>
-        </div>
-        <div style={wstyles.statBox}>
-          <span className="u-label">{t("Invades")}</span>
-          <span style={wstyles.statValue}>{r.invades}</span>
-          <span className="note">{t("camps taken in the enemy jungle")}</span>
-        </div>
-        <div style={wstyles.statBox}>
-          <span className="u-label">{t("Late to your camps")}</span>
-          <span style={wstyles.statValue}>{r.mean_delay != null ? mmss(r.mean_delay) : "—"}</span>
-          <span className="note">{t("on average, from respawn to you")}</span>
-        </div>
-        <div style={wstyles.statBox}>
-          <span className="u-label">{t("Recalls")}</span>
-          <span style={wstyles.statValue}>{r.recalls.length}</span>
-          <span className="note">{t("{n} scuttles", { n: r.scuttles })}</span>
-        </div>
-      </div>
-
-      {/* ------------------------------------------------ la tira */}
-      <div className="jr-strip" role="group" aria-label={t("Camps over the game")}>
-        {r.clears.map((c, i) => (
-          <button
-            key={i}
-            type="button"
-            className="jr-camp"
-            style={{ left: pct(c.start), width: `max(4px, ${pct(c.end - c.start)})`, background: SIDE_TONE[c.side] }}
-            title={`${mmss(c.start)} · ${campLabel(c.camp, t)}${c.side === "enemy" ? ` · ${t("enemy jungle")}` : ""}`}
-            aria-label={`${mmss(c.start)} ${campLabel(c.camp, t)}`}
-            onClick={() => ir(c.start)}
-          />
-        ))}
-        {r.recalls.map((s, i) => (
-          <span key={`b${i}`} className="jr-tick jr-tick--base" style={{ left: pct(s) }} title={`${mmss(s)} · ${t("Recall")}`} />
-        ))}
-        {r.deaths.map((d, i) => (
-          <button
-            key={`d${i}`}
-            type="button"
-            className="jr-tick jr-tick--death"
-            style={{ left: pct(d.time) }}
-            title={`${mmss(d.time)} · ${t("Death")} · ${activityLabel(d.activity, t)}`}
-            aria-label={`${t("Death")} ${mmss(d.time)}`}
-            onClick={() => ir(d.time)}
-          />
-        ))}
-      </div>
-      <div className="jr-legend">
-        <span><i style={{ background: SIDE_TONE.own }} />{t("your jungle")}</span>
-        <span><i style={{ background: SIDE_TONE.enemy }} />{t("enemy jungle")}</span>
-        <span><i style={{ background: SIDE_TONE.river }} />{t("scuttle")}</span>
-        <span><i className="jr-legend-base" />{t("recall")}</span>
-        <span><i className="jr-legend-death" />{t("death")}</span>
-      </div>
-
-      {/* ------------------------------------------------ primera vuelta */}
-      {primera.length > 0 && (
-        <>
-          <div className="sect__head" style={{ marginTop: "var(--space-1)" }}>
-            <span className="u-label">{t("First clear")}</span>
-            <i className="sect__rule" />
+      <div className="mt-facts">
+        {foco ? (
+          <button type="button" className="mt-fact" onClick={() => onOpenMap(foco)} title={t("Open the map at this moment")}>
+            <span>{t("First clear")}</span>
+            <b>{mmss(r.first_clear_end as number)}</b>
+            <small>
+              {camps}
+              {delta != null && (
+                <span className={tonoMediana}>
+                  {" · "}
+                  {t("your median {m}", { m: mmss(mediana as number) })}
+                </span>
+              )}
+            </small>
+          </button>
+        ) : (
+          <div className="mt-fact">
+            <span>{t("First clear")}</span>
+            <b>—</b>
           </div>
-          <div className="jr-chips">
-            {primera.map((c, i) => (
-              <button key={i} type="button" className="jr-chip" onClick={() => ir(c.start)}>
-                <i style={{ background: SIDE_TONE[c.side] }} />
-                {campLabel(c.camp, t)}
-                <span className="u-time">{mmss(c.start)}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+        )}
+        <div className="mt-fact">
+          <span>{t("Late to your camps")}</span>
+          <b>{r.mean_delay != null ? mmss(r.mean_delay) : "—"}</b>
+          <small>{t("on average, from respawn to you")}</small>
+        </div>
+        <div className="mt-fact">
+          <span>{t("Recalls")}</span>
+          <b>{r.recalls.length}</b>
+          <small>{t("{n} scuttles", { n: r.scuttles })}</small>
+        </div>
+      </div>
 
       {/* ------------------------------------------------ el tiempo */}
-      <div className="sect__head" style={{ marginTop: "var(--space-1)" }}>
-        <span className="u-label">{t("Where your time went")}</span>
-        <i className="sect__rule" />
-      </div>
+      <span className="u-label">{t("Where your time went")}</span>
       <div className="jr-budget" aria-hidden="true">
         {BUDGET_PARTS.map((p) =>
           r.budget[p.key] > 0 ? (
@@ -216,27 +154,6 @@ const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onSeek: (s: numbe
           </span>
         ))}
       </div>
-
-      {/* ------------------------------------------------ tus muertes */}
-      {r.deaths.length > 0 && (
-        <>
-          <div className="sect__head" style={{ marginTop: "var(--space-1)" }}>
-            <span className="u-label">{t("What you were doing when you died")}</span>
-            <i className="sect__rule" />
-          </div>
-          <div style={wstyles.list}>
-            {r.deaths.map((d, i) => (
-              <button key={i} type="button" className="jr-death" onClick={() => ir(d.time)}>
-                <span className="u-time">{mmss(d.time)}</span>
-                <span>
-                  {activityLabel(d.activity, t)}
-                  {d.camp && <span className="jr-death-camp"> · {campLabel(d.camp, t)}</span>}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 };

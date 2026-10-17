@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 /**
@@ -24,10 +24,19 @@ export interface InspSectionProps {
   aside?: React.ReactNode;
   /** Cómo nace la primera vez (luego manda lo que el usuario dejó). */
   defaultOpen?: boolean;
+  /**
+   * Cada vez que cambia (y no es 0/undefined), la sección se abre y se pone a
+   * la vista. Lo usa "Lo que decidió la partida": una frase que habla de un
+   * bloque entero lleva a él, aunque el usuario lo dejara plegado. No se
+   * guarda como preferencia: abrirla para mirar no es decidir que nazca
+   * abierta.
+   */
+  reveal?: number;
   children: React.ReactNode;
 }
 
-export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defaultOpen = true, children }) => {
+export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defaultOpen = true, reveal, children }) => {
+  const ref = useRef<HTMLElement>(null);
   const [open, setOpen] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem(KEY(id));
@@ -50,8 +59,20 @@ export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defa
     });
   }, [id]);
 
+  useEffect(() => {
+    if (!reveal) return;
+    setOpen(true);
+    // Se espera a pintarla abierta: desplazarse antes apunta a la sección
+    // plegada, y lo que se abre encima de ella la empuja fuera de la vista.
+    const raf = requestAnimationFrame(() => {
+      const quieto = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      ref.current?.scrollIntoView({ block: "start", behavior: quieto ? "auto" : "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [reveal]);
+
   return (
-    <section>
+    <section ref={ref}>
       <div className="sect__head">
         <button type="button" onClick={toggle} aria-expanded={open} style={styles.toggle}>
           <ChevronDown

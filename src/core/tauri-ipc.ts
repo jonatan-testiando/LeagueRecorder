@@ -410,6 +410,10 @@ export interface PressureEvidence {
   after_episode: boolean;
   /** Pasó donde estabas tú (resultado de la pelea), no lejos. */
   local?: boolean;
+  /** Dónde pasó, en coordenadas de juego (de la timeline de Riot). Las
+   *  cachés anteriores no lo traen. */
+  x?: number | null;
+  y?: number | null;
 }
 
 export interface PressureEpisode {
@@ -600,6 +604,29 @@ export const cancelMatchMinimap = async (matchId: string): Promise<void> => {
 export const getMatchPressure = async (matchId: string): Promise<PressureWindow[]> => {
   return await invoke<PressureWindow[]>("get_match_pressure", { matchId });
 };
+
+/**
+ * Un episodio de presión segundo a segundo: tu vida (del HUD) y cuántos
+ * rivales y aliados tenías encima (del minimapa). Para ver en qué segundo
+ * había que soltar.
+ */
+export interface EpisodeStrip {
+  /** "ok", o por qué falta algo: "no_hud" (vida sin leer), "no_minimap"
+   *  (rivales sin medir), "no_riot". Con una de las dos fuentes basta para
+   *  devolver "ok"; lo que falte llega vacío. */
+  status: "ok" | "no_hud" | "no_minimap" | "no_riot";
+  /** [t_partida, vida 0..1]. Unas 4 muestras por segundo. Vacío sin HUD. */
+  hp: [number, number][];
+  /** [t_partida, rivales a ≤1200, aliados a ≤1200 (sin contarte)]. Las
+   *  muestras del minimapa (~2 por segundo). Vacío sin minimapa medido. */
+  near: [number, number, number][];
+  /** Tus muertes dentro del tramo (partida). */
+  deaths: number[];
+}
+
+/** La franja de un tramo `[from, to]` en segundos de PARTIDA. */
+export const getEpisodeStrip = async (matchId: string, from: number, to: number): Promise<EpisodeStrip> =>
+  await invoke<EpisodeStrip>("get_episode_strip", { matchId, from, to });
 
 // Marca o desmarca un suceso como revisado. El estado vive en el JSON de la
 // partida, junto a los comentarios: revisar es una tarea con estado y tiene que

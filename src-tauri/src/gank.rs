@@ -149,6 +149,11 @@ impl Lane {
             .min_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(l, _)| l)
     }
+
+    /// Distancia de un punto al eje de este carril.
+    pub fn distance(self, x: f64, y: f64) -> f64 {
+        project(self, x, y).0
+    }
 }
 
 impl Outcome {
@@ -218,7 +223,7 @@ pub fn lane_at(x: f64, y: f64, max_dist: f64) -> Option<(Lane, f64, f64)> {
         .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
 }
 
-fn lane_of_role(role: &str) -> Option<Lane> {
+pub(crate) fn lane_of_role(role: &str) -> Option<Lane> {
     match role {
         "TOP" => Some(Lane::Top),
         "MIDDLE" | "MID" => Some(Lane::Mid),

@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import {
   getGoldReport,
   getJungleRoute,
+  getMatchAttribution,
   getMatchTrack,
   getSpellAutopsy,
   type GoldResponse,
   type JungleRouteResponse,
   type MatchTrackResponse,
+  type PlayerCredit,
   type SpellReport,
 } from "../../core/tauri-ipc";
 
@@ -58,6 +60,11 @@ export const useGoldReport = (matchId: string | null) =>
 
 export const useSpellAutopsy = (matchId: string | null) =>
   useCached<SpellReport>(matchId && `autopsy:${matchId}`, () => getSpellAutopsy(matchId as string));
+
+/** Reparto de crédito de los 10: lo usan "Tus muertes" (el precio de cada una)
+ *  y "Lo que decidió la partida", que comparten filas. */
+export const useAttribution = (matchId: string | null) =>
+  useCached<PlayerCredit[]>(matchId && `attribution:${matchId}`, () => getMatchAttribution(matchId as string));
 
 export const useMatchTrack = (matchId: string | null) =>
   useCached<MatchTrackResponse>(matchId && `track:${matchId}`, () => getMatchTrack(matchId as string));

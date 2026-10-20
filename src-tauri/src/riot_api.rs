@@ -986,7 +986,26 @@ pub async fn attribution_for(
 
     let details = details_for(&api, match_id, &rid).await?;
     let tl = timeline_for(&api, match_id, &rid).await?;
-    Ok(impacto(&mut metadata, &tl, &details.info))
+    let mut filas = impacto(&mut metadata, &tl, &details.info);
+
+    // Lo grabado sólo existe para quien grabó: sus muertes ganan las etiquetas
+    // de mirar el mapa y de la niebla. Va aquí y no en `impacto` porque la
+    // sincronización y el barrido del arranque no las necesitan, y leer el HUD
+    // cuesta.
+    if let Some(yo) = metadata.participants.iter().position(|p| p.is_self) {
+        if let Some(c) = filas.iter_mut().find(|c| c.participant_id == yo as i32 + 1) {
+            let id = match_id.to_string();
+            let (snaps, offset) = (metadata.camera_snaps.clone(), metadata.video_offset);
+            let mut muertes = std::mem::take(&mut c.deaths_detail);
+            c.deaths_detail = tokio::task::spawn_blocking(move || {
+                crate::muertes::etiquetar_video(&id, &snaps, offset, &mut muertes);
+                muertes
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(filas)
 }
 
 /// Reparto de crédito de los 10, con el puesto del jugador ya guardado.
@@ -1080,7 +1099,9 @@ fn impacto(
 /// Versión del barrido de impacto. Subirlo lo obliga a repasar la biblioteca.
 // v2 (2026-10-17): el puesto desempata por WPA cuando el percentil se satura;
 // los puestos guardados con la v1 podían dejar 2º al que más aportó.
-pub const IMPACT_BACKFILL_V: u32 = 2;
+// v3 (2026-10-19): las ejecuciones (killerId 0) restan a quien muere; antes
+// costaban 0 y el WPA guardado de quien las sufría salía inflado.
+pub const IMPACT_BACKFILL_V: u32 = 3;
 
 /// Rellena el puesto de impacto de las partidas viejas, sin tocar la API.
 ///

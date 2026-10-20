@@ -3,11 +3,11 @@ import type { TimelineMarker } from "../../../types";
 import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { champLabel } from "../../../core/matchEvents";
-import { JUNGLE_AGREEMENT_MIN } from "../../../core/tauri-ipc";
+import { JUNGLE_AGREEMENT_MIN, type DeathCost, type DeathTag } from "../../../core/tauri-ipc";
 import { activityLabel } from "../jungleRoute";
-import { useGoldReport, useJungleRoute, useSpellAutopsy } from "../useMatchData";
+import { useAttribution, useGoldReport, useJungleRoute, useSpellAutopsy } from "../useMatchData";
 import type { MapFocus, OpenMap } from "../mapFocus";
-import { formatGold } from "./pressureFormat";
+import { formatGold, formatSigned } from "./pressureFormat";
 import { BLIND_LOOKBACK_S as ANTES_S } from "./ReviewQueue";
 import { HelpDot } from "./HelpDot";
 import { wstyles } from "./videoPlayerStyles";
@@ -52,25 +52,33 @@ export interface DeathRow {
   /** Dónde caíste (coordenadas de juego, de la timeline de Riot). */
   x: number | null;
   y: number | null;
+  /** Lo que costó en probabilidad de victoria y por qué. null sin reparto:
+   *  partida sin sincronizar, o sin clave de Riot. */
+  precio: DeathCost | null;
 }
 
 /**
  * Las filas, compartidas con "Lo que decidió la partida": las dos cuentan las
  * muertes a ciegas con el mismo criterio, o dirían cifras distintas.
+ *
+ * `selfPid` (1-10) es quien grabó: de su reparto sale el precio de cada muerte.
  */
 export function useDeathRows(
   matchId: string,
   markers: TimelineMarker[] | undefined,
   cameraSnaps: number[],
-  videoOffset: number
+  videoOffset: number,
+  selfPid: number | null
 ): { filas: DeathRow[]; cargando: boolean } {
   const autopsia = useSpellAutopsy(matchId);
   const ruta = useJungleRoute(matchId);
   const oro = useGoldReport(matchId);
+  const reparto = useAttribution(selfPid ? matchId : null);
 
   const filas = useMemo<DeathRow[]>(() => {
     const r = ruta?.route && ruta.route.agreement >= JUNGLE_AGREEMENT_MIN ? ruta.route : null;
     const g = oro?.status === "ok" ? oro.report : null;
+    const mias = reparto?.find((c) => c.participant_id === selfPid)?.deaths_detail ?? [];
     const marcas = (markers ?? []).filter((m) => m.event_type === "death");
     const base =
       autopsia && autopsia.autopsies.length > 0
@@ -92,11 +100,66 @@ export function useDeathRows(
         oro: g?.deaths.find((d) => Math.abs(d.time - b.tGame) <= MISMA_MUERTE_S)?.unspent ?? null,
         x: marca?.position_x ?? null,
         y: marca?.position_y ?? null,
+        precio: mias.find((d) => Math.abs(d.minute * 60 - b.tGame) <= MISMA_MUERTE_S) ?? null,
       };
     });
-  }, [autopsia, ruta, oro, markers, cameraSnaps, videoOffset]);
+  }, [autopsia, ruta, oro, reparto, selfPid, markers, cameraSnaps, videoOffset]);
 
-  return { filas, cargando: autopsia === undefined };
+  // Se espera al reparto: si el precio llegara después, la fila cambiaría de
+  // forma delante del usuario.
+  return { filas, cargando: autopsia === undefined || (selfPid != null && reparto === undefined) };
+}
+
+/** "−6,3% de victoria". */
+export const costText = (wpa: number, t: T): string => t("{p}% win chance", { p: formatSigned(wpa * 100) });
+
+const OBJETIVO: Record<string, string> = {
+  dragon: "Dragon",
+  baron: "Baron Nashor",
+  herald: "Rift Herald",
+  grubs: "Void Grubs",
+  tower: "Tower",
+  inhibitor: "Inhibitor",
+  plate: "Plate",
+};
+
+/** De dónde sale el precio, para el `title` del chip. */
+function costDetail(p: DeathCost, t: T): string {
+  const muerte = formatSigned(p.wpa_death * 100);
+  if (p.wpa_objective < 0 && p.objective) {
+    return t("The death {a}% · {objective} right after {b}%", {
+      a: muerte,
+      objective: t(OBJETIVO[p.objective] ?? p.objective),
+      b: formatSigned(p.wpa_objective * 100),
+    });
+  }
+  return t("What this death cost your team in win probability");
+}
+
+/** Texto y explicación de cada etiqueta. Las desconocidas no se pintan. */
+const TAGS: Record<DeathTag, { text: string; help: string }> = {
+  jungla: { text: "enemy jungler", help: "The enemy jungler killed you or assisted." },
+  fuera_de_zona: { text: "away from your lane", help: "You died more than 2,500 units from your lane." },
+  bajo_torre_pre14: {
+    text: "at a tower before 14:00",
+    help: "Before 14:00, next to a standing tower (yours or theirs), or their tower hit you.",
+  },
+  poco_dano_devuelto: {
+    text: "little damage back",
+    help: "What you dealt before dying is in the lowest 10% for your role at that point of the game.",
+  },
+  sin_mirar_mapa: { text: "no look at the map", help: "No look at the map in the 10 s before dying." },
+  desde_niebla: { text: "from the fog", help: "The fight that killed you was opened with no enemy in sight." },
+};
+
+/** Las etiquetas que pintar. "Sin mirar el mapa" ya lo dice la frase cuando
+ *  se saben las miradas, así que no se repite. */
+export function deathTags(f: DeathRow, t: T): { text: string; help: string }[] {
+  return (f.precio?.tags ?? [])
+    .filter((k) => !(k === "sin_mirar_mapa" && f.miradas != null))
+    .map((k) => TAGS[k as DeathTag])
+    .filter(Boolean)
+    .map((e) => ({ text: t(e.text), help: t(e.help) }));
 }
 
 export const deathTitle = (f: DeathRow, t: T): string =>
@@ -144,12 +207,14 @@ interface Props {
   /** Miradas al mapa, en tiempo de VÍDEO. */
   cameraSnaps: number[];
   videoOffset: number;
+  /** Quién grabó (1-10), para el precio de cada muerte. */
+  selfPid: number | null;
   onOpenMap: OpenMap;
 }
 
-export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, videoOffset, onOpenMap }) => {
+export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, videoOffset, selfPid, onOpenMap }) => {
   const t = useT();
-  const { filas, cargando } = useDeathRows(matchId, markers, cameraSnaps, videoOffset);
+  const { filas, cargando } = useDeathRows(matchId, markers, cameraSnaps, videoOffset, selfPid);
 
   if (cargando) return <div className="ds-loading"><div className="spinner" /></div>;
   if (filas.length === 0) return <p className="note" style={{ margin: 0 }}>{t("You didn't die this game.")}</p>;
@@ -162,21 +227,31 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
     rectas > 0 && t("{n} in a straight line", { n: rectas }),
     caras > 0 && t("{n} with {g}+ gold unspent", { n: caras, g: formatGold(SIN_GASTAR) }),
   ].filter(Boolean) as string[];
+  const conPrecio = filas.filter((f) => f.precio);
+  const total = conPrecio.reduce((s, f) => s + (f.precio?.wpa ?? 0), 0);
 
   return (
     <div style={wstyles.body}>
       <p className="ds-summary">
         {filas.length === 1 ? t("One death") : t("{n} deaths", { n: filas.length })}
+        {conPrecio.length > 0 && ` (${costText(total, t)})`}
         {partes.length > 0 && `: ${partes.join(" · ")}`}
         <HelpDot
-          text={t("Looks: minimap clicks and ally camera keys in the {n} s before dying. Straight line: your course never turned 45° in the last 3 s.", { n: ANTES_S })}
+          text={[
+            conPrecio.length > 0 &&
+              t("Win chance: what each death cost your team in the win-probability model, plus its share of what the enemy took in the next 60 s. Vision isn't in the model, so a death that gave away vision costs more than this says."),
+            t("Looks: minimap clicks and ally camera keys in the {n} s before dying. Straight line: your course never turned 45° in the last 3 s.", { n: ANTES_S }),
+          ]
+            .filter(Boolean)
+            .join(" ")}
         />
       </p>
       <div className="ds-list">
         {filas.map((f, i) => {
           const trozos = deathParts(f, t);
+          const tags = deathTags(f, t);
           return (
-            <button key={i} type="button" className="ds-row" onClick={() => onOpenMap(deathFocus(f, t))} title={t("Open the map at this moment")}>
+            <button key={i} type="button" className="ds-row ds-row--priced" onClick={() => onOpenMap(deathFocus(f, t))} title={t("Open the map at this moment")}>
               <span className="u-time ds-time">{mmss(Math.max(0, f.tGame))}</span>
               <span className="ds-body">
                 <span className="ds-who">
@@ -193,7 +268,19 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
                     ))}
                   </span>
                 )}
+                {tags.length > 0 && (
+                  <span className="ds-tags">
+                    {tags.map((g) => (
+                      <span key={g.text} className="ds-tag" title={g.help}>{g.text}</span>
+                    ))}
+                  </span>
+                )}
               </span>
+              {f.precio ? (
+                <span className="ds-cost" title={costDetail(f.precio, t)}>{costText(f.precio.wpa, t)}</span>
+              ) : (
+                <span />
+              )}
             </button>
           );
         })}

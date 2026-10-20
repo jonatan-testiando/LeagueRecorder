@@ -311,6 +311,16 @@ pub struct MatchMetadata {
     /// `realign_to_video_time` lo estima y reescribe el fichero.
     #[serde(default)]
     pub video_offset: Option<f64>,
+    /// `gameId` de la partida según el cliente de League (LCU), sin plataforma.
+    /// Con `platform_id` forma el id de Match-V5 (`LA1_1746460303`), que es lo
+    /// que usa la sincronización con Riot en vez de emparejar por duración.
+    /// `None` en partidas viejas, VODs, grabaciones manuales o si el cliente no
+    /// contestó.
+    #[serde(default)]
+    pub game_id: Option<i64>,
+    /// Plataforma del cliente al jugarla ("LA1", "EUW1"). Ver `game_id`.
+    #[serde(default)]
+    pub platform_id: Option<String>,
 }
 
 thread_local! {

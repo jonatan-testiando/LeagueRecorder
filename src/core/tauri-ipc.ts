@@ -277,6 +277,26 @@ export const syncMatchNow = async (matchId: string): Promise<MatchMetadata> => {
   return await invoke<MatchMetadata>("sync_match_now", { matchId });
 };
 
+/**
+ * Estado del cliente de League (LCU), de `lcu.rs`. Llega también por el evento
+ * `lcu-status` cada vez que cambia (el backend sondea cada 2 s).
+ */
+export interface LcuStatus {
+  /** Hay un cliente abierto que contesta. */
+  connected: boolean;
+  /** Fase de gameflow tal cual: "None", "Lobby", "ChampSelect", "InProgress"… */
+  phase: string | null;
+  /** `gameId` de la partida; solo desde que empieza hasta la post-partida. */
+  game_id: number | null;
+  queue_id: number | null;
+  /** "LA1", "EUW1"… */
+  platform_id: string | null;
+}
+
+export const getLcuStatus = async (): Promise<LcuStatus> => {
+  return await invoke<LcuStatus>("get_lcu_status");
+};
+
 // Comprueba la clave de Riot ya guardada. Resuelve si sirve, y rechaza con el
 // motivo si no.
 export const checkRiotKey = async (): Promise<void> => {

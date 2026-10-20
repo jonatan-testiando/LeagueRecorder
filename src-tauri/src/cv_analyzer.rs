@@ -402,6 +402,8 @@ pub async fn process_vod(
         camera_snaps: Vec::new(),
         // Todo lo que detecta el analizador ya está en tiempo de vídeo.
         video_offset: Some(0.0),
+        game_id: None,
+        platform_id: None,
     };
 
     let _ = app.emit("vod_progress", "Análisis finalizado.");

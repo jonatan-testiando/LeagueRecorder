@@ -158,6 +158,11 @@ pub struct ActiveMatchState {
     /// La partida se sigue registrando entera (eventos, APM, entrenamiento): lo
     /// único que cambia es que su `video_path` acabará vacío.
     pub has_video: Mutex<bool>,
+    /// La partida según el cliente de League (`gameId`, cola, plataforma). Se
+    /// toma durante la sesión, en cuanto el LCU la da por empezada, y acaba en
+    /// los metadatos: es lo que deja sincronizar con Riot por id exacto en vez
+    /// de por duración. `None` si el cliente no contestó (o no estaba).
+    pub lcu_game: Mutex<Option<crate::lcu::PartidaLcu>>,
 }
 
 impl Default for ActiveMatchState {
@@ -176,6 +181,7 @@ impl Default for ActiveMatchState {
             recording_start: Mutex::new(None),
             game_time_offset: Mutex::new(None),
             has_video: Mutex::new(false),
+            lcu_game: Mutex::new(None),
         }
     }
 }
@@ -607,6 +613,8 @@ pub async fn stop_manual_recording(
             camera_snaps: Vec::new(),
             // La grabación manual empieza y acaba con el vídeo: no hay carga que descontar.
             video_offset: Some(0.0),
+            game_id: None,
+            platform_id: None,
         };
         // Ya no se traga el error: si el metadata no se escribe, la grabación
         // existe en disco pero la biblioteca no la ve nunca. Eso hay que decirlo.
@@ -745,6 +753,10 @@ pub fn spawn_background_monitor(
                     active_match.gold_samples.lock().await.clear();
                     active_match.mouse_events.lock().await.clear();
                     ult_state.mouse_events.lock().unwrap().clear();
+                    // El cliente pasa a "InProgress" antes de que el juego abra el
+                    // puerto 2999, así que normalmente el gameId ya está aquí. Si
+                    // no, se reintenta en cada vuelta mientras dure la sesión.
+                    *active_match.lcu_game.lock().await = crate::lcu::partida_en_curso();
 
                     // Registrar evento inicial
                     active_match.events.lock().await.push(MatchEvent::plain(
@@ -827,6 +839,19 @@ pub fn spawn_background_monitor(
                     close_grace_ticks = 0;
                 } else if session_active {
                     close_grace_ticks = 0;
+
+                    {
+                        let mut lcu_game = active_match.lcu_game.lock().await;
+                        if lcu_game.is_none() {
+                            *lcu_game = crate::lcu::partida_en_curso();
+                            if let Some(p) = lcu_game.as_ref() {
+                                println!(
+                                    "LCU: partida {} (cola {:?}, {:?})",
+                                    p.game_id, p.queue_id, p.platform_id
+                                );
+                            }
+                        }
+                    }
 
                     // ¿Sigue grabando de verdad? `is_recording` refleja la intención;
                     // el servidor sabe si el output se cayó (encoder que revienta,
@@ -1240,6 +1265,7 @@ async fn finalize_match(
     // Resolución del escritorio: es el espacio en el que `rdev` da las coordenadas
     // del ratón, y el reproductor lo necesita para escalar bien la estela.
     let mouse_space = crate::ultimate::mouse_coordinate_space();
+    let lcu_game = active_match.lcu_game.lock().await.take();
     let metadata = MatchMetadata {
         id: match_id.clone(),
         game_duration: final_duration,
@@ -1258,7 +1284,9 @@ async fn finalize_match(
         gold_earned: None,
         damage_dealt: None,
         participants: Vec::new(),
-        queue: None,
+        // La de Riot la sobrescribe al sincronizar con el mismo número; hasta
+        // entonces la biblioteca ya sabe de qué cola es.
+        queue: lcu_game.as_ref().and_then(|p| p.queue_id),
         objectives: Vec::new(),
         item_purchases: Vec::new(),
         gold_diff_15: None,
@@ -1282,6 +1310,8 @@ async fn finalize_match(
         is_vod: false,
         camera_snaps,
         video_offset,
+        game_id: lcu_game.as_ref().map(|p| p.game_id),
+        platform_id: lcu_game.and_then(|p| p.platform_id),
     };
 
     // Las miradas al mapa: las teclas de cámara que se acaban de recoger MÁS los
@@ -1303,23 +1333,36 @@ async fn finalize_match(
     match save_match_metadata(&metadata) {
         Ok(_) => {
             println!("Metadatos guardados con éxito para la partida {}", match_id);
-            // Iniciar sincronización con Riot API en segundo plano tras 60 segundos
+            // Sincronización con Riot en segundo plano. Con el gameId del cliente
+            // se pide la partida exacta, y si Riot aún no la ha publicado se
+            // reintenta: 1 min, luego 2 y luego 5 (lo normal es que esté al primero).
             let match_id_for_riot = match_id.clone();
             let active_player_for_riot = active_match.active_player.lock().await.clone();
             tokio::spawn(async move {
-                println!(
-                    "Esperando 60 segundos antes de sincronizar con Riot API para la partida {}...",
-                    match_id_for_riot
-                );
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot)
-                    .await
-                {
-                    Ok(_) => println!(
-                        "Sincronización con Riot API completada para {}",
-                        match_id_for_riot
-                    ),
-                    Err(e) => eprintln!("Error al sincronizar con Riot API: {}", e),
+                const ESPERAS_S: [u64; 3] = [60, 120, 300];
+                for (intento, espera) in ESPERAS_S.iter().enumerate() {
+                    println!(
+                        "Esperando {espera} s antes de sincronizar con Riot API la partida {match_id_for_riot}..."
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(*espera)).await;
+                    match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot)
+                        .await
+                    {
+                        Ok(_) => {
+                            println!("Sincronización con Riot API completada para {match_id_for_riot}");
+                            break;
+                        }
+                        Err(e)
+                            if e.starts_with(crate::riot_api::SYNC_PENDIENTE)
+                                && intento + 1 < ESPERAS_S.len() =>
+                        {
+                            println!("{e}; se reintenta.");
+                        }
+                        Err(e) => {
+                            eprintln!("Error al sincronizar con Riot API: {e}");
+                            break;
+                        }
+                    }
                 }
             });
 

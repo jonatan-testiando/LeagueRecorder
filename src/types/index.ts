@@ -136,6 +136,11 @@ export interface MatchMetadata {
   damage_dealt?: number;
   participants?: Participant[]; // scoreboard de los 10 (vacío hasta sincronizar con Riot)
   queue?: number; // queueId de Riot (420=clasif solo, 440=flex, 450=ARAM, 0=custom…)
+  /** `gameId` según el cliente de League al grabarla (sin plataforma). Con
+   *  `platform_id` es el id de Match-V5 que usa la sincronización. */
+  game_id?: number | null;
+  /** Plataforma del cliente al jugarla: "LA1", "EUW1"… */
+  platform_id?: string | null;
   objectives?: TeamObjectives[]; // objetivos por equipo
   item_purchases?: ItemPurchase[]; // compras de items del jugador con su minuto
   gold_diff_15?: number;

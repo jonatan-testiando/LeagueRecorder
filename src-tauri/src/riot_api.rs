@@ -879,6 +879,24 @@ impl RiotApiClient {
         resp.text().await.map_err(|e| e.to_string())
     }
 
+    /// Como `get_match_details_raw`, pero un 404 es `Ok(None)` y no un error:
+    /// con el id exacto en la mano, 404 solo puede ser que Riot aún no la ha
+    /// publicado (tarda unos minutos tras acabar la partida).
+    pub async fn get_match_details_raw_si_esta(&self, match_id: &str) -> Result<Option<String>, String> {
+        let url = self.url(
+            &self.regional_host(),
+            &format!("lol/match/v5/matches/{}", match_id),
+        );
+        let resp = self.get_with_retry(&url).await?;
+        if resp.status().as_u16() == 404 {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            return Err(format!("Riot API Error (MatchDetails): {}", resp.status()));
+        }
+        resp.text().await.map(Some).map_err(|e| e.to_string())
+    }
+
     pub async fn get_match_details(&self, match_id: &str) -> Result<MatchDto, String> {
         let raw = self.get_match_details_raw(match_id).await?;
         serde_json::from_str(&raw).map_err(|e| e.to_string())
@@ -2132,6 +2150,56 @@ pub async fn backfill_participants(
     Ok(metadata)
 }
 
+/// Prefijo del error de `sync_riot_data` cuando la partida aún no está en Riot.
+/// Quien sincroniza tras la partida lo usa para saber que reintentar tiene sentido.
+pub const SYNC_PENDIENTE: &str = "pending:";
+
+/// Id de Match-V5 exacto de una grabación, si el cliente de League dio su
+/// `gameId` y su plataforma: `("LA1_1746460303", "la1")`.
+fn id_exacto(m: &crate::storage::MatchMetadata) -> Option<(String, String)> {
+    let plataforma = platform_conocida(m.platform_id.as_deref()?)?;
+    let game_id = m.game_id.filter(|g| *g > 0)?;
+    Some((format!("{}_{}", plataforma.to_ascii_uppercase(), game_id), plataforma))
+}
+
+/// La partida candidata: id de Riot, tu participante, la partida y su JSON crudo.
+type Emparejada = (String, ParticipantDto, MatchInfo, String);
+
+/// Emparejado por duración: de tus 5 últimas partidas, la primera cuya duración
+/// esté a ±180 s de la grabación. Es el plan B para grabaciones sin `gameId`
+/// (anteriores al LCU, o con el cliente sin contestar): dos partidas seguidas
+/// de duración parecida se pueden confundir.
+async fn emparejar_por_duracion(
+    api: &RiotApiClient,
+    puuid: &str,
+    duracion: f64,
+) -> Result<Option<Emparejada>, String> {
+    let recent_matches = api.get_match_ids_by_puuid(puuid, 5).await?;
+
+    if recent_matches.is_empty() {
+        return Err("No recent matches found".to_string());
+    }
+
+    for r_match_id in recent_matches {
+        // Se pide en crudo para poder cachear la que resulte ser la nuestra: el
+        // análisis de atribución necesita el DTO completo, no el recorte que va
+        // al metadata.
+        let Ok(raw) = api.get_match_details_raw(&r_match_id).await else {
+            continue;
+        };
+        let Ok(details) = serde_json::from_str::<MatchDto>(&raw) else {
+            continue;
+        };
+        let duration_diff = (details.info.gameDuration as f64 - duracion).abs();
+        if duration_diff <= 180.0 {
+            if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
+                return Ok(Some((r_match_id, participant.clone(), details.info.clone(), raw)));
+            }
+        }
+    }
+    Ok(None)
+}
+
 pub async fn sync_riot_data(
     match_id: &str,
     active_player: &str,
@@ -2160,6 +2228,11 @@ pub async fn sync_riot_data(
     };
 
     let mut api = RiotApiClient::with_config(config.riot_api_key.clone(), &config);
+    let exacto = id_exacto(&metadata);
+    if let Some((_, plataforma)) = &exacto {
+        // La plataforma que dijo el cliente manda: ni se sondea la región.
+        api.set_platform(plataforma);
+    }
 
     // account-v1 contesta desde cualquier ruta regional, así que el puuid se
     // consigue antes de saber la región.
@@ -2167,31 +2240,27 @@ pub async fn sync_riot_data(
     // Y con el puuid ya se puede averiguar dónde juega (una vez en la vida).
     api.resolve_platform(&puuid).await;
 
-    let recent_matches = api.get_match_ids_by_puuid(&puuid, 5).await?;
-
-    if recent_matches.is_empty() {
-        return Err("No recent matches found".to_string());
-    }
-
-    let mut found_match = None;
-    for r_match_id in recent_matches {
-        // Se pide en crudo para poder cachear la que resulte ser la nuestra: el
-        // análisis de atribución necesita el DTO completo, no el recorte que va
-        // al metadata.
-        let Ok(raw) = api.get_match_details_raw(&r_match_id).await else {
-            continue;
-        };
-        let Ok(details) = serde_json::from_str::<MatchDto>(&raw) else {
-            continue;
-        };
-        let duration_diff = (details.info.gameDuration as f64 - metadata.game_duration).abs();
-        if duration_diff <= 180.0 {
-            if let Some(participant) = details.info.participants.iter().find(|p| p.puuid == puuid) {
-                found_match = Some((r_match_id, participant.clone(), details.info.clone(), raw));
-                break;
+    let found_match = match exacto {
+        // Con el gameId del cliente no hay nada que adivinar. Si Riot aún no la
+        // tiene NO se cae al emparejado por duración: lo que encontraría sería
+        // la partida anterior, que es justo el error que esto viene a quitar.
+        Some((riot_id, _)) => {
+            let Some(raw) = api.get_match_details_raw_si_esta(&riot_id).await? else {
+                return Err(format!("{SYNC_PENDIENTE} {riot_id} todavía no está publicada en Riot"));
+            };
+            let details = serde_json::from_str::<MatchDto>(&raw).map_err(|e| e.to_string())?;
+            match details.info.participants.iter().find(|p| p.puuid == puuid) {
+                Some(participant) => Some((riot_id, participant.clone(), details.info.clone(), raw)),
+                None => {
+                    // Partida de espectador, o el Riot ID de la API del juego no
+                    // es el de ninguno de los diez.
+                    println!("{riot_id}: «{active_player}» no aparece entre los jugadores; sin sincronizar.");
+                    None
+                }
             }
         }
-    }
+        None => emparejar_por_duracion(&api, &puuid, metadata.game_duration).await?,
+    };
 
     if let Some((riot_id, participant, info, raw)) = found_match {
         let _ = crate::storage::save_raw_match(match_id, &raw);
@@ -2251,6 +2320,59 @@ pub async fn sync_riot_data(
     }
 
     Ok(metadata)
+}
+
+#[cfg(test)]
+mod tests_id_exacto {
+    use super::*;
+
+    fn con(game_id: Option<i64>, plataforma: Option<&str>) -> crate::storage::MatchMetadata {
+        crate::storage::MatchMetadata {
+            game_id,
+            platform_id: plataforma.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn id_de_match_v5_desde_el_cliente() {
+        assert_eq!(
+            id_exacto(&con(Some(1746460303), Some("LA1"))),
+            Some(("LA1_1746460303".to_string(), "la1".to_string()))
+        );
+        assert_eq!(
+            id_exacto(&con(Some(7), Some("euw1"))),
+            Some(("EUW1_7".to_string(), "euw1".to_string()))
+        );
+    }
+
+    #[test]
+    fn sin_id_exacto_se_empareja_por_duracion() {
+        assert_eq!(id_exacto(&con(None, Some("LA1"))), None);
+        assert_eq!(id_exacto(&con(Some(1746460303), None)), None);
+        assert_eq!(id_exacto(&con(Some(0), Some("LA1"))), None);
+        // "EUW" es la región del cliente, no una plataforma: mejor sin id que uno roto.
+        assert_eq!(id_exacto(&con(Some(1746460303), Some("EUW"))), None);
+    }
+
+    /// Contra Riot con la config de esta máquina (clave o proxy), sin escribir nada:
+    /// `RIOT_EN_VIVO=LA1_1746460303 cargo test --lib tests_id_exacto::en_vivo -- --nocapture`
+    #[test]
+    fn en_vivo() {
+        let Ok(id) = std::env::var("RIOT_EN_VIVO") else { return };
+        let cfg = crate::storage::load_config();
+        let mut api = RiotApiClient::with_config(cfg.riot_api_key.clone(), &cfg);
+        api.set_platform(&platform_from_match_id(&id).unwrap());
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let raw = api.get_match_details_raw_si_esta(&id).await.unwrap().expect("debería existir");
+            let dto: MatchDto = serde_json::from_str(&raw).unwrap();
+            println!("{id}: {} s, cola {}", dto.info.gameDuration, dto.info.queueId);
+            // Un id que no existe es "todavía no está", no un error.
+            let falso = format!("{}_1", id.split('_').next().unwrap());
+            assert_eq!(api.get_match_details_raw_si_esta(&falso).await, Ok(None));
+        });
+    }
 }
 
 #[cfg(test)]

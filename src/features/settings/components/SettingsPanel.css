@@ -173,6 +173,11 @@
   animation: stg-rec 1.4s ease-in-out infinite;
 }
 @keyframes stg-rec { 50% { opacity: 0.45; } }
+/* Apagado: no es un fallo (el cliente de League cerrado, p. ej.), solo no hay nada. */
+.stg-dot[data-tone="off"] {
+  background: var(--faint);
+  box-shadow: none;
+}
 .stg-diag__note {
   grid-column: 1 / -1;
   margin: 0;

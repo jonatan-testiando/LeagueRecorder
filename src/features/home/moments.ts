@@ -72,6 +72,11 @@ export function joinNames(names: string[], t: Translate): string {
 
 /* ------------------------------------------------------------------ ayudas */
 
+/** El tramo del foco del coach, en minutos de partida. `to: null` = hasta el final. */
+export type FocusWindow = { from: number; to: number | null };
+
+const enVentana = (min: number, w: FocusWindow) => min >= w.from && (w.to == null || min < w.to);
+
 const isDeath = (e: MatchEvent) => e.type === "ChampionKill" && e.subtype === "death";
 const isKill = (e: MatchEvent) => e.type === "ChampionKill" && e.subtype === "kill";
 const isTakedown = (e: MatchEvent) =>
@@ -154,7 +159,7 @@ interface Ctx {
 function pickError(
   ctx: Ctx,
   clips: ErrorClipMetadata[],
-  focusWindow: { from: number; to: number } | null
+  focusWindow: FocusWindow | null
 ): TeachMoment | null {
   const { match, evs, parts, self, t } = ctx;
 
@@ -218,16 +223,16 @@ function pickError(
       n: Math.round(conCoste.coste!.time - death.time),
     });
   } else {
-    // 3. La que cae en el tramo donde más mueres; 4. si no, la primera.
+    // 3. La que cae en el tramo del foco del coach; 4. si no, la primera.
     const enTramo = focusWindow
-      ? deaths.find((d) => gameMin(d) >= focusWindow.from && gameMin(d) < focusWindow.to)
+      ? deaths.find((d) => enVentana(gameMin(d), focusWindow))
       : undefined;
     if (enTramo && focusWindow) {
       death = enTramo;
-      why = t("It falls between minutes {a} and {b}, the stretch where you die most.", {
-        a: focusWindow.from,
-        b: focusWindow.to,
-      });
+      why =
+        focusWindow.to == null
+          ? t("It falls after minute {a}, the stretch of your focus.", { a: focusWindow.from })
+          : t("It falls between minutes {a} and {b}, the stretch of your focus.", { a: focusWindow.from, b: focusWindow.to });
     } else {
       death = deaths[0];
       why = t("Your first death of the game, at minute {m}.", { m: Math.floor(gameMin(death)) });
@@ -269,7 +274,7 @@ function pickFinding(
   ctx: Ctx,
   episodes: PressureEpisode[],
   looks: CameraLook[],
-  focusWindow: { from: number; to: number } | null,
+  focusWindow: FocusWindow | null,
   /** Segundo del error ya elegido: su misma muerte no se cuenta dos veces. */
   errorTime: number | null
 ): TeachMoment | null {
@@ -278,7 +283,7 @@ function pickFinding(
 
   // 0. Una muerte a ciegas: el MISMO hallazgo que marca el reproductor
   //    (`analyzerFindings`): ni un clic de minimapa ni una cámara aliada en los
-  //    segundos antes de morir. Se prefiere una del tramo donde más mueres.
+  //    segundos antes de morir. Se prefiere una del tramo del foco.
   const deathTimes = evs.filter(isDeath).map((e) => e.time);
   const lookTimes = [...(match.camera_snaps ?? []), ...looks.map((l) => l.t)];
   const ciegas = analyzerFindings(deathTimes, lookTimes, [], t).filter((f) => f.end !== errorTime);
@@ -287,7 +292,7 @@ function pickFinding(
     const enTramo = focusWindow
       ? ciegas.find((f) => {
           const min = Math.max(0, f.end - off) / 60;
-          return min >= focusWindow.from && min < focusWindow.to;
+          return enVentana(min, focusWindow);
         })
       : undefined;
     const f = enTramo ?? ciegas[0];
@@ -498,7 +503,7 @@ export function teachMoments(opts: {
   errorClips: ErrorClipMetadata[];
   episodes: PressureEpisode[];
   looks: CameraLook[];
-  focusWindow: { from: number; to: number } | null;
+  focusWindow: FocusWindow | null;
   t: Translate;
 }): TeachMoment[] {
   const { match, t } = opts;

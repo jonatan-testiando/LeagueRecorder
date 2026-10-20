@@ -18,7 +18,8 @@ use crate::winprob::Play;
 
 /// El jungla rival te mató o asistió.
 pub const JUNGLA: &str = "jungla";
-/// Caíste a más de [`crate::camera_input::RADIO_CARRIL`] del eje de tu carril.
+/// Caíste a más de [`crate::camera_input::RADIO_CARRIL`] del eje de tu carril,
+/// antes del 14:00.
 pub const FUERA_DE_ZONA: &str = "fuera_de_zona";
 /// Moriste en una torre (tuya o suya) antes del 14:00.
 pub const BAJO_TORRE: &str = "bajo_torre_pre14";
@@ -35,8 +36,10 @@ pub const VENTANA_OBJETIVO: f64 = 60.0;
 
 /// Fin de la fase de líneas: a las 14:00 caen las placas y los carriles se
 /// rompen. Una torre antes de eso es un diveo o un exceso; después, una pelea
-/// de asedio normal.
-const FIN_DE_LINEAS: f64 = 14.0 * 60.0;
+/// de asedio normal. Y estar lejos de tu carril, después, es lo que toca: con
+/// la etiqueta valiendo toda la partida marcaba el 33,6 % de las muertes del
+/// corpus, que es no decir nada.
+pub(crate) const FIN_DE_LINEAS: f64 = 14.0 * 60.0;
 
 /// A esta distancia de una torre en pie, la muerte es "en la torre".
 ///
@@ -67,7 +70,7 @@ pub const MIRADAS_ANTES: f64 = 10.0;
 
 /// Cortes de los tramos, en minutos: 0-7, 7-14, 14-21, 21-28 y 28+. Los del
 /// coach (§2.3), que son los de iTero.
-const CORTES_TRAMO: [f64; 4] = [7.0, 14.0, 21.0, 28.0];
+pub(crate) const CORTES_TRAMO: [f64; 4] = [7.0, 14.0, 21.0, 28.0];
 
 /// Percentil 10 del daño a campeones que devolvió quien murió
 /// (`victimDamageDealt`), por rol y tramo. Medido sobre el corpus (12.974
@@ -114,7 +117,8 @@ fn rol(p: &ParticipantDto) -> &str {
     }
 }
 
-fn tramo(minuto: f64) -> usize {
+/// En qué tramo (0-4) cae un minuto de partida.
+pub(crate) fn tramo(minuto: f64) -> usize {
     CORTES_TRAMO.iter().take_while(|c| minuto >= **c).count()
 }
 
@@ -168,7 +172,7 @@ fn etiquetas(
     }
 
     // Sin carril (jungla, o un modo sin puestos) no hay "tu zona".
-    if let (Some(carril), Some((x, y))) = (crate::gank::lane_of_role(rol(victima)), pos) {
+    if let (true, Some(carril), Some((x, y))) = (sec < FIN_DE_LINEAS, crate::gank::lane_of_role(rol(victima)), pos) {
         if carril.distance(x, y) > crate::camera_input::RADIO_CARRIL {
             tags.push(FUERA_DE_ZONA.to_string());
         }
@@ -276,7 +280,7 @@ pub fn precios(tl: &TimelineDto, participants: &[ParticipantDto], plays: &[Play]
 /// Todas tus miradas al mapa, en segundos de vídeo: los saltos de cámara del
 /// metadata más los del informe por clics. Son casi siempre los mismos, así
 /// que se unen por décima, igual que hace `VideoPlayer` (`allLooks`).
-fn miradas(match_id: &str, camera_snaps: &[f64]) -> Vec<f64> {
+pub(crate) fn miradas(match_id: &str, camera_snaps: &[f64]) -> Vec<f64> {
     let informe = crate::camera_snaps::load_report(match_id).map(|r| r.snaps).unwrap_or_default();
     let mut vistos = std::collections::HashSet::new();
     let mut out: Vec<f64> = camera_snaps
@@ -289,21 +293,26 @@ fn miradas(match_id: &str, camera_snaps: &[f64]) -> Vec<f64> {
     out
 }
 
-fn sin_mirar(miradas: &[f64], t_video: f64) -> bool {
+pub(crate) fn sin_mirar(miradas: &[f64], t_video: f64) -> bool {
     !miradas.iter().any(|t| *t >= t_video - MIRADAS_ANTES && *t <= t_video)
 }
 
-/// ¿La pelea que te mató te la abrieron desde la niebla?
+/// La pelea que te mató, si `golpes` la encontró: `Some(from_fog)`.
 ///
 /// `aperturas` son `(t_game, died, from_fog)` de `golpes::Apertura`. La de esta
 /// muerte es la última que acabó contigo y empezó antes de ella. `golpes`
 /// marca `died` si mueres hasta 10 s después del primer golpe o antes de que
 /// la pelea se corte, así que se mira hasta 60 s atrás.
-fn desde_niebla(aperturas: impl Iterator<Item = (f64, bool, bool)>, t_game: f64) -> bool {
+pub(crate) fn apertura_mortal(aperturas: impl Iterator<Item = (f64, bool, bool)>, t_game: f64) -> Option<bool> {
     aperturas
         .filter(|(t, died, _)| *died && *t <= t_game + 0.5 && *t >= t_game - 60.0)
         .max_by(|a, b| a.0.total_cmp(&b.0))
-        .is_some_and(|(_, _, niebla)| niebla)
+        .map(|(_, _, niebla)| niebla)
+}
+
+/// ¿La pelea que te mató te la abrieron desde la niebla?
+fn desde_niebla(aperturas: impl Iterator<Item = (f64, bool, bool)>, t_game: f64) -> bool {
+    apertura_mortal(aperturas, t_game).unwrap_or(false)
 }
 
 /// Añade las etiquetas que salen de lo grabado a las muertes de quien grabó.
@@ -433,17 +442,20 @@ mod tests {
     fn fuera_de_zona_lejos_de_tu_carril() {
         let v = precios_de(vec![
             // El top (1) en mitad de su carril, y luego en el centro del mapa.
-            kill(1_000_000, 6, 1, &[], 1512, 9000),
-            kill(1_100_000, 6, 1, &[], MID.0, MID.1),
+            kill(400_000, 6, 1, &[], 1512, 9000),
+            kill(500_000, 6, 1, &[], MID.0, MID.1),
             // El jungla (2) no tiene carril: nunca está fuera de zona.
-            kill(1_200_000, 6, 2, &[], 13000, 13000),
+            kill(600_000, 6, 2, &[], 13000, 13000),
             // El support (5) en el carril de abajo.
-            kill(1_300_000, 6, 5, &[], 9000, 1300),
+            kill(700_000, 6, 5, &[], 9000, 1300),
+            // El top en el centro, pasado el 14:00: ya no es su zona la que cuenta.
+            kill(1_100_000, 6, 1, &[], MID.0, MID.1),
         ]);
         assert!(!tiene(&v[0], FUERA_DE_ZONA));
         assert!(tiene(&v[1], FUERA_DE_ZONA));
         assert!(!tiene(&v[2], FUERA_DE_ZONA));
         assert!(!tiene(&v[3], FUERA_DE_ZONA));
+        assert!(!tiene(&v[4], FUERA_DE_ZONA), "después del 14 no cuenta");
     }
 
     #[test]

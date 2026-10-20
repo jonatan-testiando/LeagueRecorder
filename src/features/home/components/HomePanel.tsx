@@ -11,7 +11,20 @@ import {
   type CameraLook,
 } from "../../../core/tauri-ipc";
 import { mmss, relativeDay, matchAge } from "../../../core/time";
-import { currentFocus, deathClock, confidenceOf, sampleLabel, BUCKET_SECONDS } from "../../../core/patterns";
+import { confidenceOf, sampleLabel } from "../../../core/patterns";
+import { useCoachSummary } from "../../../core/useCoachSummary";
+import {
+  categoryHelp,
+  coachPlaylist,
+  focusTitle,
+  focusWhy,
+  isOwnBaseline,
+  liftText,
+  rowsByTramo,
+  tramoShort,
+  tramoWindow,
+  wpPoints,
+} from "../../../core/coach";
 import { outcome, formatDuration, computeKDA, kdaRatio, lpDeltas, queueKey, type KDA } from "../../../core/matchStats";
 import { reviewProgress } from "../../../core/review";
 import { laneLabel } from "../../../core/lanes";
@@ -56,11 +69,12 @@ import {
  *  2. Los tres momentos que más enseñan — el peor error, el hallazgo del
  *     analizador y la mejor jugada, cada uno abre el vídeo en su segundo.
  *  3. Tres señales en frases — punto ciego, presión que absorbes, impacto.
- *  4. A la derecha, el foco de la semana (el tramo en que más mueres) y la
- *     forma reciente con la cola de partidas por revisar.
+ *  4. A la derecha, el foco del coach (la categoría × tramo que más te cuesta
+ *     por encima de su baremo, `coach.rs`) con la lista de reproducción de sus
+ *     peores jugadas, y la forma reciente con la cola de partidas por revisar.
  *
  * Lo que no cabe en esa lectura (detalles de la partida, qué mide cada señal,
- * la evidencia de presión episodio a episodio, dónde ocurrió el foco) vive en
+ * la evidencia de presión episodio a episodio, las jugadas del foco) vive en
  * un <details> discreto al final: se reubica, no se pierde.
  *
  * El estado de captura (grabando, clave de Riot, disco) no vive aquí: está en
@@ -87,9 +101,6 @@ export interface HomePanelProps {
   onGoTraining: () => void;
 }
 
-/** Tramos del histograma del foco: 0-5 … 30-35 y un último "35+" que recoge el resto. */
-const HISTO_FROM = [0, 5, 10, 15, 20, 25, 30, 35];
-const HISTO_LAST = HISTO_FROM[HISTO_FROM.length - 1];
 /** Retratos de la forma reciente. */
 const FORM_GAMES = 9;
 
@@ -108,6 +119,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
   const setLibraryFilter = useAppStore((s) => s.setLibraryFilter);
   const refreshMatches = useAppStore((s) => s.refreshMatches);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
+  const startPlaylist = useAppStore((s) => s.startPlaylist);
   const { clips: errorClips } = useErrorClips();
   const { restart: abrirAsistente } = useOnboarding();
 
@@ -117,6 +129,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
   // Arriba del todo, con el resto de hooks: más abajo hay un return anticipado
   // (sin partidas) y un hook detrás de él rompe el orden (error #310 de React).
   const rankNow = useCurrentRank();
+  const coach = useCoachSummary();
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [mant, setMant] = useState<MaintenanceProgress | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
@@ -161,23 +174,10 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
   }, [matches.length]);
 
   const own = useMemo(() => matches.filter((m) => !m.is_vod), [matches]);
-  const focus = useMemo(() => currentFocus(own), [own]);
-  const clock = useMemo(() => deathClock(own), [own]);
-  const conf = confidenceOf(own.length);
-
-  /** Conteos por tramo para el histograma: los ≥35 se juntan en el último. */
-  const histo = useMemo(() => {
-    const counts = HISTO_FROM.map(() => 0);
-    for (const b of clock.buckets) {
-      const i = b.from >= HISTO_LAST ? HISTO_FROM.length - 1 : HISTO_FROM.indexOf(b.from);
-      if (i >= 0) counts[i] += b.total;
-    }
-    return counts;
-  }, [clock]);
-  const histoMax = Math.max(1, ...histo);
-  const focoIdx = focus
-    ? focus.bucket.from >= HISTO_LAST ? HISTO_FROM.length - 1 : HISTO_FROM.indexOf(focus.bucket.from)
-    : -1;
+  // El foco lo elige el coach (`coach.rs`), sin ventana de tiempo: por eso la
+  // tarjeta ya no dice «esta semana».
+  const focus = coach?.focus ?? null;
+  const focusWindow = useMemo(() => (focus?.tramo != null ? tramoWindow(focus.tramo) : null), [focus]);
 
   /** De más reciente a más antigua. La lista llega así, pero no se promete. */
   const porFecha = useMemo(() => [...own].sort((a, b) => (a.date < b.date ? 1 : -1)), [own]);
@@ -196,22 +196,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
       .catch(() => vivo && setLooks([]));
     return () => { vivo = false; };
   }, [ultimaId]);
-
-  /** Las partidas donde ocurre la debilidad, de más reciente a más antigua. */
-  const affected = useMemo(() => {
-    if (!focus) return [];
-    const { from, to } = focus.bucket;
-    return porFecha
-      .filter((m) => {
-        const off = m.video_offset ?? 0;
-        return m.events.some((ev) => {
-          if (ev.type !== "ChampionKill" || ev.subtype !== "death") return false;
-          const min = Math.max(0, ev.time - off) / 60;
-          return min >= from && min < to;
-        });
-      })
-      .slice(0, 4);
-  }, [porFecha, focus]);
 
   // Una sola definición de "revisada" en toda la app (`core/review.ts`): la cola
   // de momentos tachada, o notas escritas a mano.
@@ -244,11 +228,11 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
             errorClips,
             episodes: presion?.episodes ?? [],
             looks,
-            focusWindow: focus ? { from: focus.bucket.from, to: focus.bucket.to } : null,
+            focusWindow,
             t,
           })
         : [],
-    [ultima, errorClips, presion, looks, focus, t]
+    [ultima, errorClips, presion, looks, focusWindow, t]
   );
 
   /** Tendencia: las 10 últimas contra las 10 anteriores, solo con lo local. */
@@ -434,17 +418,30 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
   const trendDelta =
     trend && trend.wrPrev != null && trend.wr != null ? Math.round((trend.wr - trend.wrPrev) * 100) : null;
 
-  const focoFrase = (() => {
-    if (!focus) return "";
-    const vars = {
-      n: focus.bucket.total,
-      total: clock.total,
-      pct: Math.round(focus.share * 100),
-    };
-    if (focus.bucket.to <= 15) return t("{n} of your {total} deaths ({pct}%) fall in that stretch, during the laning phase.", vars);
-    if (focus.bucket.from >= 25) return t("{n} of your {total} deaths ({pct}%) fall in that stretch, in the late game.", vars);
-    return t("{n} of your {total} deaths ({pct}%) fall in that stretch, when the objective fights start.", vars);
-  })();
+  /* -------------------------------------------------------------- foco */
+  // Lo que cuesta la categoría del foco en cada tramo, con la raya de su
+  // baremo: se ve de un vistazo que el tramo elegido es el que se dispara.
+  const barras = focus && coach ? rowsByTramo(coach, focus.category) : [];
+  const barrasMax = Math.max(1e-9, ...barras.map((r) => Math.max(r.user, r.base ?? 0)));
+  const alto = (x: number) => `${Math.max(0, Math.min(100, Math.round((x / barrasMax) * 100)))}%`;
+  const listaFoco = focus ? coachPlaylist(focus, t, lang) : [];
+  const lift = focus ? liftText(focus, t, lang) : null;
+  const verFoco = () => {
+    if (!focus || listaFoco.length === 0) return;
+    startPlaylist(focusTitle(focus, t), listaFoco);
+    navigate("/review");
+  };
+  const sinFoco =
+    coach === undefined
+      ? t("Working out your focus…")
+      : coach === null
+        ? t("Couldn't work out your focus this time. It retries on the next visit.")
+        : coach.games < coach.min_games
+          ? t("The focus needs {n} games synced with Riot; you have {k}. Until then nothing is solid enough to point at.", {
+              n: coach.min_games,
+              k: coach.games,
+            })
+          : t("Nothing costs you more than its baseline yet, in any stretch with {n} games or more.", { n: coach.min_games });
 
   return (
     <div className="panel-enter home-panel">
@@ -753,50 +750,78 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
           <aside className="home-col">
             <section className="home-card home-focus" aria-labelledby="home-focus-lbl">
               <div className="home-card__head">
-                <span id="home-focus-lbl" className="home-card__label">{t("Your focus this week")}</span>
+                <span id="home-focus-lbl" className="home-card__label">{t("Your focus")}</span>
                 {focus && (
                   <span className="home-pill home-pill--gold">
-                    {sampleLabel(conf, own.length, t)}
+                    {sampleLabel(confidenceOf(focus.games), focus.games, t)}
                   </span>
                 )}
               </div>
 
-              {focus ? (
+              {focus && coach ? (
                 <>
                   <div className="home-focus__text">
-                    <span className="home-focus__title">
-                      {t("You die most between minutes {a} and {b}", { a: focus.bucket.from, b: focus.bucket.to })}
+                    <span className="home-focus__title" title={categoryHelp(focus.category, t)}>
+                      {focusTitle(focus, t)}
                     </span>
-                    <span className="home-focus__why">{focoFrase}</span>
+                    <span className="home-focus__why">{focusWhy(focus, coach, t, lang)}</span>
+                    {lift && <span className="home-focus__why">{lift}</span>}
+                    {isOwnBaseline(focus) && (
+                      <span className="home-focus__note">
+                        {t("Riot's data can't see this, so the baseline is your own average, not your rank's.")}
+                      </span>
+                    )}
                   </div>
                   <div
                     className="home-histo"
                     role="img"
-                    aria-label={t("Deaths per game minute, in {n}-minute windows", { n: BUCKET_SECONDS / 60 })}
+                    aria-label={t("What it costs you per game in each stretch of the game, with its baseline")}
                   >
                     <div className="home-bars">
-                      {histo.map((n, i) => (
-                        <div
-                          key={HISTO_FROM[i]}
-                          className={`home-bar${i === focoIdx ? " home-bar--hot" : ""}`}
-                          style={{ height: `${Math.max(4, Math.round((n / histoMax) * 100))}%` }}
-                          title={`${n}`}
-                        />
+                      {barras.map((r) => (
+                        <div key={r.tramo} className="home-bar-col">
+                          <div
+                            className={`home-bar${r.tramo === focus.tramo ? " home-bar--hot" : ""}`}
+                            style={{ height: alto(r.user) }}
+                            title={t("{n} games · you {user}% · baseline {base}%", {
+                              n: r.games,
+                              user: wpPoints(r.user, lang),
+                              base: r.base != null ? wpPoints(r.base, lang) : "—",
+                            })}
+                          />
+                          {r.base != null && <i className="home-bar__base" style={{ bottom: alto(r.base) }} />}
+                        </div>
                       ))}
                     </div>
-                    <div className="home-bars__axis">
-                      {HISTO_FROM.map((f, i) => (
-                        <span key={f} className={i === focoIdx ? "home-flag" : undefined}>
-                          {i === HISTO_FROM.length - 1 ? `${f}'+` : `${f}'`}
+                    <div className="home-bars__axis home-bars__axis--cols">
+                      {barras.map((r) => (
+                        <span key={r.tramo} className={r.tramo === focus.tramo ? "home-flag" : undefined}>
+                          {tramoShort(r.tramo ?? 0)}
                         </span>
                       ))}
                     </div>
+                    <span className="home-bars__legend">
+                      <span>
+                        <i className="home-legend__bar" />
+                        {t("what you lose per game")}
+                      </span>
+                      <span>
+                        <i className="home-legend__base" />
+                        {isOwnBaseline(focus) ? t("your usual rate") : t("your rank")}
+                      </span>
+                    </span>
                   </div>
+                  {listaFoco.length > 0 && (
+                    <button type="button" className="home-sbtn" onClick={verFoco}>
+                      <Play size={15} className="home-sbtn__icon" />
+                      {listaFoco.length === 1
+                        ? t("Watch the play that cost you most")
+                        : t("Watch the {n} plays that cost you most", { n: listaFoco.length })}
+                    </button>
+                  )}
                 </>
               ) : (
-                <p className="home-focus__why">
-                  {t("Nothing to point at yet. Record a few games and this turns into the one thing worth working on.")}
-                </p>
+                <p className="home-focus__why">{sinFoco}</p>
               )}
 
               {/* Sin nada por revisar, la acción de la pantalla pasa a ser entrenar. */}
@@ -925,30 +950,27 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
                 )}
               </dl>
 
-              {affected.length > 0 && focus && (
+              {focus && focus.worst.length > 0 && (
                 <>
-                  <h3 className="home-h3">
-                    {t("Where it happened: deaths between minutes {a} and {b}", { a: focus.bucket.from, b: focus.bucket.to })}
-                  </h3>
+                  <h3 className="home-h3">{t("Where your focus happened")}</h3>
                   <div className="home-chips">
-                    {affected.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        className="home-chip"
-                        onClick={() => onOpenMatch(m)}
-                        title={`${m.champion} · ${relativeDay(m.date, t)}`}
-                      >
-                        <ChampionAvatar champion={m.champion} size={20} />
-                        {m.champion}
-                        <span className="home-chip__meta">{relativeDay(m.date, t)}</span>
-                      </button>
-                    ))}
-                    {focus.games > affected.length && (
-                      <span className="home-chip__meta">
-                        {t("latest {n} of {total}", { n: affected.length, total: focus.games })}
-                      </span>
-                    )}
+                    {focus.worst.map((p) => {
+                      const m = matches.find((x) => x.id === p.match_id);
+                      if (!m) return null;
+                      return (
+                        <button
+                          key={`${p.match_id}:${p.time}`}
+                          type="button"
+                          className="home-chip"
+                          onClick={() => abrirEn(m, p.video_time)}
+                          title={`${p.champion} · ${relativeDay(m.date, t)}`}
+                        >
+                          <ChampionAvatar champion={p.champion} size={20} />
+                          {mmss(p.time)}
+                          <span className="home-chip__meta">−{wpPoints(p.lost, lang)}%</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               )}

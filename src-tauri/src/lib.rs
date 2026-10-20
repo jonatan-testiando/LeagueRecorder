@@ -8,6 +8,8 @@ mod baselines;
 pub mod benchmarks;
 mod camera_input;
 mod camera_snaps;
+mod coach;
+mod coach_baremos;
 mod commands;
 mod curvas;
 mod cv_analyzer;
@@ -361,6 +363,7 @@ pub fn run() {
             hud::read_match_hud,
             golpes::get_hits_taken,
             jugadas::get_match_plays,
+            coach::get_coach_summary,
             golpes::get_hits_taken_career,
             franja::get_episode_strip,
             curvas::get_minute_series,

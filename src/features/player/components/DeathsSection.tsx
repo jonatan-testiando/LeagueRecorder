@@ -139,7 +139,7 @@ function costDetail(p: DeathCost, t: T): string {
 /** Texto y explicación de cada etiqueta. Las desconocidas no se pintan. */
 const TAGS: Record<DeathTag, { text: string; help: string }> = {
   jungla: { text: "enemy jungler", help: "The enemy jungler killed you or assisted." },
-  fuera_de_zona: { text: "away from your lane", help: "You died more than 2,500 units from your lane." },
+  fuera_de_zona: { text: "away from your lane", help: "Before 14:00, more than 2,500 units from your lane." },
   bajo_torre_pre14: {
     text: "at a tower before 14:00",
     help: "Before 14:00, next to a standing tower (yours or theirs), or their tower hit you.",

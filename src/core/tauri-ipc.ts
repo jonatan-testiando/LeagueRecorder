@@ -283,11 +283,69 @@ export const checkRiotKey = async (): Promise<void> => {
   return await invoke<void>("check_riot_key");
 };
 
-// Una muerte concreta y lo que costó en tiempo fuera de la partida.
+// Una muerte concreta y lo que costó: en tiempo fuera de la partida y en
+// probabilidad de victoria (`muertes.rs`).
 export interface DeathCost {
   minute: number;
   seconds_dead: number;
+  /** Lo que costó a tu equipo en probabilidad de victoria (0-1): la muerte más
+   *  su parte de lo que el rival tomó en los 60 s siguientes. Nunca positivo. */
+  wpa: number;
+  /** La muerte sola. */
+  wpa_death: number;
+  /** Su parte del objetivo rival de después. */
+  wpa_objective: number;
+  /** El objetivo que más pesó de esos ("dragon", "tower"…), como `Play.kind`. */
+  objective: string | null;
+  /** Por qué fue cara. Ver `DeathTag`; puede llegar alguna que la UI no conozca. */
+  tags: string[];
 }
+
+/** Las etiquetas de una muerte. Las dos últimas sólo existen para quien grabó. */
+export type DeathTag =
+  | "jungla"
+  | "fuera_de_zona"
+  | "bajo_torre_pre14"
+  | "poco_dano_devuelto"
+  | "sin_mirar_mapa"
+  | "desde_niebla";
+
+/** Lo que una jugada movió la probabilidad de victoria (`winprob.rs`). */
+export interface Play {
+  /** Segundos de partida. */
+  time: number;
+  /** "kill", "execution", "tower", "inhibitor", "plate", "dragon", "baron", "herald", "grubs". */
+  kind: string;
+  team_id: number;
+  /** Probabilidad de victoria de `team_id` antes y después. */
+  before: number;
+  after: number;
+  /** `after - before`, desde la óptica de `team_id`. */
+  wpa: number;
+  /** `[participant_id, fracción]`. */
+  shares: [number, number][];
+  /** Quién lo pagó (asesinatos y ejecuciones). */
+  victim: number | null;
+}
+
+/** Probabilidad de victoria en un fotograma de minuto. */
+export interface WpPoint {
+  time: number;
+  /** De que gane el equipo 100; la del 200 es `1 - p100`. */
+  p100: number;
+}
+
+export interface MatchPlays {
+  self_participant_id: number | null;
+  plays: Play[];
+  curve: WpPoint[];
+}
+
+// Jugadas y curva de probabilidad de una partida ya sincronizada. Sólo lee lo
+// que hay en disco y lo cachea en `plays_v1.json`.
+export const getMatchPlays = async (matchId: string): Promise<MatchPlays> => {
+  return await invoke<MatchPlays>("get_match_plays", { matchId });
+};
 
 // Reparto de crédito de un jugador. `killing_blow_gold` es lo que ve un KDA (oro
 // de kills por rematar); `damage_credit_gold` es ese mismo oro repartido por el

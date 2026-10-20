@@ -184,6 +184,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
               markers={match.timeline_markers}
               cameraSnaps={cameraSnaps}
               videoOffset={videoOffset}
+              selfPid={selfP ? participants.indexOf(selfP) + 1 : null}
               onOpenMap={onOpenMap}
             />
             <div className="mt-sub">

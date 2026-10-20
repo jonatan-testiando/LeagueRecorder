@@ -20,8 +20,10 @@ mod franja;
 mod oleadas;
 mod barras;
 mod hands;
+mod jugadas;
 mod jungle_route;
 mod minimap;
+mod muertes;
 mod obs_client;
 mod occupancy;
 mod overlay;
@@ -349,6 +351,7 @@ pub fn run() {
             track::export_route_video,
             hud::read_match_hud,
             golpes::get_hits_taken,
+            jugadas::get_match_plays,
             golpes::get_hits_taken_career,
             franja::get_episode_strip,
             oleadas::get_waves,

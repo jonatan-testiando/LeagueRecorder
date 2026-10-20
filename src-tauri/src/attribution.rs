@@ -100,11 +100,25 @@ pub(crate) fn death_timer(level: i32, minute: f64) -> f64 {
     BASE_RESPAWN[idx] * (1.0 + time_increase_factor(minute))
 }
 
-/// Una muerte concreta y lo que costó en tiempo fuera de la partida.
+/// Una muerte concreta y lo que costó: en tiempo fuera de la partida y en
+/// probabilidad de victoria. Ver `crate::muertes`.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct DeathCost {
     pub minute: f64,
     pub seconds_dead: f64,
+    /// Lo que costó a tu equipo en probabilidad de victoria: `wpa_death` más
+    /// `wpa_objective`. Nunca positivo.
+    pub wpa: f64,
+    /// La muerte sola.
+    pub wpa_death: f64,
+    /// Tu parte de lo que el rival tomó en los 60 s siguientes.
+    pub wpa_objective: f64,
+    /// El objetivo que más pesó de esos (`dragon`, `tower`…), si hubo.
+    pub objective: Option<String>,
+    /// Por qué fue cara: `jungla`, `fuera_de_zona`, `bajo_torre_pre14`,
+    /// `poco_dano_devuelto` para los diez; `sin_mirar_mapa` y `desde_niebla`
+    /// sólo para quien grabó (las añade `muertes::etiquetar_video`).
+    pub tags: Vec<String>,
 }
 
 /// Lo que aportó y lo que costó un jugador, en oro.
@@ -224,7 +238,7 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
     // del equipo que pierde (revives, el nexo cayendo a mitad del temporizador).
     // Por eso no se usa como valor absoluto: sirve para repartir *entre* muertes,
     // y el total lo fija `totalTimeSpentDead`, que Riot ya mide.
-    let mut timers: HashMap<i32, Vec<(f64, f64)>> = HashMap::new();
+    let mut timers: HashMap<i32, Vec<(i64, f64)>> = HashMap::new();
     let mut team_kills: HashMap<i32, i32> = HashMap::new();
     let mut participated: HashMap<i32, i32> = HashMap::new();
     let mut share_sum: HashMap<i32, f64> = HashMap::new();
@@ -242,7 +256,7 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
                 timers
                     .entry(ev.victimId)
                     .or_default()
-                    .push((minute, timer.min(until_end)));
+                    .push((ev.timestamp, timer.min(until_end)));
             }
 
             // El último golpe: lo que el marcador le adjudica.
@@ -375,7 +389,12 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
     }
 
     // Probabilidad de victoria aportada, con el mismo reparto por daño real.
-    let wpa = crate::winprob::per_player_breakdown(&crate::winprob::plays(tl, participants));
+    let jugadas = crate::winprob::plays(tl, participants);
+    let mut precios: HashMap<(i32, i64), crate::muertes::Precio> = crate::muertes::precios(tl, participants, &jugadas)
+        .into_iter()
+        .map(|p| ((p.victim, (p.time * 1000.0).round() as i64), p))
+        .collect();
+    let wpa = crate::winprob::per_player_breakdown(&jugadas);
     for (pid, v) in wpa {
         if let Some(c) = credit.get_mut(&pid) {
             c.wpa = v.total();
@@ -402,11 +421,20 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
             .unwrap_or(raw_total);
         let scale = if raw_total > 0.0 { real_total / raw_total } else { 0.0 };
         c.time_dead = real_total;
+        let pid = c.participant_id;
         c.deaths_detail = raw
             .into_iter()
-            .map(|(minute, t)| DeathCost {
-                minute,
-                seconds_dead: t * scale,
+            .map(|(ts, t)| {
+                let p = precios.remove(&(pid, ts)).unwrap_or_default();
+                DeathCost {
+                    minute: ts as f64 / 60_000.0,
+                    seconds_dead: t * scale,
+                    wpa: p.wpa_death + p.wpa_objective,
+                    wpa_death: p.wpa_death,
+                    wpa_objective: p.wpa_objective,
+                    objective: p.objective,
+                    tags: p.tags,
+                }
             })
             .collect();
         let n = participated.get(&c.participant_id).copied().unwrap_or(0);

@@ -2218,6 +2218,21 @@ const ES: Record<string, string> = {
   "The video on its own": "El vídeo solo",
   "Your video next to your recording's minimap, with your trail and the waves": "Tu vídeo junto al minimapa de tu grabación, con tu estela y las oleadas",
   "Map": "Mapa",
+  "{p}% win chance": "{p}% de victoria",
+  "The death {a}% · {objective} right after {b}%": "La muerte {a}% · {objective} justo después {b}%",
+  "What this death cost your team in win probability": "Lo que esta muerte le costó a tu equipo en probabilidad de victoria",
+  "Win chance: what each death cost your team in the win-probability model, plus its share of what the enemy took in the next 60 s. Vision isn't in the model, so a death that gave away vision costs more than this says.":
+    "De victoria: lo que cada muerte le costó a tu equipo según el modelo de probabilidad de victoria, más su parte de lo que el rival tomó en los 60 s siguientes. La visión no está en el modelo: una muerte que regaló visión cuesta más de lo que dice esto.",
+  "enemy jungler": "jungla rival",
+  "The enemy jungler killed you or assisted.": "Te mató o asistió el jungla rival.",
+  "away from your lane": "lejos de tu carril",
+  "You died more than 2,500 units from your lane.": "Moriste a más de 2.500 unidades de tu carril.",
+  "at a tower before 14:00": "en torre antes del 14:00",
+  "Before 14:00, next to a standing tower (yours or theirs), or their tower hit you.": "Antes del 14:00, junto a una torre en pie (tuya o suya), o te pegó su torre.",
+  "little damage back": "poco daño devuelto",
+  "What you dealt before dying is in the lowest 10% for your role at that point of the game.": "Lo que devolviste antes de morir está en el 10% más bajo de tu puesto a esa altura de la partida.",
+  "No look at the map in the 10 s before dying.": "Ninguna mirada al mapa en los 10 s antes de morir.",
+  "The fight that killed you was opened with no enemy in sight.": "La pelea que te mató te la abrieron sin ningún rival a la vista.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

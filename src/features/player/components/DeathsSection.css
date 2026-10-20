@@ -35,6 +35,22 @@
   color: var(--muted);
 }
 .ds-tag--bad { background: var(--tint-loss); color: var(--loss); }
+/* Las muertes llevan su precio a la derecha: lo que costaron en probabilidad
+   de victoria (muertes.rs). */
+.ds-row--priced { grid-template-columns: 44px minmax(0, 1fr) auto; }
+.ds-cost {
+  align-self: start;
+  font-size: 12px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  /* Relleno liso, como el LP perdido: --tint-loss es un degradado de fila y
+     en una píldora se desvanece hacia la derecha. */
+  background: color-mix(in srgb, var(--loss) 14%, transparent);
+  color: var(--loss);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .gp-visit {
   display: grid;

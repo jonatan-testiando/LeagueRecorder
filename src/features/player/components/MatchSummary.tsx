@@ -368,7 +368,9 @@ interface Props {
 export const MatchSummary: React.FC<Props> = ({ match, isJungler, wantsMoves, enemyTeam, cameraSnaps, onOpenMap, onReveal }) => {
   const t = useT();
   const off = match.video_offset ?? 0;
-  const { filas, cargando } = useDeathRows(match.id, match.timeline_markers, cameraSnaps, off);
+  // `participant_id` es 1..10 en el orden de Riot, el mismo de `participants`.
+  const yo = (match.participants ?? []).findIndex((p) => p.is_self) + 1 || null;
+  const { filas, cargando } = useDeathRows(match.id, match.timeline_markers, cameraSnaps, off, yo);
   const mv = useMoves(match.id, match.timeline_markers, off, wantsMoves);
   const mediana = useFirstClearMedian(isJungler ? match.id : null);
   const oro = useGoldReport(match.id);

@@ -198,7 +198,7 @@ pub fn calibrar(z: f64) -> f64 {
 }
 
 /// Lo que una jugada movió la probabilidad de victoria.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Play {
     /// Segundos de partida.
     pub time: f64,
@@ -253,12 +253,31 @@ fn diffs_at(tl: &TimelineDto, participants: &[ParticipantDto], sec: f64) -> (f64
     }
 }
 
+/// Probabilidad de victoria en un fotograma de minuto.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+pub struct WpPoint {
+    /// Segundos de partida: el `timestamp` del fotograma.
+    pub time: f64,
+    /// Probabilidad de que gane el equipo 100. La del 200 es `1 - p100`.
+    pub p100: f64,
+}
+
 /// Recorre la partida y valora cada jugada por lo que movió la probabilidad.
 ///
 /// El WPA se calcula aislando el efecto de la jugada: se toma el estado justo
 /// antes y se le aplica **sólo** lo que esa jugada cambia. Restar estados de
 /// minutos consecutivos mezclaría todo lo que pasó en ese minuto.
 pub fn plays(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Play> {
+    plays_and_curve(tl, participants).0
+}
+
+/// Las jugadas y, con el mismo recorrido, la probabilidad en cada fotograma.
+///
+/// La curva sale del mismo `State` que valora las jugadas, así que un salto en
+/// ella es la suma de las jugadas de ese minuto más lo que movieron el oro y la
+/// experiencia. Riot mete en el fotograma *i* los eventos ocurridos **antes**
+/// de su `timestamp`; por eso cada punto se toma después de aplicarlos.
+pub fn plays_and_curve(tl: &TimelineDto, participants: &[ParticipantDto]) -> (Vec<Play>, Vec<WpPoint>) {
     let team_of = |pid: i32| participants.get((pid - 1) as usize).map(|p| p.teamId);
     let mut st = State {
         baron_100: -99.0,
@@ -268,6 +287,12 @@ pub fn plays(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Play> {
         ..Default::default()
     };
     let mut out = Vec::new();
+    let mut curve = Vec::with_capacity(tl.info.frames.len());
+    let punto = |st: &State, sec: f64| -> WpPoint {
+        let (oro, xp) = diffs_at(tl, participants, sec);
+        let s = State { minute: sec / 60.0, gold_diff: oro, xp_diff: xp, ..st.clone() };
+        WpPoint { time: sec, p100: s.win_prob() }
+    };
 
     for frame in &tl.info.frames {
         for ev in &frame.events {
@@ -281,11 +306,27 @@ pub fn plays(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Play> {
             // equipo 100, que es como está entrenado el modelo.
             let (equipo, kind, oro_extra, mut despues) = match ev.event_type.as_str() {
                 "CHAMPION_KILL" => {
-                    let Some(eq) = team_of(ev.killerId) else { continue };
-                    let mut s = st.clone();
-                    s.kills_diff += if eq == 100 { 1.0 } else { -1.0 };
-                    let g = (ev.bounty + ev.shutdownBounty) as f64 * FACTOR_ASISTENCIAS / 1000.0;
-                    (eq, "kill", g, s)
+                    if let Some(eq) = team_of(ev.killerId) {
+                        let mut s = st.clone();
+                        s.kills_diff += if eq == 100 { 1.0 } else { -1.0 };
+                        let g = (ev.bounty + ev.shutdownBounty) as f64 * FACTOR_ASISTENCIAS / 1000.0;
+                        (eq, "kill", g, s)
+                    } else {
+                        // Ejecución: te mata una torre, un esbirro o un monstruo
+                        // (killerId 0). Riot no paga recompensa, pero el tiempo
+                        // muerto es el mismo, y eso es lo que mide `KILLS_DIF` con
+                        // el oro y la experiencia fijos. Antes costaban 0.
+                        //
+                        // Aproximación consciente: el modelo se entrenó contando
+                        // sólo kills con killerId de campeón (`fit_winprob2.py`),
+                        // así que las ejecuciones nunca entraron en `kills_dif`.
+                        // Afinarlo exigiría reentrenar con muertes en vez de kills.
+                        let Some(victima) = team_of(ev.victimId) else { continue };
+                        let eq = if victima == 100 { 200 } else { 100 };
+                        let mut s = st.clone();
+                        s.kills_diff += if eq == 100 { 1.0 } else { -1.0 };
+                        (eq, "execution", 0.0, s)
+                    }
                 }
                 "BUILDING_KILL" => {
                     let Some(eq) = team_of(ev.killerId) else { continue };
@@ -344,6 +385,15 @@ pub fn plays(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Play> {
                         }
                         Some("RIFTHERALD") => ("herald", crate::attribution::PESO_HERALDO),
                         Some("HORDE") => ("grubs", crate::attribution::PESO_GRUBS),
+                        // Atakhan se queda sin valorar A PROPÓSITO. No sale en
+                        // los datos de esta temporada: 0 de 618 partidas
+                        // muestreadas del corpus (parches 16.14-16.16) y 0 de
+                        // las 26 grabadas tienen un ELITE_MONSTER_KILL suyo.
+                        // Valorarlo exige medirlo, como el resto de objetivos
+                        // (un peso en oro de la regresión de `attribution`, o
+                        // una variable del modelo y reentrenar), y sin partidas
+                        // con Atakhan cualquier número sería inventado.
+                        Some("ATAKHAN") => continue,
                         _ => continue,
                     };
                     (eq, kind, g / 1000.0, s)
@@ -379,8 +429,9 @@ pub fn plays(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Play> {
             // El estado corriente incorpora la jugada.
             st = despues;
         }
+        curve.push(punto(&st, frame.timestamp as f64 / 1000.0));
     }
-    out
+    (out, curve)
 }
 
 /// Quién se lleva el crédito de una jugada, y en qué proporción.
@@ -494,7 +545,9 @@ pub fn per_player_breakdown(plays: &[Play]) -> std::collections::HashMap<i32, Br
             let b = out.entry(*pid).or_default();
             let v = p.wpa * frac;
             match p.kind.as_str() {
-                "kill" => b.kills += v,
+                // Una ejecución casi nunca reparte (nadie del bando que cobra
+                // pegó), pero si alguien pegó antes es su parte de un asesinato.
+                "kill" | "execution" => b.kills += v,
                 "tower" | "inhibitor" | "plate" => b.structures += v,
                 _ => b.objectives += v,
             }
@@ -523,9 +576,123 @@ pub fn per_player(plays: &[Play]) -> std::collections::HashMap<i32, f64> {
         .collect()
 }
 
+/// Partidas de mentira para los tests: diez jugadores con el oro empatado y los
+/// eventos que pida cada prueba. Las comparten los tests de `muertes`.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use crate::riot_api::{ParticipantDto, TimelineDto};
+
+    pub const ROLES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
+
+    /// 1-5 son el equipo 100 y 6-10 el 200, en el orden de `ROLES`.
+    pub fn diez() -> Vec<ParticipantDto> {
+        (0..10)
+            .map(|i| {
+                serde_json::from_value(serde_json::json!({
+                    "puuid": format!("p{i}"),
+                    "kills": 0, "deaths": 0, "assists": 0, "goldEarned": 0,
+                    "totalDamageDealtToChampions": 0,
+                    "win": i < 5,
+                    "teamId": if i < 5 { 100 } else { 200 },
+                    "teamPosition": ROLES[i % 5],
+                    "championName": format!("Campeon{}", i + 1),
+                }))
+                .unwrap()
+            })
+            .collect()
+    }
+
+    /// Una partida de `minutos` fotogramas con todos los eventos en el que toca
+    /// por su `timestamp` (Riot mete en el fotograma *i* lo ocurrido antes de
+    /// él). El oro y la experiencia van empatados para que sólo cuenten los
+    /// eventos.
+    pub fn partida(minutos: usize, eventos: Vec<serde_json::Value>) -> TimelineDto {
+        let pf: serde_json::Map<String, serde_json::Value> = (1..=10)
+            .map(|p| (p.to_string(), serde_json::json!({ "participantId": p, "totalGold": 500, "xp": 0, "level": 6 })))
+            .collect();
+        let mut frames: Vec<serde_json::Value> = (0..=minutos)
+            .map(|m| serde_json::json!({ "timestamp": m * 60_000, "events": [], "participantFrames": pf }))
+            .collect();
+        for e in eventos {
+            let ts = e["timestamp"].as_i64().unwrap();
+            let i = ((ts + 59_999) / 60_000).clamp(0, minutos as i64) as usize;
+            frames[i]["events"].as_array_mut().unwrap().push(e);
+        }
+        serde_json::from_value(serde_json::json!({ "info": { "frames": frames } })).unwrap()
+    }
+
+    pub fn kill(ts: i64, killer: i32, victim: i32, assists: &[i32], x: i32, y: i32) -> serde_json::Value {
+        serde_json::json!({
+            "type": "CHAMPION_KILL", "timestamp": ts, "killerId": killer, "victimId": victim,
+            "assistingParticipantIds": assists, "bounty": 0, "shutdownBounty": 0,
+            "position": { "x": x, "y": y },
+        })
+    }
+
+    pub fn monstruo(ts: i64, team: i32, tipo: &str) -> serde_json::Value {
+        serde_json::json!({
+            "type": "ELITE_MONSTER_KILL", "timestamp": ts, "killerTeamId": team,
+            "killerId": if team == 100 { 2 } else { 7 }, "monsterType": tipo,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::fixtures::*;
     use super::*;
+
+    /// Te ejecuta una torre: antes costaba 0 porque el evento no tiene
+    /// killerId de campeón. Ahora vale lo mismo que un asesinato sin
+    /// recompensa, y lo paga quien murió.
+    #[test]
+    fn una_ejecucion_cuesta_como_un_asesinato_sin_recompensa() {
+        let ps = diez();
+        let ejecucion = plays(&partida(10, vec![kill(300_000, 0, 1, &[], 7000, 7000)]), &ps);
+        assert_eq!(ejecucion.len(), 1, "la ejecución no salió como jugada");
+        let j = &ejecucion[0];
+        assert_eq!(j.kind, "execution");
+        assert_eq!(j.team_id, 200, "cobra el equipo rival de quien murió");
+        assert_eq!(j.victim, Some(1));
+        assert!(j.shares.is_empty(), "nadie pegó: nadie cobra crédito");
+        assert!(j.wpa > 0.0, "una muerte del 100 tiene que subir al 200: {}", j.wpa);
+
+        // El mismo instante, pero matado por un campeón y sin recompensa.
+        let asesinato = plays(&partida(10, vec![kill(300_000, 6, 1, &[], 7000, 7000)]), &ps);
+        assert!((asesinato[0].wpa - j.wpa).abs() < 1e-12, "{} vs {}", asesinato[0].wpa, j.wpa);
+
+        let d = per_player_breakdown(&ejecucion);
+        assert!((d[&1].deaths + j.wpa).abs() < 1e-12, "la ejecución no se le carga a quien murió");
+    }
+
+    /// Atakhan no existe en los datos de esta temporada (ver la nota en
+    /// `plays_and_curve`): no se valora, y el heraldo de al lado sí. Si vuelve y
+    /// se mide su peso, este test es el que hay que cambiar.
+    #[test]
+    fn atakhan_no_se_valora_sin_datos_y_el_heraldo_si() {
+        let ps = diez();
+        let tl = partida(25, vec![monstruo(1_200_000, 100, "ATAKHAN"), monstruo(1_260_000, 100, "RIFTHERALD")]);
+        let v = plays(&tl, &ps);
+        assert_eq!(v.iter().map(|p| p.kind.as_str()).collect::<Vec<_>>(), vec!["herald"]);
+        assert!(v[0].wpa > 0.0);
+    }
+
+    /// Un punto por fotograma, cada uno después de los eventos que Riot metió en
+    /// él: sin eso el asesinato del minuto 4 no se vería hasta el 6.
+    #[test]
+    fn la_curva_tiene_un_punto_por_fotograma_tras_sus_eventos() {
+        let ps = diez();
+        let tl = partida(10, vec![kill(230_000, 1, 6, &[], 7000, 7000), kill(230_500, 2, 7, &[], 7000, 7000)]);
+        let (jugadas, curva) = plays_and_curve(&tl, &ps);
+        assert_eq!(curva.len(), 11);
+        assert_eq!(curva[4].time, 240.0);
+        assert!((curva[3].p100 - curva[0].p100).abs() < 0.02, "antes de los asesinatos no se mueve");
+        assert!(curva[4].p100 > curva[3].p100 + 0.005, "{} → {}", curva[3].p100, curva[4].p100);
+        // El salto de la curva en ese minuto es el de las dos jugadas, más lo
+        // poco que mueve el reloj.
+        let salto: f64 = jugadas.iter().map(|j| j.wpa).sum();
+        assert!((curva[4].p100 - curva[3].p100 - salto).abs() < 0.01);
+    }
 
     fn jugada(kind: &str, wpa: f64, shares: &[(i32, f64)], victim: Option<i32>) -> Play {
         Play {

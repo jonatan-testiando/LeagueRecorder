@@ -8,6 +8,7 @@ pub mod benchmarks;
 mod camera_input;
 mod camera_snaps;
 mod commands;
+mod curvas;
 mod cv_analyzer;
 mod app_update;
 mod dataset_generator;
@@ -351,6 +352,7 @@ pub fn run() {
             golpes::get_hits_taken,
             golpes::get_hits_taken_career,
             franja::get_episode_strip,
+            curvas::get_minute_series,
             oleadas::get_waves,
             oleadas::get_waves_career,
             barras::get_aim,

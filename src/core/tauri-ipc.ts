@@ -628,6 +628,129 @@ export interface EpisodeStrip {
 export const getEpisodeStrip = async (matchId: string, from: number, to: number): Promise<EpisodeStrip> =>
   await invoke<EpisodeStrip>("get_episode_strip", { matchId, from, to });
 
+/** Las cuatro series de un jugador, una cifra por fotograma (acumuladas). */
+export interface MinuteSeriesPlayer {
+  participant_id: number;
+  team_id: number;
+  champion: string;
+  /** "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | "". */
+  role: string;
+  gold: number[];
+  xp: number[];
+  damage_dealt: number[];
+  damage_taken: number[];
+}
+
+/** Un objetivo caído y el equipo que se lo llevó. */
+export interface MatchObjective {
+  /** Segundos de PARTIDA. */
+  time: number;
+  kind: "dragon" | "elder" | "baron" | "herald" | "grubs" | "atakhan" | "tower" | "inhibitor";
+  /** Tipo de dragón ("FIRE_DRAGON"…) o de torre ("OUTER_TURRET"…). */
+  detail: string | null;
+  /** Carril de la torre o el inhibidor ("TOP_LANE"…). */
+  lane: string | null;
+  team_id: number;
+}
+
+/**
+ * Las curvas por minuto de los diez, de `riot_timeline.json`. Sin restar nada:
+ * el modo (rival, media rival, equipos, los diez) lo calcula la gráfica.
+ */
+export interface MinuteSeries {
+  status: "ok" | "no_riot";
+  /** Minuto de PARTIDA de cada fotograma; el último es el final. */
+  minutes: number[];
+  /** Los diez, en orden de participantId. */
+  players: MinuteSeriesPlayer[];
+  objectives: MatchObjective[];
+  /** participantId del jugador grabado y de su rival de línea; 0 si no se sabe. */
+  self_id: number;
+  rival_id: number;
+}
+
+export const getMinuteSeries = async (matchId: string): Promise<MinuteSeries> =>
+  await invoke<MinuteSeries>("get_minute_series", { matchId });
+
+/**
+ * Una jugada con lo que movió la probabilidad de victoria (`winprob.rs::Play`).
+ * El comando `get_match_plays` lo prepara la sesión «Base del coach» (§2.1 de
+ * docs/coach-de-macro-diseno.md); hasta que exista, `getMatchPlays` devuelve
+ * null y la gráfica no dibuja la curva.
+ */
+export interface MatchPlay {
+  /** Segundos de PARTIDA. */
+  time: number;
+  kind: string;
+  /** Equipo que la hizo. */
+  team_id: number;
+  /** Probabilidad de victoria DE ESE EQUIPO antes y después (0..1). */
+  before: number;
+  after: number;
+  /** `after - before`, desde la óptica de quien la hizo. */
+  wpa: number;
+  /** `[participantId, fracción]`. */
+  shares: [number, number][];
+  victim: number | null;
+}
+
+/** La probabilidad de victoria en un fotograma de minuto (`winprob::WpPoint`). */
+export interface WpPoint {
+  /** Segundos de PARTIDA. */
+  time: number;
+  /** Probabilidad de que gane el equipo 100; la del 200 es `1 - p100`. */
+  p100: number;
+}
+
+export interface MatchPlays {
+  plays: MatchPlay[];
+  /** Un punto por fotograma, si el comando lo da. Sin él, la curva se
+   *  reconstruye con el antes y el después de cada jugada. */
+  curve: WpPoint[] | null;
+}
+
+/**
+ * Las jugadas de una partida, o null si el comando aún no existe o falla.
+ * Acepta la lista sola o `{ plays, curve }`, y `wp_before`/`wp_after` por si
+ * el comando final llama así a los campos.
+ */
+export const getMatchPlays = async (matchId: string): Promise<MatchPlays | null> => {
+  try {
+    const raw = await invoke<unknown>("get_match_plays", { matchId });
+    const obj = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
+    const list = Array.isArray(raw) ? raw : obj && Array.isArray(obj.plays) ? (obj.plays as unknown[]) : null;
+    if (!list) return null;
+    const curveRaw = obj && Array.isArray(obj.curve) ? (obj.curve as Record<string, unknown>[]) : null;
+    const curve = curveRaw
+      ? curveRaw
+          .filter((c) => typeof c.time === "number" && typeof c.p100 === "number")
+          .map((c) => ({ time: c.time as number, p100: c.p100 as number }))
+      : null;
+    const plays = list.map((p) => {
+      const o = p as Record<string, unknown>;
+      const num = (...keys: string[]) => {
+        for (const k of keys) if (typeof o[k] === "number") return o[k] as number;
+        return 0;
+      };
+      const before = num("before", "wp_before");
+      const after = num("after", "wp_after");
+      return {
+        time: num("time"),
+        kind: String(o.kind ?? ""),
+        team_id: num("team_id"),
+        before,
+        after,
+        wpa: typeof o.wpa === "number" ? o.wpa : after - before,
+        shares: Array.isArray(o.shares) ? (o.shares as [number, number][]) : [],
+        victim: typeof o.victim === "number" ? o.victim : null,
+      };
+    });
+    return { plays, curve: curve && curve.length > 1 ? curve : null };
+  } catch {
+    return null;
+  }
+};
+
 // Marca o desmarca un suceso como revisado. El estado vive en el JSON de la
 // partida, junto a los comentarios: revisar es una tarea con estado y tiene que
 // sobrevivir a cerrar la app.

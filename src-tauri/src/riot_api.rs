@@ -1723,8 +1723,14 @@ fn marker(
 /// copias del criterio acabarían dando dos rivales distintos.
 ///
 /// Respaldo cuando el puesto no encaja (lobbies con roles repetidos, partidas
-/// sin `teamPosition`): el del mismo hueco en el otro equipo.
-fn rival_de_linea(participants: &[ParticipantDto], self_participant_id: i32) -> i32 {
+/// sin `teamPosition`): a un jungla, el rival que más campamentos hizo; a los
+/// demás, el del mismo hueco en el otro equipo.
+///
+/// El puesto va PRIMERO y en una pasada aparte. Iba todo en un solo `find` con
+/// un «o más de 20 campamentos», y a un jungla le tocaba el primer rival que
+/// cumpliera cualquiera de las dos: en `match_20260829_235459` la Gwen jungla
+/// salía emparejada con Quinn top (28 campamentos) en vez de con Zed.
+pub(crate) fn rival_de_linea(participants: &[ParticipantDto], self_participant_id: i32) -> i32 {
     let self_participant = participants.get((self_participant_id - 1) as usize);
     let self_team_id = self_participant.map(|p| p.teamId).unwrap_or(100);
     let self_pos = self_participant.map(rol_de).unwrap_or_default();
@@ -1733,15 +1739,17 @@ fn rival_de_linea(participants: &[ParticipantDto], self_participant_id: i32) -> 
             .map(|p| p.neutralMinionsKilled > p.totalMinionsKilled)
             .unwrap_or(false);
 
-    participants
-        .iter()
-        .enumerate()
-        .find(|(_i, p)| {
-            p.teamId != self_team_id
-                && ((!self_pos.is_empty()
-                    && (p.teamPosition == self_pos || p.individualPosition == self_pos))
-                    || (is_jungle && p.neutralMinionsKilled > 20))
-        })
+    let rivales = || participants.iter().enumerate().filter(|(_, p)| p.teamId != self_team_id);
+    let por_puesto = rivales().find(|(_, p)| {
+        !self_pos.is_empty() && (p.teamPosition == self_pos || p.individualPosition == self_pos)
+    });
+    let por_campamentos = || {
+        rivales()
+            .filter(|(_, p)| is_jungle && p.neutralMinionsKilled > 20)
+            .max_by_key(|(_, p)| p.neutralMinionsKilled)
+    };
+    por_puesto
+        .or_else(por_campamentos)
         .map(|(i, _)| (i + 1) as i32)
         .unwrap_or_else(|| {
             if self_participant_id <= 5 {
@@ -2066,7 +2074,7 @@ fn to_participant(p: &ParticipantDto, is_self: bool) -> crate::storage::Particip
 
 /// El puesto de un jugador, con el mismo criterio que el resto del análisis:
 /// `teamPosition` manda y `individualPosition` es el respaldo (ver baselines.rs).
-fn rol_de(p: &ParticipantDto) -> String {
+pub(crate) fn rol_de(p: &ParticipantDto) -> String {
     if !p.teamPosition.is_empty() {
         p.teamPosition.clone()
     } else {

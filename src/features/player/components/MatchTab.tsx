@@ -8,6 +8,7 @@ import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../compon
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { ChampFace } from "./eventMeta";
 import { GoldXpChart } from "./GoldXpChart";
+import { LeadChart } from "./LeadChart";
 import { JungleRouteWidget } from "./JungleRouteWidget";
 import { DeathsSection } from "./DeathsSection";
 import { HitsTaken } from "./HitsTaken";
@@ -57,12 +58,14 @@ export interface MatchTabProps {
   onSync: () => void;
   /** Saltar en el vídeo (segundos de VÍDEO). */
   seekTo: (videoSeconds: number, play: boolean) => void;
+  /** Dónde va el vídeo (segundos de VÍDEO): el cabezal de la curva de Ventaja. */
+  videoTime: number;
   /** Abrir el Mapa en un momento con lo suyo dibujado. */
   onOpenMap: OpenMap;
 }
 
 export const MatchTab: React.FC<MatchTabProps> = ({
-  match, participants, itemPurchases, ddragonVer, cameraSnaps, syncing, onSync, seekTo, onOpenMap,
+  match, participants, itemPurchases, ddragonVer, cameraSnaps, syncing, onSync, seekTo, videoTime, onOpenMap,
 }) => {
   const t = useT();
   const selfP = participants.find((p) => p.is_self);
@@ -79,6 +82,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
   // muerto): mejor una sola explicación y el botón.
   const synced = !match.is_vod && !!match.riot_match_id;
   const seek = useCallback((secs: number) => seekTo(secs, false), [seekTo]);
+  const seekGame = useCallback((gameSecs: number) => seekTo(Math.max(0, gameSecs + videoOffset), false), [seekTo, videoOffset]);
 
   // Una frase del resumen que habla de un bloque entero lo abre y lo trae a
   // la vista. El contador hace que pedir dos veces el mismo bloque funcione.
@@ -122,16 +126,26 @@ export const MatchTab: React.FC<MatchTabProps> = ({
       )}
 
       {/* ------------------------------------------------------- Ventaja.
-          La curva del oro del equipo, la línea del minuto 15 (antes una
-          sección con los mismos números que la curva) y frente a tu rango,
-          corto: lo fuerte, lo flojo y tres barras. El duelo con tu rival
-          directo (tu oro, tu XP) está en Impacto → "Tú contra tu rival". */}
+          La curva por minuto con modos (oro, XP, daño; contra tu rival, la
+          media rival, equipo contra equipo o los diez), la franja de
+          objetivos y la probabilidad de victoria con sus jugadas (LeadChart).
+          Sin la timeline guardada, la curva vieja del oro del equipo. Debajo,
+          la línea del minuto 15 y frente a tu rango, corto. El duelo con tu
+          rival directo sigue en Impacto → "Tú contra tu rival". */}
       {synced && (
         <InspSection id="match-lead" title={t("Lead")} reveal={rv("match-lead")}>
           <div className="mt-block">
-            {hasCurve && (
-              <GoldXpChart frames={match.minute_frames ?? []} videoOffset={videoOffset} onSeek={seek} />
-            )}
+            <LeadChart
+              matchId={match.id}
+              videoTime={videoTime}
+              videoOffset={videoOffset}
+              onSeekGame={seekGame}
+              fallback={
+                hasCurve ? (
+                  <GoldXpChart frames={match.minute_frames ?? []} videoOffset={videoOffset} onSeek={seek} />
+                ) : undefined
+              }
+            />
             {has15 && (
               <p className="ds-summary">
                 {t("At minute 15:")}{" "}

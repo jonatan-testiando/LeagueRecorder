@@ -1,0 +1,209 @@
+/* La ventaja minuto a minuto (LeadChart.tsx). Prefijo `lc-`. Solo tokens de
+   index.css.
+
+   Tres paneles con el mismo eje de tiempo: la serie, la franja de objetivos y
+   la probabilidad de victoria. Lo que en el reproductor es el cabezal (oro) y
+   el cursor (hueso al 40 %) aquí es lo mismo, para que se lea como el mismo
+   instante. Marcas finas y rejilla casi invisible: el dato es lo único que
+   puede hacer ruido. */
+
+.lc { display: flex; flex-direction: column; gap: 8px; }
+/* Mientras llega: el hueco del alto de la gráfica, sin esqueleto ni salto. */
+.lc--loading { min-height: 220px; }
+
+.lc-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.lc-controls .tp-seg button { padding: 4px 9px; white-space: nowrap; }
+.lc-controls .tp-seg button:disabled { opacity: 0.4; cursor: default; }
+.lc-controls .tp-seg button:disabled:hover { color: var(--faint); }
+
+.lc-caption { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint); }
+
+/* ------------------------------------------- caras de los diez */
+.lc-faces { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.lc-faces__team { display: flex; gap: 4px; }
+.lc-faces__vs { font-size: 11px; color: var(--faint); }
+.lc-face {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  box-shadow: 0 0 0 1.5px var(--line);
+  transition: opacity var(--t-instant) var(--e-move), box-shadow var(--t-instant) var(--e-move);
+}
+.lc-face img, .lc-face__empty { width: 22px; height: 22px; border-radius: 50%; display: block; background: var(--raised); }
+.lc-face[data-team="ally"][aria-pressed="true"] { box-shadow: 0 0 0 1.5px var(--cool); }
+.lc-face[data-team="enemy"][aria-pressed="true"] { box-shadow: 0 0 0 1.5px var(--loss); }
+.lc-face[data-self][aria-pressed="true"] { box-shadow: 0 0 0 2.5px var(--cool); }
+.lc-face[aria-pressed="false"] { opacity: 0.35; filter: grayscale(1); }
+.lc-face:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.lc-faces__all {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.lc-faces__all:hover { color: var(--text); }
+
+/* ------------------------------------------- paneles */
+.lc-plot { display: flex; flex-direction: column; gap: 4px; }
+.lc-chart { position: relative; width: 100%; }
+.lc-svg { display: block; width: 100%; height: 100%; overflow: visible; cursor: pointer; }
+
+.lc-grid { stroke: var(--line-soft); stroke-width: 1; }
+.lc-zero { stroke: var(--line); stroke-width: 1; }
+.lc-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.lc-line--wp { stroke-width: 1.5; }
+.lc-head { stroke: var(--brand); stroke-width: 1.5; pointer-events: none; }
+.lc-hover { stroke: color-mix(in srgb, var(--text) 40%, transparent); stroke-width: 1; pointer-events: none; }
+
+/* Cifras del eje vertical: pequeñas, en la esquina izquierda, que es donde
+   las curvas de diferencia están en cero y no tapan nada. */
+.lc-tick {
+  position: absolute;
+  left: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--faint);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.lc-tick--top { top: 0; }
+.lc-tick--bottom { bottom: 0; }
+/* El 50 % a la derecha: al empezar la curva siempre está en el 50 %, y al
+   final casi nunca (la partida ya está decidida). */
+.lc-tick--mid { top: 50%; left: auto; right: 2px; transform: translateY(-130%); }
+
+/* El punto del cursor sobre la curva de diferencia. */
+.lc-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 2px var(--panel);
+  pointer-events: none;
+}
+
+.lc-axis { position: relative; height: 12px; }
+.lc-axis span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------- franja de objetivos
+   Dos filas: arriba lo que se llevó tu equipo, abajo lo del rival. Los
+   colores son los de la línea de tiempo del reproductor (eventMeta): tus
+   objetivos en oro, tus estructuras en jade, lo del rival en rojo. */
+.lc-objs {
+  position: relative;
+  height: 36px;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+.lc-objs::before {
+  /* La raya entre las dos filas. */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px dashed var(--line-soft);
+}
+.lc-obj {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+  z-index: 1;
+}
+.lc-obj[data-row="ours"] { top: 1px; }
+.lc-obj[data-row="theirs"] { bottom: 1px; }
+.lc-obj[data-tone="objective"] { color: var(--brand); }
+.lc-obj[data-tone="structure"] { color: var(--cool); }
+.lc-obj[data-tone="enemy"] { color: var(--loss); }
+.lc-obj:hover { background: var(--raised); z-index: 2; }
+.lc-obj:focus-visible { outline: 2px solid var(--cool); outline-offset: 0; z-index: 2; }
+.lc-objs__head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.5px;
+  margin-left: -0.75px;
+  background: var(--brand);
+  pointer-events: none;
+}
+
+/* ------------------------------------------- probabilidad de victoria */
+.lc-wp { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.lc-wp__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-height: 18px; }
+
+/* Cada jugada: el punto pinta su tamaño (--r) y el botón es más grande que el
+   punto para que se pueda acertar. Anillo del color del panel para que se lea
+   encima de la curva; anillo claro si estabas tú. */
+.lc-play {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  z-index: 1;
+}
+.lc-play::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--loss);
+  box-shadow: 0 0 0 1.5px var(--panel);
+  opacity: 0.45;
+}
+.lc-play[data-good]::after { background: var(--win); }
+/* Las tuyas, enteras y con un aro fino: son las que vienes a revisar. */
+.lc-play[data-yours] { z-index: 2; }
+.lc-play[data-yours]::after { opacity: 1; box-shadow: 0 0 0 1px var(--panel), 0 0 0 2.5px var(--muted); }
+.lc-play[data-on] { z-index: 3; }
+.lc-play[data-on]::after { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+.lc-play:focus-visible { outline: 2px solid var(--cool); outline-offset: 0; border-radius: 50%; z-index: 3; }
+
+/* ------------------------------------------- la lectura */
+.lc-foot { min-height: 20px; }
+.lc-read { font-size: 12.5px; line-height: 1.5; color: var(--faint); font-variant-numeric: tabular-nums; }
+.lc-read b { font-weight: 600; color: var(--text); }
+.lc-read__parts { margin-left: 8px; }
+.lc-read--all { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.lc-chip { display: inline-flex; align-items: baseline; gap: 4px; color: var(--muted); white-space: nowrap; }
+.lc-chip i { align-self: center; width: 10px; height: 2px; border-radius: 1px; }
+.lc-chip b { font-weight: 500; }
+.lc-chip[data-self] { color: var(--text); }
+.lc-chip[data-self] b { font-weight: 600; }

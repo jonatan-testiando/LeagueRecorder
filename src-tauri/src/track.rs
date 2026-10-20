@@ -46,6 +46,9 @@ pub struct Track {
     pub clears: Vec<crate::jungle_route::CampClear>,
     pub deaths: Vec<TrackDeath>,
     pub recalls: Vec<f64>,
+    /// Recorte del minimapa en el vídeo, `[x0, x1, y0, y1]` en fracciones: el
+    /// mismo con el que se midieron estas coordenadas (`Positions::recorte`).
+    pub minimap_rect: [f64; 4],
 }
 
 #[derive(Serialize)]
@@ -127,6 +130,10 @@ pub fn build(tl: &TimelineDto, m: &MatchDto, pos: &Positions) -> Option<Track> {
         clears,
         deaths,
         recalls,
+        minimap_rect: {
+            let (x0, x1, y0, y1) = pos.recorte();
+            [x0, x1, y0, y1]
+        },
     })
 }
 
@@ -185,9 +192,15 @@ mod tests {
 
 // ------------------------------------------------------------ descarga
 
-/// Recorte del minimapa en la grabación: las mismas fracciones que el
-/// detector (`minimap_positions.py`) y que el Recorrido en la interfaz.
-const MM: (f64, f64, f64, f64) = (0.787, 0.995, 0.622, 0.972);
+/// El recorte del minimapa en píxeles de un vídeo `w`×`h`: `(x0, y0, ancho,
+/// alto)`. La misma cuenta que el detector (`minimap_positions.py`), con ancho
+/// y alto pares porque ffmpeg los redondea así.
+fn recorte_px(w: f64, h: f64, r: crate::minimap::Rect) -> (i64, i64, i64, i64) {
+    let x0 = (w * r.0) as i64;
+    let y0 = (h * r.2) as i64;
+    (x0, y0, ((w * r.1) as i64 - x0) / 2 * 2, ((h * r.3) as i64 - y0) / 2 * 2)
+}
+
 const MAPA: f64 = 14870.0;
 /// Ancho del vídeo exportado: el minimapa ampliado a algo que se vea.
 const ANCHO_EXPORT: f64 = 720.0;
@@ -350,10 +363,8 @@ pub async fn export_route_video(
         if hasta - desde < 5.0 {
             return Err("El tramo elegido es demasiado corto".to_string());
         }
-        let x0 = (w * MM.0) as i64;
-        let y0 = (h * MM.2) as i64;
-        let cw = ((w * MM.1) as i64 - x0) / 2 * 2;
-        let ch = ((h * MM.3) as i64 - y0) / 2 * 2;
+        // El recorte con el que se midió el rastro: la estela cae donde tocaba.
+        let (x0, y0, cw, ch) = recorte_px(w, h, pos.recorte());
         let ow = ANCHO_EXPORT;
         let oh = ((ow * ch as f64 / cw as f64) / 2.0).round() * 2.0;
 
@@ -433,6 +444,7 @@ mod tests_export {
             clears: vec![],
             deaths: vec![TrackDeath { t: 10.0, x: 3000.0, y: 2000.0 }],
             recalls: vec![],
+            minimap_rect: [0.787, 0.995, 0.622, 0.972],
         };
         let ass = estela_ass(&tr, 0.0, 20.0, "sofar", 720.0, 684.0, 2.0);
         assert!(ass.starts_with("[Script Info]"));
@@ -442,6 +454,39 @@ mod tests_export {
         assert!(ass.contains("\\p1}m "));
         assert_eq!(reloj_ass(61.5), "0:01:01.50");
         assert_eq!(color_ass(0.0, 100.0), "&H87B73C&");
+    }
+
+    #[test]
+    fn recorte_fijo_es_el_de_siempre() {
+        // Lo que daba la cuenta con la constante antes de pasarla por la partida.
+        let fijo = crate::minimap::RECT_FIJO;
+        assert_eq!(recorte_px(2560.0, 1440.0, fijo), (2014, 895, 532, 504));
+        assert_eq!(recorte_px(1920.0, 1080.0, fijo), (1511, 671, 398, 378));
+    }
+
+    #[test]
+    fn recorte_sigue_al_de_la_partida() {
+        // Minimapa pequeño a la izquierda (volteado): la esquina inferior izquierda.
+        let r = recorte_px(2560.0, 1440.0, (0.005, 0.08, 0.86, 0.99));
+        assert_eq!(r, (12, 1238, 192, 186));
+        let p = crate::minimap::Positions::from_json(
+            r#"{"fps":2.0,"video_offset":0.0,"self_participant_id":1,"self_team_id":100,
+                "rect":[0.005,0.08,0.86,0.99],"samples":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.recorte(), (0.005, 0.08, 0.86, 0.99));
+        // Sin `rect` (ficheros viejos) o con uno roto, el fijo.
+        let viejo = crate::minimap::Positions::from_json(
+            r#"{"fps":2.0,"video_offset":0.0,"self_participant_id":1,"self_team_id":100,"samples":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(viejo.recorte(), crate::minimap::RECT_FIJO);
+        let roto = crate::minimap::Positions::from_json(
+            r#"{"fps":2.0,"video_offset":0.0,"self_participant_id":1,"self_team_id":100,
+                "rect":[0.9,0.8,0.6,0.9],"samples":[]}"#,
+        )
+        .unwrap();
+        assert_eq!(roto.recorte(), crate::minimap::RECT_FIJO);
     }
 }
 

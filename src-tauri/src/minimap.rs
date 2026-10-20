@@ -53,6 +53,60 @@ pub struct Positions {
     /// 2026-10-07, que ponían azul = 100 a secas.
     #[serde(default)]
     pub team_from: Option<String>,
+    /// Recorte del vídeo del que salen las coordenadas, `[x0, x1, y0, y1]`.
+    /// Ausente: ficheros de antes del 2026-10-19, medidos con [`RECT_FIJO`].
+    #[serde(default)]
+    pub rect: Option<[f64; 4]>,
+}
+
+// ------------------------------------------------------------ recorte
+
+/// Dónde está el minimapa en el vídeo: `(x0, x1, y0, y1)` en fracciones del
+/// fotograma. El vídeo es el recorte de la ventana del juego, así que son las
+/// mismas fracciones que en pantalla.
+pub type Rect = (f64, f64, f64, f64);
+
+/// El recorte de siempre: el HUD de la máquina de desarrollo (MinimapScale=3,
+/// a la derecha, 2560×1440). Igual que `MINIMAPA` en `camera_input.rs`.
+pub const RECT_FIJO: Rect = (0.787, 0.995, 0.622, 0.972);
+
+/// Variable con la que los scripts reciben el recorte, `x0,x1,y0,y1`. Sin
+/// ella, o si no vale, usan [`RECT_FIJO`] (`rect_minimapa` en cada script).
+pub const RECT_ENV: &str = "LR_MINIMAP_RECT";
+
+/// Cuatro números finitos dentro del fotograma, con `x0 < x1` y `y0 < y1`. La
+/// misma regla que aplican los scripts.
+pub fn rect_valido(r: Rect) -> bool {
+    let (x0, x1, y0, y1) = r;
+    [x0, x1, y0, y1].iter().all(|v| v.is_finite())
+        && 0.0 <= x0
+        && x0 < x1
+        && x1 <= 1.0
+        && 0.0 <= y0
+        && y0 < y1
+        && y1 <= 1.0
+}
+
+/// El recorte del minimapa en el vídeo de una partida.
+///
+/// Hoy, el fijo para todas. Un cliente con otro `MinimapScale` o con el
+/// minimapa volteado lo tiene en otro sitio: esto debe pasar a
+/// `crate::camera_input::Calibracion::actual().rect(meta)`, que lo saca de los
+/// ajustes del juego guardados en la partida.
+pub fn rect_de(_meta: &crate::storage::MatchMetadata) -> Rect {
+    RECT_FIJO
+}
+
+/// Pasa el recorte a un script de Python en [`RECT_ENV`]. Es el único sitio
+/// que la fija: así todos los scripts de una partida miran el mismo trozo.
+pub fn pasar_rect(cmd: &mut std::process::Command, r: Rect) {
+    if rect_valido(r) {
+        // `{}` de f64 es la escritura más corta que vuelve al mismo número:
+        // Python lee exactamente el mismo recorte.
+        cmd.env(RECT_ENV, format!("{},{},{},{}", r.0, r.1, r.2, r.3));
+    } else {
+        log::warn!("minimapa: recorte no válido {r:?}; los scripts usarán el fijo");
+    }
 }
 
 /// Cuánto puede moverse alguien por segundo sin romper la física del juego.
@@ -167,6 +221,15 @@ impl Positions {
         }
         p.team_from = Some("ally_ring".into());
         Some(p)
+    }
+
+    /// El recorte del vídeo donde viven estas coordenadas. Sobre él se pinta la
+    /// estela: con otro, los puntos caerían desplazados.
+    pub fn recorte(&self) -> Rect {
+        self.rect
+            .map(|[x0, x1, y0, y1]| (x0, x1, y0, y1))
+            .filter(|r| rect_valido(*r))
+            .unwrap_or(RECT_FIJO)
     }
 
     /// Sigue al jugador grabado a lo largo de la partida.
@@ -910,6 +973,7 @@ pub fn spawn_processing(app: &tauri::AppHandle, match_id: &str) -> Result<(), St
     let (w, h, dur) =
         crate::proc::video_info(&ffmpeg, &meta.video_path).unwrap_or((1920.0, 1080.0, None));
     let duracion = dur.unwrap_or(meta.game_duration as f64 + meta.video_offset.unwrap_or(0.0));
+    let rect = rect_de(&meta);
 
     let (py, cuda_dll) = python(app);
     let dir_s = dir.to_string_lossy().to_string();
@@ -937,6 +1001,7 @@ pub fn spawn_processing(app: &tauri::AppHandle, match_id: &str) -> Result<(), St
         if let Some(dll) = &cuda_dll {
             cmd.env("VOD_CUDA_DLL_DIR", dll);
         }
+        pasar_rect(&mut cmd, rect);
         // Sin esto Windows le abre una consola propia al hijo. Era LA ventana
         // negra que aparecía al entrar en Impacto, y cerrarla mataba el análisis.
         crate::proc::hide_console(&mut cmd);
@@ -1067,6 +1132,34 @@ mod tests {
 
     fn equipos(p: &Positions) -> Vec<Option<i32>> {
         p.samples[0].icons.iter().map(|i| i.team).collect()
+    }
+
+    #[test]
+    fn recorte_por_entorno() {
+        assert!(rect_valido(RECT_FIJO));
+        assert!(!rect_valido((0.9, 0.8, 0.6, 0.9)));
+        assert!(!rect_valido((0.7, 0.8, 0.6, 0.6)));
+        assert!(!rect_valido((f64::NAN, 0.8, 0.6, 0.9)));
+        assert!(!rect_valido((0.5, 1.2, 0.6, 0.9)));
+        let valor = |c: &std::process::Command| {
+            c.get_envs()
+                .find(|(k, _)| *k == RECT_ENV)
+                .and_then(|(_, v)| v)
+                .map(|v| v.to_string_lossy().to_string())
+        };
+        let mut cmd = std::process::Command::new("python");
+        pasar_rect(&mut cmd, RECT_FIJO);
+        // Lo que lee `rect_minimapa` en los scripts: el mismo número, sin redondeos.
+        assert_eq!(valor(&cmd).as_deref(), Some("0.787,0.995,0.622,0.972"));
+        let r = (0.1 / 3.0, 0.2, 0.6, 0.97);
+        let mut cmd = std::process::Command::new("python");
+        pasar_rect(&mut cmd, r);
+        let v: Vec<f64> = valor(&cmd).unwrap().split(',').map(|s| s.parse().unwrap()).collect();
+        assert_eq!(v, vec![r.0, r.1, r.2, r.3]);
+        // Uno roto no se pasa: el script se queda con el fijo.
+        let mut cmd = std::process::Command::new("python");
+        pasar_rect(&mut cmd, (0.9, 0.8, 0.6, 0.9));
+        assert_eq!(valor(&cmd), None);
     }
 
     #[test]

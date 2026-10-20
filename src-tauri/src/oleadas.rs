@@ -405,6 +405,7 @@ pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
         .arg(format!("{}x{}", w as i64, h as i64))
         .arg("--duracion")
         .arg(format!("{duracion:.2}"));
+    crate::minimap::pasar_rect(&mut cmd, crate::minimap::rect_de(&meta));
     crate::proc::hide_console(&mut cmd);
     let salida = cmd.output();
     if let Ok(mut l) = leyendo().lock() {

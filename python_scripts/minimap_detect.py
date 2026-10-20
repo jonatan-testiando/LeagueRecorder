@@ -41,8 +41,10 @@ diseño:
 """
 import argparse
 import json
+import math
 import os
 import subprocess
+import sys
 import urllib.request
 
 import cv2
@@ -51,8 +53,28 @@ import numpy as np
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0 Safari/537.36")
 
-# Mismo ROI que `camera_snaps.py`, ya afinado contra grabaciones reales.
-MM = (0.787, 0.995, 0.622, 0.972)
+# Mismo ROI que `camera_snaps.py`, ya afinado contra grabaciones reales. Otro
+# HUD se pasa en LR_MINIMAP_RECT (ver minimap_positions.py).
+MM_FIJO = (0.787, 0.995, 0.622, 0.972)
+
+
+def rect_minimapa():
+    """El recorte de `LR_MINIMAP_RECT` ("x0,x1,y0,y1"), o el fijo si falta o no vale."""
+    crudo = os.environ.get("LR_MINIMAP_RECT", "").strip()
+    if not crudo:
+        return MM_FIJO
+    try:
+        r = tuple(float(v) for v in crudo.split(","))
+    except ValueError:
+        r = ()
+    if (len(r) == 4 and all(math.isfinite(v) for v in r)
+            and 0.0 <= r[0] < r[1] <= 1.0 and 0.0 <= r[2] < r[3] <= 1.0):
+        return r
+    print(f"LR_MINIMAP_RECT no vale ({crudo!r}): se usa el recorte fijo", file=sys.stderr, flush=True)
+    return MM_FIJO
+
+
+MM = rect_minimapa()
 MAPA = 14870.0
 
 # Data Dragon usa nombres internos que no siempre son el `championName` de

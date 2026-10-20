@@ -15,6 +15,8 @@ Salida: los parámetros de la transformación y el error de reproyección.
 """
 import argparse
 import json
+import math
+import os
 import subprocess
 import sys
 
@@ -22,8 +24,28 @@ import cv2
 import numpy as np
 
 # ROI del minimapa en fracciones del frame. Mismos valores que usa
-# `camera_snaps.py`, que ya están afinados contra grabaciones reales.
-MM = (0.787, 0.995, 0.622, 0.972)
+# `camera_snaps.py`, que ya están afinados contra grabaciones reales. Otro HUD
+# se pasa en LR_MINIMAP_RECT (ver minimap_positions.py).
+MM_FIJO = (0.787, 0.995, 0.622, 0.972)
+
+
+def rect_minimapa():
+    """El recorte de `LR_MINIMAP_RECT` ("x0,x1,y0,y1"), o el fijo si falta o no vale."""
+    crudo = os.environ.get("LR_MINIMAP_RECT", "").strip()
+    if not crudo:
+        return MM_FIJO
+    try:
+        r = tuple(float(v) for v in crudo.split(","))
+    except ValueError:
+        r = ()
+    if (len(r) == 4 and all(math.isfinite(v) for v in r)
+            and 0.0 <= r[0] < r[1] <= 1.0 and 0.0 <= r[2] < r[3] <= 1.0):
+        return r
+    print(f"LR_MINIMAP_RECT no vale ({crudo!r}): se usa el recorte fijo", file=sys.stderr, flush=True)
+    return MM_FIJO
+
+
+MM = rect_minimapa()
 
 # El mapa de la Grieta va de 0 a ~14 870 en ambos ejes, con el origen abajo a la
 # izquierda. En pantalla el eje Y crece hacia abajo, así que se invierte.

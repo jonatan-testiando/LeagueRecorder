@@ -524,7 +524,7 @@ fn de_partida(match_id: &str, cal: crate::camera_input::Calibracion) -> GolpesRe
 /// Las peleas que te empezaron en una partida, sin iconos. Vacío si la partida
 /// no tiene el HUD leído o le falta algo para cruzarlo.
 pub(crate) fn aperturas_de(match_id: &str) -> Vec<Apertura> {
-    de_partida(match_id, crate::storage::load_config().minimap_scale).list
+    de_partida(match_id, crate::camera_input::Calibracion::actual()).list
 }
 
 /// Instantes de vídeo de las peleas que te empezaron: alrededor de ellos se

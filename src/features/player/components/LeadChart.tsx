@@ -3,7 +3,7 @@ import {
   getMatchPlays,
   getMinuteSeries,
   type MatchObjective,
-  type MatchPlay,
+  type Play as MatchPlay,
   type MatchPlays,
   type MinuteSeries,
   type MinuteSeriesPlayer,
@@ -217,7 +217,11 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
     getMinuteSeries(matchId)
       .then((d) => vivo && setData(d))
       .catch(() => vivo && setData(null));
-    getMatchPlays(matchId).then((p) => vivo && setPlays(p));
+    // Sin jugadas (partida sin sincronizar o el comando falla) no hay curva de
+    // WP; el resto de la gráfica no depende de ella.
+    getMatchPlays(matchId)
+      .then((p) => vivo && setPlays(p))
+      .catch(() => vivo && setPlays(null));
     return () => {
       vivo = false;
     };
@@ -285,12 +289,14 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
     const mia = (p: MatchPlay, v: number) => (p.team_id === myTeam ? v : 1 - v);
     const pts: [number, number][] = [];
     for (const p of ps) pts.push([p.time / 60, mia(p, p.before)], [p.time / 60, mia(p, p.after)]);
-    if (plays.curve) {
-      for (const c of plays.curve) pts.push([c.time / 60, myTeam === 100 ? c.p100 : 1 - c.p100]);
+    // Con menos de dos fotogramas la curva no aporta: se queda la de las jugadas.
+    const curve = plays.curve.length > 1 ? plays.curve : null;
+    if (curve) {
+      for (const c of curve) pts.push([c.time / 60, myTeam === 100 ? c.p100 : 1 - c.p100]);
       // Orden estable: a la misma hora, el antes de una jugada va antes que su después.
       pts.sort((a, b) => a[0] - b[0]);
     }
-    if (pts[0][0] > 0) pts.unshift([0, plays.curve ? (myTeam === 100 ? plays.curve[0].p100 : 1 - plays.curve[0].p100) : pts[0][1]]);
+    if (pts[0][0] > 0) pts.unshift([0, curve ? (myTeam === 100 ? curve[0].p100 : 1 - curve[0].p100) : pts[0][1]]);
     if (pts[pts.length - 1][0] < tEnd) pts.push([tEnd, pts[pts.length - 1][1]]);
     const dots = ps
       .map((p, i) => {

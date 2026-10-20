@@ -89,12 +89,13 @@ pub fn rect_valido(r: Rect) -> bool {
 
 /// El recorte del minimapa en el vídeo de una partida.
 ///
-/// Hoy, el fijo para todas. Un cliente con otro `MinimapScale` o con el
-/// minimapa volteado lo tiene en otro sitio: esto debe pasar a
-/// `crate::camera_input::Calibracion::actual().rect(meta)`, que lo saca de los
-/// ajustes del juego guardados en la partida.
-pub fn rect_de(_meta: &crate::storage::MatchMetadata) -> Rect {
-    RECT_FIJO
+/// Sale de los ajustes del juego guardados en la partida (o del override de
+/// Ajustes), igual que el rectángulo de los clics: un cliente con otro
+/// `MinimapScale` o con el minimapa volteado lo tiene en otro sitio. Las
+/// partidas sin ajustes guardados caen en el rectángulo heredado, que a la
+/// escala de siempre es [`RECT_FIJO`].
+pub fn rect_de(meta: &crate::storage::MatchMetadata) -> Rect {
+    crate::camera_input::Calibracion::actual().rect(meta)
 }
 
 /// Pasa el recorte a un script de Python en [`RECT_ENV`]. Es el único sitio

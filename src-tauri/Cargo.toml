@@ -43,6 +43,12 @@ futures-util = { version = "0.3", default-features = false }
 # momentos revisados) para que sobrevivan a un formateo. Solo deflate: los
 # vídeos NO entran en la copia, así que no hace falta ningún otro compresor.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Cliente del LCU (ver `lcu.rs`): su TLS se verifica de verdad contra la CA raíz
+# de Riot, que es lo que firma el certificado de 127.0.0.1. Para eso reqwest
+# necesita un `ClientConfig` de rustls hecho a mano. Las dos ya viajaban en el
+# árbol (las mismas versiones que usa reqwest 0.11), no se descarga nada nuevo.
+rustls = "0.21"
+rustls-pemfile = "1"
 
 # Solo para pruebas: el corpus de partidas se guarda comprimido y los ajustes
 # (percentiles por rol, pesos de objetivos) se recalculan desde ahi. No viaja en
@@ -60,12 +66,17 @@ tauri-plugin-single-instance = "2"
 # el loopback de OBS. Se elige `windows-sys` y no `windows` porque ya viaja en
 # el arbol de Tauri (misma version, 0.61) y son declaraciones FFI planas: no
 # añade tiempo de compilacion apreciable ni capas COM que aqui no usamos.
+# Los de procesos (ToolHelp, Threading y el NtQueryInformationProcess de Wdk)
+# son para leer la linea de comandos de LeagueClientUx.exe cuando no hay
+# lockfile: ver `winsys::process_command_line`.
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.61", features = [
+    "Wdk_System_Threading",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }

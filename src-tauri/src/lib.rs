@@ -22,6 +22,7 @@ mod oleadas;
 mod barras;
 mod hands;
 mod jungle_route;
+mod lcu;
 mod minimap;
 mod obs_client;
 mod occupancy;
@@ -227,6 +228,10 @@ pub fn run() {
             let (rec, active, ult, video, training) = monitor_deps;
             spawn_background_monitor(rec, active, ult, video, training, app.handle().clone());
 
+            // El cliente de League (LCU): fase de gameflow, gameId y cola. Solo
+            // lectura; el monitor de partida lo consulta al etiquetar la grabación.
+            lcu::spawn_monitor(app.handle().clone());
+
             // Mantenimiento de la biblioteca: migración, miradas e impacto.
             spawn_library_maintenance(app.handle().clone());
 
@@ -322,6 +327,7 @@ pub fn run() {
             set_app_config,
             ajustes_juego::get_minimap_detection,
             get_disk_usage,
+            lcu::get_lcu_status,
             backup::export_backup,
             backup::import_backup,
             get_hotkeys,

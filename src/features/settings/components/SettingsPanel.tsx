@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type MaintenanceProgress } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
 import { formatDecimal } from "../../../core/benchmarkFormat";
+import { queueKey } from "../../../core/matchStats";
 // La lista de regiones se comparte con el asistente de primer arranque.
 import { RIOT_PLATFORMS, platformLabel } from "../../../core/riotRegions";
 import { AudioStatus, VideoSettings } from "../../../types";
@@ -120,6 +121,26 @@ const readStoredCategory = (): Category | null => {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /**
+ * Fase de gameflow del cliente de League → clave de i18n. Una fase que no está
+ * aquí (Riot añade alguna de vez en cuando) se enseña tal cual la da el cliente.
+ */
+const LCU_PHASES: Record<string, string> = {
+  None: "In the client",
+  Lobby: "In a lobby",
+  Matchmaking: "In queue",
+  CheckedIntoTournament: "Checked into Clash",
+  ReadyCheck: "Match found",
+  ChampSelect: "Champion select",
+  GameStart: "Loading the game",
+  InProgress: "In game",
+  Reconnect: "Reconnecting",
+  WaitingForStats: "Waiting for stats",
+  PreEndOfGame: "Post-game",
+  EndOfGame: "Post-game",
+  TerminatedInError: "Game ended with an error",
+};
+
+/**
  * Fila de ajuste: título y ayuda a la izquierda, control a la derecha.
  *
  * Fuera del panel a propósito: definida dentro del render era un componente
@@ -228,6 +249,15 @@ export const SettingsPanel: React.FC = () => {
    * actualizar, no porque haya que hacer nada.
    */
   const [maint, setMaint] = useState<MaintenanceProgress | null>(null);
+  // Cliente de League (LCU): null hasta la primera respuesta del backend.
+  const [lcu, setLcu] = useState<LcuStatus | null>(null);
+  useEffect(() => {
+    getLcuStatus().then(setLcu).catch(() => {});
+    const stop = listen<LcuStatus>("lcu-status", (e) => setLcu(e.payload));
+    return () => {
+      stop.then((f) => f()).catch(() => {});
+    };
+  }, []);
   // Para que la cuenta atrás de la prueba no escriba en un panel ya muerto.
   const alive = useRef(true);
   useEffect(() => {
@@ -1222,6 +1252,29 @@ export const SettingsPanel: React.FC = () => {
           <span className="stg-diag__v">
             <span className="stg-dot" data-tone={isRecording ? "rec" : recorderKnown ? "ok" : "bad"} />
             <span>{isRecording ? t("Recording") : recorderKnown ? t("Idle") : "—"}</span>
+          </span>
+        </Row>
+
+        <Row label={t("League client")} desc={t("Read-only. Gives the queue and the exact game ID, so the Riot sync doesn't have to guess by duration.")}>
+          <span className="stg-diag__v">
+            <span className="stg-dot" data-tone={lcu?.connected ? undefined : "off"} />
+            <span>
+              {!lcu
+                ? "—"
+                : !lcu.connected
+                  ? t("Not detected")
+                  : [
+                      lcu.phase ? (LCU_PHASES[lcu.phase] ? t(LCU_PHASES[lcu.phase]) : lcu.phase) : null,
+                      lcu.queue_id != null ? t(queueKey(lcu.queue_id)) : null,
+                      // En partida, el id de Match-V5 tal cual ("LA1_…"); fuera, la
+                      // plataforma sola, que es lo que hará falta para formarlo.
+                      lcu.game_id != null
+                        ? `${lcu.platform_id ? `${lcu.platform_id}_` : ""}${lcu.game_id}`
+                        : lcu.platform_id,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+            </span>
           </span>
         </Row>
 

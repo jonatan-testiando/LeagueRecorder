@@ -32,6 +32,7 @@ instalados a mano, y `ffprobe` ni siquiera se empaqueta.
 """
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -96,7 +97,34 @@ def preparar_cuda():
         pass
 
 
-MM = (0.787, 0.995, 0.622, 0.972)
+# Recorte del minimapa en el vídeo, en fracciones (x0, x1, y0, y1). El fijo es
+# el HUD de la máquina de desarrollo (MinimapScale=3, a la derecha): un cliente
+# con otro tamaño o con el minimapa volteado lo tiene en otro sitio, y la app
+# pasa el de cada partida en LR_MINIMAP_RECT (`minimap::pasar_rect`). El vídeo
+# es el recorte de la ventana del juego, así que valen fracciones de pantalla.
+#
+# Copiado igual en oleadas.py, camera_snaps.py, minimap_detect.py y
+# minimap_calib.py: cada script se empaqueta suelto y no hay módulo común.
+MM_FIJO = (0.787, 0.995, 0.622, 0.972)
+
+
+def rect_minimapa():
+    """El recorte de `LR_MINIMAP_RECT` ("x0,x1,y0,y1"), o el fijo si falta o no vale."""
+    crudo = os.environ.get("LR_MINIMAP_RECT", "").strip()
+    if not crudo:
+        return MM_FIJO
+    try:
+        r = tuple(float(v) for v in crudo.split(","))
+    except ValueError:
+        r = ()
+    if (len(r) == 4 and all(math.isfinite(v) for v in r)
+            and 0.0 <= r[0] < r[1] <= 1.0 and 0.0 <= r[2] < r[3] <= 1.0):
+        return r
+    print(f"LR_MINIMAP_RECT no vale ({crudo!r}): se usa el recorte fijo", file=sys.stderr, flush=True)
+    return MM_FIJO
+
+
+MM = rect_minimapa()
 MAPA = 14870.0
 MODELO = "models/minimap_icons.onnx"
 
@@ -320,6 +348,8 @@ def reanudar(parcial, cabecera):
             j = json.load(f)
     except (OSError, ValueError):
         return []
+    # Los parciales de antes de `rect` se midieron con el recorte fijo.
+    j.setdefault("rect", list(MM_FIJO))
     if any(j.get(k) != v for k, v in cabecera.items()):
         return []
     muestras = j.get("samples") or []
@@ -390,6 +420,9 @@ def main():
         "team_from": "ally_ring",
         # Cada muestra trae `cam`, el recuadro de la cámara (ver camara_de).
         "camera": 1,
+        # El recorte de donde salen las coordenadas: el Mapa y la descarga del
+        # recorrido pintan la estela sobre este mismo trozo del vídeo.
+        "rect": list(MM),
     }
     salida = [] if a.sin_reanudar else reanudar(parcial, cabecera)
     # Se retoma en el fotograma siguiente al último guardado.

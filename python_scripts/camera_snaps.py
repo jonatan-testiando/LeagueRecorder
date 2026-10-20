@@ -31,10 +31,34 @@ import cv2
 import numpy as np
 import sys
 import json
+import math
 import os
 
 
 # ------------------ HELPERS DE ENTORNO ------------------
+# Recorte del minimapa, en fracciones (x0, x1, y0, y1). El fijo es el HUD de la
+# máquina de desarrollo; la app pasa el de cada partida en LR_MINIMAP_RECT (ver
+# minimap_positions.py). VOD_SNAP_MM_* sigue mandando sobre los dos.
+MM_FIJO = (0.787, 0.995, 0.622, 0.972)
+
+
+def rect_minimapa():
+    """El recorte de `LR_MINIMAP_RECT` ("x0,x1,y0,y1"), o el fijo si falta o no vale."""
+    crudo = os.environ.get("LR_MINIMAP_RECT", "").strip()
+    if not crudo:
+        return MM_FIJO
+    try:
+        r = tuple(float(v) for v in crudo.split(","))
+    except ValueError:
+        r = ()
+    if (len(r) == 4 and all(math.isfinite(v) for v in r)
+            and 0.0 <= r[0] < r[1] <= 1.0 and 0.0 <= r[2] < r[3] <= 1.0):
+        return r
+    print(f"LR_MINIMAP_RECT no vale ({crudo!r}): se usa el recorte fijo", file=sys.stderr, flush=True)
+    return MM_FIJO
+
+
+
 def _envf(name, default):
     try:
         return float(os.environ.get(name, default))
@@ -74,11 +98,13 @@ class Config:
         # Umbrales de decisión de la vista del mundo.
         self.mad_thresh = _envf("VOD_SNAP_MAD", 0.085)
         self.resp_thresh = _envf("VOD_SNAP_RESP", 0.30)
-        # ROI del minimapa, en fracciones del frame (HUD de LoL por defecto).
-        self.mm_x0 = _envf("VOD_SNAP_MM_X0", 0.787)
-        self.mm_x1 = _envf("VOD_SNAP_MM_X1", 0.995)
-        self.mm_y0 = _envf("VOD_SNAP_MM_Y0", 0.622)
-        self.mm_y1 = _envf("VOD_SNAP_MM_Y1", 0.972)
+        # ROI del minimapa, en fracciones del frame (el de la partida, ver
+        # rect_minimapa).
+        mm = rect_minimapa()
+        self.mm_x0 = _envf("VOD_SNAP_MM_X0", mm[0])
+        self.mm_x1 = _envf("VOD_SNAP_MM_X1", mm[1])
+        self.mm_y0 = _envf("VOD_SNAP_MM_Y0", mm[2])
+        self.mm_y1 = _envf("VOD_SNAP_MM_Y1", mm[3])
         # Salto mínimo del viewport, como fracción del ancho del minimapa. Caminar
         # con la cámara enganchada mueve el rectángulo muy poco entre muestras.
         self.mm_jump = _envf("VOD_SNAP_MM_JUMP", 0.12)

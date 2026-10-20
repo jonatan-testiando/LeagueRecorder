@@ -19,6 +19,7 @@ cada color en coordenadas de juego (0..14870, y hacia arriba).
 """
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -28,8 +29,29 @@ import threading
 import cv2
 import numpy as np
 
-# Las mismas fracciones que minimap_positions.py: mismas coordenadas.
-MM = (0.787, 0.995, 0.622, 0.972)
+# El mismo recorte que minimap_positions.py: mismas coordenadas. El fijo es el
+# HUD de la máquina de desarrollo; la app pasa el de cada partida en
+# LR_MINIMAP_RECT (ver allí).
+MM_FIJO = (0.787, 0.995, 0.622, 0.972)
+
+
+def rect_minimapa():
+    """El recorte de `LR_MINIMAP_RECT` ("x0,x1,y0,y1"), o el fijo si falta o no vale."""
+    crudo = os.environ.get("LR_MINIMAP_RECT", "").strip()
+    if not crudo:
+        return MM_FIJO
+    try:
+        r = tuple(float(v) for v in crudo.split(","))
+    except ValueError:
+        r = ()
+    if (len(r) == 4 and all(math.isfinite(v) for v in r)
+            and 0.0 <= r[0] < r[1] <= 1.0 and 0.0 <= r[2] < r[3] <= 1.0):
+        return r
+    print(f"LR_MINIMAP_RECT no vale ({crudo!r}): se usa el recorte fijo", file=sys.stderr, flush=True)
+    return MM_FIJO
+
+
+MM = rect_minimapa()
 MAPA = 14870.0
 
 # Diámetro de un súbdito en fracción del ancho del minimapa (10 px de 532 en 1440p).
@@ -137,7 +159,7 @@ def main():
     for f, t in zip(frames, tiempos):
         f["t"] = round(t, 2)
 
-    salida = {"v": 1, "width": W, "height": H, "frames": frames}
+    salida = {"v": 1, "width": W, "height": H, "rect": list(MM), "frames": frames}
     tmp = a.salida + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(salida, fh, separators=(",", ":"))

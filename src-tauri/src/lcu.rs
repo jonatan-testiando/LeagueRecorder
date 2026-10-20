@@ -365,6 +365,48 @@ pub fn partida_en_curso() -> Option<PartidaLcu> {
     partida_de(&e.status)
 }
 
+/// Lo más que se espera a que vuelva el juego de una partida que se cayó viva.
+/// Pulsar «Reconectar» y pasar otra vez la pantalla de carga se lleva uno o dos
+/// minutos. Pasado esto la partida se guarda como esté, y si el jugador vuelve
+/// más tarde, la vuelta es otra grabación.
+pub const MAX_ESPERA_RECONEXION: Duration = Duration::from_secs(5 * 60);
+
+/// Fases en las que el juego de la partida puede volver. `Reconnect` es el
+/// juego caído con la partida viva. `GameStart` e `InProgress` son el juego
+/// relanzándose tras pulsar «Reconectar», y también lo que se lee durante los
+/// primeros segundos de la caída, antes de que el cliente se entere o el
+/// sondeo vea el cambio.
+const FASES_DE_VUELTA: [&str; 3] = ["Reconnect", "GameStart", "InProgress"];
+
+/// ¿Se sigue esperando a que vuelva el juego, en vez de cerrar la partida?
+///
+/// `fase` y `game_id` son lo que dice el cliente. `partida` es el `gameId` de
+/// la sesión que se está grabando y `caido`, cuánto lleva sin contestar la API
+/// del juego (puerto 2999). Solo se espera por la misma partida: sin `gameId`
+/// de la sesión no hay con qué comparar, y se cierra como siempre.
+pub fn seguir_esperando(
+    fase: Option<&str>,
+    game_id: Option<i64>,
+    partida: Option<i64>,
+    caido: Duration,
+) -> bool {
+    caido < MAX_ESPERA_RECONEXION
+        && partida.is_some()
+        && game_id == partida
+        && fase.is_some_and(|f| FASES_DE_VUELTA.contains(&f))
+}
+
+/// `seguir_esperando` con lo último que se leyó del cliente. Una lectura vieja
+/// o un cliente cerrado no sostienen la espera.
+pub fn esperar_reconexion(partida: Option<i64>, caido: Duration) -> bool {
+    let Ok(e) = ESTADO.lock() else {
+        return false;
+    };
+    e.leido.is_some_and(|t| t.elapsed() < FRESCURA)
+        && e.status.connected
+        && seguir_esperando(e.status.phase.as_deref(), e.status.game_id, partida, caido)
+}
+
 fn partida_de(st: &LcuStatus) -> Option<PartidaLcu> {
     if !st.connected || !FASES_CON_PARTIDA.contains(&st.phase.as_deref()?) {
         return None;
@@ -728,5 +770,49 @@ mod tests {
                 .await;
             assert!(r.is_err(), "un cliente sin la CA de Riot no debería conectar");
         });
+    }
+
+    #[test]
+    fn se_espera_al_juego_caido_de_la_misma_partida() {
+        let s = Duration::from_secs;
+        let partida = Some(4_321_000_123);
+        // El juego se cayó y el cliente ofrece reconectar.
+        assert!(seguir_esperando(Some("Reconnect"), partida, partida, s(4)));
+        assert!(seguir_esperando(Some("Reconnect"), partida, partida, s(299)));
+        // Los primeros segundos el cliente aún dice InProgress; y tras pulsar
+        // «Reconectar», GameStart o InProgress mientras el juego carga.
+        for fase in ["InProgress", "GameStart"] {
+            assert!(seguir_esperando(Some(fase), partida, partida, s(3)), "{fase}");
+            assert!(seguir_esperando(Some(fase), partida, partida, s(150)), "{fase}");
+        }
+    }
+
+    #[test]
+    fn no_se_espera_mas_de_cinco_minutos() {
+        let partida = Some(7);
+        assert!(!seguir_esperando(Some("Reconnect"), partida, partida, MAX_ESPERA_RECONEXION));
+        assert!(!seguir_esperando(Some("Reconnect"), partida, partida, Duration::from_secs(3600)));
+    }
+
+    #[test]
+    fn no_se_espera_por_otra_partida_ni_sin_gameid() {
+        let s = Duration::from_secs(5);
+        // El cliente habla de otra partida: la nuestra ya no va a volver.
+        assert!(!seguir_esperando(Some("Reconnect"), Some(8), Some(7), s));
+        // La sesión no llegó a saber su gameId: no hay con qué comparar.
+        assert!(!seguir_esperando(Some("Reconnect"), Some(7), None, s));
+        assert!(!seguir_esperando(Some("Reconnect"), None, None, s));
+        // El cliente no dio gameId en la fase de reconexión.
+        assert!(!seguir_esperando(Some("Reconnect"), None, Some(7), s));
+    }
+
+    #[test]
+    fn no_se_espera_si_la_partida_acabo_o_no_hay_cliente() {
+        let s = Duration::from_secs(5);
+        let partida = Some(7);
+        for fase in ["WaitingForStats", "PreEndOfGame", "EndOfGame", "None", "Lobby", "ChampSelect"] {
+            assert!(!seguir_esperando(Some(fase), partida, partida, s), "{fase}");
+        }
+        assert!(!seguir_esperando(None, partida, partida, s));
     }
 }

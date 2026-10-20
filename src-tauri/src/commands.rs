@@ -282,6 +282,10 @@ pub struct ActiveMatchState {
     /// los metadatos: es lo que deja sincronizar con Riot por id exacto en vez
     /// de por duración. `None` si el cliente no contestó (o no estaba).
     pub lcu_game: Mutex<Option<crate::lcu::PartidaLcu>>,
+    /// Segundos que la sesión pasó esperando a un juego que se cayó con la
+    /// partida viva y volvió. Están en el vídeo, pero no son partida: el APM
+    /// medio no los cuenta.
+    pub sin_juego: Mutex<f64>,
 }
 
 impl Default for ActiveMatchState {
@@ -302,6 +306,7 @@ impl Default for ActiveMatchState {
             has_video: Mutex::new(false),
             hud_settings: Mutex::new(None),
             lcu_game: Mutex::new(None),
+            sin_juego: Mutex::new(0.0),
         }
     }
 }
@@ -820,6 +825,15 @@ pub fn spawn_background_monitor(
             // emitiendo de verdad, y el aviso de muerte se da UNA vez por sesión.
             let mut liveness_ticks: u32 = 0;
             let mut death_reported = false;
+            // Desde cuándo no contesta la API del juego con la sesión abierta, y
+            // si la sesión está esperando a que vuelva un juego caído con la
+            // partida viva (ver `lcu::seguir_esperando`).
+            let mut caido_desde: Option<std::time::Instant> = None;
+            let mut esperando_juego = false;
+            // Hora de partida del último suceso visto y, tras la vuelta de un
+            // juego caído, hasta dónde los sucesos que repita ya están guardados.
+            let mut ultimo_t_suceso = f64::NEG_INFINITY;
+            let mut sucesos_hasta = f64::NEG_INFINITY;
 
             loop {
                 tokio::time::sleep(Duration::from_secs(1)).await;
@@ -850,6 +864,11 @@ pub fn spawn_background_monitor(
                     last_event_id = -1;
                     game_start_time = Local::now();
                     close_grace_ticks = 0;
+                    caido_desde = None;
+                    esperando_juego = false;
+                    ultimo_t_suceso = f64::NEG_INFINITY;
+                    sucesos_hasta = f64::NEG_INFINITY;
+                    *active_match.sin_juego.lock().await = 0.0;
                     // Reiniciar el seguimiento de tiempo de juego para la nueva partida.
                     last_game_time = 0.0;
                     last_game_time_at = std::time::Instant::now();
@@ -968,23 +987,51 @@ pub fn spawn_background_monitor(
                     //
                     // Salvo que el cliente diga que la partida acabó: si el LCU vio esta
                     // partida en curso y ahora está en estadísticas, honor o sala, la API
-                    // no se ha caído un momento, se ha cerrado el juego. Con `Reconnect`
-                    // (el juego se cayó con la partida viva) o sin cliente, lo de siempre.
+                    // no se ha caído un momento, se ha cerrado el juego.
                     let fin_lcu = active_match.lcu_game.lock().await.is_some()
                         && crate::lcu::partida_terminada() == Some(true);
+                    let caido = caido_desde.get_or_insert_with(std::time::Instant::now).elapsed();
                     close_grace_ticks += 1;
-                    if fin_lcu || close_grace_ticks >= 3 {
+                    // Pasada la gracia, si el cliente dice que el juego de ESTA partida se
+                    // cayó con la partida viva (`Reconnect`) o se está relanzando, se le
+                    // espera: misma sesión, mismo match_id y la grabación en marcha. Antes
+                    // se guardaba media partida y la vuelta empezaba otra grabación.
+                    let partida = active_match.lcu_game.lock().await.as_ref().map(|p| p.game_id);
+                    if !fin_lcu && close_grace_ticks >= 3 && crate::lcu::esperar_reconexion(partida, caido) {
+                        if !esperando_juego {
+                            esperando_juego = true;
+                            println!(
+                                "Detección automática: el juego de la partida {:?} se ha caído con la partida en curso; se espera a que vuelva (máx. {} s).",
+                                partida,
+                                crate::lcu::MAX_ESPERA_RECONEXION.as_secs()
+                            );
+                            // Lo que se teclee o clique sin juego no es de la partida.
+                            ult_state.counting.store(false, Ordering::Relaxed);
+                            training_state.active.store(false, Ordering::Relaxed);
+                        }
+                    } else if fin_lcu || close_grace_ticks >= 3 {
                         if fin_lcu {
                             println!("Detección automática: el cliente de League da la partida por terminada. Finalizando grabación...");
+                        } else if esperando_juego {
+                            println!(
+                                "Detección automática: el juego no ha vuelto tras {:.0} s (fase del cliente {:?}). Finalizando grabación...",
+                                caido.as_secs_f64(),
+                                crate::lcu::status().phase
+                            );
                         } else {
                             println!("Detección automática: La API no responde. Finalizando grabación...");
                         }
+                        // Lo que se esperó pasada la gracia no es partida: fuera de la
+                        // duración y del vídeo. Sin espera es cero, como siempre.
+                        let sobra = caido.saturating_sub(Duration::from_secs(3));
                         let snaps = cam_presses.iter().map(|c| c.t).collect::<Vec<_>>();
                         persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
-                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps).await;
+                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps, sobra).await;
                         session_active = false;
                         awaiting_new_game = false;
                         close_grace_ticks = 0;
+                        caido_desde = None;
+                        esperando_juego = false;
                     } else {
                         println!("Detección automática: La API del juego no responde (Ticks de gracia: {}/3)", close_grace_ticks);
                     }
@@ -994,6 +1041,24 @@ pub fn spawn_background_monitor(
                     close_grace_ticks = 0;
                 } else if session_active {
                     close_grace_ticks = 0;
+                    if let Some(desde) = caido_desde.take() {
+                        if std::mem::take(&mut esperando_juego) {
+                            let hueco = desde.elapsed().as_secs_f64();
+                            println!("Detección automática: el juego ha vuelto tras {hueco:.0} s; sigue la misma partida.");
+                            *active_match.sin_juego.lock().await += hueco;
+                            // Lo que se tecleó o clicó con el juego caído no es de la partida.
+                            training_state.drain_presses();
+                            ult_state.presses.lock().unwrap().clear();
+                            ult_state.mouse_events.lock().unwrap().clear();
+                            ult_state.counting.store(true, Ordering::Relaxed);
+                            training_state.active.store(true, Ordering::Relaxed);
+                            // El juego que vuelve es otro proceso: numera sus sucesos desde
+                            // cero y puede repetir los de antes de la caída, que ya están
+                            // guardados y se reconocen por la hora de partida.
+                            last_event_id = -1;
+                            sucesos_hasta = ultimo_t_suceso;
+                        }
+                    }
 
                     {
                         let mut lcu_game = active_match.lcu_game.lock().await;
@@ -1053,7 +1118,15 @@ pub fn spawn_background_monitor(
 
                     // Actualizar el tiempo de juego (el nivel de la R ya no se usa:
                     // la detección de ultimate se retiró, ver `ultimate.rs`).
-                    if let Ok((gt, _r_level, oro)) = api_client.get_live_state().await {
+                    // El reloj de la partida no va hacia atrás. Si lo hace es un juego que
+                    // vuelve de una caída y sigue en la pantalla de carga (~0): esa
+                    // lectura no vale ni para el reloj ni para el APM.
+                    if let Some((gt, _r_level, oro)) = api_client
+                        .get_live_state()
+                        .await
+                        .ok()
+                        .filter(|(gt, ..)| *gt >= last_game_time)
+                    {
                         let mut offset_guard = active_match.game_time_offset.lock().await;
                         // El reloj de /allgamedata se queda clavado en ~0 (pero no en 0 exacto)
                         // mientras dura la pantalla de carga. Con `gt > 0.0` el offset se fijaba
@@ -1215,6 +1288,10 @@ pub fn spawn_background_monitor(
                         for ev in lol_events {
                             if ev.event_id > last_event_id {
                                 last_event_id = ev.event_id;
+                                if !suceso_nuevo(&ev.event_name, ev.event_time, sucesos_hasta, ultimo_t_suceso) {
+                                    continue;
+                                }
+                                ultimo_t_suceso = ultimo_t_suceso.max(ev.event_time);
                                 if let Some(mapped) = map_lol_event(&ev, &active_name, &player_team, &team_map, game_time_offset) {
                                     if mapped.r#type == "GameEnd" {
                                         game_ended = true;
@@ -1234,7 +1311,7 @@ pub fn spawn_background_monitor(
                         println!("Detección automática: evento GameEnd recibido. Finalizando grabación de inmediato.");
                         let snaps = cam_presses.iter().map(|c| c.t).collect::<Vec<_>>();
                         persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
-                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps).await;
+                        finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps, Duration::ZERO).await;
                         session_active = false;
                         awaiting_new_game = true;
                     }
@@ -1242,6 +1319,18 @@ pub fn spawn_background_monitor(
             }
         });
     });
+}
+
+/// ¿Hay que guardar este suceso de la API del juego?
+///
+/// `hasta` es la hora de partida hasta la que ya está todo guardado (solo tras
+/// la vuelta de un juego caído; si no, menos infinito) y `ultimo`, la del último
+/// suceso visto en la sesión. Medido el 2026-10-20 en Práctica: el juego que
+/// vuelve numera desde 0 y abre con su propio `GameStart` a la hora de la
+/// reconexión (101 s), sin repetir los de antes. Ese `GameStart` no es el
+/// inicio de la partida.
+fn suceso_nuevo(nombre: &str, t: f64, hasta: f64, ultimo: f64) -> bool {
+    t > hasta && !(nombre == "GameStart" && ultimo.is_finite())
 }
 
 /// Vuelca a disco lo recogido para el entrenamiento de cámara y deja de escuchar.
@@ -1296,6 +1385,10 @@ use std::time::Duration;
 
 /// Detiene la grabación, calcula los metadatos finales (duración, resultado, APM) y los guarda.
 /// Si no hubo evento GameEnd de Riot (p.ej. salida brusca), añade un marcador de fin.
+///
+/// `sobra` es el final de la grabación que ya no es partida: lo que se esperó a
+/// un juego caído que no volvió. No cuenta en la duración, y el recorte de las
+/// salidas bruscas lo quita del vídeo.
 async fn finalize_match(
     app: &tauri::AppHandle,
     recorder_state: &Arc<RecorderState>,
@@ -1303,6 +1396,7 @@ async fn finalize_match(
     ult_state: &Arc<UltState>,
     game_start_time: chrono::DateTime<Local>,
     camera_snaps: Vec<f64>,
+    sobra: Duration,
 ) {
     let is_auto = *active_match.is_auto_recording.lock().await;
     // El error de `stop` ya no se tira: si el servidor no cerró la grabación, el
@@ -1322,7 +1416,8 @@ async fn finalize_match(
         return;
     }
     let champion = active_match.champion.lock().await.clone();
-    let duration = (Local::now() - game_start_time).num_seconds() as f64;
+    let duration =
+        ((Local::now() - game_start_time).num_seconds() as f64 - sobra.as_secs() as f64).max(0.0);
 
     // Segundos de vídeo que preceden al 0:00 del reloj de la partida (la carga).
     // `game_time_offset` guarda `t_partida - t_vídeo`, así que el desfase inverso
@@ -1339,7 +1434,8 @@ async fn finalize_match(
         .iter()
         .map(|(t, a)| (to_video(*t), *a))
         .collect();
-    let (apm, apm_series) = compute_apm(&samples, duration);
+    let sin_juego = *active_match.sin_juego.lock().await;
+    let (apm, apm_series) = compute_apm(&samples, duration, sin_juego);
     let camera_snaps: Vec<f64> = camera_snaps.iter().map(|t| to_video(*t)).collect();
 
     // Resultado a partir del GameEnd de Riot (subtype win/lose) y si ya existe ese evento.
@@ -1618,7 +1714,11 @@ fn trim_en_sitio(app: &tauri::AppHandle, final_path: &std::path::Path, segundos:
 
 /// Calcula el APM promedio y la serie de APM por minuto a partir de muestras
 /// (tiempo_de_vídeo, acciones_acumuladas).
-fn compute_apm(samples: &[(f64, u64)], duration: f64) -> (f64, Vec<f64>) {
+///
+/// `sin_juego`: segundos del vídeo en los que el juego estaba caído y la sesión
+/// le esperaba. La serie los enseña como lo que fueron (cero acciones), pero la
+/// media es por minuto de partida y no los cuenta.
+fn compute_apm(samples: &[(f64, u64)], duration: f64, sin_juego: f64) -> (f64, Vec<f64>) {
     if samples.len() < 2 || duration <= 0.0 {
         return (0.0, Vec::new());
     }
@@ -1645,7 +1745,7 @@ fn compute_apm(samples: &[(f64, u64)], duration: f64) -> (f64, Vec<f64>) {
     };
 
     let total_actions = samples[samples.len() - 1].1 as f64;
-    let minutes = (duration / 60.0).max(1.0 / 60.0);
+    let minutes = ((duration - sin_juego) / 60.0).max(1.0 / 60.0);
     let avg = total_actions / minutes;
 
     // Serie fina y suave: N puntos equiespaciados, APM con ventana deslizante de 20s.
@@ -3106,5 +3206,75 @@ mod post_game_tests {
         assert_eq!((otro.reason, otro.detail.as_deref()), (Some("failed"), Some("HTTP 503")));
         let v = serde_json::to_value(otro).unwrap();
         assert_eq!(v["status"], "error");
+    }
+}
+
+#[cfg(test)]
+mod apm_tests {
+    use super::compute_apm;
+
+    /// 10 min de vídeo con 1 acción por segundo, salvo un hueco de 2 min (de 4:00
+    /// a 6:00) con el juego caído: la sesión no cuenta y no hay muestras.
+    fn con_hueco() -> Vec<(f64, u64)> {
+        let mut s = Vec::new();
+        let mut acciones = 0;
+        for t in 0..=600u64 {
+            if (240..360).contains(&t) {
+                continue;
+            }
+            s.push((t as f64, acciones));
+            if !(239..360).contains(&t) {
+                acciones += 1;
+            }
+        }
+        s
+    }
+
+    #[test]
+    fn la_media_no_cuenta_el_tiempo_sin_juego() {
+        let s = con_hueco();
+        // 480 acciones en 8 minutos de partida: 60 por minuto, no 48.
+        let (sin_descontar, _) = compute_apm(&s, 600.0, 0.0);
+        let (descontando, serie) = compute_apm(&s, 600.0, 120.0);
+        assert!((sin_descontar - 48.0).abs() < 0.5, "{sin_descontar}");
+        assert!((descontando - 60.0).abs() < 0.5, "{descontando}");
+        // La serie sigue cubriendo el vídeo entero y enseña el hueco a cero.
+        let n = serie.len();
+        assert_eq!(n, 75);
+        assert!(serie[n / 2] < 1.0, "{}", serie[n / 2]);
+        assert!((serie[n / 4] - 60.0).abs() < 1.0, "{}", serie[n / 4]);
+    }
+}
+
+#[cfg(test)]
+mod sucesos_tras_la_vuelta_tests {
+    use super::suceso_nuevo;
+
+    const NADA: f64 = f64::NEG_INFINITY;
+
+    #[test]
+    fn una_partida_normal_lo_guarda_todo() {
+        assert!(suceso_nuevo("GameStart", 0.0, NADA, NADA));
+        assert!(suceso_nuevo("ChampionKill", 312.4, NADA, 0.0));
+    }
+
+    #[test]
+    fn el_game_start_del_juego_que_vuelve_no_es_el_inicio() {
+        // Lo medido: antes de la caída solo GameStart@0; el juego que vuelve
+        // abre con 0:GameStart@101.0.
+        assert!(!suceso_nuevo("GameStart", 101.0, 0.0, 0.0));
+        // Lo que pase después sí es de la partida.
+        assert!(suceso_nuevo("ChampionKill", 140.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn lo_de_antes_de_la_caida_no_se_repite() {
+        assert!(!suceso_nuevo("ChampionKill", 85.0, 92.0, 92.0));
+        assert!(!suceso_nuevo("DragonKill", 92.0, 92.0, 92.0));
+    }
+
+    #[test]
+    fn si_cayo_antes_de_empezar_el_game_start_de_la_vuelta_vale() {
+        assert!(suceso_nuevo("GameStart", 0.5, NADA, NADA));
     }
 }

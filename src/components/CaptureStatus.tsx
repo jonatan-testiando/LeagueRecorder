@@ -8,12 +8,14 @@ import {
   getDiskUsage,
   getHotkeys,
   type DiskSpaceInfo,
+  type PostGameEvent,
   type RecorderAlert,
 } from "../core/tauri-ipc";
 import { useLang, useT } from "../core/LanguageProvider";
 import { useAppStore, useErrorClips } from "../store/useAppStore";
 import { useToast } from "./ui/Toaster";
 import { ChampionAvatar } from "./ChampionAvatar";
+import { postGameStage } from "./PostGameFlow";
 import { clock } from "../core/time";
 import { formatDuration, outcome } from "../core/matchStats";
 import { reviewProgress } from "../core/review";
@@ -36,10 +38,12 @@ import type { MatchMetadata } from "../types";
  *   5. La clave de Riot falla (lleva a Ajustes › Cuenta).
  *   y si no, listo para grabar.
  *
- * De aquí sale también el aviso de «Partida guardada»: el backend no emite
- * ningún evento al guardar, así que la partida nueva se detecta cuando crece
- * la lista del store (el refresco de fin de grabación de `useGallery`, y el
- * sondeo de abajo mientras dura el procesado).
+ * De aquí sale también el aviso de «Partida guardada», de respaldo: las
+ * partidas automáticas las cuenta `PostGameFlow` con el evento `post_game`
+ * (que además cierra el procesado al llegar), y este aviso queda para las que
+ * no lo emiten. La partida nueva se detecta cuando crece la lista del store
+ * (el refresco de fin de grabación de `useGallery`, y el sondeo de abajo
+ * mientras dura el procesado).
  */
 
 type KeyStatus = "ok" | "missing" | "expired" | "invalid";
@@ -152,6 +156,13 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
       if (typeof pct !== "number" || pct < 0 || pct >= 100) setMinimap(null);
       else setMinimap({ pct, at: Date.now() });
     });
+    // El análisis de la partida terminó (bien o mal): fin del procesado, sin
+    // esperar al siguiente sondeo ni al plazo.
+    const paraFin = listen<PostGameEvent>("post_game", (e) => {
+      if (e.payload.stage !== "ready") return;
+      const id = e.payload.match_id;
+      setProc((p) => (p && (p.matchId === null || p.matchId === id) ? null : p));
+    });
     const cada = setInterval(() => {
       refreshDisk();
       refreshAudio();
@@ -159,6 +170,7 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
     return () => {
       vivo = false;
       clearInterval(cada);
+      paraFin.then((f) => f()).catch(() => {});
       paraClave.then((f) => f()).catch(() => {});
       paraAlerta.then((f) => f()).catch(() => {});
       paraMinimapa.then((f) => f()).catch(() => {});
@@ -215,8 +227,10 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
       const ms = new Date(iso.replace(" ", "T")).getTime();
       return Number.isFinite(ms) && Date.now() - ms < 3 * 3600_000;
     };
+    // Una partida cuyo análisis ya terminó (llegó el `post_game` antes que la
+    // lista) no vuelve a «Procesando».
     const propia = nuevas
-      .filter((m) => !m.is_vod && reciente(m.date))
+      .filter((m) => !m.is_vod && reciente(m.date) && postGameStage(m.id) !== "ready")
       .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
     if (!propia) return;
     setProc((p) =>
@@ -322,7 +336,9 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
     const plazo = ahora - aparecio > PROC_SYNC_TIMEOUT_MS;
     if (esPrueba || sincronizada || sinClave || plazo) {
       setProc(null);
-      if (!esPrueba) avisar(m);
+      // Las que lleva `PostGameFlow` ya tienen su aviso: dos para la misma
+      // partida sería ruido.
+      if (!esPrueba && !postGameStage(m.id)) avisar(m);
       return;
     }
     return revisarEn(aparecio + PROC_SYNC_TIMEOUT_MS);

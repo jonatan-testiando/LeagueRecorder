@@ -55,6 +55,121 @@ pub fn emit_recorder_alert(
     );
 }
 
+/// En qué punto está la partida que acaba de terminar. Se emite como `post_game`.
+///
+/// `analyzing` al guardarla y `ready` cuando acaba la sincronización con Riot,
+/// que es también su análisis (marcador, línea de tiempo, impacto). Con esto la
+/// interfaz avisa, pide atención en la barra de tareas y abre la partida sin
+/// esperar a que el usuario entre a buscarla.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+pub struct PostGame {
+    pub match_id: String,
+    /// "analyzing" | "ready"
+    pub stage: &'static str,
+    /// Solo en `ready`: "ok" | "error".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
+    /// Clave estable del fallo, que traduce el frontend: "no_key" | "no_tag"
+    /// | "not_published" | "not_found" | "failed".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
+    /// El motivo técnico, de respaldo para `failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl PostGame {
+    fn analizando(match_id: &str) -> Self {
+        Self {
+            match_id: match_id.to_string(),
+            stage: "analyzing",
+            status: None,
+            reason: None,
+            detail: None,
+        }
+    }
+
+    /// Lo que se cuenta según cómo acabó la sincronización.
+    fn listo(match_id: &str, r: &Result<MatchMetadata, String>) -> Self {
+        let (status, reason, detail) = match r {
+            Ok(m) if m.riot_match_id.is_some() => ("ok", None, None),
+            // Sin error pero sin partida: el Riot ID no está entre los diez, o
+            // ninguna de las últimas cuadra en duración.
+            Ok(_) => ("error", Some("not_found"), None),
+            Err(e) if e == crate::riot_api::SYNC_SIN_CLAVE => ("error", Some("no_key"), None),
+            Err(e) if e.starts_with(crate::riot_api::SYNC_SIN_ETIQUETA) => {
+                ("error", Some("no_tag"), None)
+            }
+            Err(e) if e.starts_with(crate::riot_api::SYNC_PENDIENTE) => {
+                ("error", Some("not_published"), None)
+            }
+            Err(e) => ("error", Some("failed"), Some(e.clone())),
+        };
+        Self {
+            match_id: match_id.to_string(),
+            stage: "ready",
+            status: Some(status),
+            reason,
+            detail,
+        }
+    }
+}
+
+fn emit_post_game(app: &tauri::AppHandle, ev: PostGame) {
+    let _ = app.emit("post_game", ev);
+}
+
+/// Esperas entre intentos de sincronizar tras la partida, en segundos. Con el
+/// id exacto el primero sale en cuanto el cliente da la partida por acabada, y
+/// pedirla antes de que Riot la publique solo cuesta un 404. Sin él se espera
+/// al minuto: el emparejado por duración, con la nueva aún sin publicar,
+/// podría quedarse con la anterior.
+const ESPERAS_CON_ID: [u64; 5] = [0, 30, 60, 120, 300];
+const ESPERAS_SIN_ID: [u64; 3] = [60, 120, 300];
+/// Lo más que se espera a que el cliente cierre la partida. Quien se queda en
+/// la pantalla de victoria no frena la sincronización: Riot publica igual.
+const MAX_ESPERA_LCU: Duration = Duration::from_secs(90);
+
+/// Sincroniza con Riot la partida recién guardada, reintentando mientras Riot
+/// no la haya publicado.
+///
+/// El disparo es la transición de gameflow del cliente (`lcu.rs`): de partida
+/// a estadísticas, honor o sala. La espera fija de 60 s queda para cuando no
+/// hay `gameId` o no hay cliente al que preguntar.
+async fn sincronizar_tras_partida(
+    match_id: &str,
+    jugador: &str,
+    id_exacto: bool,
+) -> Result<MatchMetadata, String> {
+    if !crate::riot_api::hay_credencial() {
+        return Err(crate::riot_api::SYNC_SIN_CLAVE.to_string());
+    }
+    let esperas: &[u64] = if id_exacto {
+        if crate::lcu::esperar_fin_de_partida(MAX_ESPERA_LCU).await {
+            println!("LCU: la partida {match_id} ha terminado para el cliente; se sincroniza ya.");
+        }
+        &ESPERAS_CON_ID
+    } else {
+        &ESPERAS_SIN_ID
+    };
+    let mut intento = 0;
+    loop {
+        let espera = esperas[intento];
+        if espera > 0 {
+            println!("Esperando {espera} s antes de sincronizar con Riot API la partida {match_id}...");
+            tokio::time::sleep(Duration::from_secs(espera)).await;
+        }
+        let r = crate::riot_api::sync_riot_data(match_id, jugador).await;
+        match &r {
+            Err(e) if e.starts_with(crate::riot_api::SYNC_PENDIENTE) && intento + 1 < esperas.len() => {
+                println!("{e}; se reintenta.");
+                intento += 1;
+            }
+            _ => return r,
+        }
+    }
+}
+
 /// Progreso del mantenimiento de la biblioteca al arrancar. Se emite como
 /// evento `library_maintenance`.
 ///
@@ -850,9 +965,20 @@ pub fn spawn_background_monitor(
                 } else if !lol_running && session_active {
                     // Salida brusca SIN evento GameEnd (cierre/crash). Usamos ticks de gracia
                     // por si es un fallo momentáneo de la API.
+                    //
+                    // Salvo que el cliente diga que la partida acabó: si el LCU vio esta
+                    // partida en curso y ahora está en estadísticas, honor o sala, la API
+                    // no se ha caído un momento, se ha cerrado el juego. Con `Reconnect`
+                    // (el juego se cayó con la partida viva) o sin cliente, lo de siempre.
+                    let fin_lcu = active_match.lcu_game.lock().await.is_some()
+                        && crate::lcu::partida_terminada() == Some(true);
                     close_grace_ticks += 1;
-                    if close_grace_ticks >= 3 {
-                        println!("Detección automática: La API no responde. Finalizando grabación...");
+                    if fin_lcu || close_grace_ticks >= 3 {
+                        if fin_lcu {
+                            println!("Detección automática: el cliente de League da la partida por terminada. Finalizando grabación...");
+                        } else {
+                            println!("Detección automática: La API no responde. Finalizando grabación...");
+                        }
                         let snaps = cam_presses.iter().map(|c| c.t).collect::<Vec<_>>();
                         persist_awareness(&app, &active_match, &training_state, &mut snapshots, &mut cam_presses, &mut metro, last_game_time).await;
                         finalize_match(&app, &recorder_state, &active_match, &ult_state, game_start_time, snaps).await;
@@ -1367,37 +1493,23 @@ async fn finalize_match(
     match save_match_metadata(&metadata) {
         Ok(_) => {
             println!("Metadatos guardados con éxito para la partida {}", match_id);
-            // Sincronización con Riot en segundo plano. Con el gameId del cliente
-            // se pide la partida exacta, y si Riot aún no la ha publicado se
-            // reintenta: 1 min, luego 2 y luego 5 (lo normal es que esté al primero).
+            // Sincronización con Riot en segundo plano, y la interfaz enterada de
+            // las dos puntas: guardada (aviso de progreso) y analizada (abrirla).
+            // Con el gameId del cliente se pide la partida exacta en cuanto el
+            // cliente la da por acabada; si Riot aún no la ha publicado, se
+            // reintenta. Ver `sincronizar_tras_partida`.
+            emit_post_game(app, PostGame::analizando(&match_id));
             let match_id_for_riot = match_id.clone();
             let active_player_for_riot = active_match.active_player.lock().await.clone();
+            let id_exacto = crate::riot_api::tiene_id_exacto(&metadata);
+            let app_for_riot = app.clone();
             tokio::spawn(async move {
-                const ESPERAS_S: [u64; 3] = [60, 120, 300];
-                for (intento, espera) in ESPERAS_S.iter().enumerate() {
-                    println!(
-                        "Esperando {espera} s antes de sincronizar con Riot API la partida {match_id_for_riot}..."
-                    );
-                    tokio::time::sleep(std::time::Duration::from_secs(*espera)).await;
-                    match crate::riot_api::sync_riot_data(&match_id_for_riot, &active_player_for_riot)
-                        .await
-                    {
-                        Ok(_) => {
-                            println!("Sincronización con Riot API completada para {match_id_for_riot}");
-                            break;
-                        }
-                        Err(e)
-                            if e.starts_with(crate::riot_api::SYNC_PENDIENTE)
-                                && intento + 1 < ESPERAS_S.len() =>
-                        {
-                            println!("{e}; se reintenta.");
-                        }
-                        Err(e) => {
-                            eprintln!("Error al sincronizar con Riot API: {e}");
-                            break;
-                        }
-                    }
+                let r = sincronizar_tras_partida(&match_id_for_riot, &active_player_for_riot, id_exacto).await;
+                match &r {
+                    Ok(_) => println!("Sincronización con Riot API completada para {match_id_for_riot}"),
+                    Err(e) => eprintln!("Error al sincronizar con Riot API: {e}"),
                 }
+                emit_post_game(&app_for_riot, PostGame::listo(&match_id_for_riot, &r));
             });
 
             // Trigger Dataset Generation si está activo
@@ -2959,5 +3071,40 @@ mod patch_tests {
         assert_eq!(p(r#"{"language":"es"}"#), None);
         assert_eq!(p(r#"{"minimap_scale_override":null}"#), Some(None));
         assert_eq!(p(r#"{"minimap_scale_override":2.5}"#), Some(Some(2.5)));
+    }
+}
+
+#[cfg(test)]
+mod post_game_tests {
+    use super::*;
+
+    #[test]
+    fn analizando_no_lleva_estado() {
+        let v = serde_json::to_value(PostGame::analizando("match_1")).unwrap();
+        assert_eq!(v, serde_json::json!({ "match_id": "match_1", "stage": "analyzing" }));
+    }
+
+    #[test]
+    fn listo_segun_la_sincronizacion() {
+        let sincronizada = MatchMetadata {
+            riot_match_id: Some("LA1_1".into()),
+            ..Default::default()
+        };
+        let ok = PostGame::listo("m", &Ok(sincronizada));
+        assert_eq!((ok.stage, ok.status, ok.reason), ("ready", Some("ok"), None));
+
+        // Contestó sin partida: el Riot ID no está entre los diez.
+        let sin = PostGame::listo("m", &Ok(MatchMetadata::default()));
+        assert_eq!((sin.status, sin.reason), (Some("error"), Some("not_found")));
+
+        let motivo = |e: String| PostGame::listo("m", &Err(e)).reason;
+        assert_eq!(motivo(crate::riot_api::SYNC_SIN_CLAVE.into()), Some("no_key"));
+        assert_eq!(motivo(format!("{} el Riot ID «x» no trae etiqueta", crate::riot_api::SYNC_SIN_ETIQUETA)), Some("no_tag"));
+        assert_eq!(motivo(format!("{} LA1_1 todavía no está publicada", crate::riot_api::SYNC_PENDIENTE)), Some("not_published"));
+
+        let otro = PostGame::listo("m", &Err("HTTP 503".into()));
+        assert_eq!((otro.reason, otro.detail.as_deref()), (Some("failed"), Some("HTTP 503")));
+        let v = serde_json::to_value(otro).unwrap();
+        assert_eq!(v["status"], "error");
     }
 }

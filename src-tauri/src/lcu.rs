@@ -67,6 +67,12 @@ pub const FASES_CON_PARTIDA: [&str; 6] = [
     "EndOfGame",
 ];
 
+/// Fases en las que la partida todavía no ha terminado para el cliente: el
+/// juego sigue abierto, o se cerró pero el servidor aún no ha mandado las
+/// estadísticas. `Reconnect` es un juego que se cerró a lo bruto con la
+/// partida viva: no es un final.
+const FASES_SIN_TERMINAR: [&str; 4] = ["GameStart", "InProgress", "Reconnect", "WaitingForStats"];
+
 /// Puerto y contraseña de la API del cliente.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Credenciales {
@@ -370,6 +376,44 @@ fn partida_de(st: &LcuStatus) -> Option<PartidaLcu> {
     })
 }
 
+/// ¿Ha terminado la partida según el cliente? `None` si no se sabe: cliente
+/// cerrado o lectura vieja.
+///
+/// Es el disparo de iTero: de `InProgress` a cualquier fase de después, sea
+/// `PreEndOfGame` (honor), `EndOfGame` (estadísticas) o `None`/`Lobby` si el
+/// jugador se salta la pantalla de fin. Quien lo use tiene que haber visto
+/// antes la partida en curso: esto mira la fase de ahora, no la transición.
+pub fn partida_terminada() -> Option<bool> {
+    let e = ESTADO.lock().ok()?;
+    if !e.leido.is_some_and(|t| t.elapsed() < FRESCURA) {
+        return None;
+    }
+    terminada(&e.status)
+}
+
+fn terminada(st: &LcuStatus) -> Option<bool> {
+    if !st.connected {
+        return None;
+    }
+    let fase = st.phase.as_deref()?;
+    Some(!FASES_SIN_TERMINAR.contains(&fase))
+}
+
+/// Espera, como mucho `max`, a que el cliente dé la partida por terminada.
+/// `true` si lo dijo; `false` si se agotó el plazo o no hay cliente al que
+/// preguntar (entonces no se espera nada).
+pub async fn esperar_fin_de_partida(max: Duration) -> bool {
+    let hasta = Instant::now() + max;
+    loop {
+        match partida_terminada() {
+            Some(true) => return true,
+            None => return false,
+            Some(false) if Instant::now() >= hasta => return false,
+            Some(false) => tokio::time::sleep(Duration::from_secs(1)).await,
+        }
+    }
+}
+
 /// `(gameId, queueId)` de `/lol-gameflow/v1/session`. Un 0 o un negativo es
 /// "todavía no hay" (las colas personalizadas no tienen id de cola real).
 pub fn parse_sesion(sesion: &Value) -> (Option<i64>, Option<i32>) {
@@ -616,6 +660,26 @@ mod tests {
         st.game_id = Some(42);
         st.connected = false;
         assert!(partida_de(&st).is_none());
+    }
+
+    #[test]
+    fn fin_de_partida_por_la_fase() {
+        let con = |fase: &str| LcuStatus {
+            connected: true,
+            phase: Some(fase.into()),
+            ..Default::default()
+        };
+        // Lo de iTero (de partida a None o Lobby) y las pantallas de fin.
+        for fin in ["PreEndOfGame", "EndOfGame", "None", "Lobby", "Matchmaking", "ChampSelect"] {
+            assert_eq!(terminada(&con(fin)), Some(true), "{fin}");
+        }
+        // Juego abierto, juego caído con la partida viva, o estadísticas sin llegar.
+        for sigue in ["GameStart", "InProgress", "Reconnect", "WaitingForStats"] {
+            assert_eq!(terminada(&con(sigue)), Some(false), "{sigue}");
+        }
+        // Sin cliente no se sabe: manda la API del juego.
+        assert_eq!(terminada(&LcuStatus::default()), None);
+        assert_eq!(terminada(&LcuStatus { connected: true, ..Default::default() }), None);
     }
 
     #[test]

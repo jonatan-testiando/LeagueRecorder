@@ -18,6 +18,7 @@ import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
 import { RailProfile } from "./components/RailProfile";
 import { CommandPalette } from "./components/CommandPalette";
+import { PostGameFlow } from "./components/PostGameFlow";
 import { isReviewed } from "./core/review";
 import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
@@ -415,6 +416,11 @@ export const App: React.FC = () => {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      {/* Fin de partida: aviso, atención en la barra de tareas y la partida
+          abierta cuando Riot la tiene analizada. Fuera del asistente de primer
+          arranque: ahí no hay a dónde llevar a nadie. */}
+      <PostGameFlow />
 
       {/* El tránsito de la actualización: el instalador cierra este proceso y
           la app vuelve sola en unos segundos. Sin el velo eso se lee como un

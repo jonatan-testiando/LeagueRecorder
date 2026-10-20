@@ -4,6 +4,23 @@
 <meta charset="utf-8" />
 <title>LeagueRecorder — arnés de navegador</title>
 <script>
+// El mismo script de arranque que index.html (tema e idioma de la última vez
+// antes de React): sin él el arnés no enseñaría si hay fogonazo.
+(function () {
+  try {
+    var hint = JSON.parse(localStorage.getItem("lr-boot") || "{}") || {};
+    var root = document.documentElement;
+    if (hint.lang === "es" || hint.lang === "en") root.lang = hint.lang;
+    if (/[?&]overlay\b/.test(location.search)) return;
+    var theme = hint.theme;
+    if (theme === "system") {
+      theme = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+</script>
+<script>
 /* Doble de la capa IPC de Tauri: sirve para abrir la interfaz en un navegador,
    con datos falsos, sin levantar la app. `npm run dev` y luego
    http://localhost:1420/dev-harness.html#/<ruta>.
@@ -804,7 +821,20 @@
     get_camera_snap_summary: () => null,
     list_awareness_records: () => [],
     list_recall_frames: () => [],
+    // Sin este doble, `null` hacía reventar Patrones (`rutas.filter`). La app
+    // real devuelve [] cuando no hay rutas.
+    get_jungle_routes: () => [],
   };
+
+  /**
+   * `?slow=600` retrasa TODAS las respuestas esos milisegundos: es la forma de
+   * ver los estados de carga (esqueletos, rango del rail) sin la app real.
+   * `?break=get_jungle_routes` hace que ese comando devuelva `null`, como un
+   * doble que falta, para ver el aviso de sección caída.
+   */
+  const QS = new URLSearchParams(location.search);
+  const SLOW = Number(QS.get("slow")) || 0;
+  const BREAK = new Set((QS.get("break") || "").split(",").filter(Boolean));
 
   // El unlisten() que devuelve listen() no pasa por invoke: entra por aquí.
   window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
@@ -824,10 +854,14 @@
     },
     convertFileSrc: (p) => p,
     invoke(cmd, args) {
-      const h = HANDLERS[cmd];
+      const h = BREAK.has(cmd) ? null : HANDLERS[cmd];
       if (!h) {
         console.warn("[arnés] sin doble para", cmd);
         return Promise.resolve(null);
+      }
+      // Los eventos (listen/unlisten) no se retrasan: no son datos.
+      if (SLOW > 0 && !cmd.startsWith("plugin:event")) {
+        return new Promise((ok) => setTimeout(() => ok(h(args)), SLOW));
       }
       return Promise.resolve(h(args));
     },

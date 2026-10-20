@@ -1,7 +1,7 @@
 import type { MatchEvent, MatchMetadata, Participant } from "../../types";
 import type { CameraLook, ErrorClipMetadata, PressureEpisode } from "../../core/tauri-ipc";
 import { individualEvents } from "../../core/matchEvents";
-import { describeEventFull, type Translate } from "../../core/eventText";
+import { describeEventFull, nonChampionKiller, type Translate } from "../../core/eventText";
 import { eventMeta } from "../player/components/eventMeta";
 import { analyzerFindings, buildQueue, type Moment } from "../player/components/ReviewQueue";
 import { laneLabel } from "../../core/lanes";
@@ -139,10 +139,9 @@ function objectiveName(ev: MatchEvent, t: Translate): string {
 
 /** Quién te mata, dicho para una persona: una torre no es "Turret_T2_C_05_A". */
 function killedByTitle(ev: MatchEvent, champ: string | null, t: Translate): string {
-  const who = ev.actor ?? "";
   if (champ) return t("Killed by {actor}", { actor: champ });
-  if (/turret|tower/i.test(who)) return t("Killed by a tower");
-  if (/minion/i.test(who)) return t("Killed by minions");
+  const unit = nonChampionKiller(ev.actor, t);
+  if (unit) return unit.phrase;
   return eventTitle(ev, t);
 }
 

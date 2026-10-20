@@ -561,6 +561,27 @@ button.home-sig:focus-visible { outline: 2px solid var(--brand); outline-offset:
 .home-empty__title { margin: 0 0 8px; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
 .home-empty__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 
+/* --------------------------------------------------------------- cargando */
+/* El esqueleto usa las clases del héroe y la rejilla: solo se definen aquí
+   las piezas que no existen en la pantalla de verdad. */
+.home-skel { display: flex; flex-direction: column; gap: 20px; }
+/* Con el padre delante: el .skeleton de index.css se carga después y su radio
+   ganaría a una clase suelta. */
+.home-skel .home-skel__portrait { width: 96px; height: 96px; flex-shrink: 0; border-radius: 50%; }
+.home-skel__line { display: block; max-width: 100%; }
+.home-skel .home-skel__card { display: block; height: 214px; border-radius: 12px; }
+.home-skel__card--tall { height: 100%; min-height: 260px; }
+/* Dentro del héroe el esqueleto va sobre la lámina (--panel), que es el mismo
+   color que el .skeleton de serie: se hunde un escalón para que se vea. */
+.home-skel .home-hero .skeleton {
+  background-image: linear-gradient(
+    90deg,
+    var(--sunken) 25%,
+    color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%,
+    var(--sunken) 63%
+  );
+}
+
 /* ------------------------------------------------------------- respuesta */
 @media (max-width: 1360px) {
   .home-grid { grid-template-columns: minmax(0, 1fr) 340px; }

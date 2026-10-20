@@ -33,6 +33,7 @@ import {
 } from "./core/updates";
 import { useAppStore, useErrorClips } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
 type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
 
@@ -155,11 +156,17 @@ export const App: React.FC = () => {
     selectedMatch,
     setSelectedMatch,
     isRecording,
+    isLoading: matchesLoading,
     error: matchesError,
     refreshMatches,
     deleteMatch,
     deleteMatches
   } = useGallery();
+  // La PRIMERA lectura de la biblioteca: mientras dura, Hoy y la Biblioteca
+  // enseñan su esqueleto y nunca el «Juega una partida». Los refrescos de
+  // después (tras borrar, al acabar una partida) ya tienen lista que enseñar.
+  const matchesLoaded = useAppStore(state => state.matchesLoaded);
+  const firstLoad = matchesLoading && !matchesLoaded;
 
   const goTo = (path: string) => {
     navigate(path);
@@ -215,7 +222,13 @@ export const App: React.FC = () => {
           flexDirection: "column",
         }}
       >
-        {mountedPanels.has(path) ? content : null}
+        {/* Cada panel con su red: si uno revienta al pintar, cae solo él y
+            la barra de título y el rail siguen ahí. */}
+        {mountedPanels.has(path) ? (
+          <ErrorBoundary name={t(NAV_ITEMS.find((n) => n.path === path)?.label ?? "Section")}>
+            {content}
+          </ErrorBoundary>
+        ) : null}
       </div>
     );
   };
@@ -320,8 +333,9 @@ export const App: React.FC = () => {
         ) : null}
       </nav>
 
-      {/* Main Content Area */}
-      <div style={styles.mainContent}>
+      {/* El contenido, marcado como región principal: los lectores de
+          pantalla saltan a él desde el rail. */}
+      <main style={styles.mainContent}>
         <RiotKeyBanner />
         {panel("/settings", <SettingsPanel />)}
 
@@ -334,6 +348,7 @@ export const App: React.FC = () => {
           "/home",
           <HomePanel
             matches={matches}
+            loading={firstLoad}
             isRecording={isRecording}
             onOpenMatch={(m) => { setSelectedMatch(m); navigate("/review"); }}
             onGoTraining={() => navigate("/training")}
@@ -394,6 +409,7 @@ export const App: React.FC = () => {
             >
               <MatchGallery
                 matches={matches}
+                loading={firstLoad}
                 onSelectMatch={setSelectedMatch}
                 onDeleteMatch={deleteMatch}
                 onDeleteMatches={deleteMatches}
@@ -412,7 +428,7 @@ export const App: React.FC = () => {
         <div className="playlist-dock">
           <PlaylistBar />
         </div>
-      </div>
+      </main>
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

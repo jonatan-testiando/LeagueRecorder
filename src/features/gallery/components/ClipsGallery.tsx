@@ -19,6 +19,7 @@ import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
 import { matchAge } from "../../../core/time";
+import { formatDecimal } from "../../../core/benchmarkFormat";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
 import "./ClipsGallery.css";
 
@@ -104,10 +105,11 @@ const loadStoredLinks = (): Record<string, StoredLink> => {
   }
 };
 
+/** Con la coma del idioma: «48,0 MB» en español (era `toFixed`, «48.0 MB»). */
 const formatSize = (bytes: number): string => {
-  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes >= 1024 * 1024 * 1024) return `${formatDecimal(bytes / 1024 / 1024 / 1024, 2)} GB`;
+  if (bytes >= 1024 * 1024) return `${formatDecimal(bytes / 1024 / 1024, 1)} MB`;
+  if (bytes >= 1024) return `${formatDecimal(bytes / 1024, 0)} KB`;
   return `${bytes} B`;
 };
 

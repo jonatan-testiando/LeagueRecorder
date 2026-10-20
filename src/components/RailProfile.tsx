@@ -81,7 +81,10 @@ export const RailProfile: React.FC<{ collapsed?: boolean }> = ({ collapsed }) =>
     position ? t(POSITION_LABEL[position]) : null,
     region,
   ].filter(Boolean) as string[];
-  const titulo = [rango ?? t("Unranked"), ...meta].join(" · ");
+  // Sin saber aún el rango (primer arranque, Riot y la biblioteca sin
+  // contestar) no se dice «Sin clasificar»: se deja el hueco.
+  const sabido = rank !== undefined;
+  const titulo = [rango ?? (sabido ? t("Unranked") : t("Loading…")), ...meta].join(" · ");
   // Si no es en vivo, se dice de cuándo es: puede haber partidas sin grabar
   // entre medias.
   const origen = rank && !rank.live && rank.date
@@ -100,7 +103,14 @@ export const RailProfile: React.FC<{ collapsed?: boolean }> = ({ collapsed }) =>
         </span>
       )}
       <div className="rail-profile__text" aria-hidden={collapsed ? true : undefined}>
-        <span className="rail-profile__rank">{rango ?? t("Unranked")}</span>
+        {sabido ? (
+          <span className="rail-profile__rank">{rango ?? t("Unranked")}</span>
+        ) : (
+          <span
+            className="rail-profile__rank skeleton"
+            style={{ display: "block", width: 96, height: 14, backgroundImage: "linear-gradient(90deg, var(--sunken) 25%, color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%, var(--sunken) 63%)" }}
+          />
+        )}
         {meta.length > 0 && <span className="rail-profile__meta">{meta.join(" · ")}</span>}
       </div>
     </div>

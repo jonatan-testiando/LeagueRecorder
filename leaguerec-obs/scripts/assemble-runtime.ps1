@@ -75,5 +75,11 @@ if ($pdbs.Count -gt 0) {
   Write-Host ("Descartados {0} .pdb de depuración ({1:N0} MB)" -f $pdbs.Count, $freed) -ForegroundColor Yellow
 }
 
+# Runtime de VC++ junto al servidor. libobs, sus plugins y leaguerec-obs.exe lo enlazan de forma
+# dinámica: aquí y en CI lo pone Visual Studio en System32, pero en un Windows sin el
+# redistribuible el servidor ni arranca y no se graba nada. Falla si algún binario lo sigue
+# pidiendo fuera de bin/64bit.
+& (Join-Path $PSScriptRoot "..\..\scripts\vc-runtime.ps1") -Dest $binOut -Scan $OutDir
+
 $size = (Get-ChildItem $OutDir -Recurse | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("Runtime ensamblado en $OutDir ({0:N0} MB)" -f $size) -ForegroundColor Green

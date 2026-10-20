@@ -35,8 +35,15 @@ $EmbedUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVers
 $GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
 
 $Marker = Join-Path $RuntimeDir ".runtime-ready"
+# El marcador guarda también el hash de requirements.txt: si cambian las versiones, el
+# runtime local se rehace en vez de seguir con las de cuando se construyó. Sin esto, la
+# máquina de desarrollo probaba con unas versiones y la instalación recibía otras.
+$Ready = "ready $PythonVersion $((Get-FileHash $Requirements -Algorithm SHA256).Hash)"
+$VcRuntime = Join-Path $RepoRoot "scripts\vc-runtime.ps1"
 
-if ((Test-Path $Marker) -and -not $Force) {
+if ((Test-Path $Marker) -and ((Get-Content $Marker -Raw).Trim() -eq $Ready) -and -not $Force) {
+    # Un runtime construido antes de que se copiara el de VC++ no lo trae: se completa aquí.
+    & $VcRuntime -Dest $RuntimeDir -Scan $RuntimeDir
     Write-Host "[setup_runtime] Runtime ya construido en $RuntimeDir (usa -Force para rehacerlo)." -ForegroundColor Green
     exit 0
 }
@@ -78,6 +85,12 @@ Remove-Item $GetPip -Force
 Write-Host "[setup_runtime] Instalando dependencias de $Requirements..."
 & $PythonExe -m pip install --no-cache-dir --no-warn-script-location -r $Requirements
 
+# 4b) Runtime de VC++ junto a python.exe. onnxruntime pide msvcp140.dll y msvcp140_1.dll, que
+#     el Python embebible no trae: aquí los ponía Visual Studio en System32, y en un Windows sin
+#     el redistribuible `import onnxruntime` fallaba (detector de minimapa y YOLO de VOD).
+#     Windows busca las dependencias de un .pyd en la carpeta de python.exe antes que en System32.
+& $VcRuntime -Dest $RuntimeDir -Scan $RuntimeDir
+
 # 5) Verificación rápida de que cv2 importa dentro del runtime aislado
 Write-Host "[setup_runtime] Verificando OpenCV en el runtime aislado..."
 & $PythonExe -c "import cv2, numpy, onnxruntime; print('OK cv2', cv2.__version__, '| numpy', numpy.__version__, '| ort', onnxruntime.__version__)"
@@ -109,5 +122,5 @@ $after = (Get-ChildItem $RuntimeDir -Recurse -File | Measure-Object Length -Sum)
 Write-Host ("[setup_runtime] Podado: {0:N0} MB -> {1:N0} MB ({2:N0} MB menos)" -f $before, $after, ($before - $after)) -ForegroundColor Yellow
 
 # Marcar como listo para builds incrementales
-"ready $PythonVersion" | Set-Content -Path $Marker -Encoding ascii
+$Ready | Set-Content -Path $Marker -Encoding ascii
 Write-Host "[setup_runtime] Runtime listo en $RuntimeDir" -ForegroundColor Green

@@ -4,9 +4,14 @@
 #
 # headless = sin dependencias de GUI (Qt). El analizador no usa ventanas,
 # así que es más pequeño y evita DLLs innecesarias.
-numpy>=1.26,<3
-opencv-python-headless>=4.9,<5
+#
+# Versiones EXACTAS: con rangos, cada release de CI se llevaba lo último de PyPI
+# y el runtime local se quedaba con lo de cuando se construyó (aquí había
+# numpy 2.5.0 / onnxruntime 1.29 / opencv 4.13 y la v1.2.36 instaló
+# 2.5.3 / 1.30 / 4.14). Estas son las que lleva la v1.2.36; subirlas es a mano.
+numpy==2.5.3
+opencv-python-headless==4.14.0.94
 # Inferencia de los modelos ONNX empaquetados (minimap_icons y el detector de
 # cursor YOLO en CPU). Sin esto, ambos caían en silencio en la instalación
 # real: la máquina de desarrollo lo tenía instalado a mano en su runtime.
-onnxruntime>=1.20,<2
+onnxruntime==1.30.0

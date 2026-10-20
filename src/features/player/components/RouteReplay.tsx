@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FolderOpen, RotateCcw, Waves, X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { exportRouteVideo, getWaves } from "../../../core/tauri-ipc";
+import { exportRouteVideo, getWaves, type MatchTrack } from "../../../core/tauri-ipc";
 import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { SIDE_TONE } from "../jungleRoute";
@@ -48,8 +48,18 @@ import "./RouteReplay.css";
  * `oleadas.rs`. La descarga (`export_route_video`) hace lo mismo con ffmpeg.
  */
 
-/** Recorte del minimapa en la grabación (fracciones de `minimap_positions.py`). */
-const MM = { x0: 0.787, x1: 0.995, y0: 0.622, y1: 0.972 };
+/** Recorte del minimapa en la grabación cuando el rastro no trae el suyo: el
+ *  fijo de `minimap_positions.py` (el HUD de la máquina de desarrollo). */
+const MM_FIJO = { x0: 0.787, x1: 0.995, y0: 0.622, y1: 0.972 };
+
+/** El recorte con el que se midió este rastro (`track.minimap_rect`): la
+ *  estela se pinta sobre el mismo trozo del vídeo del que salió. */
+function recorteDe(tr: MatchTrack | null): typeof MM_FIJO {
+  const r = tr?.minimap_rect;
+  if (!r || r.length !== 4 || !r.every(Number.isFinite)) return MM_FIJO;
+  const [x0, x1, y0, y1] = r;
+  return 0 <= x0 && x0 < x1 && x1 <= 1 && 0 <= y0 && y0 < y1 && y1 <= 1 ? { x0, x1, y0, y1 } : MM_FIJO;
+}
 /** Un hueco mayor que esto corta la estela (vuelta a base, icono perdido). El
  *  rastro salta muestras sin tu icono (hasta 15 s, ver `minimap.rs`): por
  *  debajo de 8 s se une con una recta. */
@@ -343,6 +353,7 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
   useEffect(() => {
     let raf = 0;
     let ultimo = -1;
+    const mm = recorteDe(tr);
     // Se reutiliza en cada fotograma: los rótulos se pintan al final, encima
     // de todos los trazos.
     const rotulos: Rotulo[] = [];
@@ -363,10 +374,10 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
         const cw = Math.max(1, Math.round(c.clientWidth * dpr));
         const ch = Math.max(1, Math.round(c.clientHeight * dpr));
         if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
-        const sx = v.videoWidth * MM.x0;
-        const sy = v.videoHeight * MM.y0;
-        const sw = v.videoWidth * (MM.x1 - MM.x0);
-        const sh = v.videoHeight * (MM.y1 - MM.y0);
+        const sx = v.videoWidth * mm.x0;
+        const sy = v.videoHeight * mm.y0;
+        const sw = v.videoWidth * (mm.x1 - mm.x0);
+        const sh = v.videoHeight * (mm.y1 - mm.y0);
         const k = Math.min(cw / sw, ch / sh);
         const dw = sw * k;
         const dh = sh * k;

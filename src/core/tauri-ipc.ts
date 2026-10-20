@@ -1086,6 +1086,9 @@ export interface MatchTrack {
   clears: CampClear[];
   deaths: { t: number; x: number; y: number }[];
   recalls: number[];
+  /** Recorte del minimapa en el vídeo, [x0, x1, y0, y1] en fracciones: el
+   *  mismo con el que se midió el rastro. Sin él, el recorte fijo. */
+  minimap_rect?: [number, number, number, number];
 }
 
 export interface MatchTrackResponse {

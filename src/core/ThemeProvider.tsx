@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getAppConfig, setAppConfig } from "./tauri-ipc";
+import { readBootHint, writeBootHint } from "./bootHint";
 
 /**
  * Tema de la interfaz: oscuro, claro o el de Windows.
@@ -9,9 +10,11 @@ import { getAppConfig, setAppConfig } from "./tauri-ipc";
  * `data-theme="dark" | "light"` en <html>, y es index.css quien redefine los
  * tokens para el claro; ningún componente sabe qué tema hay.
  *
- * Hasta que llega la config se sirve el oscuro, que es el defecto del backend,
- * así que no hay fogonazo blanco en el arranque salvo que el usuario tenga el
- * claro guardado, en cuyo caso cambia una vez y ya.
+ * Hasta que llega la config se sirve el tema de la última vez, que guarda la
+ * pista de arranque (`bootHint.ts`) y que `index.html` ya ha puesto en <html>
+ * antes de cargar React. Antes se servía el oscuro, y quien tenía el claro veía
+ * 150-300 ms de oscuro en cada arranque. Sin pista (la primera vez), el oscuro,
+ * que es el defecto del backend.
  */
 
 export type Theme = "dark" | "light" | "system";
@@ -46,8 +49,8 @@ const resolve = (theme: Theme): ResolvedTheme =>
 const asTheme = (v: unknown): Theme => (v === "light" || v === "system" ? v : "dark");
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  const [resolved, setResolved] = useState<ResolvedTheme>("dark");
+  const [theme, setThemeState] = useState<Theme>(() => readBootHint().theme ?? "dark");
+  const [resolved, setResolved] = useState<ResolvedTheme>(() => resolve(theme));
 
   useEffect(() => {
     let alive = true;
@@ -71,6 +74,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     document.documentElement.dataset.theme = resolved;
   }, [resolved]);
+
+  // La preferencia, no el resuelto: con "system" el próximo arranque vuelve a
+  // mirar Windows, que puede haber cambiado entre medias.
+  useEffect(() => {
+    writeBootHint({ theme });
+  }, [theme]);
 
   const setTheme = useCallback(async (next: Theme) => {
     const prev = theme;

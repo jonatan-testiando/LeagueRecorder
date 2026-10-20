@@ -57,6 +57,93 @@ const DRAGON_KEY: Record<string, string> = {
   elder: "Elder Dragon",
 };
 
+/**
+ * Asesinos que no son campeones.
+ *
+ * La API en directo manda en `KillerName` el id interno de la unidad cuando
+ * quien mata no es un jugador: «Minion_T200L1S07N0026», «Turret_T2_C_05_A»,
+ * «SRU_Baron12.1.1», «SRU_Dragon_Fire6.3.1». Se pintaba tal cual: «Te mata
+ * minion_t200l1s07n0026». Aquí se les da nombre. La frase va entera porque
+ * en español cambia el verbo («te matan los súbditos», «te mata una torre»).
+ *
+ * Los patrones son estrictos (prefijo de Riot y nada más) para no confundir
+ * con un jugador que se llame «Tower» o «Minion».
+ */
+export interface NonChampionKiller {
+  /** Sustantivo, para listas y tooltips: «Súbditos», «Barón Nashor». */
+  name: string;
+  /** La frase de la muerte: «Te matan los súbditos». */
+  phrase: string;
+}
+
+/** `SRU_Dragon_<x>` de Riot → clave de `DRAGON_KEY`. */
+const DRAGON_ID: Record<string, string> = {
+  air: "cloud",
+  cloud: "cloud",
+  fire: "infernal",
+  infernal: "infernal",
+  water: "ocean",
+  ocean: "ocean",
+  earth: "mountain",
+  mountain: "mountain",
+  hextech: "hextech",
+  chemtech: "chemtech",
+  elder: "elder",
+};
+
+/** Monstruos grandes: se nombran en la frase («Te mata Barón Nashor»). */
+const EPIC: [RegExp, string][] = [
+  [/^sru_baron/, "Baron Nashor"],
+  [/^sru_riftherald/, "Rift Herald"],
+  [/^sru_atakhan/, "Atakhan"],
+];
+
+/** Campamentos: el nombre en la lista, la frase genérica de monstruo. */
+const CAMPS: [RegExp, string][] = [
+  [/^sru_horde/, "Void Grubs"],
+  [/^sru_blue/, "Blue buff"],
+  [/^sru_red/, "Red buff"],
+  [/^sru_gromp/, "Gromp"],
+  [/^sru_murkwolf/, "Wolves"],
+  [/^sru_razorbeak/, "Raptors"],
+  [/^sru_krug/, "Krugs"],
+  [/^sru_crab/, "Rift Scuttler"],
+];
+
+export function nonChampionKiller(actor: string | null | undefined, t: Translate): NonChampionKiller | null {
+  const id = (actor ?? "").trim().toLowerCase();
+  if (!id) return null;
+
+  if (/^minion_t\d/.test(id) || /^sru_(?:order|chaos)minion/.test(id)) {
+    return { name: t("Minions"), phrase: t("Killed by minions") };
+  }
+  if (/^(?:sru_)?turret_/.test(id)) {
+    return { name: t("Turret"), phrase: t("Killed by a tower") };
+  }
+  if (/^sruap_.*fountain|^sru_.*fountain|^obelisk/.test(id)) {
+    return { name: t("Fountain"), phrase: t("Killed by the fountain") };
+  }
+  const dragon = /^sru_dragon_([a-z]+)/.exec(id);
+  if (dragon) {
+    const key = DRAGON_KEY[DRAGON_ID[dragon[1]] ?? ""];
+    const name = key ? t(key) : t("Dragon");
+    return { name, phrase: t("Killed by {actor}", { actor: name }) };
+  }
+  for (const [re, key] of EPIC) {
+    if (re.test(id)) {
+      const name = t(key);
+      return { name, phrase: t("Killed by {actor}", { actor: name }) };
+    }
+  }
+  for (const [re, key] of CAMPS) {
+    if (re.test(id)) return { name: t(key), phrase: t("Killed by a jungle monster") };
+  }
+  if (/^sru_/.test(id)) {
+    return { name: t("Jungle monster"), phrase: t("Killed by a jungle monster") };
+  }
+  return null;
+}
+
 export interface EventText {
   text: string;
   /** true si viene de `description` porque la partida es anterior al cambio. */
@@ -94,6 +181,8 @@ export function describeEventFull(ev: MatchEvent, t: Translate): EventText {
           return { text: t("Killed {target}", { target: ev.target }), isLegacy: false };
         }
         if (ev.subtype === "death" && has(ev.actor)) {
+          const unit = nonChampionKiller(ev.actor, t);
+          if (unit) return { text: unit.phrase, isLegacy: false };
           return { text: t("Killed by {actor}", { actor: ev.actor }), isLegacy: false };
         }
         if (ev.subtype === "assist" && has(ev.target)) {

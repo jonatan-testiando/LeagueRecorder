@@ -1590,6 +1590,13 @@ const ES: Record<string, string> = {
   "You flagged this": "Lo marcaste tú",
   "Killed by a tower": "Te mata una torre",
   "Killed by minions": "Te matan los súbditos",
+  // Asesinos que no son campeones (eventText.ts, nonChampionKiller).
+  "Turret": "Torre",
+  "Fountain": "Fuente",
+  "Killed by the fountain": "Te mata la fuente",
+  "Killed by a jungle monster": "Te mata un monstruo de la jungla",
+  "Jungle monster": "Monstruo de la jungla",
+  "Rift Scuttler": "Cangrejo del río",
   "{what} {n} s later.": "{what} {n} s después.",
   "Your first death of the game, at minute {m}.": "Tu primera muerte de la partida, en el minuto {m}.",
   "You draw {n} enemies and die": "Atraes a {n} enemigos y mueres",
@@ -2325,6 +2332,20 @@ const ES: Record<string, string> = {
   "Where your focus happened": "Dónde pasó tu foco",
   "It falls after minute {a}, the stretch of your focus.": "Cae pasado el minuto {a}, el tramo de tu foco.",
   "It falls between minutes {a} and {b}, the stretch of your focus.": "Cae entre el minuto {a} y el {b}, el tramo de tu foco.",
+  // Sección caída (components/ui/ErrorBoundary.tsx).
+  "Section": "Sección",
+  "This section failed to load": "Esta sección falló al cargar",
+  "The rest of the app still works. Reload just this section, or copy the details to report it.":
+    "El resto de la app sigue funcionando. Recarga solo esta sección o copia los detalles para avisar del fallo.",
+  "Reload {section}": "Recargar {section}",
+  "The app failed to load": "La app falló al cargar",
+  "Reload the window to try again. If it happens again, copy the details to report it.":
+    "Recarga la ventana para volver a intentarlo. Si vuelve a pasar, copia los detalles para avisar del fallo.",
+  "Reload the window": "Recargar la ventana",
+  "Copy details": "Copiar detalles",
+  "Copied": "Copiado",
+  // Carga de la biblioteca (Hoy y Biblioteca).
+  "Loading your games…": "Cargando tus partidas…",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

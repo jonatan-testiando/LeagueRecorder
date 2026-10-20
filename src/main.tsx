@@ -8,6 +8,8 @@ import { LanguageProvider } from "./core/LanguageProvider";
 import { ThemeProvider } from "./core/ThemeProvider";
 import { ToastProvider } from "./components/ui/Toaster";
 import { RecorderAlerts } from "./components/RecorderAlerts";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { Titlebar } from "./components/Titlebar";
 import "./fonts.css";
 import "./index.css";
 
@@ -33,7 +35,17 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           <ToastProvider>
             <RecorderAlerts />
             <HashRouter>
-              <App />
+              {/* La red de debajo: cada panel lleva la suya (App.tsx), esta
+                  recoge lo que pete fuera de ellos (rail, barra, paleta). */}
+              <ErrorBoundary
+                name="App"
+                scope="app"
+                // La ventana no tiene marco: sin barra no se podría ni cerrar.
+                // Va con su propia red por si la que falla es ella.
+                chrome={<ErrorBoundary name="Titlebar" fallback={null}><Titlebar /></ErrorBoundary>}
+              >
+                <App />
+              </ErrorBoundary>
             </HashRouter>
           </ToastProvider>
         </DialogProvider>

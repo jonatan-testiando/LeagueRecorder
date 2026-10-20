@@ -5,6 +5,7 @@ import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { rankLabel } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../components/PositionIcon";
 import { ROLE_FILTERS, matchRole, type RoleFilter } from "../../../core/patterns";
 import { reviewProgress, type ReviewProgress } from "../../../core/review";
@@ -95,6 +96,8 @@ interface MatchGalleryProps {
   /** Borrado por lotes con confirmación. Devuelve true si se llegó a borrar. */
   onDeleteMatches: (ids: string[]) => Promise<boolean>;
   isRecording: boolean;
+  /** La biblioteca aún no se ha leído: esqueleto, nunca «no hay partidas». */
+  loading?: boolean;
   /** Motivo del último fallo al leer la biblioteca, en crudo. */
   loadError?: string | null;
   /** Vuelve a intentar la lectura. */
@@ -118,9 +121,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   onDeleteMatch,
   onDeleteMatches,
   isRecording,
+  loading = false,
   loadError,
   onRetry,
 }) => {
+  // Leyendo (o el esqueleto aún en su tiempo mínimo): ni censo ni vacío.
+  const esqueleto = useDelayedLoading(loading);
+  const cargando = loading || esqueleto;
   // `null` hasta que el backend contesta: antes arrancaba en "0 / 100 GB", que
   // es un disco inventado.
   const [diskSpace, setDiskSpace] = useState<DiskSpaceInfo | null>(null);
@@ -550,8 +557,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       {/* Cabecera: título, censo y el disco en una línea. */}
       <div className="lib-head">
         <h1>{t("Library")}</h1>
+        {/* Mientras se lee, sin censo: «0 partidas» era el vacío disfrazado. */}
         <span className="lib-head__sub">
-          {matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}
+          {cargando
+            ? "—"
+            : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>}
         </span>
         <div className="lib-head__right">
           {isRecording && (
@@ -591,7 +601,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             >
               {t(f.label)}
               <span className={`lib-seg__n${f.key === "unreviewed" ? " lib-seg__n--gold" : ""}`}>
-                {counts[f.key]}
+                {cargando ? "—" : counts[f.key]}
               </span>
             </button>
           ))}
@@ -679,7 +689,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       <div className="lib-md">
         <div className="lib-master">
           <section className="lib-card" aria-label={t("Library")}>
-            {visible.length > 0 && (
+            {(visible.length > 0 || esqueleto) && (
               <div className="lib-grid lib-th" aria-hidden>
                 <span />
                 <span>{t("Game")}</span>
@@ -697,9 +707,14 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               ref={parentRef}
               role="listbox"
               aria-label={t("Games")}
+              aria-busy={cargando || undefined}
               aria-multiselectable={selectMode || undefined}
             >
-              {matches.length === 0 ? (
+              {cargando ? (
+                // Mientras se lee, filas con la forma de las de verdad (y nada
+                // los primeros 150 ms). El vacío solo cuando la lectura acabó.
+                esqueleto ? <LibrarySkeleton /> : null
+              ) : matches.length === 0 ? (
                 <EmptyState
                   icon={<Gamepad2 size={30} color="var(--faint)" />}
                   title={t("No games recorded yet")}
@@ -819,7 +834,18 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           )}
         </div>
 
-        {wide && current && (
+        {/* El panel de detalle también ocupa su sitio mientras carga: sin
+            esto la lista se estrechaba de golpe al llegar la primera partida. */}
+        {wide && esqueleto && (
+          <aside className="mdp lib-skel__detail" aria-hidden="true">
+            <span className="skeleton" style={{ width: 72, height: 72, borderRadius: "50%" }} />
+            <span className="skeleton" style={{ width: 180, height: 22 }} />
+            <span className="skeleton" style={{ width: 240, height: 13 }} />
+            <span className="skeleton" style={{ width: "100%", height: 120, marginTop: 8 }} />
+            <span className="skeleton" style={{ width: "100%", height: 40 }} />
+          </aside>
+        )}
+        {wide && current && !cargando && (
           <MatchDetailPanel
             match={current}
             progress={progreso.get(current.id)}
@@ -833,6 +859,49 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     </div>
   );
 };
+
+/* ------------------------------------------------------------------------
+   Esqueleto de la lista: la misma rejilla y alto que las filas (.lib-grid,
+   .lib-tr), con un encabezado de día delante. Sin `data-match-id`: no son
+   partidas.
+   ------------------------------------------------------------------------ */
+const SKELETON_ROWS = 8;
+const LibrarySkeleton: React.FC = () => (
+  <div className="lib-skel">
+    <div className="lib-day" aria-hidden="true">
+      <span className="skeleton" style={{ display: "block", width: 110, height: 12 }} />
+    </div>
+    {Array.from({ length: SKELETON_ROWS }, (_, i) => (
+      <div key={i} className="lib-grid lib-tr lib-skel__row" aria-hidden="true">
+        <span className="skeleton" style={{ width: 44, height: 44, borderRadius: 10 }} />
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: "min(160px, 80%)", height: 14 }} />
+          <span className="skeleton" style={{ width: "min(120px, 60%)", height: 11 }} />
+        </span>
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: 52, height: 14 }} />
+          <span className="skeleton" style={{ width: 40, height: 11 }} />
+        </span>
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: 60, height: 14 }} />
+          <span className="skeleton" style={{ width: 36, height: 11 }} />
+        </span>
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: 32, height: 14 }} />
+        </span>
+        <span className="lib-col-rival">
+          <span className="skeleton" style={{ display: "block", width: 72, height: 24, borderRadius: 999 }} />
+        </span>
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: 28, height: 14 }} />
+        </span>
+        <span className="lib-cell">
+          <span className="skeleton" style={{ width: 64, height: 20, borderRadius: 999 }} />
+        </span>
+      </div>
+    ))}
+  </div>
+);
 
 /* ------------------------------------------------------------------------
    Una fila de partida. Misma rejilla que la cabecera de columnas (.lib-grid).
@@ -879,10 +948,10 @@ const LibraryRow: React.FC<RowProps> = ({
   const rival = laneRival(match);
   const res = outcome(match.result);
 
-  // LP que dio o quitó; el absoluto solo cuando no hay resta que enseñar.
+  // LP que dio o quitó, siempre con signo. Sin resta, nada: el absoluto en
+  // este hueco («16 LP») se leía como una ganancia al lado de «+20 LP».
   const rango = rankLabel(match.rank_tier, match.rank_division);
-  const lpTxt =
-    lp != null && lp !== 0 ? lpText(lp) : match.rank_lp != null ? `${match.rank_lp} LP` : null;
+  const lpTxt = lp != null ? lpText(lp) : null;
 
   const nota = match.impact_percentile != null ? Math.round(match.impact_percentile) : null;
   const rank = match.impact_rank ?? null;

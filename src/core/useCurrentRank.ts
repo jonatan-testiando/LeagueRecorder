@@ -43,14 +43,53 @@ function pedir(): Promise<CurrentRank | null> {
   return enVuelo;
 }
 
-export function useCurrentRank(): RankNow | null {
+/**
+ * El último rango que se enseñó, para el arranque. Hasta que contestan Riot y
+ * la biblioteca no hay rango que dar, y el rail decía «Sin clasificar» a quien
+ * es Maestro. Mientras tanto se sirve el de la última vez; en cuanto hay
+ * respuesta, manda la respuesta (también si es que no tienes rango).
+ */
+const LAST_KEY = "lr-rank";
+
+function leerUltimo(): RankNow | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_KEY);
+    const v = raw ? (JSON.parse(raw) as RankNow) : null;
+    return v && typeof v.tier === "string" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarUltimo(r: RankNow): void {
+  try {
+    window.localStorage.setItem(LAST_KEY, JSON.stringify(r));
+  } catch {
+    // Sin almacenamiento, el próximo arranque espera a la respuesta.
+  }
+}
+
+/**
+ * `null` es «sin rango» (ya contestaron Riot y la biblioteca y no hay); y
+ * `undefined`, «aún no se sabe»: la primera vez, sin rango de la última vez
+ * que enseñar. Quien pinta pone un hueco, no «Sin clasificar».
+ */
+export function useCurrentRank(): RankNow | null | undefined {
   const matches = useAppStore((s) => s.matches);
+  const loaded = useAppStore((s) => s.matchesLoaded);
   const [live, setLive] = useState<CurrentRank | null>(ultimo?.value ?? null);
+  // Si Riot ya contestó (aunque sea con null). Hasta entonces, `live` a null
+  // no quiere decir «sin rango».
+  const [asked, setAsked] = useState(ultimo != null);
 
   // Se vuelve a preguntar cuando llega una partida nueva: es cuando cambia.
   useEffect(() => {
     let vivo = true;
-    pedir().then((r) => vivo && setLive(r));
+    pedir().then((r) => {
+      if (!vivo) return;
+      setLive(r);
+      setAsked(true);
+    });
     return () => {
       vivo = false;
     };
@@ -65,6 +104,21 @@ export function useCurrentRank(): RankNow | null {
       : null;
   }, [matches]);
 
-  if (live) return { tier: live.tier.toUpperCase(), division: live.division, lp: live.lp, live: true };
-  return guardado;
+  const enVivo = useMemo<RankNow | null>(
+    () => (live ? { tier: live.tier.toUpperCase(), division: live.division, lp: live.lp, live: true } : null),
+    [live]
+  );
+  const ultimoVisto = useMemo(leerUltimo, []);
+
+  // La respuesta, cuando la hay: Riot en vivo o, sin él, la última grabada.
+  const respuesta = asked ? enVivo ?? guardado : null;
+  useEffect(() => {
+    if (respuesta) guardarUltimo(respuesta);
+  }, [respuesta]);
+
+  if (respuesta) return respuesta;
+  // Riot aún no ha contestado: el de la última vez antes que el de una
+  // partida grabada que puede tener semanas.
+  if (!asked) return ultimoVisto ?? guardado ?? undefined;
+  return loaded ? null : ultimoVisto ?? undefined;
 }

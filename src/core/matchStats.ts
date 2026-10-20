@@ -64,30 +64,66 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * LP que dio o quitó cada partida: la resta con la clasificatoria anterior.
+ * Posición en una escalera continua de LP: cada división son 100 y Maestro,
+ * Gran Maestro y Aspirante comparten la misma cuenta desde el final de
+ * Diamante I. Así la resta vale también al cruzar un ascenso o un descenso
+ * (de Diamante I 90 a Maestro 16 son +26). null si el rango no se reconoce.
+ */
+const LADDER_TIERS = ["IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "EMERALD", "DIAMOND"];
+const LADDER_DIVS = ["IV", "III", "II", "I"];
+function ladderLp(tier?: string | null, division?: string | null, lp?: number | null): number | null {
+  if (lp == null || !tier) return null;
+  const T = tier.toUpperCase();
+  if (T === "MASTER" || T === "GRANDMASTER" || T === "CHALLENGER") return LADDER_TIERS.length * 400 + lp;
+  const ti = LADDER_TIERS.indexOf(T);
+  const di = LADDER_DIVS.indexOf((division ?? "").toUpperCase());
+  return ti < 0 || di < 0 ? null : ti * 400 + di * 100 + lp;
+}
+
+/** Más que esto en una partida no lo da ni lo quita LoL: entre medias hubo
+ *  partidas sin grabar y la resta sería de varias. */
+const MAX_LP_PER_GAME = 60;
+
+/**
+ * LP que dio o quitó cada partida: la resta con la partida anterior que tenga
+ * rango guardado, sobre la escalera continua (`ladderLp`).
  *
- * Solo entre partidas del mismo rango y división: cruzar un ascenso o un
- * descenso haría mentir a la resta (de Esmeralda IV 8 LP a Esmeralda III 75
- * no son +67). Devuelve un mapa id → delta; las partidas sin anterior
- * comparable simplemente no están.
+ * Solo se apunta lo que es de verdad el LP de ESA partida, para que lo que se
+ * enseñe lleve siempre signo («+20 LP», «−18 LP»):
+ *  - solo en Solo/Dúo (420), que es el rango que se guarda; una normal o una
+ *    flexible no te mueve ese LP, aunque la partida lleve el rango estampado;
+ *  - nada con 0: el rango se estampa al sincronizar, y las partidas viejas se
+ *    estamparon todas con el de un mismo día (`riot_api.rs`), así que un 0 es
+ *    «no se sabe», no «no te movió»;
+ *  - nada de más de ±60: hubo partidas sin grabar entre medias.
+ * Devuelve un mapa id → delta; las partidas sin dato no están, y quien pinta
+ * NO pone en su lugar el LP absoluto: «Victoria 16 LP» al lado de «+20 LP» se
+ * leía como una ganancia.
  *
  * Vivía dentro de la biblioteca, que era el único sitio que lo pintaba. "Hoy"
  * necesita exactamente el mismo número para la última partida, y copiarlo era
  * garantizar que un día dijeran cosas distintas del mismo dato.
  */
 export function lpDeltas(
-  matches: { id: string; date: string; rank_lp?: number | null; rank_tier?: string | null; rank_division?: string | null }[]
+  matches: {
+    id: string;
+    date: string;
+    queue?: number;
+    rank_lp?: number | null;
+    rank_tier?: string | null;
+    rank_division?: string | null;
+  }[]
 ): Map<string, number> {
   const orden = matches
-    .filter((m) => m.rank_lp != null)
-    .sort((a, b) => (a.date < b.date ? -1 : 1));
+    .map((m) => ({ m, pos: ladderLp(m.rank_tier, m.rank_division, m.rank_lp) }))
+    .filter((x): x is { m: (typeof matches)[number]; pos: number } => x.pos != null)
+    .sort((a, b) => (a.m.date < b.m.date ? -1 : 1));
   const out = new Map<string, number>();
   for (let i = 1; i < orden.length; i++) {
-    const ant = orden[i - 1];
     const cur = orden[i];
-    if (ant.rank_tier === cur.rank_tier && ant.rank_division === cur.rank_division) {
-      out.set(cur.id, (cur.rank_lp as number) - (ant.rank_lp as number));
-    }
+    if (cur.m.queue != null && cur.m.queue !== 420) continue;
+    const d = cur.pos - orden[i - 1].pos;
+    if (d !== 0 && Math.abs(d) <= MAX_LP_PER_GAME) out.set(cur.m.id, d);
   }
   return out;
 }

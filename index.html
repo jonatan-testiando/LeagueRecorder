@@ -5,6 +5,26 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LeagueRecorder</title>
+    <script>
+      // Tema e idioma de la última vez, antes de que cargue nada: sin esto la
+      // ventana salía en inglés y en oscuro hasta que llegaba la config (ver
+      // src/core/bootHint.ts, que es quien la escribe). La config sigue
+      // mandando; esto solo evita el fogonazo.
+      (function () {
+        try {
+          var hint = JSON.parse(localStorage.getItem("lr-boot") || "{}") || {};
+          var root = document.documentElement;
+          if (hint.lang === "es" || hint.lang === "en") root.lang = hint.lang;
+          // La ventana del overlay no tiene tema: es transparente.
+          if (/[?&]overlay\b/.test(location.search)) return;
+          var theme = hint.theme;
+          if (theme === "system") {
+            theme = window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+          }
+          if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>

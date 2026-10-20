@@ -3,6 +3,7 @@ import { FolderOpen, Loader2, Play, RefreshCw, Trash2, Users } from "lucide-reac
 import { MatchMetadata } from "../../../types";
 import { computeKDA, formatDuration, outcome } from "../../../core/matchStats";
 import { rankLabel } from "../../../core/ddragon";
+import { rankText } from "../../home/format";
 import { clock, relativeDay } from "../../../core/time";
 import { syncMatchNow } from "../../../core/tauri-ipc";
 import { type ReviewProgress } from "../../../core/review";
@@ -82,11 +83,14 @@ export const MatchDetailPanel: React.FC<Props> = ({ match, progress, lpDelta, on
   const csmin = yo && minutos > 0 ? fmtDec(yo.cs / minutos, 1, lang) : null;
 
   const rango = rankLabel(match.rank_tier, match.rank_division);
+  // El LP que dio o quitó, con signo. Si no se sabe, el rango con su LP
+  // («Maestro 16 LP»): un «16 LP» suelto junto a «Victoria» se leía como una
+  // ganancia.
   const lp =
     lpDelta != null && lpDelta !== 0
       ? { text: lpText(lpDelta), tone: lpDelta > 0 ? "win" : "loss" }
-      : match.rank_lp != null
-        ? { text: `${match.rank_lp} LP`, tone: "neutral" }
+      : match.rank_lp != null && match.rank_tier
+        ? { text: `${rankText(match.rank_tier.toUpperCase(), match.rank_division, t)} ${match.rank_lp} LP`, tone: "neutral" }
         : null;
 
   // "hoy 18:32" y "ayer 21:10"; más atrás la hora ya no ubica y basta el día.

@@ -1,9 +1,11 @@
 import React from "react";
 import { useT } from "../../../core/LanguageProvider";
 import type { DiskSpaceInfo } from "../../../core/tauri-ipc";
+import { formatDecimal } from "../../../core/benchmarkFormat";
 
 const GB = 1024 ** 3;
-const gb = (bytes: number, decimals = 1): string => (bytes / GB).toFixed(decimals);
+// Con la coma del idioma, como el resto de cifras («12,4 GB»).
+const gb = (bytes: number, decimals = 1): string => formatDecimal(bytes / GB, decimals);
 
 /** Por debajo de esto el backend avisa (`storage::DISK_LOW_BYTES`). */
 const DISK_LOW_GB = 3;

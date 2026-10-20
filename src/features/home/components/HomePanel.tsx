@@ -30,6 +30,7 @@ import { reviewProgress } from "../../../core/review";
 import { laneLabel } from "../../../core/lanes";
 import { rankIcon } from "../../../core/ddragon";
 import { useCurrentRank } from "../../../core/useCurrentRank";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { ChampionWash } from "../../../components/ChampionWash";
 import { PositionIcon } from "../../../components/PositionIcon";
@@ -96,6 +97,8 @@ interface MaintenanceProgress {
 
 export interface HomePanelProps {
   matches: MatchMetadata[];
+  /** La biblioteca aún no se ha leído: ni partidas ni «no hay partidas». */
+  loading?: boolean;
   isRecording: boolean;
   onOpenMatch: (match: MatchMetadata) => void;
   onGoTraining: () => void;
@@ -113,7 +116,7 @@ const kdaOf = (m: MatchMetadata): KDA => {
   return computeKDA(m.events);
 };
 
-export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGoTraining }) => {
+export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, onOpenMatch, onGoTraining }) => {
   const { t, lang } = useLang();
   const navigate = useNavigate();
   const setLibraryFilter = useAppStore((s) => s.setLibraryFilter);
@@ -130,6 +133,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
   // (sin partidas) y un hook detrás de él rompe el orden (error #310 de React).
   const rankNow = useCurrentRank();
   const coach = useCoachSummary();
+  const esqueleto = useDelayedLoading(loading);
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [mant, setMant] = useState<MaintenanceProgress | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
@@ -318,6 +322,22 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
       )}
     </header>
   );
+
+  /* ------------------------------------------------------------ cargando */
+  // Tres estados y no dos: mientras se lee la biblioteca NUNCA el «Juega una
+  // partida», que decía que no tenías partidas durante 150-300 ms en cada
+  // arranque. Los primeros 150 ms, solo la cabecera; después, el esqueleto con
+  // la forma del héroe y la rejilla, para que nada salte al llegar los datos.
+  if (loading || esqueleto) {
+    return (
+      <div className="panel-enter home-panel">
+        <div className="home-page" aria-busy="true">
+          {cabecera}
+          {esqueleto && <HomeSkeleton label={t("Loading your games…")} />}
+        </div>
+      </div>
+    );
+  }
 
   /* --------------------------------------------------------- sin partidas */
   if (own.length === 0 || !ultima) {
@@ -1043,3 +1063,48 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, onOpenMatch, onGo
     </div>
   );
 };
+
+/**
+ * Esqueleto de Hoy: el héroe (retrato, quién, cifras) y la rejilla de debajo
+ * con las mismas clases que la pantalla de verdad, así que mide lo mismo.
+ */
+const HomeSkeleton: React.FC<{ label: string }> = ({ label }) => (
+  <div className="home-skel" role="status" aria-label={label}>
+    <section className="home-hero" aria-hidden="true">
+      <div className="home-hero__in">
+        <div className="home-hero__top">
+          <span className="skeleton home-skel__portrait" />
+          <div className="home-hero__who">
+            <span className="skeleton home-skel__line" style={{ width: 240, height: 13 }} />
+            <span className="skeleton home-skel__line" style={{ width: 200, height: 40 }} />
+            <span className="skeleton home-skel__line" style={{ width: 280, height: 14 }} />
+          </div>
+        </div>
+        <div className="home-hero__bottom">
+          <div className="home-stats">
+            {[0, 1, 2].map((i) => (
+              <div className="home-stat" key={i}>
+                <span className="skeleton home-skel__line" style={{ width: 56, height: 13 }} />
+                <span className="skeleton home-skel__line" style={{ width: 104, height: 30 }} />
+                <span className="skeleton home-skel__line" style={{ width: 120, height: 13 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+    <div className="home-grid" aria-hidden="true">
+      <div className="home-col">
+        <span className="skeleton home-skel__line" style={{ width: 180, height: 16 }} />
+        <div className="home-mo-grid">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="skeleton home-skel__card" />
+          ))}
+        </div>
+      </div>
+      <aside className="home-col">
+        <span className="skeleton home-skel__card home-skel__card--tall" />
+      </aside>
+    </div>
+  </div>
+);

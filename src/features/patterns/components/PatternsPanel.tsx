@@ -52,6 +52,7 @@ import {
   Waves,
 } from "lucide-react";
 import { useT } from "../../../core/LanguageProvider";
+import { nonChampionKiller } from "../../../core/eventText";
 import { useAppStore, useMatches, type PlaylistItem } from "../../../store/useAppStore";
 import {
   RankBenchmarkCard,
@@ -528,7 +529,11 @@ export const PatternsPanel: React.FC = () => {
           const nombre = killerOf(ev);
           return {
             time: ev.time,
-            killer: nombre ? campeonDe.get(nombre.trim().toLowerCase()) ?? nombre : null,
+            // Un súbdito o una torre no están en el marcador: se nombran, no
+            // se pinta su id interno («minion_t200l1s07n0026»).
+            killer: nombre
+              ? campeonDe.get(nombre.trim().toLowerCase()) ?? nonChampionKiller(nombre, t)?.name ?? nombre
+              : null,
           };
         });
       for (const tm of m.timeline_markers ?? []) {
@@ -554,7 +559,7 @@ export const PatternsPanel: React.FC = () => {
       }
     }
     return out;
-  }, [propias]);
+  }, [propias, t]);
 
   // El tramo de la fase elegida. "Todas" no resalta nada: es el mapa entero.
   const peak = histo.peak;
@@ -650,11 +655,12 @@ export const PatternsPanel: React.FC = () => {
         if (ev.type !== "ChampionKill" || ev.subtype !== "death") continue;
         if (!enTramo(Math.max(0, ev.time - offset) / 60, peak)) continue;
         const nombre = killerOf(ev);
+        const unidad = nombre ? nonChampionKiller(nombre, t) : null;
         const killer = nombre ? campeonDe.get(nombre.trim().toLowerCase()) ?? nombre : null;
         items.push({
           matchId: m.id,
           time: ev.time,
-          label: killer ? t("Killed by {champion}", { champion: killer }) : t("Death"),
+          label: unidad ? unidad.phrase : killer ? t("Killed by {champion}", { champion: killer }) : t("Death"),
           fecha: fechaMs(m),
         });
       }

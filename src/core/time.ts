@@ -33,7 +33,17 @@ export const mmss = (secs: number): string => {
 };
 
 /**
- * Fecha de una partida → "hoy", "ayer", "hace 3d" o la fecha suelta.
+ * La configuración regional de la interfaz, del <html lang> que mantiene
+ * `LanguageProvider` (el mismo criterio que `formatDecimal`).
+ */
+const uiLocale = (): string => (document.documentElement.lang === "en" ? "en-US" : "es-ES");
+
+/**
+ * Fecha de una partida → "hoy", "ayer", "hace 3d" o el día con nombre.
+ *
+ * Pasada una semana, el día en el idioma de la interfaz: «viernes, 5 sept» y
+ * «Friday, Sep 5» (con el año si no es el actual). Antes era el ISO suelto,
+ * «2026-09-05», al lado de «Hoy» y «Ayer» en los grupos de la Biblioteca.
  *
  * Recibe `t` en vez de devolver una clave porque el "3d" lleva un número dentro:
  * traducirlo fuera obligaba a buscar en el diccionario la cadena ya formada
@@ -53,7 +63,12 @@ export const relativeDay = (
   if (dias <= 0) return t("today");
   if (dias === 1) return t("yesterday");
   if (dias < 7) return t("{d}d ago", { d: dias });
-  return iso.split(" ")[0];
+  return new Intl.DateTimeFormat(uiLocale(), {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  }).format(d);
 };
 
 /**

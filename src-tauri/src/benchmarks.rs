@@ -581,7 +581,7 @@ pub fn compare_all(band: Option<&str>, role: &str, values: &[(&str, f64)]) -> Ve
 /// los cortes del 10% al 70%, el percentil es 35 — el centro del bloque de
 /// gente que hizo exactamente eso. Y encaja por los dos lados con la
 /// interpolación normal, así que la función sigue siendo monótona.
-fn interpolar(cortes: &[f64; 9], v: f64) -> f64 {
+pub(crate) fn interpolar(cortes: &[f64; 9], v: f64) -> f64 {
     let menores = cortes.iter().filter(|c| **c < v).count();
     let iguales = cortes.iter().filter(|c| **c == v).count();
 

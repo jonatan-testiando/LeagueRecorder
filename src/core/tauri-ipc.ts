@@ -407,6 +407,77 @@ export const getMatchPlays = async (matchId: string): Promise<MatchPlays> => {
   return await invoke<MatchPlays>("get_match_plays", { matchId });
 };
 
+/** Las categorías de pérdida del coach (`coach.rs`). Las seis primeras son las
+ *  etiquetas de muerte; las dos de vídeo se comparan con tu propia media. */
+export type CoachCategory = DeathTag | "antes_de_objetivo" | "ausente_objetivo" | "tirada";
+
+/** Una de las jugadas que más te costaron de una fila. */
+export interface CoachPlay {
+  match_id: string;
+  champion: string;
+  date: string;
+  /** Segundos de partida. */
+  time: number;
+  /** Segundos de vídeo; null si la partida no conserva su vídeo. */
+  video_time: number | null;
+  /** Lo que cargó en la categoría, en probabilidad de victoria (0-1). */
+  lost: number;
+  /** "death", o "objective": un objetivo rival que se hizo sin ti. */
+  kind: string;
+  killer: string | null;
+  /** En una muerte, el objetivo rival de después; en un objetivo, cuál fue. */
+  objective: string | null;
+  /** En un objetivo: "far", "base" o "dead". */
+  state: string | null;
+}
+
+/** Una categoría en un tramo (0-7, 7-14, 14-21, 21-28, 28+), o en toda la
+ *  partida con `tramo: null`. Todo en probabilidad de victoria por partida. */
+export interface CoachRow {
+  category: CoachCategory;
+  tramo: number | null;
+  /** Partidas en las que se pudo medir. */
+  games: number;
+  plays: number;
+  user: number;
+  base: number | null;
+  /** `user - base`: positivo es perder más de lo normal. */
+  excess: number | null;
+  /** "corpus" (tu rol y rango) u "own" (tu propia media, las de vídeo). */
+  baseline: "corpus" | "own" | null;
+  /** Sólo las de vídeo: en qué parte de tus muertes se dio, y en qué parte se
+   *  habría dado con tu media. Su cociente es el lift. */
+  rate_deaths: number | null;
+  rate_any: number | null;
+  worst: CoachPlay[];
+}
+
+export interface CoachTramo {
+  tramo: number;
+  games: number;
+  wpa: number;
+  /** Media de tus percentiles frente a tu rol y franja. */
+  percentile: number | null;
+}
+
+export interface CoachSummary {
+  games: number;
+  /** La franja de rango más frecuente de tus partidas ("bajo"/"medio"/"alto"). */
+  band: string | null;
+  band_uniform: boolean;
+  min_games: number;
+  rows: CoachRow[];
+  /** La categoría × tramo con más pérdida por encima de su baremo. */
+  focus: CoachRow | null;
+  tramos: CoachTramo[];
+}
+
+// Categorías, baremos y foco de todas tus partidas. Cachea por partida en
+// `coach_v1.json`.
+export const getCoachSummary = async (): Promise<CoachSummary> => {
+  return await invoke<CoachSummary>("get_coach_summary");
+};
+
 // Reparto de crédito de un jugador. `killing_blow_gold` es lo que ve un KDA (oro
 // de kills por rematar); `damage_credit_gold` es ese mismo oro repartido por el
 // daño que puso cada uno, y `credit_gap` la diferencia entre ambos.

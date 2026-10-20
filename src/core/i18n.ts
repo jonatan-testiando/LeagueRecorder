@@ -176,7 +176,6 @@ const ES: Record<string, string> = {
   "You die between minute {a} and {b}": "Te mueres entre el minuto {a} y el {b}",
   "Train camera control": "Entrenar control de cámara",
   "Your blind spot": "Tu punto ciego",
-  "latest {n} of {total}": "las {n} últimas de {total}",
   "{lane} is the lane you leave unwatched the longest, in {n} of your last {total} games.":
     "{lane} es el carril que más rato dejas sin mirar, en {n} de tus últimas {total} partidas.",
   "On average {avg} without a single look; your worst was {worst}.":
@@ -192,8 +191,6 @@ const ES: Record<string, string> = {
   "Recording": "Grabando",
   "Idle — records itself when a game starts":
     "En espera — se graba sola al detectar partida",
-  "Nothing to point at yet. Record a few games and this turns into the one thing worth working on.":
-    "Todavía no hay nada que señalar. Graba unas cuantas partidas y esto se convierte en lo único que merece la pena trabajar.",
   "deaths": "muertes",
   "gold @15": "oro @15",
 
@@ -1434,7 +1431,6 @@ const ES: Record<string, string> = {
   "See the library": "Ver la biblioteca",
   "Synced with Riot": "Sincronizada con Riot",
   "lead, {n} games": "indicio, {n} partidas",
-  "Deaths per game minute, in {n}-minute windows": "Muertes por minuto de partida, en tramos de {n} minutos",
   "Signals": "Señales",
   "Blind spot": "Punto ciego",
   "{avg} unwatched on average · {n} of {total} games": "{avg} sin mirar de media · {n} de {total} partidas",
@@ -1595,7 +1591,6 @@ const ES: Record<string, string> = {
   "Killed by a tower": "Te mata una torre",
   "Killed by minions": "Te matan los súbditos",
   "{what} {n} s later.": "{what} {n} s después.",
-  "It falls between minutes {a} and {b}, the stretch where you die most.": "Cae entre el minuto {a} y el {b}, el tramo en que más mueres.",
   "Your first death of the game, at minute {m}.": "Tu primera muerte de la partida, en el minuto {m}.",
   "You draw {n} enemies and die": "Atraes a {n} enemigos y mueres",
   "You draw enemies and die": "Atraes enemigos y mueres",
@@ -1629,14 +1624,9 @@ const ES: Record<string, string> = {
   "Of players in your role, across {n} recent games.": "De los jugadores de tu puesto, en {n} partidas recientes.",
   "Not computed yet": "Aún sin calcular",
   "Impact is computed when you open a game's Impact tab. It shows here after three games.": "El impacto se calcula al abrir la pestaña Impacto de una partida. Sale aquí a partir de tres.",
-  "Your focus this week": "Tu foco esta semana",
   "Lead · {n} games": "Indicio · {n} partidas",
   "Trend · {n} games": "Tendencia · {n} partidas",
   "Solid · {n} games": "Sólido · {n} partidas",
-  "You die most between minutes {a} and {b}": "Mueres más entre el minuto {a} y el {b}",
-  "{n} of your {total} deaths ({pct}%) fall in that stretch, during the laning phase.": "{n} de tus {total} muertes ({pct} %) caen en ese tramo, en plena fase de líneas.",
-  "{n} of your {total} deaths ({pct}%) fall in that stretch, when the objective fights start.": "{n} de tus {total} muertes ({pct} %) caen en ese tramo, cuando empiezan las peleas por objetivos.",
-  "{n} of your {total} deaths ({pct}%) fall in that stretch, in the late game.": "{n} de tus {total} muertes ({pct} %) caen en ese tramo, ya en la partida tardía.",
   "Recent form": "Forma reciente",
   "{n} W": "{n} V",
   "{n} L": "{n} D",
@@ -1647,7 +1637,6 @@ const ES: Record<string, string> = {
   "Riot": "Riot",
   "Win rate": "Victorias",
   "({d} pts vs the {p} before)": "({d} pts frente a las {p} anteriores)",
-  "Where it happened: deaths between minutes {a} and {b}": "Dónde pasó: muertes entre el minuto {a} y el {b}",
   "The moments": "Los momentos",
   "Your win probability added, ranked against players in your role. From your recorded games only: it points at a direction, it doesn't grade you.": "La probabilidad de victoria que aportas, comparada con los jugadores de tu puesto. Solo con tus partidas grabadas: marca una dirección, no te pone nota.",
   "The worst mistake (one you flagged, a death that cost an objective, or one in your worst stretch), the analyzer's most useful finding and your best play. The review button counts the same moments as the player's review queue.": "El peor error (uno que marcaste, una muerte que costó un objetivo o una en tu peor tramo), el hallazgo más útil del analizador y tu mejor jugada. El botón de revisar cuenta los mismos momentos que la cola del reproductor.",
@@ -2280,13 +2269,62 @@ const ES: Record<string, string> = {
   "enemy jungler": "jungla rival",
   "The enemy jungler killed you or assisted.": "Te mató o asistió el jungla rival.",
   "away from your lane": "lejos de tu carril",
-  "You died more than 2,500 units from your lane.": "Moriste a más de 2.500 unidades de tu carril.",
+  "Before 14:00, more than 2,500 units from your lane.": "Antes del 14:00, a más de 2.500 unidades de tu carril.",
   "at a tower before 14:00": "en torre antes del 14:00",
   "Before 14:00, next to a standing tower (yours or theirs), or their tower hit you.": "Antes del 14:00, junto a una torre en pie (tuya o suya), o te pegó su torre.",
   "little damage back": "poco daño devuelto",
   "What you dealt before dying is in the lowest 10% for your role at that point of the game.": "Lo que devolviste antes de morir está en el 10% más bajo de tu puesto a esa altura de la partida.",
   "No look at the map in the 10 s before dying.": "Ninguna mirada al mapa en los 10 s antes de morir.",
   "The fight that killed you was opened with no enemy in sight.": "La pelea que te mató te la abrieron sin ningún rival a la vista.",
+
+  // Coach de macro: categorías, tramos y foco (`core/coach.ts`).
+  "from minute {a}": "desde el minuto {a}",
+  "between minutes {a} and {b}": "entre el minuto {a} y el {b}",
+  "Deaths to the enemy jungler": "Muertes al jungla rival",
+  "Deaths away from your lane": "Muertes fuera de tu zona",
+  "Deaths at a tower": "Muertes bajo torre",
+  "Deaths dealing little damage back": "Muertes devolviendo poco daño",
+  "Deaths without looking at the map": "Muertes sin mirar el mapa",
+  "Fights opened on you from the fog": "Peleas que te abren desde la niebla",
+  "Deaths right before an enemy objective": "Muertes justo antes de un objetivo rival",
+  "Enemy objectives taken without you": "Objetivos rivales sin ti",
+  "Deaths with the game in hand": "Muertes con la partida de cara",
+  "Your share of what the enemy took in the 60 s after your death.": "Tu parte de lo que el rival tomó en los 60 s siguientes a tu muerte.",
+  "A dragon, Baron, Herald or grubs the enemy took while you were far from the pit, in base or dead. It is shared among the allies who were missing.":
+    "Un dragón, barón, heraldo o larvas que el rival hizo mientras estabas lejos del foso, en base o muerto. Se reparte entre los aliados que faltaban.",
+  "You died with your team at 65% win chance or more.": "Moriste con tu equipo al 65% de victoria o más.",
+  "They cost you {user}% win chance per game; at your usual rate they would cost {base}%.":
+    "Te cuestan un {user}% de victoria por partida; con tu tasa de siempre serían un {base}%.",
+  "They cost you {user}% win chance per game; in your rank, {base}%.": "Te cuestan un {user}% de victoria por partida; en tu rango, un {base}%.",
+  "They cost you {user}% win chance per game; your role in the rank of each game, {base}%.":
+    "Te cuestan un {user}% de victoria por partida; a tu rol en el rango de cada partida, un {base}%.",
+  "Before dying you had gone 10 s without a look {a}% of the time; at any moment, {b}%.":
+    "Antes de morir llevabas 10 s sin mirar el mapa el {a}% de las veces; en un momento cualquiera, el {b}%.",
+  "{a}% of the fights that killed you came from the fog; of all the fights started on you, {b}%.":
+    "El {a}% de las peleas que te mataron te las abrieron desde la niebla; de todas las que te empezaron, el {b}%.",
+  "−{p}% win chance": "−{p}% de victoria",
+  "{objective} without you ({where})": "{objective} sin ti ({where})",
+  "far from the pit": "lejos del foso",
+  "in base": "en base",
+  "dead": "muerto",
+  "Riot's data can't see this, so the baseline is your own average, not your rank's.":
+    "Los datos de Riot no ven esto, así que el baremo es tu propia media y no la de tu rango.",
+  "What it costs you per game in each stretch of the game, with its baseline": "Lo que te cuesta por partida en cada tramo, con su baremo",
+  "{n} games · you {user}% · baseline {base}%": "{n} partidas · tú {user}% · baremo {base}%",
+  "what you lose per game": "lo que pierdes por partida",
+  "your usual rate": "tu media",
+  "your rank": "tu rango",
+  "Watch the play that cost you most": "Ver la jugada que más te costó",
+  "Watch the {n} plays that cost you most": "Ver las {n} jugadas que más te costaron",
+  "Working out your focus…": "Calculando tu foco…",
+  "Couldn't work out your focus this time. It retries on the next visit.": "No se pudo calcular tu foco esta vez. Se reintenta en la próxima visita.",
+  "The focus needs {n} games synced with Riot; you have {k}. Until then nothing is solid enough to point at.":
+    "El foco necesita {n} partidas sincronizadas con Riot; tienes {k}. Hasta entonces nada es lo bastante sólido para señalarlo.",
+  "Nothing costs you more than its baseline yet, in any stretch with {n} games or more.":
+    "Por ahora nada te cuesta más que su baremo en ningún tramo con {n} partidas o más.",
+  "Where your focus happened": "Dónde pasó tu foco",
+  "It falls after minute {a}, the stretch of your focus.": "Cae pasado el minuto {a}, el tramo de tu foco.",
+  "It falls between minutes {a} and {b}, the stretch of your focus.": "Cae entre el minuto {a} y el {b}, el tramo de tu foco.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

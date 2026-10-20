@@ -415,6 +415,29 @@ button.home-sig:focus-visible { outline: 2px solid var(--brand); outline-offset:
 .home-bar--hot { background: linear-gradient(180deg, color-mix(in srgb, var(--flag) 72%, var(--text)), var(--flag)); }
 .home-bars__axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--faint); }
 
+/* El foco del coach: una columna por tramo, la barra es lo que pierdes y la
+   raya, su baremo (tu rango, o tu media en las categorías de vídeo). */
+.home-focus__note { font-size: 12px; line-height: 1.45; color: var(--faint); }
+.home-bar-col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.home-bar-col .home-bar { width: 100%; }
+.home-bar__base {
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  height: 2px;
+  margin-bottom: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.6;
+  pointer-events: none;
+}
+.home-bars__axis--cols { gap: 6px; }
+.home-bars__axis--cols span { flex: 1; text-align: center; }
+.home-bars__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--faint); }
+.home-bars__legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.home-legend__bar { width: 10px; height: 10px; border-radius: 3px; background: var(--flag); }
+.home-legend__base { width: 12px; height: 2px; border-radius: 1px; background: var(--text); opacity: 0.6; }
+
 /* --------------------------------------------------------- forma reciente */
 .home-form { flex-grow: 1; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; }
 .home-form__wl { font-size: 13px; }

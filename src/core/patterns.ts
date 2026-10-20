@@ -202,47 +202,12 @@ export function errorCategories(
     .sort((a, b) => b.count - a.count);
 }
 
-export interface Focus {
-  /** Tramo problemático. */
-  bucket: DeathBucket;
-  /** Porcentaje de todas tus muertes que caen ahí. */
-  share: number;
-  /** En cuántas partidas distintas ocurre. */
-  games: number;
-  confidence: Confidence;
-}
-
-/**
- * La debilidad en la que tocaría trabajar.
- *
- * Ahora mismo es simplemente el tramo con más muertes, que es la señal más
- * fuerte que hay con los datos que existen. Deliberadamente simple: es mejor
- * una regla que se entiende que una puntuación compuesta que nadie puede
- * discutir.
+/*
+ * El foco («en qué trabajar») ya no vive aquí: era el bloque de 5 min en que
+ * más mueres, y lo sustituye el del coach (`core/coach.ts`, `coach.rs`), que
+ * mira lo que te cuesta cada tipo de jugada frente a su baremo.
+ * `confidenceOf` y `sampleLabel` siguen siendo la regla de muestra de los dos.
  */
-export function currentFocus(matches: MatchMetadata[]): Focus | null {
-  const clock = deathClock(matches);
-  if (!clock.peak || clock.total === 0) return null;
-
-  const { from, to } = clock.peak;
-  let games = 0;
-  for (const m of matches) {
-    const offset = m.video_offset ?? 0;
-    const hit = m.events.some((ev) => {
-      if (!isDeath(ev.type, ev.subtype)) return false;
-      const t = Math.max(0, ev.time - offset) / 60;
-      return t >= from && t < to;
-    });
-    if (hit) games++;
-  }
-
-  return {
-    bucket: clock.peak,
-    share: clock.peak.total / clock.total,
-    games,
-    confidence: confidenceOf(matches.length),
-  };
-}
 
 /* ========================================================================
    La escalera de rango y la predicción.

@@ -183,7 +183,7 @@ pub struct Fix {
 
 /// Dónde estaría alguien según la API, interpolando entre los dos minutos que
 /// rodean el instante. `None` si cae fuera del rango con anclas.
-fn interpolar(anclas: &[(f64, f64, f64)], sec: f64) -> Option<(f64, f64)> {
+pub(crate) fn interpolar(anclas: &[(f64, f64, f64)], sec: f64) -> Option<(f64, f64)> {
     let antes = anclas.iter().rev().find(|(t, _, _)| *t <= sec)?;
     let despues = anclas.iter().find(|(t, _, _)| *t >= sec)?;
     if (despues.0 - antes.0).abs() < 1e-6 {

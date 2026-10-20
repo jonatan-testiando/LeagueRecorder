@@ -21,7 +21,7 @@
 
 use serde::Serialize;
 
-use crate::camera_input::minimapa_rect;
+use crate::camera_input::{Calibracion, Rect};
 use crate::storage::{MatchMetadata, MouseEventData};
 
 /// Bajo este radio (en fracción de la ALTURA de pantalla) el clic es "corto".
@@ -179,7 +179,7 @@ fn giro(a: f64, b: f64) -> f64 {
 
 /// ¿Está el clic en una parte de la pantalla donde una orden de movimiento tiene
 /// sentido? Fuera quedan el minimapa y el HUD.
-fn en_juego(e: &MouseEventData, w: f64, h: f64, minimapa: (f64, f64, f64, f64)) -> bool {
+fn en_juego(e: &MouseEventData, w: f64, h: f64, minimapa: Rect) -> bool {
     if e.x < 0.0 || e.y < 0.0 || e.x > w || e.y > h {
         return false;
     }
@@ -205,12 +205,14 @@ struct Vec2 {
 ///
 /// Lo usa también [`crate::spells`] para mirar qué hizo la mano en los segundos
 /// previos a cada muerte, así que el filtrado vive aquí y no duplicado allí.
-pub(crate) fn ordenes(m: &MatchMetadata, escala: f64) -> Vec<(f64, f64, f64, f64, f64)> {
+///
+/// `minimapa` es el de esta partida (`Calibracion::rect`): sus clics se
+/// descuentan, que son miradas y no órdenes.
+pub(crate) fn ordenes(m: &MatchMetadata, minimapa: Rect) -> Vec<(f64, f64, f64, f64, f64)> {
     let (w, h) = (m.mouse_space_w as f64, m.mouse_space_h as f64);
     if w <= 0.0 || h <= 0.0 {
         return Vec::new();
     }
-    let minimapa = minimapa_rect(escala);
     let (cx, cy) = (w / 2.0, h / 2.0);
     let mut v: Vec<(f64, f64, f64, f64, f64)> = m
         .mouse_events
@@ -227,10 +229,10 @@ pub(crate) fn ordenes(m: &MatchMetadata, escala: f64) -> Vec<(f64, f64, f64, f64
 
 /// El informe de la mano para una partida.
 ///
-/// `escala` es `minimap_scale` de la config: el rectángulo del minimapa cambia
-/// con ella y hay que descontarlo bien o los clics de mirada se cuelan como
-/// órdenes de movimiento.
-pub fn analyze(m: &MatchMetadata, escala: f64) -> HandReport {
+/// `cal` dice dónde está el minimapa de la partida (cambia con los ajustes de
+/// League de cada uno): hay que descontarlo bien o los clics de mirada se
+/// cuelan como órdenes de movimiento.
+pub fn analyze(m: &MatchMetadata, cal: Calibracion) -> HandReport {
     let (w, h) = (m.mouse_space_w as f64, m.mouse_space_h as f64);
     let mut r = HandReport {
         screen_w: m.mouse_space_w,
@@ -240,7 +242,7 @@ pub fn analyze(m: &MatchMetadata, escala: f64) -> HandReport {
     if w <= 0.0 || h <= 0.0 {
         return r;
     }
-    let minimapa = minimapa_rect(escala);
+    let minimapa = cal.rect(m);
     let (cx, cy) = (w / 2.0, h / 2.0);
 
     let mut v: Vec<Vec2> = Vec::new();
@@ -396,8 +398,7 @@ pub fn analyze(m: &MatchMetadata, escala: f64) -> HandReport {
 #[tauri::command]
 pub async fn get_hand_report(match_id: String) -> Result<HandReport, String> {
     let m = crate::storage::get_match_metadata(&match_id)?;
-    let escala = crate::storage::load_config().minimap_scale;
-    Ok(analyze(&m, escala))
+    Ok(analyze(&m, Calibracion::actual()))
 }
 
 /// Partidas que suma la versión de historial: las últimas con estela.
@@ -409,13 +410,14 @@ const PARTIDAS_HISTORIAL: usize = 10;
 /// reactivos para que su mediana diga algo: por eso este panel vive en
 /// Patrones. No hay cálculo nuevo: se juntan los clics de las últimas
 /// `PARTIDAS_HISTORIAL` partidas grabadas a la MISMA resolución (las
-/// coordenadas son píxeles de pantalla) y se pasa el mismo `analyze`. Cada
+/// coordenadas son píxeles de pantalla) y con el minimapa en el MISMO sitio
+/// (el que se descuenta es el de la primera) y se pasa el mismo `analyze`. Cada
 /// partida se desplaza en el tiempo para que ningún par de clics cruce de una
 /// a otra.
 #[tauri::command]
 pub async fn get_hand_career() -> Result<HandReport, String> {
     tokio::task::spawn_blocking(|| {
-        let escala = crate::storage::load_config().minimap_scale;
+        let cal = Calibracion::actual();
         let mut base: Option<MatchMetadata> = None;
         let mut n = 0;
         for (i, ligera) in crate::storage::load_all_matches()
@@ -433,7 +435,9 @@ pub async fn get_hand_career() -> Result<HandReport, String> {
             match base.as_mut() {
                 None => base = Some(m),
                 Some(b) => {
-                    if (b.mouse_space_w, b.mouse_space_h) != (m.mouse_space_w, m.mouse_space_h) {
+                    if (b.mouse_space_w, b.mouse_space_h) != (m.mouse_space_w, m.mouse_space_h)
+                        || !crate::camera_input::mismo_rect(cal.rect(b), cal.rect(&m))
+                    {
                         continue;
                     }
                     let desplaza = 1.0e6 * (n as f64);
@@ -446,7 +450,7 @@ pub async fn get_hand_career() -> Result<HandReport, String> {
             n += 1;
         }
         let base = base.ok_or_else(|| "Sin partidas con estela del ratón".to_string())?;
-        let mut r = analyze(&base, escala);
+        let mut r = analyze(&base, cal);
         r.matches = n;
         Ok(r)
     })
@@ -492,7 +496,7 @@ mod tests {
             (2.0, 1800.0, 900.0, "right_click"),  // minimapa
             (3.0, 1200.0, 400.0, "right_click"),  // esta sí
         ]);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert_eq!(r.clicks, 1);
         assert_eq!(r.discarded_ui, 2);
     }
@@ -506,7 +510,7 @@ mod tests {
             (9.0, 960.0, 240.0, "right_click"),
             (13.0, 960.0, 840.0, "right_click"),
         ]);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert_eq!(r.clicks, 4);
         assert!((r.ring_px_p50 - 300.0).abs() < 1e-6);
         // 300 px pasa de 0,20 × 1080 = 216, así que ninguno es corto.
@@ -519,7 +523,7 @@ mod tests {
             (1.0, 1010.0, 540.0, "right_click"),  // 50 px: corto
             (5.0, 1360.0, 540.0, "right_click"),  // 400 px: largo
         ]);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert!((r.short_ratio - 0.5).abs() < 1e-6);
     }
 
@@ -530,7 +534,7 @@ mod tests {
             (1.0, 1360.0, 540.0, "right_click"),
             (1.5, 560.0, 540.0, "right_click"),
         ]);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert_eq!(r.reactive.clicks, 1);
         assert_eq!(r.cruise.clicks, 0);
         assert!((r.turn_deg_p50 - 180.0).abs() < 1e-6);
@@ -542,7 +546,7 @@ mod tests {
             (1.0, 1360.0, 540.0, "right_click"),
             (30.0, 560.0, 540.0, "right_click"),
         ]);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert_eq!(r.reactive.clicks, 0);
         assert_eq!(r.cruise.clicks, 0);
     }
@@ -557,7 +561,7 @@ mod tests {
             evs.push((t + 0.04, 1380.0, 540.0, "right_click"));
         }
         let m = partida(evs);
-        let r = analyze(&m, 1.0);
+        let r = analyze(&m, Calibracion::default());
         assert_eq!(r.correction_px_p50, Some(20.0));
         // atan(20/~400) ≈ 2,9°
         let coste = r.angular_cost_deg.unwrap();
@@ -566,7 +570,7 @@ mod tests {
 
     #[test]
     fn sin_estela_no_se_inventa_nada() {
-        let r = analyze(&MatchMetadata::default(), 1.0);
+        let r = analyze(&MatchMetadata::default(), Calibracion::default());
         assert_eq!(r.clicks, 0);
         assert!(r.sectors.is_empty());
     }
@@ -581,10 +585,10 @@ mod tests {
         if std::env::var("LR_REAL").is_err() {
             return;
         }
-        let escala = crate::storage::load_config().minimap_scale;
+        let cal = Calibracion::actual();
         for m in crate::storage::load_all_matches() {
             let Some(full) = crate::storage::load_match_by_id(&m.id) else { continue };
-            let r = analyze(&full, escala);
+            let r = analyze(&full, cal);
             if r.clicks == 0 {
                 println!("{:<28} sin clics", m.id);
                 continue;

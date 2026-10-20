@@ -188,9 +188,12 @@ export interface AppConfig {
   language: string;
   /** Tema de la interfaz: "dark", "light" o "system". Se guarda en disco. */
   theme: string;
-  /** Tamaño del minimapa respecto al estándar (1.0). Calibra la detección de
-   *  clics de minimapa cuando League corre con la interfaz reescalada. */
+  /** HEREDADO: factor del minimapa de antes de leer los ajustes del juego. Lo
+   *  usan solo las partidas antiguas; ya no se edita desde la UI. */
   minimap_scale: number;
+  /** `MinimapScale` de League puesto a mano (0–3), o `null` para usar el que
+   *  se lee del juego en cada partida. Manda sobre lo detectado. */
+  minimap_scale_override: number | null;
   /** Plataforma de Riot ("la1", "euw1", "kr"…) o "auto" para sondearla. */
   riot_platform: string;
   /** La sondeada con "auto". Solo lectura desde la UI: la escribe el backend. */
@@ -231,6 +234,28 @@ export const RIOT_PLATFORMS: { code: string; label: string }[] = [
 /** "euw1" → "EUW". Devuelve el propio código si no está en la lista. */
 export const platformLabel = (code: string): string =>
   RIOT_PLATFORMS.find((p) => p.code === code)?.label ?? code.toUpperCase();
+
+/** Ajustes del HUD de League que deciden dónde está el minimapa
+ *  (`ajustes_juego::HudSettings`). */
+export interface HudSettings {
+  /** `HUD.MinimapScale`, de 0 a 3 (1 por defecto). */
+  minimap_scale: number;
+  /** `HUD.FlipMiniMap`: minimapa a la izquierda. */
+  flip_minimap: boolean;
+  global_scale?: number;
+  width?: number;
+  height?: number;
+  /** 0 pantalla completa, 1 ventana, 2 sin bordes. */
+  window_mode?: number;
+  /** Carpeta de League de la que se leyó. */
+  install_dir: string;
+}
+
+/** Lo que se detectaría si empezara una partida ahora. `hud` es `null` si no se
+ *  encuentra League o no se pueden leer sus ajustes. */
+export const getMinimapDetection = async (): Promise<{ hud: HudSettings | null }> => {
+  return await invoke<{ hud: HudSettings | null }>("get_minimap_detection");
+};
 
 export const getAppConfig = async (): Promise<AppConfig> => {
   return await invoke<AppConfig>("get_app_config");

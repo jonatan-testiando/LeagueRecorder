@@ -454,9 +454,9 @@ fn desde_cache(m: &crate::storage::MatchMetadata, con_estela: bool) -> Option<Sp
         .iter()
         .position(|p| p.championName == m.champion)?;
     let ordenes = if con_estela {
-        let escala = crate::storage::load_config().minimap_scale;
+        let cal = crate::camera_input::Calibracion::actual();
         crate::storage::load_match_by_id(&m.id)
-            .map(|full| crate::hands::ordenes(&full, escala))
+            .map(|full| crate::hands::ordenes(&full, cal.rect(&full)))
             .unwrap_or_default()
     } else {
         Vec::new()

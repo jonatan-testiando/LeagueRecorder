@@ -372,6 +372,8 @@ pub async fn process_vod(
         // están en el espacio del vídeo, así que no hay reescalado que aplicar.
         mouse_space_w: 0,
         mouse_space_h: 0,
+        // Un VOD es de otro jugador: los ajustes de ESTA máquina no dicen nada.
+        hud_settings: None,
         riot_match_id: None,
         kda: None,
         gold_earned: None,

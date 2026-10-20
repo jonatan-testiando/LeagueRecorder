@@ -1,5 +1,6 @@
 mod riot_live_api;
 mod spells;
+mod ajustes_juego;
 mod attribution;
 mod awareness;
 mod backup;
@@ -319,6 +320,7 @@ pub fn run() {
             set_video_settings,
             get_app_config,
             set_app_config,
+            ajustes_juego::get_minimap_detection,
             get_disk_usage,
             backup::export_backup,
             backup::import_backup,

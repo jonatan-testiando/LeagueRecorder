@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type MaintenanceProgress } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type MaintenanceProgress } from "../../../core/tauri-ipc";
+import { formatDecimal } from "../../../core/benchmarkFormat";
 // La lista de regiones se comparte con el asistente de primer arranque.
 import { RIOT_PLATFORMS, platformLabel } from "../../../core/riotRegions";
 import { AudioStatus, VideoSettings } from "../../../types";
@@ -55,11 +56,16 @@ const clampPruneDays = (raw: string): number => {
   return Math.min(Math.max(n, 0), MAX_PRUNE_DAYS);
 };
 
-/** Escala del minimapa en % (100 = estándar). Misma cota que el backend. */
-const clampMinimapPct = (raw: string): number => {
-  const n = Math.round(Number(raw));
-  if (!Number.isFinite(n)) return 100;
-  return Math.min(Math.max(n, 50), 200);
+/** Máximo de `MinimapScale`: el deslizador de League va de 0 a 3. Misma cota
+ *  que el backend (`camera_input::ESCALA_MAX`). */
+const MAX_MINIMAP_SCALE = 3;
+
+/** La escala forzada del minimapa: vacío (o basura) = automático, `null`. */
+const parseMinimapOverride = (raw: string): number | null => {
+  if (raw.trim() === "") return null;
+  const n = Number(raw.replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  return Math.round(Math.min(Math.max(n, 0), MAX_MINIMAP_SCALE) * 100) / 100;
 };
 
 /* -------------------------------------------------------------- categorías
@@ -180,6 +186,8 @@ export const SettingsPanel: React.FC = () => {
   const [storageDraft, setStorageDraft] = useState<string>("");
   const [pruneDraft, setPruneDraft] = useState<string>("");
   const [minimapDraft, setMinimapDraft] = useState<string>("");
+  // Lo que se lee ahora de los ajustes de League. `undefined` = aún preguntando.
+  const [minimapHud, setMinimapHud] = useState<HudSettings | null | undefined>(undefined);
   const [proxyDraft, setProxyDraft] = useState<string>("");
   // La clave se enseña tapada; el ojo es para comprobar que se pegó entera.
   const [showKey, setShowKey] = useState<boolean>(false);
@@ -274,13 +282,16 @@ export const SettingsPanel: React.FC = () => {
     refreshDisk();
     getHotkeys().then(setHotkeysState).catch(console.error);
     getVersion().then(setAppVersion).catch(console.error);
+    getMinimapDetection()
+      .then((d) => setMinimapHud(d.hud))
+      .catch(() => setMinimapHud(null));
     getPendingUpdate().then(setPending).catch(() => {});
     getAppConfig()
       .then(c => {
         setConfig(c);
         setStorageDraft(String(c.max_storage_gb));
         setPruneDraft(String(c.auto_prune_days));
-        setMinimapDraft(String(Math.round((c.minimap_scale ?? 1) * 100)));
+        setMinimapDraft(c.minimap_scale_override == null ? "" : String(c.minimap_scale_override));
         setProxyDraft(c.riot_proxy_url ?? "");
       })
       .catch(console.error);
@@ -1083,23 +1094,37 @@ export const SettingsPanel: React.FC = () => {
     <section className="card stg-card">
       <Row
         label={t("Minimap scale")}
-        desc={t("Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Changing it recalculates past games in the background.")}
+        desc={t("Read from League's settings at the start of each game, so minimap clicks are measured on your real minimap. Type a value from 0 to 3 only if the detected one is wrong; empty means automatic. Changing it recalculates past games in the background.")}
       >
+        <span className="u-meta" title={minimapHud?.install_dir}>
+          {minimapHud === undefined
+            ? t("Detecting…")
+            : minimapHud === null
+              ? t("League's settings not found")
+              : t("Detected: {scale}, {side}", {
+                  scale: formatDecimal(minimapHud.minimap_scale, 1),
+                  side: minimapHud.flip_minimap ? t("left side") : t("right side"),
+                })}
+        </span>
         <input
           type="number"
-          min={50}
-          max={200}
-          step={5}
+          min={0}
+          max={MAX_MINIMAP_SCALE}
+          step={0.1}
           className="field field--num"
+          placeholder={t("Auto")}
+          aria-label={t("Minimap scale")}
           value={minimapDraft}
+          disabled={config === null}
           onChange={(e) => setMinimapDraft(e.target.value)}
           onBlur={() => {
-            const pct = clampMinimapPct(minimapDraft);
-            setMinimapDraft(String(pct));
-            handleSaveConfig({ minimap_scale: pct / 100 });
+            const v = parseMinimapOverride(minimapDraft);
+            setMinimapDraft(v === null ? "" : String(v));
+            if (v !== (config?.minimap_scale_override ?? null)) {
+              handleSaveConfig({ minimap_scale_override: v });
+            }
           }}
         />
-        <span className="u-meta">%</span>
       </Row>
 
       <Row

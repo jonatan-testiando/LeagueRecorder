@@ -192,6 +192,12 @@ pub struct MatchMetadata {
     pub mouse_space_w: u32,
     #[serde(default)]
     pub mouse_space_h: u32,
+    /// Los ajustes del HUD de League al empezar la partida (tamaño y lado del
+    /// minimapa, sobre todo). De aquí sale el rectángulo del minimapa con el
+    /// que se analizan los clics: ver `camera_input::Calibracion`. `None` en
+    /// las partidas grabadas antes de leerlos y en los VODs importados.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hud_settings: Option<crate::ajustes_juego::HudSettings>,
     /// API de Riot: ID real de la partida en el servidor
     #[serde(default)]
     pub riot_match_id: Option<String>,
@@ -485,9 +491,8 @@ fn shift_apm_series(series: &[f64], duration: f64, offset: f64) -> Vec<f64> {
 pub const MIN_STORAGE_GB: u64 = 10;
 
 fn default_max_storage() -> u64 { 100 }
-/// Escala del minimapa RELATIVA a la geometría estándar validada
-/// (`camera_input::MINIMAPA`). 1.0 = tal cual; quien juegue con el minimapa
-/// agrandado o encogido en los ajustes de League lo calibra en Ajustes.
+/// Factor heredado del minimapa: 1.0 = el rectángulo validado tal cual. Ver
+/// `AppConfig::minimap_scale`.
 fn default_minimap_scale() -> f64 { 1.0 }
 /// 0 = borrado por edad DESACTIVADO. Es el valor que heredan las configuraciones
 /// ya guardadas, que no traen el campo: actualizar la app nunca debe empezar a
@@ -519,11 +524,18 @@ pub struct AppConfig {
     /// misma razón que el idioma: tiene que sobrevivir a cerrar la app.
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// Tamaño del minimapa respecto al estándar (1.0). Ver `camera_input`:
-    /// con la interfaz de League reescalada, el rectángulo estándar pierde
-    /// clics (el minimapa crece hacia dentro) o cuenta de más.
+    /// HEREDADO. Tamaño del minimapa respecto al rectángulo validado (1.0),
+    /// de cuando era la única calibración. Ya no sale en Ajustes; sólo lo usan
+    /// las partidas grabadas antes de leer los ajustes del juego, que así se
+    /// quedan como estaban. Ver `camera_input::rect_heredado`.
     #[serde(default = "default_minimap_scale")]
     pub minimap_scale: f64,
+    /// `MinimapScale` de League puesto a mano (0 a 3), o `None` para usar el
+    /// que se lee del juego en cada partida. Es la salida de emergencia por si
+    /// la detección falla: manda sobre lo detectado en TODAS las partidas,
+    /// también en las antiguas.
+    #[serde(default)]
+    pub minimap_scale_override: Option<f64>,
     /// Plataforma de Riot del jugador ("la1", "euw1", "kr"…) o "auto".
     ///
     /// La app nació clavada en LAN: quien juega fuera de América no recibía
@@ -583,6 +595,7 @@ impl Default for AppConfig {
             language: "en".to_string(),
             theme: "dark".to_string(),
             minimap_scale: 1.0,
+            minimap_scale_override: None,
             riot_platform: "auto".to_string(),
             riot_platform_detected: String::new(),
             riot_proxy_url: String::new(),

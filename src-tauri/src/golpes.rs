@@ -285,7 +285,8 @@ pub struct Entrada<'a> {
     pub m: &'a MatchDto,
     pub pos: &'a Positions,
     pub meta: &'a crate::storage::MatchMetadata,
-    pub escala_minimapa: f64,
+    /// El minimapa de esta partida (`camera_input::Calibracion::rect`).
+    pub minimapa: crate::camera_input::Rect,
     pub barras: Option<&'a crate::barras::Barras>,
 }
 
@@ -312,7 +313,7 @@ pub fn analizar(e: &Entrada) -> GolpesReport {
 
     let anclas = crate::minimap::anclas_de(e.tl, pid);
     let pista = e.pos.follow(&anclas);
-    let ordenes = crate::hands::ordenes(e.meta, e.escala_minimapa);
+    let ordenes = crate::hands::ordenes(e.meta, e.minimapa);
     let teclas: Vec<(f64, &str)> = e
         .meta
         .mouse_events
@@ -490,7 +491,7 @@ fn estado(status: &str) -> GolpesReport {
     GolpesReport { status: status.into(), ..Default::default() }
 }
 
-fn de_partida(match_id: &str, escala: f64) -> GolpesReport {
+fn de_partida(match_id: &str, cal: crate::camera_input::Calibracion) -> GolpesReport {
     if crate::hud::leyendo(match_id) {
         return estado("reading");
     }
@@ -515,7 +516,7 @@ fn de_partida(match_id: &str, escala: f64) -> GolpesReport {
         m: &m,
         pos: &pos,
         meta: &meta,
-        escala_minimapa: escala,
+        minimapa: cal.rect(&meta),
         barras: barras.as_ref(),
     })
 }
@@ -523,7 +524,7 @@ fn de_partida(match_id: &str, escala: f64) -> GolpesReport {
 /// Instantes de vídeo de las peleas que te empezaron: alrededor de ellos se
 /// leen las barras de vida ([`crate::barras`]).
 pub(crate) fn aperturas(match_id: &str) -> Vec<f64> {
-    de_partida(match_id, crate::storage::load_config().minimap_scale)
+    de_partida(match_id, crate::camera_input::Calibracion::actual())
         .list
         .iter()
         .map(|a| a.t_video)
@@ -534,7 +535,7 @@ pub(crate) fn aperturas(match_id: &str) -> Vec<f64> {
 #[tauri::command]
 pub async fn get_hits_taken(match_id: String) -> GolpesReport {
     tokio::task::spawn_blocking(move || {
-        con_iconos(de_partida(&match_id, crate::storage::load_config().minimap_scale))
+        con_iconos(de_partida(&match_id, crate::camera_input::Calibracion::actual()))
     })
     .await
     .unwrap_or_else(|_| estado("no_riot"))
@@ -546,7 +547,7 @@ const PARTIDAS_HISTORIAL: usize = 10;
 #[tauri::command]
 pub async fn get_hits_taken_career() -> GolpesReport {
     tokio::task::spawn_blocking(|| {
-        let escala = crate::storage::load_config().minimap_scale;
+        let cal = crate::camera_input::Calibracion::actual();
         let mut total = GolpesReport { status: "no_hud".into(), ..Default::default() };
         let mut todas: Vec<Apertura> = Vec::new();
         for m in crate::storage::load_all_matches().into_iter().filter(|m| !m.is_vod) {
@@ -556,7 +557,7 @@ pub async fn get_hits_taken_career() -> GolpesReport {
             if !crate::hud::ruta(&m.id).exists() {
                 continue;
             }
-            let r = de_partida(&m.id, escala);
+            let r = de_partida(&m.id, cal);
             if r.status != "ok" {
                 continue;
             }
@@ -656,7 +657,7 @@ mod tests {
             let meta: crate::storage::MatchMetadata = serde_json::from_str(&rm).unwrap();
             let t0 = std::time::Instant::now();
             let barras = std::fs::read_to_string(d.join(crate::barras::FICHERO)).ok().and_then(|r| crate::barras::Barras::from_json(&r));
-            let r = analizar(&Entrada { hud_raw: &hud, tl: &tl, m: &m, pos: &pos, meta: &meta, escala_minimapa: 1.0, barras: barras.as_ref() });
+            let r = analizar(&Entrada { hud_raw: &hud, tl: &tl, m: &m, pos: &pos, meta: &meta, minimapa: crate::camera_input::Calibracion::default().rect(&meta), barras: barras.as_ref() });
             println!("   línea de fuego: lateral {} · huyendo {} · hacia él {} · fuera de pantalla {} (de {} medidas)", r.line_lateral, r.line_away, r.line_toward, r.line_offscreen, r.line_known);
             println!(
                 "{id} {} · {} golpes de campeón · {} aperturas · recto {}/{} · niebla {} · muerte {} · efectos {:?} · {:?}",

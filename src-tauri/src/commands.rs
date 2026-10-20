@@ -158,6 +158,10 @@ pub struct ActiveMatchState {
     /// La partida se sigue registrando entera (eventos, APM, entrenamiento): lo
     /// único que cambia es que su `video_path` acabará vacío.
     pub has_video: Mutex<bool>,
+    /// Los ajustes del HUD de League leídos al empezar la partida. De ellos
+    /// sale el rectángulo del minimapa (ver `camera_input::Calibracion`) y van
+    /// a la metadata al guardar.
+    pub hud_settings: Mutex<Option<crate::ajustes_juego::HudSettings>>,
 }
 
 impl Default for ActiveMatchState {
@@ -176,6 +180,7 @@ impl Default for ActiveMatchState {
             recording_start: Mutex::new(None),
             game_time_offset: Mutex::new(None),
             has_video: Mutex::new(false),
+            hud_settings: Mutex::new(None),
         }
     }
 }
@@ -577,6 +582,9 @@ pub async fn stop_manual_recording(
             mouse_events: active_match.mouse_events.lock().await.clone(),
             mouse_space_w: mouse_space.0,
             mouse_space_h: mouse_space.1,
+            // Una grabación manual no pasa por el arranque de partida: se leen
+            // aquí, que es lo más cerca que hay del momento en que se jugó.
+            hud_settings: crate::ajustes_juego::detectar(),
             riot_match_id: None,
             kda: None,
             gold_earned: None,
@@ -671,7 +679,9 @@ pub fn spawn_background_monitor(
             // los acepta como respuesta igual que una tecla de cámara: es el
             // gesto con el que la mayoría mira el mapa.
             let mut cam_looks: Vec<(f64, &'static str)> = Vec::new();
-            let espacio_raton = crate::ultimate::mouse_coordinate_space();
+            // Se vuelve a medir al empezar cada partida: aquí la ventana del juego
+            // aún no suele existir y la medida cae al monitor principal.
+            let mut espacio_raton = crate::ultimate::mouse_coordinate_space();
             let mut last_snapshot_time: f64 = -1e9;
             // Metrónomo: rotación de roles, aviso pendiente y resultados.
             let mut metro: MetronomeRunner = MetronomeRunner::default();
@@ -745,6 +755,25 @@ pub fn spawn_background_monitor(
                     active_match.gold_samples.lock().await.clear();
                     active_match.mouse_events.lock().await.clear();
                     ult_state.mouse_events.lock().unwrap().clear();
+
+                    // Dónde está el minimapa en ESTA partida: el tamaño y el lado
+                    // que el jugador tenga puestos en League. Sin esto se usaba el
+                    // rectángulo de la máquina de desarrollo para todo el mundo.
+                    espacio_raton = crate::ultimate::mouse_coordinate_space();
+                    let hud = crate::ajustes_juego::detectar();
+                    match &hud {
+                        Some(a) => log::info!(
+                            "minimapa: escala {} {} ({:?}x{:?}, modo {:?}) de {}",
+                            a.minimap_scale,
+                            if a.flip_minimap { "a la izquierda" } else { "a la derecha" },
+                            a.width,
+                            a.height,
+                            a.window_mode,
+                            a.install_dir
+                        ),
+                        None => log::warn!("minimapa: no se encontraron los ajustes de League; se usa la escala forzada en Ajustes o, sin ella, el rectángulo de siempre"),
+                    }
+                    *active_match.hud_settings.lock().await = hud;
 
                     // Registrar evento inicial
                     active_match.events.lock().await.push(MatchEvent::plain(
@@ -993,9 +1022,13 @@ pub fn spawn_background_monitor(
                             // sumarlo lleva un instante del vídeo al reloj de la partida,
                             // que es en el que trabaja el metrónomo.
                             let desfase = active_match.game_time_offset.lock().await.unwrap_or(0.0);
-                            // La escala del minimapa se lee UNA vez por tanda,
-                            // no por clic: es un fichero de config en disco.
-                            let escala_minimapa = crate::storage::load_config().minimap_scale;
+                            // El rectángulo del minimapa se calcula UNA vez por
+                            // tanda, no por clic: la config es un fichero en disco.
+                            let rect_minimapa = crate::camera_input::Calibracion::actual().rect_para(
+                                espacio_raton.0 as f64,
+                                espacio_raton.1 as f64,
+                                active_match.hud_settings.lock().await.as_ref(),
+                            );
                             for (inst, x, y, evt_str) in raw_mouse_events {
                                 // Usamos el instante relativo al momento en que empezó el video
                                 let gt = inst.saturating_duration_since(rec_start).as_secs_f64();
@@ -1005,7 +1038,7 @@ pub fn spawn_background_monitor(
                                         y,
                                         espacio_raton.0 as f64,
                                         espacio_raton.1 as f64,
-                                        escala_minimapa,
+                                        rect_minimapa,
                                     ) {
                                         cam_looks.push((gt + desfase, carril));
                                     }
@@ -1253,6 +1286,7 @@ async fn finalize_match(
         mouse_events: active_match.mouse_events.lock().await.clone(),
         mouse_space_w: mouse_space.0,
         mouse_space_h: mouse_space.1,
+        hud_settings: active_match.hud_settings.lock().await.clone(),
         riot_match_id: None,
         kda: None,
         gold_earned: None,
@@ -1291,7 +1325,7 @@ async fn finalize_match(
     let miradas = crate::camera_input::looks_from_input(
         &metadata,
         &metadata.camera_snaps,
-        crate::storage::load_config().minimap_scale,
+        crate::camera_input::Calibracion::actual().rect(&metadata),
     );
     crate::camera_input::write_report(&metadata, &miradas);
     metadata.camera_snaps = miradas.iter().map(|l| l.t).collect();
@@ -2261,11 +2295,24 @@ pub struct AppConfigPatch {
     pub auto_prune_days: Option<u32>,
     pub language: Option<String>,
     pub theme: Option<String>,
-    pub minimap_scale: Option<f64>,
+    /// Ausente = no se toca; `null` = automático (lo detectado); un número =
+    /// `MinimapScale` forzado. Por eso es un `Option` doble.
+    #[serde(deserialize_with = "presente")]
+    pub minimap_scale_override: Option<Option<f64>>,
     pub riot_platform: Option<String>,
     pub riot_proxy_url: Option<String>,
     pub onboarding_done: Option<bool>,
     pub backup_mirror_dir: Option<String>,
+}
+
+/// Distingue un campo AUSENTE (el `default`, `None`) de uno puesto a `null`
+/// (`Some(None)`): serde por sí solo los confunde en un `Option<Option<_>>`.
+fn presente<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    serde::Deserialize::deserialize(d).map(Some)
 }
 
 #[tauri::command]
@@ -2325,17 +2372,17 @@ pub fn set_app_config(patch: AppConfigPatch) -> Result<(), String> {
     if let Some(d) = patch.backup_mirror_dir {
         config.backup_mirror_dir = d.trim().to_string();
     }
-    // La misma cota que aplica la geometría (`camera_input::minimapa_rect`):
-    // fuera de [0.5, 2.0] no hay ajuste de League que lo produzca.
-    if let Some(s) = patch.minimap_scale {
-        if s.is_finite() {
-            let nueva = s.clamp(0.5, 2.0);
-            // Al cambiar de verdad, las miradas ya calculadas se recalculan en
-            // segundo plano: sin esto la calibración solo valía hacia delante.
-            if (nueva - config.minimap_scale).abs() > 1e-9 {
-                config.minimap_scale = nueva;
-                crate::camera_input::spawn_regenerate_all(nueva);
-            }
+    // La misma cota que aplica la geometría (`camera_input::minimapa_rect`): el
+    // deslizador de League va de 0 a 3. Un número roto se lee como "automático".
+    if let Some(s) = patch.minimap_scale_override {
+        let nueva = s
+            .filter(|v| v.is_finite())
+            .map(|v| v.clamp(0.0, crate::camera_input::ESCALA_MAX));
+        // Al cambiar de verdad, las miradas ya calculadas se recalculan en
+        // segundo plano: sin esto la calibración solo valía hacia delante.
+        if nueva != config.minimap_scale_override {
+            config.minimap_scale_override = nueva;
+            crate::camera_input::spawn_regenerate_all(crate::camera_input::Calibracion::de_config(&config));
         }
     }
     // El fallo al escribir sube hasta la UI: guardar en silencio y mentir era
@@ -2853,5 +2900,21 @@ mod error_clip_tests {
             .await
             .unwrap();
         assert_eq!(load_clip_meta(&mp4).await.unwrap().note, "revisar esto");
+    }
+}
+
+#[cfg(test)]
+mod patch_tests {
+    use super::AppConfigPatch;
+
+    /// El campo ausente no toca nada; `null` vuelve a automático; un número
+    /// fuerza la escala. Si los dos primeros se confundieran, cambiar el idioma
+    /// (que manda un parche sin este campo) borraría la escala forzada.
+    #[test]
+    fn la_escala_forzada_distingue_ausente_de_null() {
+        let p = |txt: &str| serde_json::from_str::<AppConfigPatch>(txt).unwrap().minimap_scale_override;
+        assert_eq!(p(r#"{"language":"es"}"#), None);
+        assert_eq!(p(r#"{"minimap_scale_override":null}"#), Some(None));
+        assert_eq!(p(r#"{"minimap_scale_override":2.5}"#), Some(Some(2.5)));
     }
 }

@@ -567,8 +567,13 @@ const ES: Record<string, string> = {
   "Interface language. Saved with your settings.":
     "Idioma de la interfaz. Se guarda con tus ajustes.",
   "Minimap scale": "Escala del minimapa",
-  "Size of your in-game minimap versus the standard one, in percent. Calibrates minimap-click detection (map looks, blind spots) if you play with the HUD rescaled. Changing it recalculates past games in the background.":
-    "Tamaño de tu minimapa en el juego respecto al estándar, en porcentaje. Calibra la detección de clics de minimapa (miradas, puntos ciegos) si juegas con la interfaz reescalada. Al cambiarlo se recalculan las partidas pasadas en segundo plano.",
+  "Read from League's settings at the start of each game, so minimap clicks are measured on your real minimap. Type a value from 0 to 3 only if the detected one is wrong; empty means automatic. Changing it recalculates past games in the background.":
+    "Se lee de los ajustes de League al empezar cada partida, para medir los clics de minimapa sobre tu minimapa real. Escribe un valor de 0 a 3 solo si el detectado está mal; vacío es automático. Al cambiarlo se recalculan las partidas pasadas en segundo plano.",
+  "League's settings not found": "No se encontraron los ajustes de League",
+  "Detecting…": "Detectando…",
+  "Detected: {scale}, {side}": "Detectado: {scale}, {side}",
+  "right side": "a la derecha",
+  "left side": "a la izquierda",
 
   // ---------------------------------------------------------------- entrenamiento
   "Loading…": "Cargando…",

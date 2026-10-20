@@ -6,6 +6,8 @@
 //!   - la estela del ratón (`ultimate::mouse_coordinate_space`), que escalaba
 //!     contra el monitor primario aunque se jugara en el secundario;
 //!   - el almacenamiento, que no miraba el disco físico en ningún momento.
+//!   - los ajustes del juego (`ajustes_juego`), que necesitan saber en qué
+//!     carpeta está instalado el League que se está jugando.
 //!
 //! Todo lo de aquí devuelve `Option`: no saber la respuesta es un resultado
 //! válido y cada llamante tiene su propio plan B.
@@ -22,14 +24,20 @@ pub struct MonitorRect {
 #[cfg(target_os = "windows")]
 mod imp {
     use super::MonitorRect;
-    use std::path::Path;
-    use windows_sys::Win32::Foundation::{HWND, RECT};
+    use std::path::{Path, PathBuf};
+    use windows_sys::Win32::Foundation::{CloseHandle, HWND, RECT};
     use windows_sys::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
     };
     use windows_sys::Win32::Media::Audio::waveOutGetNumDevs;
     use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, GetClientRect};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+        PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        FindWindowW, GetClientRect, GetWindowThreadProcessId,
+    };
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -91,6 +99,38 @@ mod imp {
         }
     }
 
+    /// Ruta del ejecutable dueño de una ventana, buscada por título.
+    ///
+    /// Se pide sólo `PROCESS_QUERY_LIMITED_INFORMATION`, el permiso mínimo (el
+    /// que usa el Administrador de tareas para enseñar la ruta): un antitrampas
+    /// puede negar más, y aun así el llamante tiene a dónde caer.
+    pub fn window_process_path(title: &str) -> Option<PathBuf> {
+        let hwnd = find_window(title)?;
+        let mut pid: u32 = 0;
+        // SAFETY: hwnd válido y `pid` es nuestro.
+        unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+        if pid == 0 {
+            return None;
+        }
+        // SAFETY: sin punteros; el handle se cierra antes de salir.
+        let proceso = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        if proceso.is_null() {
+            return None;
+        }
+        let mut buf = vec![0u16; 1024];
+        let mut len = buf.len() as u32;
+        // SAFETY: `buf` tiene `len` u16 reservados y el handle está abierto.
+        let ok = unsafe {
+            QueryFullProcessImageNameW(proceso, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len)
+        };
+        // SAFETY: handle abierto arriba, se cierra una sola vez.
+        unsafe { CloseHandle(proceso) };
+        if ok == 0 || len == 0 {
+            return None;
+        }
+        Some(PathBuf::from(String::from_utf16_lossy(&buf[..len as usize])))
+    }
+
     /// (bytes libres para este usuario, capacidad total) del volumen de `path`.
     ///
     /// Se le pasa el directorio tal cual: `GetDiskFreeSpaceExW` acepta cualquier
@@ -143,8 +183,11 @@ mod imp {
 #[cfg(not(target_os = "windows"))]
 mod imp {
     use super::MonitorRect;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
+    pub fn window_process_path(_title: &str) -> Option<PathBuf> {
+        None
+    }
     pub fn window_client_size(_title: &str) -> Option<(u32, u32)> {
         None
     }
@@ -159,4 +202,6 @@ mod imp {
     }
 }
 
-pub use imp::{disk_space, has_playback_device, monitor_of_window, window_client_size};
+pub use imp::{
+    disk_space, has_playback_device, monitor_of_window, window_client_size, window_process_path,
+};

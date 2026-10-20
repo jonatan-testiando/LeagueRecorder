@@ -320,6 +320,7 @@
     language: "es",
     theme: new URLSearchParams(location.search).get("theme") || "dark",
     minimap_scale: 1,
+    minimap_scale_override: null,
     riot_platform: "auto",
     riot_platform_detected: "la1",
     riot_proxy_url: "",
@@ -399,6 +400,9 @@
     // es lo que permite ver el asistente cambiar de idioma y de región y que
     // los cambios sigan ahí al volver.
     set_app_config: ({ patch }) => { Object.assign(CONFIG, patch || {}); return null; },
+    get_minimap_detection: () => ({
+      hud: { minimap_scale: 3, flip_minimap: false, global_scale: 0, width: 2560, height: 1440, window_mode: 2, install_dir: "C:/Riot Games/League of Legends" },
+    }),
     get_video_settings: () => ({ ...VIDEO }),
     set_video_settings: ({ fps, quality, resolution }) => {
       VIDEO.fps = fps;

@@ -1961,6 +1961,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             syncing={syncing}
             onSync={handleSync}
             seekTo={seekTo}
+            videoTime={currentTime}
             onOpenMap={openMap}
           />
         )}

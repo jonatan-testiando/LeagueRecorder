@@ -12,6 +12,7 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-close",
+    "core:window:allow-request-user-attention",
     "opener:default",
     "opener:allow-reveal-item-in-dir",
     "dialog:default"

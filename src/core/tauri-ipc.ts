@@ -91,6 +91,21 @@ export interface RecorderAlert {
   detail?: string;
 }
 
+/**
+ * La partida que acaba de terminar. Llega por el evento `post_game`: una vez al
+ * guardarla (`analyzing`) y otra al acabar la sincronización con Riot, que es
+ * también su análisis (`ready`, con `status`).
+ */
+export interface PostGameEvent {
+  match_id: string;
+  stage: "analyzing" | "ready";
+  status?: "ok" | "error";
+  /** Clave estable del fallo, para traducirlo aquí. */
+  reason?: "no_key" | "no_tag" | "not_published" | "not_found" | "failed";
+  /** Motivo técnico, de respaldo para `failed`. */
+  detail?: string;
+}
+
 export interface ErrorEvent {
   id: string;
   time: number;

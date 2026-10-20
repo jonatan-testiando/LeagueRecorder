@@ -32,6 +32,10 @@ import { useT } from "../../core/LanguageProvider";
  * «Post-partida»: además del icono de tono, un aviso puede llevar su propia
  * imagen (`media`: el retrato del campeón en «Partida guardada»), un cuerpo
  * con marcado (el resultado en su color) y una segunda acción ("Más tarde").
+ *
+ * Flujo de fin de partida: un aviso puede ser de progreso (`progress`, una
+ * barra que recorre en lugar de la cuenta atrás) y cambiar en su sitio con
+ * `update` cuando el trabajo acaba, en vez de apilar un segundo aviso.
  */
 
 export type ToastTone = "info" | "success" | "warning" | "danger";
@@ -62,17 +66,26 @@ export interface ToastOptions {
   /** Milisegundos hasta que se va solo. 0 = se queda. Por defecto: 6 s, salvo
    *  en `danger`, que se queda. */
   duration?: number;
+  /** Trabajo en curso sin cifra: una barra que recorre abajo, en vez de la
+   *  cuenta atrás. Va con `duration: 0` y luego se `update`a con el resultado. */
+  progress?: boolean;
 }
 
 interface Toast extends ToastOptions {
   id: string;
   /** Duración efectiva, para la línea de tiempo restante. */
   ms: number;
+  /** Sube con cada `update`: reinicia la cuenta atrás sin repetir la entrada. */
+  rev: number;
 }
 
 interface ToastContextValue {
   /** Muestra un aviso y devuelve su id, por si hay que cerrarlo a mano. */
   toast: (options: ToastOptions) => string;
+  /** Cambia un aviso en su sitio («Analizando…» → «Lista»). Si ya se cerró,
+   *  sale como uno nuevo: el resultado no se pierde porque se cerrara el
+   *  progreso. Devuelve el id con el que queda. */
+  update: (id: string, options: ToastOptions) => string;
   dismiss: (id: string) => void;
 }
 
@@ -80,6 +93,7 @@ const ToastContext = createContext<ToastContextValue>({
   // Fuera del provider no revienta: los avisos son accesorios, y un componente
   // que se monta suelto (una prueba, un panel aislado) no debe caerse por esto.
   toast: () => "",
+  update: () => "",
   dismiss: () => {},
 });
 
@@ -107,6 +121,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Los temporizadores viven en una ref y no en el estado: si se guardaran en el
   // estado, cada aviso nuevo repintaría y reiniciaría la cuenta de los demás.
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Los ids vivos, para que `update` sepa sin esperar al render si el aviso
+  // sigue ahí o hay que sacarlo de nuevo.
+  const live = useRef<Set<string>>(new Set());
   const t = useT();
 
   const dismiss = useCallback((id: string) => {
@@ -115,29 +132,51 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearTimeout(timer);
       timers.current.delete(id);
     }
+    live.current.delete(id);
     setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
+
+  const arm = useCallback(
+    (id: string, ms: number) => {
+      const old = timers.current.get(id);
+      if (old) clearTimeout(old);
+      timers.current.delete(id);
+      if (ms > 0) timers.current.set(id, setTimeout(() => dismiss(id), ms));
+    },
+    [dismiss]
+  );
 
   const toast = useCallback(
     (options: ToastOptions): string => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const tone = options.tone ?? "info";
       const ms = options.duration ?? (tone === "danger" ? 0 : DEFAULT_MS);
+      live.current.add(id);
       setToasts((prev) => {
         // Tope de cinco: una tanda de fallos encadenados llenaba la ventana
         // entera de avisos y tapaba la propia app.
-        const next = [...prev, { ...options, tone, id, ms }];
+        const next = [...prev, { ...options, tone, id, ms, rev: 0 }];
+        next.slice(0, -5).forEach((x) => live.current.delete(x.id));
         return next.slice(-5);
       });
-      if (ms > 0) {
-        timers.current.set(
-          id,
-          setTimeout(() => dismiss(id), ms)
-        );
-      }
+      arm(id, ms);
       return id;
     },
-    [dismiss]
+    [arm]
+  );
+
+  const update = useCallback(
+    (id: string, options: ToastOptions): string => {
+      if (!live.current.has(id)) return toast(options);
+      const tone = options.tone ?? "info";
+      const ms = options.duration ?? (tone === "danger" ? 0 : DEFAULT_MS);
+      setToasts((prev) =>
+        prev.map((x) => (x.id === id ? { ...options, tone, id, ms, rev: x.rev + 1 } : x))
+      );
+      arm(id, ms);
+      return id;
+    },
+    [arm, toast]
   );
 
   // Al desmontar, fuera los temporizadores pendientes.
@@ -149,7 +188,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
-  const value = useMemo(() => ({ toast, dismiss }), [toast, dismiss]);
+  const value = useMemo(() => ({ toast, update, dismiss }), [toast, update, dismiss]);
 
   return (
     <ToastContext.Provider value={value}>
@@ -218,11 +257,19 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     )}
                   </div>
                 </div>
+                {/* Trabajo en curso: la barra recorre, no finge un porcentaje. */}
+                {x.progress && (
+                  <div style={styles.timer} className="toast__progress" aria-hidden="true">
+                    <span />
+                  </div>
+                )}
                 {/* Lo que le queda al aviso. Solo en los que se van solos: los
-                    de peligro se quedan y no tienen cuenta que enseñar. */}
-                {x.ms > 0 && (
+                    de peligro se quedan y no tienen cuenta que enseñar. La
+                    clave con `rev` la reinicia cuando el aviso cambia. */}
+                {x.ms > 0 && !x.progress && (
                   <div style={styles.timer} aria-hidden="true">
                     <div
+                      key={x.rev}
                       className="toast__timer"
                       style={{
                         background: `color-mix(in srgb, ${TONE_COLOR[tone]} 70%, transparent)`,

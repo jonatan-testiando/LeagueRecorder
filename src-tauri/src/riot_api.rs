@@ -2182,6 +2182,16 @@ pub async fn backfill_participants(
 /// Prefijo del error de `sync_riot_data` cuando la partida aún no está en Riot.
 /// Quien sincroniza tras la partida lo usa para saber que reintentar tiene sentido.
 pub const SYNC_PENDIENTE: &str = "pending:";
+/// Error de `sync_riot_data` sin clave ni proxy con los que llamar a Riot.
+pub const SYNC_SIN_CLAVE: &str = "No Riot API Key configured";
+/// Prefijo del error de `sync_riot_data` cuando el Riot ID no trae etiqueta.
+pub const SYNC_SIN_ETIQUETA: &str = "no_tag:";
+
+/// ¿Hay clave o proxy con los que llamar a Riot? Lo mismo que mira
+/// `sync_riot_data` antes de hacer nada.
+pub fn hay_credencial() -> bool {
+    !sin_credencial(&crate::storage::load_config())
+}
 
 /// Id de Match-V5 exacto de una grabación, si el cliente de League dio su
 /// `gameId` y su plataforma: `("LA1_1746460303", "la1")`.
@@ -2189,6 +2199,11 @@ fn id_exacto(m: &crate::storage::MatchMetadata) -> Option<(String, String)> {
     let plataforma = platform_conocida(m.platform_id.as_deref()?)?;
     let game_id = m.game_id.filter(|g| *g > 0)?;
     Some((format!("{}_{}", plataforma.to_ascii_uppercase(), game_id), plataforma))
+}
+
+/// Si la grabación se puede pedir a Riot por su id exacto, sin emparejar.
+pub fn tiene_id_exacto(m: &crate::storage::MatchMetadata) -> bool {
+    id_exacto(m).is_some()
 }
 
 /// La partida candidata: id de Riot, tu participante, la partida y su JSON crudo.
@@ -2235,7 +2250,7 @@ pub async fn sync_riot_data(
 ) -> Result<crate::storage::MatchMetadata, String> {
     let config = crate::storage::load_config();
     if sin_credencial(&config) {
-        return Err("No Riot API Key configured".to_string());
+        return Err(SYNC_SIN_CLAVE.to_string());
     }
 
     let mut metadata = crate::storage::get_match_metadata(match_id)
@@ -2252,7 +2267,7 @@ pub async fn sync_riot_data(
     let game_name = parts[0];
     let Some(tag_line) = parts.get(1).map(|t| t.trim()).filter(|t| !t.is_empty()) else {
         return Err(format!(
-            "no_tag: el Riot ID «{active_player}» no trae etiqueta (#EUW, #LAN…)"
+            "{SYNC_SIN_ETIQUETA} el Riot ID «{active_player}» no trae etiqueta (#EUW, #LAN…)"
         ));
     };
 

@@ -1,0 +1,343 @@
+/* =========================================================================
+   Coach — el plan de 10 partidas, las categorías por coste, la nota por tramo
+   y los planes anteriores (Figma, página Coach).
+   Solo tokens del sistema (index.css): ningún color fijo, que hay tema claro.
+   Rejilla de 4: 12 dentro de una tarjeta, 20 de padding y 16 entre tarjetas.
+   ========================================================================= */
+
+.coach-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.coach-page {
+  container: coach / inline-size;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Color del texto: el tamaño lo ponen las clases .t-* del sistema. */
+.coach-strong { color: var(--text); }
+.coach-muted { color: var(--muted); }
+.coach-faint { color: var(--faint); }
+.coach-win { color: var(--cool); }
+.coach-loss { color: var(--loss); }
+.coach-brand { color: var(--brand-ink); }
+
+/* ---------------------------------------------------------------- cabecera */
+.coach-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.coach-h1 { margin: 0; color: var(--text); }
+.coach-sub { color: var(--faint); }
+.coach-head__how { margin-left: auto; align-self: center; }
+
+.coach-how {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.coach-how p { margin: 0; max-width: 80ch; color: var(--muted); }
+
+/* ----------------------------------------------------------------- tarjeta */
+.coach-card {
+  padding: var(--space-5);
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+.coach-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.coach-card__head h2 { margin: 0; }
+
+/* ------------------------------------------------------- el plan (héroe) */
+/* La superficie principal de la pantalla (.surface-hero, con la aureola): el
+   plan en curso, su cierre o el foco que se propone. A la derecha, las
+   acciones, con una sola en oro. */
+.coach-hero {
+  padding: var(--space-6);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--space-8);
+  align-items: center;
+}
+.coach-hero--quiet { grid-template-columns: minmax(0, 1fr); }
+.coach-hero__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.coach-hero__labels {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.coach-hero__main p { margin: 0; }
+.coach-title { margin: 0; color: var(--text); }
+.coach-why { margin: 0; max-width: 72ch; color: var(--muted); }
+
+/* Las diez casillas: una por partida que mide el foco, con las jugadas que
+   cargó. Limpia en jade, peor que tu antes en rojo, el resto neutra, y las que
+   faltan con el filo discontinuo. */
+.coach-boxes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  margin-top: var(--space-2);
+}
+.coach-boxes__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.coach-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  /* Sobre la lámina y no en --raised: el texto se queda a 10-11:1. */
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+  color: var(--text);
+}
+.coach-box--clean { box-shadow: inset 0 0 0 1px var(--cool); color: var(--cool); }
+.coach-box--worse { box-shadow: inset 0 0 0 1px var(--loss); color: var(--loss); }
+.coach-box--empty {
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed var(--hair-strong);
+  font-size: var(--fs-13);
+  font-weight: 400;
+  color: var(--faint);
+}
+.coach-boxes__legend { display: flex; flex-direction: column; flex: 1 1 120px; min-width: 0; }
+
+.coach-last {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+}
+.coach-last svg { flex: none; color: var(--faint); }
+
+/* Acciones: la de oro arriba y a todo el ancho de la columna. */
+.coach-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.coach-actions__btn { width: 100%; }
+.coach-actions__note { margin: var(--space-1) 0 0; }
+/* Sin fondo: el texto se alinea con la nota de encima. */
+.coach-actions__abandon { align-self: flex-start; margin-left: calc(var(--space-3) * -1); }
+.coach-error { margin: 0; color: var(--loss); }
+
+/* El siguiente foco, tras el cierre: recuadrado con el filo, sobre la misma
+   lámina (en --raised el texto pasaba de 11:1 en claro). */
+.coach-next {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+}
+.coach-next .coach-actions__btn:first-of-type { margin-top: var(--space-2); }
+
+/* -------------------------------------------------------------- el cierre */
+.coach-result {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-8);
+  margin-top: var(--space-2);
+}
+.coach-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6) var(--space-8);
+  margin: 0;
+}
+.coach-num { display: flex; flex-direction: column; gap: var(--space-1); }
+.coach-num dd { margin: 0; }
+.coach-num__v { color: var(--text); }
+.coach-num__unit { margin-left: 2px; font-size: var(--fs-20); }
+.coach-num--expected { color: var(--muted); }
+.coach-num--win { color: var(--cool); }
+.coach-num--loss { color: var(--loss); }
+
+/* El intervalo del cambio frente a lo esperado: el eje, la franja de «igual»
+   (± lo relevante), la banda del intervalo y la raya del cero. */
+.coach-ci {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+.coach-ci__axis { position: relative; height: 16px; }
+.coach-ci__axis > i { position: absolute; display: block; }
+.coach-ci__line { left: 0; right: 0; top: 7px; height: 2px; border-radius: 1px; background: var(--hair-strong); }
+.coach-ci__margin { top: 4px; height: 8px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text) 8%, transparent); }
+.coach-ci__band { top: 5px; height: 6px; border-radius: var(--radius-full); background: var(--muted); }
+.coach-ci__band--improved { background: var(--cool); }
+.coach-ci__band--worse { background: var(--loss); }
+.coach-ci__zero { top: 0; width: 2px; height: 16px; margin-left: -1px; border-radius: 1px; background: var(--text); }
+.coach-hero__main .coach-reading { margin-top: var(--space-3); max-width: 80ch; }
+
+/* ---------------------------------------------------------------- detalle */
+.coach-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 344px;
+  gap: var(--space-4);
+  align-items: start;
+}
+.coach-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+/* Dónde se te va la partida: nombre y baremo, barra con la raya del baremo,
+   lo que pierdes y cuánto por encima o por debajo de él. */
+.coach-cats { display: flex; flex-direction: column; gap: var(--space-3); }
+.coach-cats__list { margin: 0; padding: 0; list-style: none; }
+.coach-cat {
+  display: grid;
+  /* La barra crece con la tarjeta: a 1920, con 150 fijos, quedaba un hueco
+     entre el nombre y la barra. */
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.6fr) 64px 48px;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--hair);
+}
+.coach-cat__name { display: flex; flex-direction: column; min-width: 0; }
+.coach-cat__line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.coach-cat__bar {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+}
+.coach-cat__fill {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: var(--radius-full);
+  background: var(--cool);
+  transform-origin: left center;
+  transform: scaleX(var(--p));
+  transition: transform var(--t-base) var(--e-move);
+}
+.coach-cat__fill--over { background: var(--loss); }
+.coach-cat__base {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  display: block;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+.coach-cat__user { text-align: right; color: var(--text); white-space: nowrap; }
+.coach-cat__excess { text-align: right; white-space: nowrap; }
+
+/* Tu nota por tramo: una columna por tramo, la altura es el percentil. */
+.coach-tramos { display: flex; flex-direction: column; gap: var(--space-3); }
+.coach-tramos__bars {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+  height: 112px;
+}
+.coach-tramo {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: var(--space-1);
+  text-align: center;
+}
+.coach-tramo__bar {
+  display: block;
+  height: max(3px, calc(var(--p) * 64px));
+  border-radius: var(--radius-sm);
+  /* Mezcla con la tinta y no --raised: en claro --raised es MÁS claro que el
+     panel y la barra desaparecía. */
+  background: color-mix(in srgb, var(--text) 10%, var(--panel));
+}
+.coach-tramo--hot .coach-tramo__bar { background: var(--brand); }
+
+/* Planes anteriores. */
+.coach-hist { display: flex; flex-direction: column; gap: var(--space-3); }
+.coach-hist__list { display: flex; flex-direction: column; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.coach-hist__row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.coach-hist__text { display: flex; flex-direction: column; min-width: 0; }
+
+/* ----------------------------------------------------------------- estados */
+.coach-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-2) var(--space-5) var(--space-6);
+}
+.coach-few {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: min(400px, 100%);
+  text-align: center;
+}
+.coach-few__track {
+  width: min(320px, 100%);
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--hair-strong);
+}
+.coach-few__fill {
+  display: block;
+  height: 100%;
+  background: var(--cool);
+  transform-origin: left center;
+  transform: scaleX(var(--p));
+}
+
+.coach-skel { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* ------------------------------------------------------------- estrecho */
+/* Por el ancho del contenido y no de la ventana: con el rail desplegado, una
+   ventana de 1100 deja 880 para la pantalla. */
+@container coach (max-width: 900px) {
+  .coach-hero,
+  .coach-detail { grid-template-columns: minmax(0, 1fr); }
+  .coach-hero { gap: var(--space-5); }
+  /* Apiladas, las acciones no se estiran a todo el ancho de la tarjeta. */
+  .coach-actions { max-width: 400px; }
+  .coach-cat { grid-template-columns: minmax(0, 1fr) 96px 56px 44px; gap: var(--space-3); }
+}

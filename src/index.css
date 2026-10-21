@@ -120,13 +120,15 @@
   --loss-soft: color-mix(in srgb, var(--loss) 14%, transparent);
   --flag-soft: color-mix(in srgb, var(--flag) 16%, transparent);
   /* Tinta: el tinte cuando es TEXTO sobre su propio tono suave (chip,
-     contador, «+23 LP»). En oscuro es el tinte tal cual; en claro el tinte
-     sobre su suave se quedaba en 4,1-4,5 y se oscurece con un 15 % de --text
-     (medido: 4,5-4,9 aun sobre el fondo de la ventana). */
-  --brand-ink: var(--brand);
-  --cool-ink: var(--cool);
-  --loss-ink: var(--loss);
-  --flag-ink: var(--flag);
+     contador, «+23 LP»). El tinte tal cual sobre su suave se quedaba en
+     4,1-4,5 en claro y en 4,3-4,4 sobre --raised en oscuro; con un 15 % de
+     --text (que oscurece en claro y aclara en oscuro) pasa de 4,5 en todas
+     las superficies de los dos temas. Mismo valor en claro, en oscuro y en
+     el ámbito .stage-dark, porque --text cambia con cada uno. */
+  --brand-ink: color-mix(in srgb, var(--brand) 85%, var(--text));
+  --cool-ink: color-mix(in srgb, var(--cool) 85%, var(--text));
+  --loss-ink: color-mix(in srgb, var(--loss) 85%, var(--text));
+  --flag-ink: color-mix(in srgb, var(--flag) 85%, var(--text));
 
   /* Anillo de foco: jade, 2 px, visible en los dos temas (auditoría A5). */
   --focus: var(--cool);
@@ -366,10 +368,6 @@
   --cool-soft: color-mix(in srgb, var(--cool) 11%, transparent);
   --loss-soft: color-mix(in srgb, var(--loss) 10%, transparent);
   --flag-soft: color-mix(in srgb, var(--flag) 11%, transparent);
-  --brand-ink: color-mix(in srgb, var(--brand) 85%, var(--text));
-  --cool-ink: color-mix(in srgb, var(--cool) 85%, var(--text));
-  --loss-ink: color-mix(in srgb, var(--loss) 85%, var(--text));
-  --flag-ink: color-mix(in srgb, var(--flag) 85%, var(--text));
   --action: #C8AA6E;
   --action-hover: #D9BE85;
   --on-action: #0A1420;
@@ -420,10 +418,10 @@
   --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
   --loss-soft: color-mix(in srgb, var(--loss) 14%, transparent);
   --flag-soft: color-mix(in srgb, var(--flag) 16%, transparent);
-  --brand-ink: var(--brand);
-  --cool-ink: var(--cool);
-  --loss-ink: var(--loss);
-  --flag-ink: var(--flag);
+  --brand-ink: color-mix(in srgb, var(--brand) 85%, var(--text));
+  --cool-ink: color-mix(in srgb, var(--cool) 85%, var(--text));
+  --loss-ink: color-mix(in srgb, var(--loss) 85%, var(--text));
+  --flag-ink: color-mix(in srgb, var(--flag) 85%, var(--text));
   --focus: var(--cool);
   --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
   --apm-line: color-mix(in srgb, var(--muted) 34%, transparent);

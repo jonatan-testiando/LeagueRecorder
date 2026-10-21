@@ -69,10 +69,9 @@
   font-weight: 500;
 }
 .imc__tags { display: flex; flex-wrap: wrap; gap: 6px; }
-/* El chip de derrota va sobre --raised, no sobre el panel: en oscuro su tinta
-   se quedaba en 4,3:1. Un 20 % de --text la separa del fondo en los dos temas
-   (en oscuro la aclara y en claro la oscurece). */
-.imc__play .chip--loss { color: color-mix(in srgb, var(--loss-ink) 80%, var(--text)); font-variant-numeric: tabular-nums; }
+/* El chip de derrota va sobre --raised: su tinta ya pasa AA ahí en los dos
+   temas (--loss-ink de index.css). Aquí solo las cifras en columna. */
+.imc__play .chip--loss { font-variant-numeric: tabular-nums; }
 .imc__note { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
 
 .imc__foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }

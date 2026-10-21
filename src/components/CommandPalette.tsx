@@ -26,6 +26,7 @@ import { eventMeta, type Tone } from "../features/player/components/eventMeta";
 import { buildQueue } from "../features/player/components/ReviewQueue";
 import { ChampionAvatar } from "./ChampionAvatar";
 import type { MatchMetadata } from "../types";
+import { originOf, setNavOrigin, type NavOrigin } from "../core/navOrigin";
 
 /**
  * Paleta de comandos (Ctrl K / Cmd K).
@@ -149,7 +150,11 @@ const markOf = (tone: Tone): "bad" | "good" | "neutral" =>
 
 const SKIP_EVENTS = new Set(["GameStart", "GameEnd", "Ultimate"]);
 
-export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
+export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onClose: () => void }> = ({
+  open,
+  openedBy = "kbd",
+  onClose,
+}) => {
   const t = useT();
   const navigate = useNavigate();
   const { resolved, setTheme } = useTheme();
@@ -179,7 +184,18 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
     }
   }, [open]);
 
-  const close = useCallback(() => onClose(), [onClose]);
+  // Se va con un fundido de 100 ms (--t-quick-exit) y después se desmonta.
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef<number | undefined>(undefined);
+  const close = useCallback(() => {
+    setClosing(true);
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => {
+      setClosing(false);
+      onClose();
+    }, 100);
+  }, [onClose]);
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
 
   const openMatch = useCallback(
     (m: MatchMetadata, seek?: number) => {
@@ -445,12 +461,13 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
   }, [selected]);
 
   const run = useCallback(
-    (it: Item | null) => {
+    (it: Item | null, origin: NavOrigin) => {
       if (!it) return;
-      onClose();
+      setNavOrigin(origin);
       it.run();
+      close();
     },
-    [onClose]
+    [close]
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -465,7 +482,7 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
       if (flat.length) setSel((selIdx - 1 + flat.length) % flat.length);
     } else if (e.key === "Enter") {
       e.preventDefault();
-      run(selected);
+      run(selected, "kbd");
     } else if (e.key === "Tab") {
       // Tab salta al primer elemento del grupo siguiente (Mayús: anterior). Y
       // de paso atrapa el foco: nunca sale del diálogo.
@@ -492,7 +509,12 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
   const optId = (it: Item) => `cmdk-opt-${it.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
   return (
-    <div className="cmdk-veil" onMouseDown={close}>
+    <div
+      className="cmdk-veil"
+      data-open={openedBy}
+      data-closing={closing ? "" : undefined}
+      onMouseDown={close}
+    >
       <div
         className="cmdk"
         role="dialog"
@@ -559,7 +581,7 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
                       const i = flat.indexOf(it);
                       if (i !== selIdx) setSel(i);
                     }}
-                    onClick={() => run(it)}
+                    onClick={(e) => run(it, originOf(e))}
                   >
                     {it.render(hl, on)}
                     {on && <kbd className="u-kbd cmdk__enter">Enter</kbd>}

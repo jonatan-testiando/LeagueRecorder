@@ -468,7 +468,7 @@ export const CapturePill: React.FC<{ info: CaptureInfo }> = ({ info }) => {
               aria-valuemax={100}
               aria-valuenow={capture.pct === null ? undefined : Math.round(capture.pct)}
             >
-              <span style={capture.pct === null ? undefined : { width: `${capture.pct}%` }} />
+              <span style={capture.pct === null ? undefined : ({ "--p": capture.pct / 100 } as React.CSSProperties)} />
             </span>
           </span>
         );

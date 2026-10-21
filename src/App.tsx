@@ -34,6 +34,7 @@ import {
 import { useAppStore, useErrorClips } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
 
 type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
 
@@ -109,12 +110,19 @@ export const App: React.FC = () => {
   // buscador de la barra de título. Durante el asistente de primer arranque no
   // hay nada que buscar.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Cómo se abrió: con el teclado no se anima el panel, solo el velo.
+  const [paletteBy, setPaletteBy] = useState<NavOrigin>("kbd");
+  const openPalette = (origin: NavOrigin) => {
+    setPaletteBy(origin);
+    setPaletteOpen(true);
+  };
   const onboardingPending = onboarding.done === false;
   React.useEffect(() => {
     if (onboardingPending) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        setPaletteBy("kbd");
         setPaletteOpen((o) => !o);
       }
     };
@@ -168,7 +176,8 @@ export const App: React.FC = () => {
   const matchesLoaded = useAppStore(state => state.matchesLoaded);
   const firstLoad = matchesLoading && !matchesLoaded;
 
-  const goTo = (path: string) => {
+  const goTo = (path: string, origin: NavOrigin = "ptr") => {
+    setNavOrigin(origin);
     navigate(path);
   };
 
@@ -205,10 +214,9 @@ export const App: React.FC = () => {
   // Envuelve un panel: oculto con display:none en vez de desmontarlo, y sin renderizar
   // su contenido hasta la primera visita.
   //
-  // La clave `panelSeq` se incrementa en cada cambio de panel para reiniciar la
-  // animación de entrada. Antes esto era un corte seco: la navegación, que es lo
-  // único que se hace todo el rato, era lo único sin transición, mientras cada
-  // tarjeta decorativa entraba con fundido.
+  // Al pasar a activo, `.panel-enter` funde el panel en 120 ms, solo opacidad
+  // (movimiento.md). Si la navegación vino del teclado (`<html data-nav="kbd">`)
+  // no se anima: quien navega con el teclado ya sabe adónde va.
   const panel = (path: Panel, content: React.ReactNode) => {
     const active = activePanel === path;
     return (
@@ -255,7 +263,7 @@ export const App: React.FC = () => {
   return (
     <>
       <Titlebar
-        onSearch={() => setPaletteOpen(true)}
+        onSearch={openPalette}
         status={<CaptureStatus isRecording={isRecording} />}
       />
       <div className="app-body" style={styles.appContainer}>
@@ -274,7 +282,7 @@ export const App: React.FC = () => {
                   <button
                     key={item.key}
                     type="button"
-                    onClick={() => goTo(item.path)}
+                    onClick={(e) => goTo(item.path, originOf(e))}
                     className={`nav-btn${activo ? " nav-btn--active" : ""}`}
                     aria-current={activo ? "page" : undefined}
                     aria-label={cuenta ? `${label} · ${t("{n} to review", { n: cuenta })}` : label}
@@ -325,7 +333,7 @@ export const App: React.FC = () => {
               <span>v{updProgress.version} · {updProgress.percent}%</span>
             </div>
             <div className="updpill__track">
-              <div className="updpill__fill" style={{ width: `${updProgress.percent}%` }} />
+              <div className="updpill__fill" style={{ "--p": updProgress.percent / 100 } as React.CSSProperties} />
             </div>
           </div>
         ) : appVersion ? (
@@ -431,7 +439,7 @@ export const App: React.FC = () => {
       </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette open={paletteOpen} openedBy={paletteBy} onClose={() => setPaletteOpen(false)} />
 
       {/* Fin de partida: aviso, atención en la barra de tareas y la partida
           abierta cuando Riot la tiene analizada. Fuera del asistente de primer

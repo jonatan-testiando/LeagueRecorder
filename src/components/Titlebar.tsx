@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, Copy, X, Search } from "lucide-react";
 import { BrandMark } from "./BrandMark";
 import { useT } from "../core/LanguageProvider";
+import { originOf, type NavOrigin } from "../core/navOrigin";
 
 /**
  * Barra de título personalizada (la ventana se lanza con decorations:false).
@@ -18,7 +19,8 @@ import { useT } from "../core/LanguageProvider";
  */
 export const Titlebar: React.FC<{
   /** Abre la paleta de comandos. Sin esto no hay buscador. */
-  onSearch?: () => void;
+  /** Abre la paleta. `origin` dice si fue con el ratón o con el teclado. */
+  onSearch?: (origin: NavOrigin) => void;
   /** Píldora de captura y espacio libre. */
   status?: React.ReactNode;
 }> = ({ onSearch, status }) => {
@@ -60,7 +62,7 @@ export const Titlebar: React.FC<{
             <button
               type="button"
               className="titlebar__search"
-              onClick={onSearch}
+              onClick={(e) => onSearch(originOf(e))}
               aria-haspopup="dialog"
               aria-keyshortcuts="Control+K"
             >

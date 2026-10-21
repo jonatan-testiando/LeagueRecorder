@@ -309,6 +309,7 @@
   --rise: 4px;            /* asentarse: tarjetas, primera visita */
   --rise-toast: 8px;
   --pop-scale: 0.97;      /* popover, menú, pulsar */
+  --pop-scale-panel: 0.98; /* un panel grande que aparece (Ctrl K abierto con clic) */
 
   /* Alias heredados: se borran cuando acabe la migración (fase 5). */
   --t-instant: var(--t-hover);
@@ -809,7 +810,7 @@ button.cap:not(:disabled):active { transform: none; }
   background: var(--faint);
 }
 .cap__dot--ready { background: var(--cool); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cool) 18%, transparent); }
-.cap__dot--rec { background: var(--signal); animation: rec-beat 2s ease-out infinite; }
+.cap__dot--rec { position: relative; background: var(--signal); }
 .cap__sep { width: 1px; height: 14px; flex-shrink: 0; background: var(--hair-strong); }
 .cap__hint { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--faint); }
 .cap__pct { color: var(--brand); font-variant-numeric: tabular-nums; }
@@ -827,7 +828,11 @@ button.cap:not(:disabled):active { transform: none; }
   height: 100%;
   border-radius: var(--radius-full);
   background: linear-gradient(90deg, var(--brand), var(--action-hover));
-  transition: width var(--t-base) var(--e-move);
+  /* El avance se pinta con scaleX (--p de 0 a 1): animar width recalcula la
+     maquetación en cada paso. */
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--t-base) var(--e-move);
 }
 /* Sin cifra del backend: la barra no finge un porcentaje, recorre. */
 .cap__bar--indet > span {
@@ -875,9 +880,18 @@ button.cap:not(:disabled):active { transform: none; }
   background: var(--rail);
   box-shadow: inset -1px 0 0 var(--glass-line-soft);
   overflow: hidden;
-  transition: width var(--t-base) var(--e-move);
+  /* Plegar: el recorte se cierra en 260 ms y el ancho salta al final, así el
+     vídeo de al lado se recoloca una vez y no en cada fotograma (animar width
+     era un reflujo por fotograma). Desplegar: el ancho salta al principio y el
+     recorte se abre. Cada estado lleva su transición. */
+  clip-path: inset(0 0 0 0);
+  transition: clip-path var(--t-slow) var(--e-move), width 0s;
 }
-.rail--collapsed { width: var(--rail-w-collapsed); }
+.rail--collapsed {
+  width: var(--rail-w-collapsed);
+  clip-path: inset(0 calc(100% - var(--rail-w-collapsed)) 0 0);
+  transition: clip-path var(--t-slow) var(--e-move), width 0s linear var(--t-slow);
+}
 .rail__nav {
   display: flex;
   flex-direction: column;
@@ -1123,14 +1137,16 @@ button.cap:not(:disabled):active { transform: none; }
     --rise: 0px;
     --rise-toast: 0px;
     --pop-scale: 1;
+    --pop-scale-panel: 1;
     --t-base: 150ms;
     --t-slow: 150ms;
   }
   /* Bucles parados: el punto de grabación queda fijo y el esqueleto quieto. */
-  .rec-dot,
   .rec-dot::after,
-  .cap__dot--rec,
+  .cap__dot--rec::after,
   .updpill__dot { animation: none; }
+  .rec-dot::after,
+  .cap__dot--rec::after { display: none; }
   .skeleton::after { display: none; }
   .skeleton { opacity: 0.7; }
   /* El latido de progreso conserva el pulso de opacidad, sin la escala. */
@@ -1868,29 +1884,42 @@ button.cap:not(:disabled):active { transform: none; }
 }
 
 /* =========================================================================
-   Transicion de panel: la navegacion es lo unico que se hace todo el rato y
-   era lo unico sin transicion, mientras cada tarjeta decorativa entraba con
-   fundido.
+   Transición de panel. Navegar es lo que más se hace: un fundido corto, solo
+   de opacidad (120 ms), y nada si la navegación vino del teclado (Ctrl K,
+   Intro sobre el rail), que ya sabe adónde va. Ver core/navOrigin.ts.
    ========================================================================= */
-.panel-enter { animation: panel-in var(--t-base) var(--e-out) both; }
-@keyframes panel-in {
-  from { opacity: 0; transform: translateY(calc(1.5 * var(--rise))); }
-  to { opacity: 1; transform: translateY(0); }
+.panel-enter { animation: panel-fade var(--t-nav) var(--e-out) backwards; }
+@keyframes panel-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
+:root[data-nav="kbd"] .panel-enter { animation: none; }
 
 /* Punto de grabacion. La app siempre encendida necesita que su estado mas
    importante se lea sin buscarlo. */
 .rec-dot {
+  position: relative;
+  display: inline-block;
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--signal);
-  animation: rec-beat 2s ease-out infinite;
 }
-@keyframes rec-beat {
-  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 50%, transparent); }
-  70%  { box-shadow: 0 0 0 7px color-mix(in srgb, var(--signal) 0%, transparent); }
-  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 0%, transparent); }
+/* El halo se expande con transform y se apaga con opacidad: animar
+   box-shadow repintaba el punto en cada fotograma, siempre, mientras graba. */
+.rec-dot::after,
+.cap__dot--rec::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--signal);
+  animation: rec-ring 2s var(--e-out) infinite;
+  pointer-events: none;
+}
+@keyframes rec-ring {
+  from { transform: scale(1); opacity: 0.5; }
+  to { transform: scale(2.4); opacity: 0; }
 }
 
 .metric { min-width: 84px; }
@@ -2084,11 +2113,14 @@ button.cap:not(:disabled):active { transform: none; }
   box-shadow: var(--shadow-3);
   padding: var(--space-2);
   z-index: 40;
+  transform-origin: bottom right;
   animation: pop-in var(--t-quick) var(--e-out) both;
 }
+/* Menú, popover, diálogo: nacen de su disparador (cada uno pone su
+   transform-origin) con opacidad y escala; nada se desliza. */
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(var(--rise)); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: scale(var(--pop-scale)); }
+  to { opacity: 1; transform: none; }
 }
 .tp-pop__row {
   display: flex;
@@ -2549,7 +2581,9 @@ button.cap:not(:disabled):active { transform: none; }
   height: 100%;
   background: var(--action);
   border-radius: var(--radius-full);
-  transition: width var(--t-base) var(--e-move);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--t-base) var(--e-move);
 }
 .upd-veil {
   position: fixed;
@@ -2770,7 +2804,16 @@ button.cap:not(:disabled):active { transform: none; }
   padding: 110px 16px 24px;
   background: var(--scrim);
   backdrop-filter: blur(2px);
-  animation: updv-in var(--t-quick) var(--e-out) both;
+  animation: updv-in var(--t-quick-exit) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+/* Se cierra con un fundido de 100 ms. Abierta con el teclado, solo se funde
+   el velo; con un clic, el panel además crece desde 0,98 (160 ms). */
+.cmdk-veil[data-closing] { opacity: 0; pointer-events: none; }
+.cmdk-veil[data-open="ptr"] .cmdk { animation: cmdk-in var(--t-quick) var(--e-out) backwards; }
+@keyframes cmdk-in {
+  from { opacity: 0; transform: scale(var(--pop-scale-panel)); }
+  to { opacity: 1; transform: none; }
 }
 .cmdk {
   width: 640px;
@@ -2782,7 +2825,7 @@ button.cap:not(:disabled):active { transform: none; }
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 3%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-3);
-  animation: pop-in var(--t-quick) var(--e-out) both;
+  transform-origin: top center;
 }
 .cmdk__field {
   height: 56px;

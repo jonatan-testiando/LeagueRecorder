@@ -2380,6 +2380,13 @@ const ES: Record<string, string> = {
   "Couldn't load the training settings: {msg}": "No se pudo cargar la configuración del entrenamiento: {msg}",
   "Grading…": "Corrigiendo…",
   "Analysed videos": "Vídeos analizados",
+  // Biblioteca (rediseño «Ritmo», 3b).
+  "No Riot": "Sin Riot",
+  "No data": "Sin datos",
+  "needs Riot": "falta Riot",
+  "CS/min": "CS/min",
+  "Play one: LeagueRecorder detects the client, records on its own and files the game here when it ends.":
+    "Juega una: LeagueRecorder detecta el cliente, graba sola y la archiva aquí al terminar.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

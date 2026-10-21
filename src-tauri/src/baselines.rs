@@ -16,8 +16,9 @@
 //! tres tramos. Tres y no diez porque cada celda del baremo es (tramo x rol):
 //! con diez harían falta 50 celdas con muestra suficiente.
 
-#[cfg(test)]
-/// Los cinco puestos, tal y como los nombra Riot en `teamPosition`.
+/// Los cinco puestos, tal y como los nombra Riot en `teamPosition`. Fuera de
+/// `#[cfg(test)]`: la selección de campeón (`champ_select::PUESTOS`) la usa en
+/// la app, y con el `cfg` los tests compilaban y la app no.
 pub const ROLES: [&str; 5] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
 /// Deciles de WPA por rol, medidos sobre el corpus con

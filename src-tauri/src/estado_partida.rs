@@ -62,7 +62,9 @@ pub enum Estado {
 }
 
 impl Estado {
-    /// La posición en las filas de `GANA_POR_ESTADO`.
+    /// La posición en las filas de `GANA_POR_ESTADO`. Solo la usa el ajuste
+    /// del corpus (tests), que genera esas filas.
+    #[cfg(test)]
     pub fn indice(self) -> usize {
         match self {
             Estado::Ahead => 0,
@@ -85,7 +87,8 @@ pub fn estado(rol: &str, oro_14: f64) -> Option<Estado> {
     })
 }
 
-/// El tramo de nota de un percentil (0-100).
+/// El tramo de nota de un percentil (0-100). Solo para el ajuste del corpus.
+#[cfg(test)]
 pub fn tramo_nota(pct: f64) -> usize {
     ((pct / 100.0 * TRAMOS_NOTA as f64).floor().max(0.0) as usize).min(TRAMOS_NOTA - 1)
 }

@@ -130,6 +130,10 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   // Solo lo que destruye algo se pinta de rojo. Todo lo demás usa el jade, que
   // es el tinte de interacción del sistema.
   const accent = options.destructive ? "var(--signal)" : "var(--cool)";
+  // El texto del botón va en tinta sobre el tono suave: el tinte tal cual sobre
+  // su propio 18 % se quedaba en 4,1:1 (el rojo, en oscuro).
+  const soft = options.destructive ? "var(--loss-soft)" : "var(--cool-soft)";
+  const ink = options.destructive ? "var(--loss-ink)" : "var(--cool-ink)";
 
   return (
     <DialogContext.Provider value={{ showConfirm, showAlert, showSuccess, showError }}>
@@ -173,9 +177,9 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
                 onClick={handleConfirm}
                 style={{
                   ...styles.confirmBtn,
-                  background: `color-mix(in srgb, ${accent} 18%, var(--surface-2))`,
+                  background: soft,
                   border: `1px solid color-mix(in srgb, ${accent} 45%, transparent)`,
-                  color: accent,
+                  color: ink,
                 }}
               >
                 {options.confirmText || t("OK")}

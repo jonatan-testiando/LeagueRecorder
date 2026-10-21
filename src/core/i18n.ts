@@ -2387,6 +2387,121 @@ const ES: Record<string, string> = {
   "CS/min": "CS/min",
   "Play one: LeagueRecorder detects the client, records on its own and files the game here when it ends.":
     "Juega una: LeagueRecorder detecta el cliente, graba sola y la archiva aquí al terminar.",
+  // Pantalla Coach (rediseño «Ritmo», fase 4).
+  "Coach": "Coach",
+  "How it's calculated": "Cómo se calcula",
+  "Every play that lowers your team's win chance with you involved goes into a category. Its cost is the win chance lost, per game.":
+    "Cada jugada en la que tu equipo pierde probabilidad de victoria y tú estás implicado entra en una categoría. Su coste es la victoria perdida, por partida.",
+  "The line on each bar is its baseline: players of your role and rank in a corpus of games, or your own average for what only the video sees (map looks, fog).":
+    "La raya de cada barra es su baremo: jugadores de tu rol y rango en un corpus de partidas, o tu propia media en lo que sólo ve el vídeo (miradas al mapa, niebla).",
+  "A plan lasts {n} games. At the end they're compared with what was expected without changing anything (a focus picked for being your worst comes down on its own), and it only says you improved if the 90% interval rules out chance.":
+    "Un plan dura {n} partidas. Al acabar se comparan con lo que se esperaba sin cambiar nada (un foco elegido por ser lo peor baja solo), y sólo dice que mejoraste si el intervalo al 90 % descarta la casualidad.",
+  "no baseline yet": "aún sin baremo",
+  "baseline: your own average (Riot's data can't see it)": "baremo: tu propia media (Riot no lo ve)",
+  "baseline: your role in {band}": "baremo: tu rol en {band}",
+  "baseline: your role in the rank of each game": "baremo: tu rol en el rango de cada partida",
+  "Abandon the plan?": "¿Abandonar el plan?",
+  "The {k} games you've played stay in your history as an abandoned plan. You can start another whenever you like.":
+    "Las {k} partidas que llevas se quedan en el historial como un plan abandonado. Puedes empezar otro cuando quieras.",
+  "Abandon": "Abandonar",
+  "Abandon the plan": "Abandonar el plan",
+  "Couldn't load the Coach": "No se pudo cargar el Coach",
+  "Your games are fine: the Coach couldn't read its data this time.":
+    "Tus partidas están bien: el Coach no pudo leer sus datos esta vez.",
+  "Couldn't work this out this time. It retries on the next game.":
+    "No se pudo calcular esta vez. Se reintenta con la próxima partida.",
+  "Couldn't read your plans. It retries on the next game.":
+    "No se pudieron leer tus planes. Se reintenta con la próxima partida.",
+  "None of these plays kept its video.": "Ninguna de estas jugadas conserva su vídeo.",
+  "Watch your worst plays": "Ver tus peores jugadas",
+  "Watch your worst play": "Ver tu peor jugada",
+  "Exercise: camera control": "Ejercicio: control de cámara",
+  "Exercise: map reading": "Ejercicio: lectura de mapa",
+  "Before the plan they cost you {before}% win chance per game.":
+    "Antes del plan te costaban un {before}% de victoria por partida.",
+  "Before the plan they cost you {before}% win chance per game; at your usual rate, {base}%.":
+    "Antes del plan te costaban un {before}% de victoria por partida; con tu tasa de siempre, un {base}%.",
+  "Before the plan they cost you {before}% win chance per game; in your rank, {base}%.":
+    "Antes del plan te costaban un {before}% de victoria por partida; en tu rango, un {base}%.",
+  "Without changing anything, {p}% is expected: a focus picked for being your worst comes down on its own.":
+    "Sin cambiar nada se espera un {p}%: un foco elegido por ser lo peor baja solo.",
+  "Last game: clean": "Última partida: limpia",
+  "Last game: 1 play, −{p}%": "Última partida: 1 jugada, −{p}%",
+  "Last game: {n} plays, −{p}%": "Última partida: {n} jugadas, −{p}%",
+  "plan average −{p}%": "media del plan −{p}%",
+  "expected −{p}%": "se esperaba −{p}%",
+  "1 didn't measure the focus": "1 no midió el foco",
+  "{n} didn't measure the focus": "{n} no midieron el foco",
+  "A game that ended before the stretch, or without the video the category needs, doesn't measure the focus.":
+    "Una partida que acabó antes del tramo, o sin el vídeo que pide la categoría, no mide el foco.",
+  "{n}-game plan · since {date}": "Plan de {n} partidas · desde el {date}",
+  "In progress": "En curso",
+  "Plays of your focus in each game of the plan": "Jugadas de tu foco en cada partida del plan",
+  "Game {i}: still to play": "Partida {i}: por jugar",
+  "{k} of {n} games": "{k} de {n} partidas",
+  "No games yet. Each game synced with Riot comes in by itself.":
+    "Aún ninguna partida. Cada partida sincronizada con Riot entra sola.",
+  "No reminders during the game: the plan lives here and in Today.":
+    "Sin avisos durante la partida: el plan se mira aquí y en Hoy.",
+  "Your focus · you abandoned the last plan on {date}": "Tu foco · abandonaste el último plan el {date}",
+  "A plan: play {n} games with this in mind. At the end, your last {k} games before it ({p}% per game) are compared with the {n} of the plan, with their margin of error.":
+    "Un plan: juega {n} partidas con esto en mente. Al acabar, tus últimas {k} de antes ({p}% por partida) se comparan con las {n} del plan, con su margen de error.",
+  "A plan: play {n} games with this in mind. At the end they're compared with your games before it, with their margin of error.":
+    "Un plan: juega {n} partidas con esto en mente. Al acabar se comparan con tus partidas de antes, con su margen de error.",
+  "Try this plan again": "Repetir este plan",
+  "Start the plan": "Empezar el plan",
+  "Improved": "Mejoró",
+  "Same": "Igual",
+  "Got worse": "Empeoró",
+  "Short sample": "Muestra corta",
+  "Abandoned": "Abandonado",
+  "Improved: even at the edge of the interval, your ten games cost you less than expected without changing anything.":
+    "Mejoró: aun en el extremo del intervalo, tus diez partidas te costaron menos de lo esperado sin cambiar nada.",
+  "Worse: even at the edge of the interval, your ten games cost you more than expected.":
+    "Empeoró: aun en el extremo del intervalo, tus diez partidas te costaron más de lo esperado.",
+  "Same: if there was a change it was small; the interval fits within ±{p} points per game.":
+    "Igual: si hubo cambio, fue pequeño; el intervalo cabe en ±{p} puntos por partida.",
+  "With ten games it can't be told apart: the change is between {a} and {b} points per game. It doesn't say you didn't improve; it says ten games aren't enough to know.":
+    "Con diez partidas no se distingue: el cambio está entre {a} y {b} puntos por partida. No dice que no mejoraras; dice que diez partidas no bastan para saberlo.",
+  "With so few games that measure the focus, it can't be told apart. It doesn't say you didn't improve; it says there isn't enough to know.":
+    "Con tan pocas partidas que midan el foco no se distingue. No dice que no mejoraras; dice que no hay bastante para saberlo.",
+  "Plan finished · {k} of {n} games · {from} – {to}": "Plan terminado · {k} de {n} partidas · {from} – {to}",
+  "Before": "Antes",
+  "per game · {n} earlier": "por partida · {n} previas",
+  "Expected without changing anything": "Sin cambiar nada se esperaba",
+  "it comes down on its own": "baja solo",
+  "Your ten": "Tus diez",
+  "per game · {n} of the plan": "por partida · {n} del plan",
+  "Change against what was expected ({p}% interval)": "Cambio frente a lo esperado (intervalo al {p} %)",
+  "{a} to {b} per game": "de {a} a {b} por partida",
+  "touches zero": "toca el cero",
+  "doesn't touch zero": "no toca el cero",
+  "Same focus, another try": "El mismo foco, otro intento",
+  "Next proposed focus": "Siguiente foco propuesto",
+  "−{p}% per game in your last {n} games": "−{p}% por partida en tus últimas {n}",
+  "Where the game slips away": "Dónde se te va la partida",
+  "win chance lost per game · line = baseline": "victoria perdida por partida · raya = baremo",
+  "No category has cost you anything yet.": "Ninguna categoría te ha costado nada todavía.",
+  "Your grade by stretch": "Tu nota por tramo",
+  "percentile in your rank": "percentil en tu rango",
+  "Earlier plans": "Planes anteriores",
+  "None yet. When you finish one, its before and after stay here.":
+    "Aún ninguno. Cuando termines uno, su antes y después se quedan aquí.",
+  "abandoned after {k} of {n} games": "abandonado con {k} de {n} partidas",
+  "from {a}% to {b}% per game": "de {a}% a {b}% por partida",
+  "and {n} more": "y {n} más",
+  "The Coach needs {n} analysed games": "El Coach necesita {n} partidas analizadas",
+  "You have {k}. With fewer, any focus would be noise. Meanwhile, Patterns shows what can already be seen, marked as a lead.":
+    "Llevas {k}. Con menos, cualquier foco sería ruido. Mientras tanto, Patrones te enseña lo que ya se ve, con la etiqueta «indicio».",
+  "Go to Patterns": "Ir a Patrones",
+  "{k} of {n} · up to 14 games the focus comes marked as a lead":
+    "{k} de {n} · hasta las 14 partidas, el foco sale marcado como «indicio»",
+  "focus plays": "jugadas del foco",
+  "Next focus": "Siguiente foco",
+  "{champion} · {date} · plays: {n} · −{p}% win chance":
+    "{champion} · {date} · jugadas: {n} · −{p}% de victoria",
+  // Hoy · enlace al Coach (rediseño «Ritmo»).
+  "See the plan": "Ver el plan",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

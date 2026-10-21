@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Zap, Brain, Keyboard, TrendingUp } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { DrillSession, TrainingConfig, getDrillSessions, getTrainingConfig } from "../api";
 import { ReflexDrill } from "./ReflexDrill";
 import { RecallDrill } from "./RecallDrill";
@@ -101,6 +102,13 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
 
 export const TrainingPanel: React.FC = () => {
   const [section, setSection] = useState<Section>("drills");
+  // `?section=drills|awareness|setup` abre esa sección: el Coach enlaza así a
+  // su ejercicio, como Ajustes con `?cat=`.
+  const location = useLocation();
+  useEffect(() => {
+    const pedida = new URLSearchParams(location.search).get("section");
+    if (pedida === "drills" || pedida === "awareness" || pedida === "setup") setSection(pedida);
+  }, [location.search]);
   const [config, setConfig] = useState<TrainingConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<DrillSession[]>([]);

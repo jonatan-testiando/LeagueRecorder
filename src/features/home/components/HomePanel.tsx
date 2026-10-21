@@ -982,6 +982,17 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                           {t("Start a {n}-game plan", { n: coachPlan.target })}
                         </Button>
                       )}
+                      {planActivo && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="home-focus__btn"
+                          icon={<ChevronRight size={16} />}
+                          onClick={() => navigate("/coach")}
+                        >
+                          {t("See the plan")}
+                        </Button>
+                      )}
                     </div>
                     {/* Un plan en curso sobre OTRO foco: se dice cuál y cuánto lleva. */}
                     {planActivo && !planAqui && (

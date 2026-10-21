@@ -14,6 +14,7 @@ import {
   Sun,
   Target,
   TriangleAlert,
+  GraduationCap,
 } from "lucide-react";
 import { useT } from "../core/LanguageProvider";
 import { useTheme } from "../core/ThemeProvider";
@@ -340,6 +341,7 @@ export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onC
       { path: "/review", label: "Library", icon: <Library size={16} /> },
       { path: "/clips", label: "Clips", icon: <Film size={16} /> },
       { path: "/errors", label: "Errors", icon: <TriangleAlert size={16} /> },
+      { path: "/coach", label: "Coach", icon: <GraduationCap size={16} /> },
       { path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn size={16} /> },
       { path: "/training", label: "Training", icon: <Target size={16} /> },
       { path: "/vod", label: "Video analysis", icon: <ScanSearch size={16} /> },

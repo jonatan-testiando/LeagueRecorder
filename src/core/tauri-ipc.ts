@@ -478,6 +478,116 @@ export const getCoachSummary = async (): Promise<CoachSummary> => {
   return await invoke<CoachSummary>("get_coach_summary");
 };
 
+/** Una partida del plan del coach (`coach_plan.rs`), o de su «antes». */
+export interface CoachPlanGame {
+  match_id: string;
+  date: string;
+  champion: string;
+  /** Lo que te costó el foco (0-1). null si esta partida no lo mide (acabó
+   *  antes del tramo, o falta el vídeo que pide la categoría): no cuenta. */
+  cost: number | null;
+  /** Jugadas que cargaron en el foco. */
+  plays: number;
+  /** Su baremo en esta partida (el del corpus o tu media). */
+  base: number | null;
+}
+
+export type CoachVerdict = "improved" | "same" | "worse" | "short_sample";
+
+/** Antes frente a después, al cerrar el plan. Todo en probabilidad de victoria
+ *  por partida. */
+export interface CoachPlanResult {
+  before: number;
+  after: number;
+  n_before: number;
+  n_after: number;
+  /** Después − antes, tal cual: negativo es que ahora te cuesta menos. */
+  diff: number;
+  /** Lo que se esperaba después sin cambiar nada: el foco se eligió por ser lo
+   *  peor y baja solo (regresión a la media). */
+  expected: number;
+  /** Después − esperado: lo que se atribuye al plan. El veredicto sale de aquí. */
+  effect: number;
+  /** Intervalo de `effect` al `level`; null con menos de dos partidas en algún
+   *  lado. */
+  low: number | null;
+  high: number | null;
+  level: number;
+  /** «Igual» exige que el intervalo quepa en ± esto (la mitad de lo esperado). */
+  relevant: number;
+  verdict: CoachVerdict;
+}
+
+export interface CoachPlan {
+  id: string;
+  category: CoachCategory;
+  tramo: number;
+  status: "active" | "closed" | "abandoned";
+  /** Mismo formato que `MatchMetadata.date`. */
+  started_at: string;
+  /** La última partida antes de empezar: la marca «empezaste aquí». */
+  start_match: string | null;
+  target: number;
+  /** Las de antes, de la más antigua a la más reciente. */
+  before: CoachPlanGame[];
+  before_cost: number;
+  before_base: number | null;
+  /** Errores típicos que se espera que baje solo (0 si el foco no era uno de
+   *  los candidatos del coach al empezar). */
+  regression: number;
+  /** Lo que se espera que cueste por partida sin cambiar nada. */
+  expected_cost: number;
+  /** Las del plan, en el orden en que llegaron; las de `cost: null` no cuentan. */
+  games: CoachPlanGame[];
+  /** Coste medio de las que cuentan, mientras dura. */
+  after_cost: number | null;
+  ended_at: string | null;
+  result: CoachPlanResult | null;
+}
+
+/** El foco que se propone empezar: el de ahora, o el siguiente si el último
+ *  plan ya lo mejoró. */
+export interface CoachPlanProposal {
+  row: CoachRow;
+  /** Partidas que serían el antes, y su coste medio. */
+  before_games: number;
+  before_cost: number;
+  /** Es el foco del último plan. */
+  repeat: boolean;
+}
+
+export interface CoachPlanState {
+  /** "few_games": nunca hubo plan y no hay `min_before` partidas para uno. */
+  state: "active" | "closed" | "abandoned" | "few_games" | "no_plan";
+  active: CoachPlan | null;
+  /** Los acabados (cerrados o abandonados), el último primero. */
+  history: CoachPlan[];
+  target: number;
+  min_before: number;
+  /** Tus partidas que cuentan para el coach. */
+  games: number;
+  /** Sólo sin plan en curso. */
+  proposal: CoachPlanProposal | null;
+}
+
+/** Las claves de error de los comandos del plan. */
+export type CoachPlanError = "active_plan" | "no_active_plan" | "few_games" | "no_focus" | "bad_focus" | "newer_schema";
+
+// El plan en curso, los acabados y, sin plan, el foco que se propone. Al
+// pedirlo mete en el plan las partidas sincronizadas que falten.
+export const getCoachPlan = async (): Promise<CoachPlanState> => {
+  return await invoke<CoachPlanState>("get_coach_plan");
+};
+
+// Empieza un plan de diez partidas. Sin foco, el foco actual del coach.
+export const startCoachPlan = async (category?: CoachCategory, tramo?: number): Promise<CoachPlanState> => {
+  return await invoke<CoachPlanState>("start_coach_plan", { category: category ?? null, tramo: tramo ?? null });
+};
+
+export const abandonCoachPlan = async (): Promise<CoachPlanState> => {
+  return await invoke<CoachPlanState>("abandon_coach_plan");
+};
+
 // Reparto de crédito de un jugador. `killing_blow_gold` es lo que ve un KDA (oro
 // de kills por rematar); `damage_credit_gold` es ese mismo oro repartido por el
 // daño que puso cada uno, y `credit_gap` la diferencia entre ambos.

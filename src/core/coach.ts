@@ -1,4 +1,4 @@
-import type { CoachPlay, CoachRow, CoachSummary } from "./tauri-ipc";
+import type { CoachPlan, CoachPlay, CoachRow, CoachSummary } from "./tauri-ipc";
 
 /**
  * Lo que la UI necesita para contar el coach (`coach.rs`): nombres de las
@@ -133,3 +133,31 @@ export function coachPlaylist(row: CoachRow, t: Translate, lang: string): { matc
 /** Las filas de una categoría por tramo, en orden: las barras de la tarjeta. */
 export const rowsByTramo = (summary: CoachSummary, category: string): CoachRow[] =>
   summary.rows.filter((r) => r.category === category && r.tramo != null).sort((a, b) => (a.tramo ?? 0) - (b.tramo ?? 0));
+
+/* ------------------------------------------------------------ el plan */
+
+/** Partidas del plan que cuentan para las diez: las que miden el foco. */
+export const planCounted = (plan: CoachPlan): number => plan.games.filter((g) => g.cost != null).length;
+
+/** ¿Es este plan sobre esta fila (categoría × tramo)? */
+export const planIsRow = (plan: CoachPlan, row: CoachRow): boolean =>
+  plan.category === row.category && plan.tramo === row.tramo;
+
+/** "Muertes al jungla rival entre el minuto 7 y el 14", del foco de un plan. */
+export const planTitle = (plan: CoachPlan, t: Translate): string =>
+  `${categoryName(plan.category, t)} ${tramoText(plan.tramo, t)}`;
+
+const PLAN_ERRORS: Record<string, string> = {
+  active_plan: "There's already a plan in progress.",
+  no_active_plan: "There's no plan in progress.",
+  few_games: "A plan needs {n} earlier games that measure this focus.",
+  no_focus: "There's no focus to start a plan with yet.",
+  bad_focus: "That focus doesn't exist.",
+  newer_schema: "Your plans were saved by a newer version of the app. Update it to see them.",
+};
+
+/** El fallo de `startCoachPlan`/`abandonCoachPlan`, en una frase. */
+export function planErrorText(code: string, t: Translate, minBefore: number): string {
+  const key = PLAN_ERRORS[code];
+  return key ? t(key, { n: minBefore }) : t("Couldn't save the plan: {error}", { error: code });
+}

@@ -623,7 +623,24 @@ pub fn analizar(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
     })
 }
 
-fn cacheada(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
+/// Colas de la Grieta del Invocador contra jugadores. En ARAM, Arena o URF no
+/// hay jungla ni tramos de partida que comparar con un baremo sacado de
+/// clasificatorias: una muerte que no existe contaría como una partida limpia.
+const COLAS_DE_LA_GRIETA: [i32; 7] = [400, 420, 430, 440, 480, 490, 700];
+
+/// ¿Entra la partida en el coach? Sincronizada, grabada (no un VOD importado) y
+/// de la Grieta. Las antiguas sin cola guardada entran: son de antes de que se
+/// guardara, no de otro modo de juego.
+pub fn cuenta(meta: &crate::storage::MatchMetadata) -> bool {
+    !meta.is_vod && meta.riot_match_id.is_some() && meta.queue.is_none_or(|q| COLAS_DE_LA_GRIETA.contains(&q))
+}
+
+/// Las partidas del coach con su análisis, de la más reciente a la más antigua.
+pub fn tus_partidas() -> Vec<PartidaCoach> {
+    crate::storage::load_all_matches().iter().filter(|m| cuenta(m)).filter_map(cacheada).collect()
+}
+
+pub(crate) fn cacheada(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
     let cache = crate::storage::get_match_dir(&meta.id).join(FICHERO);
     let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
     if let Some(c) = mtime(&cache) {
@@ -781,6 +798,12 @@ fn aporte(p: &PartidaCoach, cat: &str, tramos: &[usize]) -> Option<(f64, Option<
     Some((user, base, n, si, cuenta))
 }
 
+/// Lo que te costó una categoría en un tramo de una partida: (pérdida, su
+/// baremo, jugadas que cargaron). `None` si en esa partida no se puede medir.
+pub fn coste(p: &PartidaCoach, cat: &str, tramo: usize) -> Option<(f64, Option<f64>, usize)> {
+    aporte(p, cat, &[tramo]).map(|(user, base, n, _, _)| (user, base, n))
+}
+
 fn fila(partidas: &[PartidaCoach], cat: &str, tramo: Option<usize>) -> Fila {
     let tramos: Vec<usize> = match tramo {
         Some(t) => vec![t],
@@ -842,12 +865,20 @@ fn fila(partidas: &[PartidaCoach], cat: &str, tramo: Option<usize>) -> Fila {
     }
 }
 
+/// Las filas que pueden ser foco (con tramo, con muestra y por encima de su
+/// baremo), de la que más pierdes por encima de él a la que menos.
+pub fn candidatos(rows: &[Fila]) -> Vec<&Fila> {
+    let mut c: Vec<&Fila> = rows
+        .iter()
+        .filter(|f| f.tramo.is_some() && f.games >= FOCO_MIN_PARTIDAS && f.excess.is_some_and(|e| e > 0.0))
+        .collect();
+    c.sort_by(|a, b| b.excess.unwrap_or(0.0).total_cmp(&a.excess.unwrap_or(0.0)));
+    c
+}
+
 /// El foco: la fila con más pérdida por encima de su baremo, con muestra.
 fn foco(rows: &[Fila]) -> Option<Fila> {
-    rows.iter()
-        .filter(|f| f.tramo.is_some() && f.games >= FOCO_MIN_PARTIDAS && f.excess.is_some_and(|e| e > 0.0))
-        .max_by(|a, b| a.excess.unwrap_or(0.0).total_cmp(&b.excess.unwrap_or(0.0)))
-        .cloned()
+    candidatos(rows).first().map(|f| (*f).clone())
 }
 
 pub fn resumen(partidas: &[PartidaCoach]) -> Resumen {
@@ -891,16 +922,7 @@ pub fn resumen(partidas: &[PartidaCoach]) -> Resumen {
 /// Las categorías, los tramos y el foco sobre todas tus partidas grabadas.
 #[tauri::command]
 pub async fn get_coach_summary() -> Resumen {
-    tokio::task::spawn_blocking(|| {
-        let partidas: Vec<PartidaCoach> = crate::storage::load_all_matches()
-            .iter()
-            .filter(|m| !m.is_vod && m.riot_match_id.is_some())
-            .filter_map(cacheada)
-            .collect();
-        resumen(&partidas)
-    })
-    .await
-    .unwrap_or_else(|_| resumen(&[]))
+    tokio::task::spawn_blocking(|| resumen(&tus_partidas())).await.unwrap_or_else(|_| resumen(&[]))
 }
 
 #[cfg(test)]

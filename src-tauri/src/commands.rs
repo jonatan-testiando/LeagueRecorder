@@ -1605,6 +1605,12 @@ async fn finalize_match(
                     Ok(_) => println!("Sincronización con Riot API completada para {match_id_for_riot}"),
                     Err(e) => eprintln!("Error al sincronizar con Riot API: {e}"),
                 }
+                // Al plan del coach antes de avisar: quien abra la partida ya
+                // ve el plan al día. Sólo se analiza esta partida.
+                if let Ok(m) = &r {
+                    let m = m.clone();
+                    let _ = tokio::task::spawn_blocking(move || crate::coach_plan::al_sincronizar(&m)).await;
+                }
                 emit_post_game(&app_for_riot, PostGame::listo(&match_id_for_riot, &r));
             });
 

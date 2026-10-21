@@ -56,7 +56,7 @@
   box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
   color: var(--text);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-13);
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
@@ -119,17 +119,17 @@
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--win);
+  color: var(--cool-ink);
   background: color-mix(in srgb, var(--win) 14%, transparent);
   padding: 1px 8px;
   border-radius: 999px;
 }
 .vp-top__lp[data-down] {
-  color: var(--loss);
+  color: var(--loss-ink);
   background: color-mix(in srgb, var(--loss) 14%, transparent);
 }
 .vp-top__meta {
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--faint);
   overflow: hidden;
@@ -187,7 +187,7 @@
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--fs-13);
   font-weight: 500;
   cursor: pointer;
   transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
@@ -283,11 +283,11 @@
   max-width: min(560px, 100%);
 }
 @keyframes vp-notice-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(var(--rise)); }
   to { opacity: 1; transform: none; }
 }
 .vp-notice__icon { flex: none; color: var(--flag); }
-.vp-notice__text { font-size: 13.5px; line-height: 1.4; }
+.vp-notice__text { font-size: var(--fs-13); line-height: 1.4; }
 .vp-notice__text b {
   font-weight: 500;
   color: color-mix(in srgb, var(--flag) 55%, var(--text));
@@ -510,7 +510,7 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--text);
 }
 .vp-tip__apm { color: var(--muted); }
@@ -518,7 +518,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
 }
 .vp-tip__ev span { color: var(--text); }
 
@@ -630,7 +630,7 @@
   background: transparent;
   color: var(--faint);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
@@ -785,7 +785,7 @@
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   white-space: nowrap;
   cursor: pointer;
   transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move),
@@ -805,7 +805,7 @@
 
 .vp-saveErr {
   margin: 0 16px 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--loss);
   flex: none;
 }
@@ -833,9 +833,9 @@
   gap: 10px;
   min-width: 0;
 }
-.vp-feat__time { font-size: 12.5px; color: var(--muted); }
+.vp-feat__time { font-size: var(--fs-12); color: var(--muted); }
 .vp-feat[data-finding] .vp-feat__time { color: color-mix(in srgb, var(--flag) 55%, var(--text)); }
-.vp-feat__kicker { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+.vp-feat__kicker { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
 .vp-feat__fill { flex: 1; }
 .vp-feat__name {
   margin: 0;
@@ -923,7 +923,7 @@
 .vp-ev__text {
   flex: 1;
   min-width: 0;
-  font-size: 13.5px;
+  font-size: var(--fs-13);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -979,7 +979,7 @@
   background: transparent;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: var(--fs-13);
 }
 .vp-notes__field input::placeholder { color: var(--faint); }
 .btn.vp-notes__save {
@@ -987,7 +987,7 @@
   flex: none;
   padding: 0 16px;
   border-radius: 10px;
-  font-size: 13.5px;
+  font-size: var(--fs-13);
 }
 .vp-notes__list {
   max-height: 104px;
@@ -1122,7 +1122,7 @@
   overflow: hidden;
 }
 .vp-sb__kda { font-size: 13px; text-align: right; }
-.vp-sb__num { font-size: 12.5px; color: var(--muted); text-align: right; }
+.vp-sb__num { font-size: var(--fs-12); color: var(--muted); text-align: right; }
 
 /* --- Impacto: crédito real -------------------------------------------------- */
 /* Las cabeceras ya no son mono de 10 px en mayúsculas: en sans de 12 px
@@ -1133,10 +1133,10 @@
 }
 .vp-insp .insp__legend { font-size: 12px; white-space: nowrap; }
 .vp-insp .insp__player { padding: 4px 6px; border-radius: 8px; }
-.vp-insp .insp__playerNum { font-size: 12.5px; }
+.vp-insp .insp__playerNum { font-size: var(--fs-12); }
 /* «asesinatos», «objetivos»…: las claves son minúsculas porque se usan
    también dentro de frases; como rótulo de fila van en tipo oración. */
-.vp-insp .imp__rowName { font-size: 12.5px; }
+.vp-insp .imp__rowName { font-size: var(--fs-12); }
 .vp-insp .imp__rowName::first-letter { text-transform: uppercase; }
 
 /* --- Partida: objetivos y compras ------------------------------------------ */

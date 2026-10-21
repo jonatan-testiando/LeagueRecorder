@@ -48,7 +48,7 @@
 .mt-sub .u-label { color: var(--muted); }
 
 /* La frase de una fila: lo que se vio en gris, el juicio con su tono. */
-.mt-line { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+.mt-line { font-size: var(--fs-13); line-height: 1.45; color: var(--muted); }
 .mt-bad { color: var(--loss); }
 .mt-good { color: var(--win); }
 .mt-soft { color: var(--faint); }
@@ -109,7 +109,7 @@ button.mt-fact:focus-visible { outline: 2px solid var(--cool); outline-offset: 1
   gap: 6px;
   padding: 4px 0;
   list-style: none;
-  font-size: 12.5px;
+  font-size: var(--fs-13);
   font-weight: 500;
   color: var(--faint);
   cursor: pointer;

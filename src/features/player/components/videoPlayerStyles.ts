@@ -122,7 +122,7 @@ export const styles: Record<string, React.CSSProperties> = {
   },
   clipTitle: {
     display: "block",
-    fontSize: "13.5px",
+    fontSize: "var(--fs-13)",
     fontWeight: 500,
     color: "var(--text)",
     whiteSpace: "nowrap",

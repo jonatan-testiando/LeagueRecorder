@@ -10,7 +10,7 @@
 .rv__side--them { justify-content: flex-end; text-align: right; }
 .rv__who { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
 .rv__who b {
-  font-size: 13.5px;
+  font-size: var(--fs-13);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -36,8 +36,8 @@
   border-bottom: 1px solid var(--line-soft);
 }
 .rv__row:last-child { border-bottom: 0; }
-.rv__label { font-size: 12.5px; color: var(--faint); text-align: center; white-space: nowrap; }
-.rv__v { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.rv__label { font-size: var(--fs-12); color: var(--faint); text-align: center; white-space: nowrap; }
+.rv__v { font-size: var(--fs-13); color: var(--muted); white-space: nowrap; }
 .rv__row > .rv__v:first-child { text-align: left; }
 .rv__row > .rv__v:last-child { text-align: right; }
 .rv__v--best { color: var(--text); font-weight: 600; }
@@ -51,7 +51,7 @@
   justify-content: space-between;
   gap: 8px;
   min-height: 18px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--faint);
 }
 .rv__curveFoot b { font-weight: 500; }

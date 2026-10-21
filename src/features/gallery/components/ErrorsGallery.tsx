@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertTriangle, FileWarning, Library, Play, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Library, RefreshCw, Trash2 } from "lucide-react";
 import { ErrorClipMetadata, deleteErrorClip } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
-import { Badge } from "../../../components/ui/Badge";
+import { Chip } from "../../../components/ui/Chip";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Segmented } from "../../../components/ui/Segmented";
@@ -13,12 +13,12 @@ import { useToast } from "../../../components/ui/Toaster";
 import { useT } from "../../../core/LanguageProvider";
 import { matchAge, mmss } from "../../../core/time";
 import { ERROR_CATEGORIES } from "../../player/components/ErrorPlayer";
-
-import { streamUrl } from "../../../core/media";
 import { useErrorClips, useMatches } from "../../../store/useAppStore";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { Skeleton } from "../../../components/ui/Skeleton";
+import { ClipPoster } from "./ClipPoster";
 import "./ClipsGallery.css";
+
 /**
  * Los errores marcados.
  *
@@ -71,8 +71,6 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   const { toast } = useToast();
   const [category, setCategory] = useState<string>("all");
   const [sort, setSort] = useState<Sort>("newest");
-  // Vídeos que el navegador no ha podido abrir (fichero movido o corrupto).
-  const [broken, setBroken] = useState<Set<string>>(() => new Set());
 
   // Al volver a la pestaña se relee: un error marcado desde el reproductor en
   // otra pantalla, o un fichero borrado por fuera, aparecen sin recargar.
@@ -161,8 +159,8 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
             <Skeleton width={180} height={28} />
-            <Skeleton shape="block" width={300} height={34} style={{ borderRadius: 999 }} />
-            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={132} />)}
+            <Skeleton shape="block" width={300} height={34} className="cg-skel__seg" />
+            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={168} />)}
           </div>
         )}
       </div>
@@ -190,7 +188,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
       {loadError && (
         <div className="cg-notice">
           <AlertTriangle size={15} color="var(--signal)" />
-          <span style={{ flex: 1, minWidth: 0 }}>
+          <span className="cg-notice__text">
             {t("Couldn't load your flagged errors: {msg}", { msg: loadError })}
           </span>
           <Button variant="ghost" size="sm" icon={<RefreshCw size={13} />} onClick={() => refresh()}>
@@ -255,47 +253,29 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
             const when = whenIso ? matchAge(whenIso, t) : null;
             const first = err.events && err.events.length > 0 ? err.events[0] : null;
             const lesson = first ? first.text : err.note;
-            const isBroken = broken.has(err.path);
             const extra = (err.events?.length ?? 0) - 1;
+            const at = err.start_time !== undefined && err.start_time !== null
+              ? t("at {t} in the game", { t: mmss(err.start_time) })
+              : null;
+            const open = () => onSelectError?.(err);
 
             return (
+              // El control de verdad es el play del póster (con foco y nombre);
+              // el clic en el resto de la fila es un atajo para el ratón. Antes
+              // la fila era un role=button con el botón de borrar DENTRO: un
+              // control dentro de otro, que el lector de pantalla no separa.
               <div
                 key={err.path}
-                className="cg-row cg-row--button"
+                className="cg-row cg-row--open"
                 {...(i === visible.length - 1 ? { "data-nodivider": true } : {})}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectError?.(err)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectError?.(err); }
-                }}
+                onClick={open}
               >
-                <div className="cg-thumb">
-                  {isBroken ? (
-                    // Sin esto, un clip cuyo fichero ya no está se veía como un
-                    // rectángulo negro: idéntico a uno que simplemente tarda.
-                    <div className="cg-thumb__broken">
-                      <FileWarning size={20} />
-                      <span>{t("Video file missing")}</span>
-                    </div>
-                  ) : (
-                    <>
-                      <video
-                        src={streamUrl(err.path)}
-                        preload="metadata"
-                        onError={() => setBroken((prev) => new Set(prev).add(err.path))}
-                      />
-                      <div className="cg-thumb__veil">
-                        <span className="cg-thumb__play">
-                          <Play size={14} fill="currentColor" />
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  {err.start_time !== undefined && err.start_time !== null && (
-                    <span className="cg-thumb__stamp u-time">{mmss(err.start_time)}</span>
-                  )}
-                </div>
+                <ClipPoster
+                  path={err.path}
+                  label={`${t("Play")}: ${lesson || t("Flagged error")}`}
+                  onOpen={open}
+                  openWhenMissing
+                />
 
                 <div className="cg-body">
                   <div className="cg-top">
@@ -307,42 +287,40 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                       ) : (
                         <p className="cg-title cg-title--empty">{t("No note yet — open it to write what you learned.")}</p>
                       )}
-                      {(match?.champion || when) && (
+                      {/* El minuto de la partida iba en una esquina de la
+                          miniatura; esa esquina es ahora la duración del clip,
+                          como en Clips, y el minuto se dice en la línea. */}
+                      {(match?.champion || when || at) && (
                         <span className="cg-meta">
                           {match?.champion && <ChampionAvatar champion={match.champion} size={20} />}
                           <span>
-                            {match?.champion && <b>{match.champion}</b>}
-                            {match?.champion && when && " · "}
-                            {when}
+                            {[match?.champion, when, at].filter(Boolean).join(" · ")}
                           </span>
                         </span>
                       )}
                     </div>
-                    {/* La fila entera es un botón que abre el clip, así que
-                        este de dentro tiene que parar la propagación: sin eso,
-                        cancelar el borrado te dejaba en el reproductor. */}
-                    <button
-                      type="button"
-                      className="btn btn--icon btn--sm"
+                    {/* Para la propagación: sin eso, cancelar el borrado te
+                        dejaba en el reproductor. */}
+                    <Button
+                      variant="icon"
+                      size="sm"
+                      icon={<Trash2 size={15} />}
                       title={t("Delete flagged error")}
                       aria-label={t("Delete flagged error")}
                       onClick={(e) => { e.stopPropagation(); handleDelete(err); }}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    />
                   </div>
 
                   <div className="cg-chips">
                     {/* La categoría se GUARDA en inglés (es el identificador que
                         conoce el backend) y se PINTA traducida. */}
-                    {first?.category && <Badge tone="loss" emphasis="solid">{t(first.category)}</Badge>}
+                    {first?.category && <Chip tone="loss">{t(first.category)}</Chip>}
                     {extra > 0 && (
-                      <Badge tone="neutral" emphasis="solid">
+                      <Chip tone="neutral">
                         {extra === 1 ? t("1 more note") : t("{n} more notes", { n: extra })}
-                      </Badge>
+                      </Chip>
                     )}
-                    {err.reviewed && <Badge tone="win" emphasis="solid">{t("Checked")}</Badge>}
+                    {err.reviewed && <Chip tone="win">{t("Checked")}</Chip>}
                   </div>
                 </div>
               </div>

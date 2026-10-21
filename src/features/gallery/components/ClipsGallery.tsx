@@ -12,19 +12,20 @@ import { deleteClip, getHotkeys, toggleClipFavorite, type UploadProgress } from 
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useToast } from "../../../components/ui/Toaster";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Badge } from "../../../components/ui/Badge";
+import { Chip } from "../../../components/ui/Chip";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Segmented } from "../../../components/ui/Segmented";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useT } from "../../../core/LanguageProvider";
-import { streamUrl } from "../../../core/media";
 import { matchAge } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { Skeleton } from "../../../components/ui/Skeleton";
 import { Select } from "../../../components/ui/Select";
+import { ClipPoster } from "./ClipPoster";
+import { ClipPlayer } from "./ClipPlayer";
 import "./ClipsGallery.css";
 
 /**
@@ -74,11 +75,11 @@ interface StoredLink {
 const LS_KEY = "clipLinks";
 
 /**
- * Alto estimado de una fila: miniatura 16:9 de 256 px (144) más el relleno.
+ * Alto estimado de una fila: póster 16:9 de 256 px (144) más el relleno.
  * La altura real la mide `measureElement`, porque la fila crece con la barra
  * de subida o el aviso de tamaño.
  */
-const ROW_ESTIMATE = 166;
+const ROW_ESTIMATE = 168;
 
 type Sort = "newest" | "oldest" | "largest" | "smallest";
 
@@ -130,8 +131,9 @@ const clipTime = (matchId: string): number => {
 };
 
 /**
- * Los clips, en filas como la Biblioteca: miniatura 16:9 que se reproduce ahí
- * mismo, titular a la derecha y chips debajo.
+ * Los clips, en filas como la Biblioteca: póster 16:9 con el primer
+ * fotograma, titular a la derecha y chips debajo. El play del póster abre el
+ * clip en el reproductor de la app (ClipPlayer), no en el del navegador.
  *
  * El oro es UNO por pantalla: lo lleva la acción de compartir del clip
  * seleccionado (el primero, o el último que tocaste). Las demás filas llevan
@@ -163,6 +165,18 @@ export const ClipsGallery: React.FC = () => {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   // La tecla del replay, para decirla en el estado vacío.
   const [replayKey, setReplayKey] = useState<string>("");
+  // Clip abierto en el reproductor. Por ruta y no por objeto: si se borra o
+  // cambia de favorito, se resuelve contra la lista fresca.
+  const [playingPath, setPlayingPath] = useState<string | null>(null);
+  // El clip desde cuyo póster se abrió: al volver, el foco regresa a ese
+  // póster y no al principio de la ventana. Se guarda la ruta y no el
+  // elemento: las filas son del virtualizador y pueden ser otras al volver
+  // (guardando el elemento, el foco se perdía).
+  const returnFocus = React.useRef<string | null>(null);
+  const openPlayer = (path: string) => {
+    returnFocus.current = path;
+    setPlayingPath(path);
+  };
 
   // La biblioteca, para poder decir de qué partida salió cada clip con algo que
   // se pueda leer (campeón y fecha) en vez del id de la carpeta.
@@ -244,6 +258,27 @@ export const ClipsGallery: React.FC = () => {
   useEffect(() => {
     rowVirtualizer.measure();
   }, [sort, onlyFavorites, rowVirtualizer]);
+
+  // Al cerrar el reproductor, el foco vuelve al póster del clip. Las filas se
+  // remontan cuando la lista recupera su ancho, así que se espera a que el
+  // póster exista (unos pocos fotogramas como mucho).
+  useEffect(() => {
+    if (playingPath !== null || returnFocus.current === null) return;
+    const path = returnFocus.current;
+    returnFocus.current = null;
+    const index = visible.findIndex((c) => c.path === path);
+    if (index < 0) return;
+    let tries = 0;
+    let id = 0;
+    const find = () => {
+      const el = scrollRef.current?.querySelector<HTMLElement>(`[data-index="${index}"] .cg-poster`);
+      if (el) el.focus();
+      else if (++tries < 10) id = requestAnimationFrame(find);
+    };
+    id = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playingPath]);
 
   // Persistir los enlaces cada vez que cambian para que sobrevivan a recargas.
   useEffect(() => {
@@ -393,8 +428,8 @@ export const ClipsGallery: React.FC = () => {
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
             <Skeleton width={180} height={28} />
-            <Skeleton shape="block" width={300} height={34} style={{ borderRadius: 999 }} />
-            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={132} />)}
+            <Skeleton shape="block" width={300} height={34} className="cg-skel__seg" />
+            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={168} />)}
           </div>
         )}
       </div>
@@ -413,13 +448,13 @@ export const ClipsGallery: React.FC = () => {
             title={t("No clips yet")}
             text={t("Your best plays will live here. Clip a moment from the player, or save the last 30 seconds while a game is recording.")}
             action={
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+              <div className="cg-empty__actions">
                 {/* La pantalla vacía lleva a donde se hacen los clips. */}
                 <Button variant="primary" size="md" icon={<PlaySquare size={15} />} onClick={() => navigate("/review")}>
                   {t("Go to the Library")}
                 </Button>
                 {replayKey && (
-                  <span className="u-meta" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span className="u-meta cg-empty__key">
                     {t("Save replay")}
                     <kbd className="u-kbd">{replayKey}</kbd>
                   </span>
@@ -432,8 +467,24 @@ export const ClipsGallery: React.FC = () => {
     );
   }
 
+  // El clip abierto, resuelto contra la lista: si ya no está, no hay reproductor.
+  const playing = playingPath ? clips.find((c) => c.path === playingPath) : undefined;
+  const playingMatch = playing ? matchById.get(playing.match_id) : undefined;
+
   return (
-    <div className="cg panel-enter">
+    <>
+      {playing && (
+        <ClipPlayer
+          clip={playing}
+          match={playingMatch}
+          onBack={() => setPlayingPath(null)}
+          onOpenMatch={playingMatch ? () => { setPlayingPath(null); openMatch(playingMatch); } : undefined}
+        />
+      )}
+
+    {/* La lista sigue montada con el reproductor abierto: así vuelve con su
+        scroll y su selección, y el virtualizador no se rehace de cero. */}
+    <div className="cg panel-enter" hidden={!!playing}>
       <div className="cg__head">
         <h1>{t("Clips")}</h1>
         <span className="cg__count">
@@ -484,12 +535,14 @@ export const ClipsGallery: React.FC = () => {
          items relativos a este div, así que si el elemento con scroll fuera el de
          fuera, la cabecera desplazaría todas las filas. */
       <div className="cg__list" ref={scrollRef}>
-      <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
+      <div className="cg__rows" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
           const clip = visible[virtualRow.index];
           if (!clip) return null;
           const stored = links[clip.path];
           const isUploading = uploading === clip.path;
+          // Una subida a la vez: el progreso y el cronómetro son de una sola.
+          const otherUploading = uploading !== null && !isUploading;
           const exp = expiry[clip.path] ?? "72h";
           const isPermanent = exp === "permanent";
           const kind = isPermanent ? "permanent" : "temporary";
@@ -500,21 +553,17 @@ export const ClipsGallery: React.FC = () => {
           // El filo de debajo se esconde junto a la seleccionada (arriba y abajo).
           const hideDivider =
             isSelected || virtualRow.index === selectedIndex - 1 || virtualRow.index === visible.length - 1;
+          const pct = uploadProg && uploadProg.total > 0 ? Math.min(1, uploadProg.sent / uploadProg.total) : 0;
 
           return (
             <div
               key={clip.path}
+              className="cg__slot"
               data-index={virtualRow.index}
               ref={rowVirtualizer.measureElement}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${virtualRow.start}px)`,
-              }}
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              {/* Tocar cualquier cosa de la fila (el vídeo, un botón, el
+              {/* Tocar cualquier cosa de la fila (el póster, un botón, el
                   selector) la selecciona: no hace falta un clic aparte. */}
               <div
                 className="cg-row"
@@ -523,9 +572,11 @@ export const ClipsGallery: React.FC = () => {
                 onPointerDown={() => setSelectedPath(clip.path)}
                 onFocusCapture={() => setSelectedPath(clip.path)}
               >
-                <div className="cg-thumb">
-                  <video src={streamUrl(clip.path)} controls preload="metadata" />
-                </div>
+                <ClipPoster
+                  path={clip.path}
+                  label={`${t("Play")}: ${clip.name}`}
+                  onOpen={() => openPlayer(clip.path)}
+                />
 
                 <div className="cg-body">
                   <div className="cg-top">
@@ -542,24 +593,26 @@ export const ClipsGallery: React.FC = () => {
                         </span>
                       </span>
                     </div>
-                    <button
-                      type="button"
+                    <Button
+                      variant="icon"
+                      size="sm"
                       className="cg-fav"
                       aria-pressed={clip.favorite}
+                      icon={<Heart size={16} fill={clip.favorite ? "currentColor" : "transparent"} />}
                       onClick={() => handleToggleFavorite(clip.path)}
                       title={clip.favorite ? t("Remove from favourites") : t("Add to favourites")}
                       aria-label={clip.favorite ? t("Remove from favourites") : t("Add to favourites")}
-                    >
-                      <Heart size={16} fill={clip.favorite ? "currentColor" : "transparent"} />
-                    </button>
+                    />
                   </div>
 
                   <div className="cg-chips">
-                    <Badge tone="neutral" emphasis="solid">{formatSize(clip.size)}</Badge>
+                    {/* Contorno y no neutro: el neutro es --raised, el mismo
+                        fondo que la fila seleccionada, y ahí desaparecía. */}
+                    <Chip tone="outline">{formatSize(clip.size)}</Chip>
                     {stored && (
-                      <Badge tone="win" emphasis="solid">
+                      <Chip tone="win">
                         {stored.expiry === "permanent" ? t("Permanent link") : formatRemaining(remaining)}
-                      </Badge>
+                      </Chip>
                     )}
                   </div>
 
@@ -595,22 +648,32 @@ export const ClipsGallery: React.FC = () => {
                     <div className="cg-actions__end">
                       {stored ? (
                         <>
-                          <div className="cg-link">
-                            <input
-                              readOnly
-                              value={stored.url}
-                              aria-label={t("Share link")}
-                              onFocus={(e) => e.target.select()}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => openUrl(stored.url)}
-                              title={t("Open in browser")}
-                              aria-label={t("Open in browser")}
-                            >
-                              <ExternalLink size={14} />
-                            </button>
-                          </div>
+                          {/* El enlace en un campo hundido y, al lado, sus
+                              atajos como botones de verdad (estaban metidos
+                              dentro del campo, a 24 px). */}
+                          <input
+                            className="cg-link"
+                            readOnly
+                            value={stored.url}
+                            aria-label={t("Share link")}
+                            onFocus={(e) => e.target.select()}
+                          />
+                          <Button
+                            variant="icon"
+                            size="sm"
+                            icon={<ExternalLink size={15} />}
+                            onClick={() => openUrl(stored.url)}
+                            title={t("Open in browser")}
+                            aria-label={t("Open in browser")}
+                          />
+                          <Button
+                            variant="icon"
+                            size="sm"
+                            icon={<RotateCcw size={15} />}
+                            onClick={() => clearLink(clip.path)}
+                            title={t("Generate a new link")}
+                            aria-label={t("Re-upload")}
+                          />
                           <Button
                             variant={isSelected ? "primary" : "ghost"}
                             size="sm"
@@ -619,14 +682,6 @@ export const ClipsGallery: React.FC = () => {
                           >
                             {t("Copy link")}
                           </Button>
-                          <Button
-                            variant="icon"
-                            size="sm"
-                            icon={<RotateCcw size={14} />}
-                            onClick={() => clearLink(clip.path)}
-                            title={t("Generate a new link")}
-                            aria-label={t("Re-upload")}
-                          />
                         </>
                       ) : (
                         <>
@@ -642,15 +697,13 @@ export const ClipsGallery: React.FC = () => {
                           <Button
                             variant={isSelected ? "primary" : "ghost"}
                             size="sm"
-                            disabled={isUploading || tooBig}
-                            icon={
-                              isUploading
-                                ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
-                                : <UploadCloud size={14} />
-                            }
+                            disabled={tooBig || otherUploading}
+                            loading={isUploading}
+                            loadingLabel={t("Uploading…")}
+                            icon={<UploadCloud size={14} />}
                             onClick={() => handleUpload(clip)}
                           >
-                            {isUploading ? t("Uploading…") : t("Upload & share")}
+                            {t("Upload & share")}
                           </Button>
                         </>
                       )}
@@ -665,16 +718,13 @@ export const ClipsGallery: React.FC = () => {
                     uploadProg && uploadProg.total > 0 ? (
                       <div className="cg-progress">
                         <span className="cg-progress__track">
-                          <span
-                            className="cg-progress__fill"
-                            style={{ width: `${Math.min(100, (100 * uploadProg.sent) / uploadProg.total)}%` }}
-                          />
+                          <span className="cg-progress__fill" style={{ transform: `scaleX(${pct})` }} />
                         </span>
                         <span>
                           {t("{pct}% · {sent} of {total} MB", {
-                            pct: Math.floor((100 * uploadProg.sent) / uploadProg.total),
-                            sent: (uploadProg.sent / 1024 / 1024).toFixed(1),
-                            total: (uploadProg.total / 1024 / 1024).toFixed(1),
+                            pct: Math.floor(pct * 100),
+                            sent: formatDecimal(uploadProg.sent / 1024 / 1024, 1),
+                            total: formatDecimal(uploadProg.total / 1024 / 1024, 1),
                           })}
                         </span>
                       </div>
@@ -703,5 +753,6 @@ export const ClipsGallery: React.FC = () => {
       </div>
       )}
     </div>
+    </>
   );
 };

@@ -1,9 +1,95 @@
-/* Pestaña Impacto (ImpactTab.tsx). Lo común (.insp, .sect__head, .imp__*,
-   .mm__*) vive en index.css; aquí sólo lo que nació con la pestaña rehecha. */
+/* Pestaña Impacto (ImpactTab.tsx) y «Lo que te costó» (MatchCost.tsx). Lo
+   común (.insp, .sect__head, .imp__*, .mm__*) vive en index.css; aquí sólo lo
+   que nació con la pestaña rehecha. */
 
-/* Tu impacto: el total junto al puesto, a la derecha. */
+/* ------------------------------------------- lo que te costó esta partida
+   Figma, Pantallas · Reproductor · Impacto (20:3572): título de tarjeta con el
+   total a la derecha y una tarjeta por jugada, en --raised sobre el panel. */
+.imc { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Mientras llega, el hueco de tres jugadas (Figma: 372 px con el botón): lo
+   de debajo no salta cuando aparece. */
+.imc--loading { min-height: 372px; }
+.imc__head { display: flex; align-items: baseline; gap: var(--space-3); }
+.imc__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: 500;
+  color: var(--text);
+}
+.imc__total {
+  flex: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: 500;
+  color: var(--loss);
+  font-variant-numeric: tabular-nums;
+}
+.imc__none { margin: 0; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+
+/* Una jugada. Toda la tarjeta lleva al momento: al vídeo si lo hay. */
+.imc__play {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 10px var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--t-hover) var(--e-color);
+}
+@media (hover: hover) and (pointer: fine) {
+  .imc__play:hover { box-shadow: inset 0 0 0 1px var(--hair-strong); }
+}
+.imc__play:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.imc__line { display: flex; align-items: center; gap: 10px; width: 100%; }
+.imc__time {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  color: var(--muted);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+}
+.imc__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+}
+.imc__tags { display: flex; flex-wrap: wrap; gap: 6px; }
+/* El chip de derrota va sobre --raised, no sobre el panel: en oscuro su tinta
+   se quedaba en 4,3:1. Un 20 % de --text la separa del fondo en los dos temas
+   (en oscuro la aclara y en claro la oscurece). */
+.imc__play .chip--loss { color: color-mix(in srgb, var(--loss-ink) 80%, var(--text)); font-variant-numeric: tabular-nums; }
+.imc__note { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+
+.imc__foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.imc__rest { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+
+/* ------------------------------------------- tu impacto */
+/* El total junto al puesto, a la derecha. */
 .imt__score { display: inline-flex; align-items: baseline; gap: 6px; margin-left: auto; white-space: nowrap; }
-.imt__wpa { font-size: 18px; font-weight: 500; line-height: 1; }
+.imt__wpa { font-size: var(--fs-20); font-weight: 500; line-height: 1; }
+
+/* El tono de una cifra o una barra: el signo es lo que significa algo. */
+.imp__rank[data-tone="win"], .imt__wpa[data-tone="win"], .imp__rowNum[data-tone="win"] { color: var(--win); }
+.imp__rank[data-tone="loss"], .imt__wpa[data-tone="loss"], .imp__rowNum[data-tone="loss"] { color: var(--loss); }
+.imp__rowNum[data-tone="muted"] { color: var(--muted); }
+.imp__bar[data-tone="win"] { background: var(--win); }
+.imp__bar[data-tone="loss"] { background: var(--loss); }
+.imp__bar[data-tone="cool"] { background: var(--cool); }
 
 /* La línea que explica la franja: una nota, no un aviso. */
 .imt__help { margin-top: 6px; }
@@ -13,17 +99,20 @@
 .imt__video {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 10px;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
   background: var(--sunken);
   box-shadow: inset 0 0 0 1px var(--hair);
 }
 .imt__video .note { margin-top: 0; }
-.imt__videoBtn { align-self: flex-start; margin-top: 6px; }
+.imt__videoBtn { align-self: flex-start; margin-top: var(--space-2); }
+.imt__stop { margin-left: auto; }
+.imt__err { color: var(--loss); }
 
 /* Dónde miraste: miradas por minuto, que nunca son negativas. El carril
    divergente de Tu impacto (cero en el centro) dejaba media pista vacía y una
    marca de cero que aquí no significa nada. */
 .imp__track.imt__plain::before { display: none; }
+.imp__track.imt__plain .imp__bar { left: 0; }

@@ -7,6 +7,7 @@ import { useT } from "../../../core/LanguageProvider";
 import { roleLabel } from "../../../core/roles";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { SkeletonLines } from "../../../components/ui/Skeleton";
+import "./MatchTab.css";
 // Las etiquetas, el formato y el orden por puesto viven en `benchmarkFormat`
 // porque Patrones enseña este mismo baremo (la media de varias partidas): con
 // una tabla en cada sitio la misma métrica acaba con dos nombres.
@@ -88,8 +89,8 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
 
   if (err !== null) {
     return (
-      <div style={styles.aviso}>
-        <span className="u-meta" style={{ flex: 1, minWidth: 0 }}>
+      <div className="bw-aviso">
+        <span className="u-meta bw-aviso__text">
           {t("Couldn't load the benchmarks: {msg}", { msg: err })}
         </span>
         <Button
@@ -105,7 +106,9 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
   }
 
   if (rows === null || esqueleto) {
-    return esqueleto ? <SkeletonLines lines={4} /> : null;
+    // El hueco de la versión corta desde el primer fotograma (P5): si no, al
+    // llegar empujaba lo de debajo.
+    return <div className={compact ? "bw bw--loading" : "bw"}>{esqueleto && <SkeletonLines lines={4} />}</div>;
   }
 
   if (rows.length === 0) {
@@ -139,38 +142,39 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
       : null;
 
   return (
-    <div>
-      {subtitulo && !(compact && resumen) && <p className="note" style={styles.sub}>{subtitulo}</p>}
-      {resumen && <p style={styles.resumen} title={compact ? subtitulo ?? undefined : undefined}>{resumen}</p>}
+    <div className="bw">
+      {subtitulo && !(compact && resumen) && <p className="note bw-sub">{subtitulo}</p>}
+      {resumen && <p className="bw-resumen" title={compact ? subtitulo ?? undefined : undefined}>{resumen}</p>}
 
-      <div style={styles.lista}>
+      <div className="bw-lista">
         {(limit && !todas ? ordenadas.filter((m) => METRIC_META[m.metric]).slice(0, limit) : ordenadas).map((m) => {
           if (!METRIC_META[m.metric]) return null;
           const p = effectivePercentile(m);
           const color = tono(p);
           return (
-            <div key={m.metric} style={styles.fila}>
-              <div style={styles.cabeza}>
-                <span style={styles.etiqueta}>{t(metricLabel(m.metric))}</span>
-                <span style={styles.valor}>{formatMetricValue(m.metric, m.value)}</span>
+            <div key={m.metric} className="bw-fila">
+              <div className="bw-cabeza">
+                <span className="bw-etiqueta">{t(metricLabel(m.metric))}</span>
+                <span className="bw-valor">{formatMetricValue(m.metric, m.value)}</span>
               </div>
-              <div style={styles.pie}>
+              <div className="bw-pie">
                 <div
-                  style={styles.pista}
+                  className="bw-pista"
                   title={
                     m.median != null
                       ? t("median {v}", { v: formatMetricValue(m.metric, m.median) })
                       : undefined
                   }
                 >
+                  {/* El ancho y el tono son el dato: van en línea. */}
                   {p != null && (
-                    <span style={{ ...styles.relleno, width: `${Math.max(1, Math.min(100, p))}%`, background: color }} />
+                    <span className="bw-relleno" style={{ width: `${Math.max(1, Math.min(100, p))}%`, background: color }} />
                   )}
                   {/* La mediana está SIEMPRE al 50 del eje de percentiles: la
                       marca no dice cuánto vale, dice dónde queda la mitad. */}
-                  {m.median != null && <span style={styles.marca} />}
+                  {m.median != null && <span className="bw-marca" />}
                 </div>
-                <span style={{ ...styles.percentil, color }}>
+                <span className="bw-percentil" style={{ color }}>
                   {p == null
                     ? "—"
                     : p >= 50
@@ -183,106 +187,12 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
         })}
       </div>
       {limit != null && ordenadas.filter((m) => METRIC_META[m.metric]).length > limit && (
-        <button type="button" className="btn btn--ghost btn--sm" style={styles.mas} onClick={() => setTodas((x) => !x)}>
+        <Button size="sm" className="bw-mas" onClick={() => setTodas((x) => !x)}>
           {todas
             ? t("Show fewer")
             : t("Show all {n} metrics", { n: ordenadas.filter((m) => METRIC_META[m.metric]).length })}
-        </button>
+        </Button>
       )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  sub: {
-    margin: "0 0 var(--space-2) 0",
-  },
-  resumen: {
-    margin: "0 0 var(--space-3) 0",
-    color: "var(--text)",
-    fontSize: 13,
-    lineHeight: 1.5,
-  },
-  lista: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-3)",
-  },
-  fila: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-  },
-  cabeza: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "var(--space-2)",
-  },
-  etiqueta: {
-    color: "var(--muted)",
-    fontSize: 13,
-    minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  valor: {
-    color: "var(--text)",
-    fontVariantNumeric: "tabular-nums",
-    fontSize: 13,
-    fontWeight: 500,
-    flexShrink: 0,
-  },
-  pie: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-  },
-  pista: {
-    position: "relative",
-    flex: 1,
-    height: 5,
-    minWidth: 40,
-    background: "var(--sunken)",
-    borderRadius: "var(--radius-full)",
-    boxShadow: "var(--inset-sunken)",
-    overflow: "hidden",
-  },
-  relleno: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: "var(--radius-full)",
-  },
-  marca: {
-    position: "absolute",
-    left: "50%",
-    top: 0,
-    bottom: 0,
-    width: 1,
-    // Un punto más clara que la pista: sobre `--line` la marca desaparecía y
-    // la barra parecía no tener referencia ninguna.
-    background: "var(--faint)",
-    opacity: 0.7,
-  },
-  percentil: {
-    fontVariantNumeric: "tabular-nums",
-    fontSize: 12,
-    fontWeight: 500,
-    flexShrink: 0,
-    // Ancho fijo para que las barras queden alineadas entre filas. 92 es lo que
-    // pide la cadena más larga en español ("31% más bajo") sin partirse.
-    width: 92,
-    whiteSpace: "nowrap",
-    textAlign: "right",
-  },
-  mas: { marginTop: "var(--space-2)" },
-  aviso: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "var(--space-2) 0",
-  },
 };

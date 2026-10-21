@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Chip } from "../../../components/ui/Chip";
 import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { getAim, type AimBucket, type AimReport } from "../../../core/tauri-ipc";
@@ -94,9 +95,9 @@ export const AimSection: React.FC<Props> = ({ matchId, videoOffset, onSeek }) =>
             <span className="ds-body">
               <span className="ds-who">{s.key}<span className="ds-soft"> · {aimLabel[s.aim]} · {t("{d}° off", { d: Math.abs(s.offset_deg).toFixed(0) })}</span></span>
               <span className="ds-tags">
-                {s.hit === true && <span className="ds-tag ws-tag--good">{t("hit")}</span>}
-                {s.hit === false && <span className="ds-tag ds-tag--bad">{t("missed")}</span>}
-                {s.hit == null && <span className="ds-tag">{t("lost sight of them")}</span>}
+                {s.hit === true && <Chip tone="win">{t("hit")}</Chip>}
+                {s.hit === false && <Chip tone="loss">{t("missed")}</Chip>}
+                {s.hit == null && <Chip tone="outline">{t("lost sight of them")}</Chip>}
               </span>
             </span>
           </button>

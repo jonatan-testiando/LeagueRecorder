@@ -1,10 +1,8 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
-  getMatchPlays,
   getMinuteSeries,
   type MatchObjective,
   type Play as MatchPlay,
-  type MatchPlays,
   type MinuteSeries,
   type MinuteSeriesPlayer,
 } from "../../../core/tauri-ipc";
@@ -14,6 +12,7 @@ import { clock } from "../../../core/time";
 import { ChampFace, IconBaron, IconDragon, IconHerald, IconTower } from "./eventMeta";
 import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
 import { Segmented } from "../../../components/ui/Segmented";
+import { useMatchPlays } from "../useMatchData";
 import "./LeadChart.css";
 
 /**
@@ -201,7 +200,9 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
   const t = useT();
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [data, setData] = useState<MinuteSeries | null | undefined>(undefined);
-  const [plays, setPlays] = useState<MatchPlays | null>(null);
+  // Las jugadas, compartidas con «Lo que te costó» (Impacto). undefined
+  // mientras llegan; null si fallaron (sin curva de WP; el resto no depende).
+  const plays = useMatchPlays(matchId);
   const [serie, setSerie] = useState<Serie>(recordado.serie);
   const [modo, setModo] = useState<Modo>(recordado.modo);
   const [hidden, setHidden] = useState<Set<number>>(() => new Set());
@@ -213,16 +214,10 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
   useEffect(() => {
     let vivo = true;
     setData(undefined);
-    setPlays(null);
     setHidden(new Set());
     getMinuteSeries(matchId)
       .then((d) => vivo && setData(d))
       .catch(() => vivo && setData(null));
-    // Sin jugadas (partida sin sincronizar o el comando falla) no hay curva de
-    // WP; el resto de la gráfica no depende de ella.
-    getMatchPlays(matchId)
-      .then((p) => vivo && setPlays(p))
-      .catch(() => vivo && setPlays(null));
     return () => {
       vivo = false;
     };
@@ -322,7 +317,9 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
     return v;
   };
 
-  if (data === undefined) return <div className="lc lc--loading" aria-busy="true" />;
+  // Se esperan también las jugadas: el panel de probabilidad llegaba después
+  // y empujaba lo de debajo (auditoría P5).
+  if (data === undefined || plays === undefined) return <div className="lc lc--loading" aria-busy="true" />;
   if (!ok) return <>{fallback ?? null}</>;
 
   // ------------------------------------------------- cursor y cabezal

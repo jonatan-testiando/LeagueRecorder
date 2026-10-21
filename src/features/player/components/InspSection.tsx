@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import "./MatchTab.css";
 
 /**
  * Sección plegable del inspector.
@@ -10,20 +11,26 @@ import { ChevronDown } from "lucide-react";
  * algo. Ahora cada uno es una sección de verdad, abierta, y quien quiera
  * cerrarla la cierra — y se queda cerrada, que es distinto de nacer cerrada.
  *
- * El estado se recuerda por `id` en localStorage, no por partida: es una
- * preferencia sobre la pantalla, no sobre esta partida concreta.
+ * Dos modos:
+ *  - Suelta: el estado se recuerda por `id` en localStorage, no por partida:
+ *    es una preferencia sobre la pantalla, no sobre esta partida concreta.
+ *  - Controlada (`open` + `onToggle`): la lleva quien la pinta. La pestaña
+ *    Partida la usa así para su acordeón, con solo el primer bloque abierto.
  */
 
 const KEY = (id: string) => `playerSection:${id}`;
 
 export interface InspSectionProps {
-  /** Identidad estable para recordar el plegado. */
+  /** Identidad estable para recordar el plegado (y ancla de la sección). */
   id: string;
   title: string;
   /** Contenido a la derecha del título (una cifra, un filtro). */
   aside?: React.ReactNode;
   /** Cómo nace la primera vez (luego manda lo que el usuario dejó). */
   defaultOpen?: boolean;
+  /** Modo controlado: abierta o no, y qué hacer al pulsar la cabecera. */
+  open?: boolean;
+  onToggle?: () => void;
   /**
    * Cada vez que cambia (y no es 0/undefined), la sección se abre y se pone a
    * la vista. Lo usa "Lo que decidió la partida": una frase que habla de un
@@ -35,9 +42,12 @@ export interface InspSectionProps {
   children: React.ReactNode;
 }
 
-export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defaultOpen = true, reveal, children }) => {
+export const InspSection: React.FC<InspSectionProps> = ({
+  id, title, aside, defaultOpen = true, open: openProp, onToggle, reveal, children,
+}) => {
   const ref = useRef<HTMLElement>(null);
-  const [open, setOpen] = useState<boolean>(() => {
+  const controlled = openProp !== undefined;
+  const [openLocal, setOpenLocal] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem(KEY(id));
       return v === null ? defaultOpen : v !== "0";
@@ -46,9 +56,14 @@ export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defa
       return defaultOpen;
     }
   });
+  const open = controlled ? openProp : openLocal;
 
   const toggle = useCallback(() => {
-    setOpen((prev) => {
+    if (controlled) {
+      onToggle?.();
+      return;
+    }
+    setOpenLocal((prev) => {
       const next = !prev;
       try {
         localStorage.setItem(KEY(id), next ? "1" : "0");
@@ -57,11 +72,11 @@ export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defa
       }
       return next;
     });
-  }, [id]);
+  }, [controlled, onToggle, id]);
 
   useEffect(() => {
     if (!reveal) return;
-    setOpen(true);
+    if (!controlled) setOpenLocal(true);
     // Se espera a pintarla abierta: desplazarse antes apunta a la sección
     // plegada, y lo que se abre encima de ella la empuja fuera de la vista.
     const raf = requestAnimationFrame(() => {
@@ -69,39 +84,22 @@ export const InspSection: React.FC<InspSectionProps> = ({ id, title, aside, defa
       ref.current?.scrollIntoView({ block: "start", behavior: quieto ? "auto" : "smooth" });
     });
     return () => cancelAnimationFrame(raf);
+    // `controlled` no cambia en la vida de una sección.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reveal]);
 
+  const bodyId = `${id}-body`;
   return (
-    <section ref={ref}>
+    <section ref={ref} id={id} className="isec" data-open={open || undefined}>
       <div className="sect__head">
-        <button type="button" onClick={toggle} aria-expanded={open} style={styles.toggle}>
-          <ChevronDown
-            size={13}
-            style={{
-              transform: open ? "none" : "rotate(-90deg)",
-              transition: "transform var(--t-quick) var(--e-move)",
-            }}
-          />
+        <button type="button" className="isec__toggle" onClick={toggle} aria-expanded={open} aria-controls={bodyId}>
+          <ChevronDown size={14} className="isec__chev" aria-hidden="true" />
           <span className="u-label">{title}</span>
         </button>
         <i className="sect__rule" />
         {aside}
       </div>
-      {open && children}
+      {open && <div id={bodyId}>{children}</div>}
     </section>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  toggle: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    padding: 0,
-    background: "none",
-    border: "none",
-    color: "var(--faint)",
-    cursor: "pointer",
-    font: "inherit",
-  },
 };

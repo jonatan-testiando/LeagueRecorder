@@ -10,6 +10,7 @@ mod camera_input;
 mod camera_snaps;
 mod coach;
 mod coach_baremos;
+mod coach_plan;
 mod commands;
 mod curvas;
 mod cv_analyzer;
@@ -364,6 +365,9 @@ pub fn run() {
             golpes::get_hits_taken,
             jugadas::get_match_plays,
             coach::get_coach_summary,
+            coach_plan::get_coach_plan,
+            coach_plan::start_coach_plan,
+            coach_plan::abandon_coach_plan,
             golpes::get_hits_taken_career,
             franja::get_episode_strip,
             curvas::get_minute_series,

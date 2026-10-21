@@ -2325,6 +2325,17 @@ const ES: Record<string, string> = {
   "Watch the play that cost you most": "Ver la jugada que más te costó",
   "Watch the {n} plays that cost you most": "Ver las {n} jugadas que más te costaron",
   "Working out your focus…": "Calculando tu foco…",
+  "Start a {n}-game plan": "Empezar un plan de {n} partidas",
+  "Plan in progress: {k} of {n} games": "Plan en curso: {k} de {n} partidas",
+  "Plan in progress ({focus}): {k} of {n} games": "Plan en curso ({focus}): {k} de {n} partidas",
+  "There's already a plan in progress.": "Ya hay un plan en curso.",
+  "There's no plan in progress.": "No hay ningún plan en curso.",
+  "A plan needs {n} earlier games that measure this focus.": "Un plan necesita {n} partidas anteriores que midan este foco.",
+  "There's no focus to start a plan with yet.": "Todavía no hay un foco con el que empezar un plan.",
+  "That focus doesn't exist.": "Ese foco no existe.",
+  "Your plans were saved by a newer version of the app. Update it to see them.":
+    "Tus planes los guardó una versión más nueva de la app. Actualízala para verlos.",
+  "Couldn't save the plan: {error}": "No se pudo guardar el plan: {error}",
   "Couldn't work out your focus this time. It retries on the next visit.": "No se pudo calcular tu foco esta vez. Se reintenta en la próxima visita.",
   "The focus needs {n} games synced with Riot; you have {k}. Until then nothing is solid enough to point at.":
     "El foco necesita {n} partidas sincronizadas con Riot; tienes {k}. Hasta entonces nada es lo bastante sólido para señalarlo.",

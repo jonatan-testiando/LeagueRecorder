@@ -13,6 +13,7 @@ import {
 import { mmss, relativeDay, matchAge } from "../../../core/time";
 import { confidenceOf, sampleLabel } from "../../../core/patterns";
 import { useCoachSummary } from "../../../core/useCoachSummary";
+import { useCoachPlan } from "../../../core/useCoachPlan";
 import {
   categoryHelp,
   coachPlaylist,
@@ -20,6 +21,10 @@ import {
   focusWhy,
   isOwnBaseline,
   liftText,
+  planCounted,
+  planErrorText,
+  planIsRow,
+  planTitle,
   rowsByTramo,
   tramoShort,
   tramoWindow,
@@ -37,7 +42,7 @@ import { PositionIcon } from "../../../components/PositionIcon";
 import { Button } from "../../../components/ui/Button";
 import { Chip } from "../../../components/ui/Chip";
 import { useAppStore, useErrorClips } from "../../../store/useAppStore";
-import { Check, ChevronRight, CircleDot, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
+import { Check, ChevronRight, CircleDot, Flag, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
 import "./HomePanel.css";
 import { usePressureSummary } from "../../player/usePressureSummary";
@@ -134,6 +139,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   // (sin partidas) y un hook detrás de él rompe el orden (error #310 de React).
   const rankNow = useCurrentRank();
   const coach = useCoachSummary();
+  const { plan: coachPlan, busy: planBusy, error: planError, start: startPlan } = useCoachPlan();
   const esqueleto = useDelayedLoading(loading);
   const [keyStatus, setKeyStatus] = useState<KeyStatus | null>(null);
   const [mant, setMant] = useState<MaintenanceProgress | null>(null);
@@ -836,6 +842,39 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                         ? t("Watch the play that cost you most")
                         : t("Watch the {n} plays that cost you most", { n: listaFoco.length })}
                     </button>
+                  )}
+                  {/* El plan de 10 partidas (§2.4): aquí sólo empezarlo y ver
+                      cuánto lleva. El cierre y el historial son de la pantalla
+                      Coach. */}
+                  {coachPlan?.active ? (
+                    <span className="home-focus__note">
+                      {planIsRow(coachPlan.active, focus)
+                        ? t("Plan in progress: {k} of {n} games", {
+                            k: planCounted(coachPlan.active),
+                            n: coachPlan.active.target,
+                          })
+                        : t("Plan in progress ({focus}): {k} of {n} games", {
+                            focus: planTitle(coachPlan.active, t),
+                            k: planCounted(coachPlan.active),
+                            n: coachPlan.active.target,
+                          })}
+                    </span>
+                  ) : (
+                    coachPlan &&
+                    coachPlan.state !== "few_games" && (
+                      <button
+                        type="button"
+                        className="home-sbtn"
+                        disabled={planBusy}
+                        onClick={() => startPlan(focus.category, focus.tramo ?? undefined)}
+                      >
+                        <Flag size={15} className="home-sbtn__icon" />
+                        {t("Start a {n}-game plan", { n: coachPlan.target })}
+                      </button>
+                    )
+                  )}
+                  {planError && (
+                    <span className="home-focus__note">{planErrorText(planError, t, coachPlan?.min_before ?? 10)}</span>
                   )}
                 </>
               ) : (

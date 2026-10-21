@@ -1847,6 +1847,9 @@ const ES: Record<string, string> = {
   // Recorrido y pestaña Partida rehecha (2026-10-07)
   "1 game was measured with the previous detector.": "1 partida se midió con el detector anterior.",
   "{n} games were measured with the previous detector.": "{n} partidas se midieron con el detector anterior.",
+  "1 game was measured with another minimap size.": "1 partida se midió con otro tamaño de minimapa.",
+  "{n} games were measured with another minimap size.": "{n} partidas se midieron con otro tamaño de minimapa.",
+  "The minimap wasn't where it was read from, so your trail and the pressure landed in the wrong place. About {min} min in total.": "El minimapa no estaba donde se leyó, así que tu estela y la presión cayeron en otro sitio. Unos {min} min en total.",
   "Measure it again": "Volver a medirla",
   "Measure them again": "Volver a medirlas",
   "The new one also reads the camera box, so it follows YOUR icon instead of a teammate's: wrong in ~40% of moments before, ~3% now. About {min} min in total.": "El nuevo también lee el recuadro de la cámara, así que sigue TU icono y no el de un compañero: antes fallaba en ~40 % de los momentos, ahora en ~3 %. Unos {min} min en total.",

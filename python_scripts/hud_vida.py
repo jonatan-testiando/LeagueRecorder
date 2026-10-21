@@ -17,12 +17,15 @@ Dos cosas, ocho veces por segundo:
 
 El HUD escala con el ALTO de la pantalla y va centrado abajo, así que las
 posiciones se dan en fracciones del alto respecto al centro (medidas en 1440p y
-comprobadas en 1080p). Con otra escala de HUD en el juego la barra no se
-encuentra y `hud_ok` sale bajo: quien lee el fichero lo trata como "no hay HUD
-legible" en vez de inventar golpes.
+comprobadas en 1080p, con `HUD.GlobalScale` = 0, el mínimo). Con otro
+GlobalScale el HUD entero crece desde ese ancla: la app pasa cuánto en
+`--escala-hud` (`hud::escala_hud`). Si aun así la barra no se encuentra,
+`hud_ok` sale bajo y quien lee el fichero lo trata como "no hay HUD legible"
+en vez de inventar golpes.
 
     python hud_vida.py --video <mp4> --salida <json> --ffmpeg <ffmpeg> --wh 2560x1440
                        [--iconos <dir> --rivales zed,akali,...] [--duracion s]
+                       [--escala-hud 1.0]
 
 Progreso por stderr (`PROGRESS:<0-100>`), como el resto de los analizadores.
 """
@@ -168,16 +171,22 @@ def main():
     ap.add_argument("--duracion", type=float, help="segundos de vídeo, para el progreso")
     ap.add_argument("--iconos", help="carpeta con una subcarpeta de iconos por campeón")
     ap.add_argument("--rivales", default="", help="campeones rivales, separados por comas")
+    ap.add_argument("--escala-hud", type=float, default=1.0,
+                    help="tamaño del HUD respecto a GlobalScale=0 (ver la cabecera)")
     a = ap.parse_args()
 
     VW, VH = [int(v) for v in a.wh.lower().split("x")[:2]]
     cx = VW / 2.0
+    # Todas las medidas del HUD crecen con él desde su ancla (centro, abajo).
+    # A 1.0, la de las partidas de siempre, cada posición sale idéntica.
+    esc = a.escala_hud if 0.5 <= a.escala_hud <= 2.0 else 1.0
+    ALTO_HUD = VH * esc
 
     def X(k):
-        return int(round(cx + k * VH))
+        return int(round(cx + k * ALTO_HUD))
 
     def Y(k):
-        return int(round(VH - k * VH))
+        return int(round(VH - k * ALTO_HUD))
 
     # ffmpeg redondea el recorte a pares: pedirlo ya par evita leer filas
     # desplazadas (pasó en la primera prueba y daba vidas inventadas).
@@ -191,7 +200,7 @@ def main():
     by0, by1 = Y(BARRA_Y[0]) - ry0, Y(BARRA_Y[1]) - ry0
     by1 = max(by1, by0 + 2)
     ey0, ey1 = Y(EFECTO_Y[0]) - ry0, Y(EFECTO_Y[1]) - ry0
-    lado, paso = EFECTO_LADO * VH, EFECTO_PASO * VH
+    lado, paso = EFECTO_LADO * ALTO_HUD, EFECTO_PASO * ALTO_HUD
     margen = max(2, int(lado * 0.09))
     huecos_x = []
     for k in range(HUECOS):
@@ -290,6 +299,10 @@ def main():
         "fps": FPS,
         "width": VW,
         "height": VH,
+        # Con qué tamaño de HUD se buscó la barra: la app vuelve a leer las
+        # partidas leídas con otro (`hud::al_dia`). Va antes que la serie para
+        # que salga en el primer KB del fichero.
+        "hud_scale": esc,
         # Fracción de fotogramas con barra verde. Muerto también da 0, pero
         # nadie pasa más de la mitad de la partida muerto: por debajo de 0,5
         # es que el HUD no está donde se le busca.

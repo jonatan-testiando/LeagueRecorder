@@ -243,7 +243,56 @@ def nms(cajas, iou_max=0.7):
     return [(float(cajas[i, 0]), float(cajas[i, 1])) for i in guardados]
 
 
-def equipo_de(mm, cx, cy, mi_equipo, radio=9):
+# `equipo_de` y `camara_de` se ajustaron con el minimapa a escala 3 (el de la
+# máquina de desarrollo), en vídeos de 1080p (recorte de 378 px de alto) y de
+# 1440p (504 px). En los dos dan lo mismo: 98-99 % de iconos con equipo y
+# 95-97 % de muestras con cámara en las 26 partidas. Un minimapa más pequeño
+# (MinimapScale por debajo de 3; el de por defecto es 1) tenía dos píxeles
+# fijos que dejaban de valer: el radio del aro y el umbral de blanco. Ahora
+# salen de `ESCALA`, y a escala 3 dan lo de siempre.
+#
+# Medido sin grabaciones a otra escala: reduciendo 600 recortes reales de 10
+# partidas al tamaño de cada escala y comparando con lo que da a escala 3.
+ALTO_AJUSTE = (378, 504)
+RADIO_ARO = 9
+# Lado del minimapa a escala 2 respecto a escala 3 (469 / 563 px en 1440p).
+ESCALA_2 = 0.833
+
+
+def escala_minimapa(mm):
+    """Lado del minimapa respecto al de escala 3, sacado del recorte.
+
+    El marco escala con el lado (`camera_input::minimapa_rect`), así que el
+    alto del recorte en fracción de pantalla es proporcional al lado. Con el
+    recorte fijo sale 1 exacto; se redondea para que el de una partida nueva a
+    escala 3, que difiere en el último bit, también.
+    """
+    return round((mm[3] - mm[2]) / (MM_FIJO[3] - MM_FIJO[2]), 6)
+
+
+ESCALA = escala_minimapa(MM)
+
+
+def radio_aro(alto, escala=None):
+    """Radio al que se muestrea el aro en un recorte de `alto` píxeles.
+
+    El aro mide un 1,7 % del alto del recorte (pico de color a 6-7 px en 378 y
+    a 8-9 en 504). Los 9 px de siempre crecen con el minimapa (`escala`). Con
+    9 px fijos en un minimapa a escala 1 el equipo no se perdía: se
+    EQUIVOCABA, porque a esa distancia del centro ya se muestrea el río o el
+    fondo. Medido: coincidía con el de escala 3 en el 86 % de los iconos, y
+    así en el 94 % (a escala 2, 92 % frente a 95 %).
+
+    Se acota a la proporción radio/alto que se ajustó (9 px en 378 y en 504):
+    en un vídeo de otra resolución, 4K por ejemplo, 9 px caerían dentro del
+    retrato. En 1080p y 1440p la cota no cambia nada.
+    """
+    e = ESCALA if escala is None else escala
+    return min(max(RADIO_ARO * e, RADIO_ARO * alto / ALTO_AJUSTE[1]),
+               RADIO_ARO * alto / ALTO_AJUSTE[0])
+
+
+def equipo_de(mm, cx, cy, mi_equipo, radio=None):
     """teamId (100/200) según el aro, o None si no está claro.
 
     En el minimapa el aro azul es SIEMPRE tu equipo y el rojo el rival, juegues
@@ -251,12 +300,16 @@ def equipo_de(mm, cx, cy, mi_equipo, radio=9):
     secas, y en lado rojo invertía aliados y rivales (ver `minimap_equipos.py`).
 
     Se muestrea el anillo y no el centro: el interior es el retrato del campeón
-    y su color no dice nada del bando.
+    y su color no dice nada del bando. El radio es `radio_aro` si no se da, y
+    las dos vueltas de fuera crecen con él.
     """
     hsv = cv2.cvtColor(mm, cv2.COLOR_BGR2HSV)
     alto, ancho = hsv.shape[:2]
+    if radio is None:
+        radio = radio_aro(alto)
+    paso = radio / RADIO_ARO  # 1 px a escala 3
     azul = rojo = 0
-    for r in (radio, radio + 1, radio + 2):
+    for r in (radio, radio + paso, radio + 2 * paso):
         for ang in range(0, 360, 12):
             x = int(cx + r * np.cos(np.radians(ang)))
             y = int(cy + r * np.sin(np.radians(ang)))
@@ -275,8 +328,25 @@ def equipo_de(mm, cx, cy, mi_equipo, radio=9):
     return mi_equipo if azul > rojo else rival
 
 
+def umbral_blanco(escala=None):
+    """Lo que cuenta como blanco del recuadro de la cámara: (V mínimo, S máximo).
 
-def camara_de(mm):
+    A escala 3, (190, 50) como siempre. El trazo es de 1-2 px y en un minimapa
+    más pequeño se mezcla con el fondo: se rompe en trozos que ya no pasan por
+    líneas largas. Medido a escala 1, la cámara salía en el 71 % (1080p) y el
+    82 % (1440p) de las muestras que la tienen a escala 3; con (165, 65), en
+    el 99 % de las dos. Por debajo de ahí entra basura: con (150, 80) uno de
+    cada tres recuadros es otra cosa. Entre escala 3 y 2 se interpola.
+
+    A escala 0 la simulación no sirve para decidir: con el mismo alto de
+    recorte sale el 99 % o el 40 % según cómo se reduzca la imagen.
+    """
+    e = ESCALA if escala is None else escala
+    t = min(1.0, max(0.0, (1.0 - e) / (1.0 - ESCALA_2)))
+    return 190 - 25 * t, 50 + 15 * t
+
+
+def camara_de(mm, escala=None):
     """El recuadro blanco de la cámara: (x0, y0, x1, y1) en píxeles del recorte.
 
     Es la pista más fuerte de cuál de los iconos aliados eres TÚ: con la
@@ -291,9 +361,13 @@ def camara_de(mm):
     junto al borde del mapa el recuadro sale cortado: se devuelve tal cual, y
     quien lo use reconstruye el centro con el tamaño típico de la partida.
     `None` si no se encuentra.
+
+    Las medidas van en fracciones del recorte, así que valen a cualquier
+    escala del minimapa; lo único fijo era el umbral de blanco (`umbral_blanco`).
     """
     hsv = cv2.cvtColor(mm, cv2.COLOR_BGR2HSV)
-    blanco = cv2.inRange(hsv, (0, 0, 190), (180, 50, 255))
+    vmin, smax = umbral_blanco(escala)
+    blanco = cv2.inRange(hsv, (0, 0, vmin), (180, smax, 255))
     alto, ancho = blanco.shape
     lh = cv2.morphologyEx(blanco, cv2.MORPH_OPEN,
                           cv2.getStructuringElement(cv2.MORPH_RECT, (max(10, ancho // 10), 1)))

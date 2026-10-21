@@ -895,6 +895,15 @@ fn metadata_en_carpeta(dir: &Path) -> Option<MatchMetadata> {
         .find_map(|p| leer(&p))
 }
 
+/// Una partida **sin la estela del ratón** (ver [`sin_estela`]) ni la
+/// realineación de [`load_match_by_id`]: para quien mira campos sueltos (la
+/// resolución, los ajustes del juego) de muchas partidas seguidas, como las
+/// comprobaciones de si un análisis está al día. NUNCA para guardarla: le falta
+/// la estela.
+pub fn metadata_ligera(id: &str) -> Option<MatchMetadata> {
+    sin_estela(|| metadata_en_carpeta(&get_match_dir(id)))
+}
+
 /// Todas las partidas de la biblioteca, **sin la estela del ratón** (ver
 /// [`sin_estela`]). Ningún camino que liste la biblioteca la necesita; el que
 /// la quiere pide una partida concreta con [`load_match_by_id`].

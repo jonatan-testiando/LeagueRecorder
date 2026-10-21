@@ -22,8 +22,10 @@ import { useT } from "../../../core/LanguageProvider";
 export const MeasureWithVideo: React.FC = () => {
   const t = useT();
   const [pending, setPending] = useState<number | null>(null);
-  /** Medidas con el detector anterior (sin el recuadro de la cámara). */
+  /** Medidas con el detector anterior (sin el recuadro de la cámara) o con otro recorte. */
   const [outdated, setOutdated] = useState(0);
+  /** De esas, las que sólo están mal por el recorte del minimapa. */
+  const [otherCrop, setOtherCrop] = useState(0);
   /** Con el minimapa al día pero sin el HUD leído (golpes que te comes). */
   const [hudPending, setHudPending] = useState(0);
   const [batch, setBatch] = useState<MinimapBatch | null>(null);
@@ -37,6 +39,7 @@ export const MeasureWithVideo: React.FC = () => {
           if (!vivo) return;
           setPending(s.pending);
           setOutdated(s.outdated ?? 0);
+          setOtherCrop(s.other_crop ?? 0);
           setHudPending(s.hud_pending ?? 0);
           setBatch(s.batch);
         })
@@ -82,22 +85,33 @@ export const MeasureWithVideo: React.FC = () => {
   }
 
   if (pending === 0 && outdated > 0) {
+    // Todas por el recorte: el detector es el actual y lo que cambió es dónde
+    // está el minimapa (ajustes del juego, o la escala forzada en Ajustes).
+    const porRecorte = otherCrop === outdated;
     return (
       <div className="mv">
         <div className="mv__row">
           <span>
-            {outdated === 1
-              ? t("1 game was measured with the previous detector.")
-              : t("{n} games were measured with the previous detector.", { n: outdated })}
+            {porRecorte
+              ? outdated === 1
+                ? t("1 game was measured with another minimap size.")
+                : t("{n} games were measured with another minimap size.", { n: outdated })
+              : outdated === 1
+                ? t("1 game was measured with the previous detector.")
+                : t("{n} games were measured with the previous detector.", { n: outdated })}
           </span>
           <button type="button" className="btn btn--ghost btn--sm" onClick={empezar}>
             {outdated === 1 ? t("Measure it again") : t("Measure them again")}
           </button>
         </div>
         <p className="mv__note">
-          {t("The new one also reads the camera box, so it follows YOUR icon instead of a teammate's: wrong in ~40% of moments before, ~3% now. About {min} min in total.", {
-            min: outdated * 4,
-          })}
+          {porRecorte
+            ? t("The minimap wasn't where it was read from, so your trail and the pressure landed in the wrong place. About {min} min in total.", {
+                min: outdated * 4,
+              })
+            : t("The new one also reads the camera box, so it follows YOUR icon instead of a teammate's: wrong in ~40% of moments before, ~3% now. About {min} min in total.", {
+                min: outdated * 4,
+              })}
         </p>
         {error && <p className="mv__note mv__note--err">{error}</p>}
       </div>

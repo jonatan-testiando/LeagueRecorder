@@ -1,4 +1,5 @@
 import type { CoachPlan, CoachPlay, CoachRow, CoachSummary } from "./tauri-ipc";
+import { champLabel } from "./matchEvents";
 
 /**
  * Lo que la UI necesita para contar el coach (`coach.rs`): nombres de las
@@ -119,7 +120,7 @@ export function coachPlayLabel(p: CoachPlay, t: Translate, lang: string): string
     });
     return `${what} · ${cost}`;
   }
-  const who = p.killer ? t("Killed by {champion}", { champion: p.killer }) : t("Death");
+  const who = p.killer ? t("Killed by {champion}", { champion: champLabel(p.killer) }) : t("Death");
   return `${who} · ${cost}`;
 }
 

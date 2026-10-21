@@ -329,12 +329,107 @@ export interface LcuStatus {
   /** `gameId` de la partida; solo desde que empieza hasta la post-partida. */
   game_id: number | null;
   queue_id: number | null;
+  /** Mapa de la cola: 11 la Grieta, 12 el Abismo. */
+  map_id: number | null;
   /** "LA1", "EUW1"… */
   platform_id: string | null;
 }
 
 export const getLcuStatus = async (): Promise<LcuStatus> => {
   return await invoke<LcuStatus>("get_lcu_status");
+};
+
+/* ------------------------------------------------- selección de campeón */
+
+/** Puesto de Match-V5: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY. */
+export type LanePosition = "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY";
+
+/** El orden de `ChampSelectEnemy.lanes`. */
+export const LANE_ORDER: LanePosition[] = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
+
+/** Tu historial contra un campeón (`champ_select::Contra`). */
+export interface ChampSelectRecord {
+  games: number;
+  wins: number;
+  /** WPA medio por partida (0-1), sobre `wpa_games` partidas. */
+  wpa: number | null;
+  wpa_games: number;
+  deaths: number;
+  /** Las que más te costaron en esas partidas, de mayor a menor. */
+  plays: CoachPlay[];
+}
+
+/** Un rival en la selección. Solo el campeón: nunca quién es. */
+export interface ChampSelectEnemy {
+  /** null mientras no fija. */
+  champion: string | null;
+  /** Probabilidad de cada puesto, en el orden de `LANE_ORDER`. */
+  lanes: number[];
+  /** El puesto que juega, si llega al 50 %. */
+  likely: LanePosition | null;
+  /** Contra él de rival de carril, en tu rol. */
+  as_rival: ChampSelectRecord | null;
+  /** Contra él en cualquier puesto del otro equipo, en tu rol. */
+  as_enemy: ChampSelectRecord | null;
+}
+
+export interface ChampSelectPoolRow {
+  champion: string;
+  games: number;
+  wins: number;
+  /** Victorias / partidas, tal cual. */
+  wr: number;
+  /** El WR de la tier: encogido hacia tu media con el peso de 50 partidas. */
+  adjusted: number;
+  /** "S+", "S", "A+", "A", "B", "C", "D" o "INT" (los cortes de iTero). */
+  tier: string;
+  wpa: number | null;
+  /** Menos de 15 partidas. */
+  short: boolean;
+}
+
+export interface ChampSelectView {
+  /** `timer.phase`: "PLANNING", "BAN_PICK", "FINALIZATION"… */
+  phase: string | null;
+  queue_id: number | null;
+  /** false en ARAM, Arena…: sin carriles de los que hablar. */
+  rift: boolean;
+  role: LanePosition | null;
+  /** "assigned" (lo dio el cliente), "chosen" (elegido aquí) o "usual" (el que más juegas). */
+  role_source: "assigned" | "chosen" | "usual" | null;
+  my_champion: string | null;
+  my_locked: boolean;
+  enemies: ChampSelectEnemy[];
+  /** Índice en `enemies` de tu rival de carril. */
+  rival: number | null;
+  rival_probability: number | null;
+  bans: string[];
+  pool: {
+    games: number;
+    /** Tu WR en el rol, encogido hacia el 50 %. */
+    mean: number;
+    rows: ChampSelectPoolRow[];
+    /** Campeones con menos de 3 partidas, que no se listan. */
+    hidden: number;
+  };
+  ban_ideas: { champion: string; games: number; losses: number }[];
+  /** Tus partidas que cuentan, en todos los roles. */
+  games: number;
+}
+
+/**
+ * La vista de la selección de campeón en curso (`champ_select.rs`), o null
+ * fuera de ella. `role` es el rol que el usuario haya puesto a mano. El evento
+ * `champ-select` (`{ active }`) avisa de cada cambio.
+ */
+export const getChampSelect = async (role?: LanePosition | null): Promise<ChampSelectView | null> => {
+  return await invoke<ChampSelectView | null>("get_champ_select", { role: role ?? null });
+};
+
+/** Pone la ventana delante sin quitarle el foco a nadie. "raised", "front"
+ *  (ya lo estaba), "covers" (taparía la ventana en uso) o "failed". */
+export const champSelectBringForward = async (): Promise<string> => {
+  return await invoke<string>("champ_select_bring_forward");
 };
 
 // Comprueba la clave de Riot ya guardada. Resuelve si sirve, y rechaza con el

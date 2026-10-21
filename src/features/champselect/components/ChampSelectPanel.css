@@ -1,0 +1,241 @@
+/* =========================================================================
+   Selección de campeón — tu rival y tu historial contra él, tu plan, la
+   sugerencia de baneo y tu pool para el rol.
+   Solo tokens del sistema (index.css): ningún color fijo, que hay tema claro.
+   Rejilla de 4, como el Coach: 20 de padding en las tarjetas y 16 entre ellas.
+   Cabe en una pantalla a 1280 × 720: se mira de reojo con el reloj corriendo.
+   ========================================================================= */
+
+.cs-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-page {
+  container: champsel / inline-size;
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.cs-page--empty { justify-content: center; min-height: 100%; }
+
+.cs-strong { color: var(--text); }
+.cs-muted { color: var(--muted); }
+.cs-faint { color: var(--faint); }
+.cs-win { color: var(--cool); }
+.cs-loss { color: var(--loss); }
+.cs-brand { color: var(--brand-ink); }
+
+/* Fuera de la vista, dentro del árbol de accesibilidad. */
+.cs-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- cabecera */
+.cs-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+.cs-h1 { margin: 0; color: var(--text); }
+.cs-role {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-left: auto;
+}
+
+/* ----------------------------------------------------------------- rejilla */
+.cs-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 344px;
+  gap: var(--space-4);
+  align-items: start;
+}
+.cs-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+.cs-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
+}
+.cs-card p,
+.cs-card h3 { margin: 0; }
+.cs-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.cs-iconed { display: inline-flex; align-items: center; gap: var(--space-2); }
+.cs-iconed svg { color: var(--faint); }
+.cs-quiet p { max-width: 72ch; }
+
+/* ------------------------------------------------------------- el rival */
+.cs-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+}
+/* Quién es tu rival a la izquierda y los cinco rivales a la derecha; en
+   estrecho, uno debajo del otro. */
+.cs-hero__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+}
+.cs-hero__top > :first-child { flex: 1 1 240px; min-width: 0; }
+.cs-rival { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.cs-rival p { margin: 0; max-width: 72ch; }
+.cs-rival__wait { display: flex; flex-direction: column; gap: var(--space-2); }
+.cs-rival__who { display: flex; align-items: center; gap: var(--space-4); }
+.cs-rival__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cs-rival__name h2 { margin: 0; }
+
+.cs-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-8);
+  margin: var(--space-1) 0 0;
+}
+.cs-num { display: flex; flex-direction: column; gap: var(--space-1); }
+.cs-num dd { margin: 0; }
+
+/* Las jugadas: icono, qué fue y cuándo, y su clip. Filetes entre filas. */
+.cs-plays { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-1); }
+.cs-plays__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 28px;
+}
+.cs-plays__list { margin: 0; padding: 0; list-style: none; }
+.cs-play {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--hair);
+}
+.cs-play__icon { color: var(--loss); }
+.cs-play__text { display: flex; flex-direction: column; min-width: 0; }
+.cs-play__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Los cinco rivales: el retrato (o el hueco del que aún no fijó) y el puesto
+   que se le supone. El tuyo, con el aro de oro; el que miras, recuadrado. */
+.cs-enemies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.cs-enemies__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.cs-enemy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  width: 56px;
+  padding: var(--space-2) 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--t-hover) var(--e-color),
+    box-shadow var(--t-hover) var(--e-color);
+}
+button.cs-enemy:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+button.cs-enemy:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.cs-enemy--sel { box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.cs-enemy--empty { cursor: default; }
+.cs-enemy__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px dashed var(--hair-strong);
+  color: var(--faint);
+  font-size: var(--fs-14);
+}
+.cs-enemy__lane { display: inline-flex; align-items: center; gap: 4px; min-height: 18px; }
+
+/* ---------------------------------------------------------------- el plan */
+.cs-plan { gap: var(--space-2); }
+.cs-plan__link { align-self: flex-start; margin-left: calc(var(--space-3) * -1); }
+
+/* Baneos: una fila por campeón. */
+.cs-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.cs-list__row { display: flex; align-items: center; gap: var(--space-3); }
+.cs-list__name { flex: 1; min-width: 0; }
+
+.cs-privacy {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin: 0;
+  padding: 0 var(--space-1);
+}
+.cs-privacy svg { flex: none; margin-top: 2px; }
+
+/* ---------------------------------------------------------------- el pool */
+.cs-pool { width: 100%; border-collapse: collapse; }
+.cs-pool th {
+  padding: 0 var(--space-3) var(--space-2) 0;
+  font-weight: 500;
+  text-align: left;
+}
+.cs-pool td {
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-top: 1px solid var(--hair);
+  vertical-align: middle;
+}
+.cs-pool th:last-child,
+.cs-pool td:last-child { padding-right: 0; }
+.cs-num-col { text-align: right; white-space: nowrap; }
+.cs-pool th.cs-num-col { text-align: right; }
+.cs-pool__champ { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.cs-pool__name { display: flex; flex-direction: column; min-width: 0; }
+.cs-pool__sub { white-space: nowrap; }
+/* Tu campeón: una raya de oro a la izquierda, sin teñir la fila. */
+.cs-pool__mine td:first-child { box-shadow: inset 2px 0 0 var(--brand); padding-left: var(--space-2); }
+.cs-pool__note { cursor: help; }
+
+/* ------------------------------------------------------------- estrecho */
+@container champsel (max-width: 900px) {
+  .cs-grid { grid-template-columns: minmax(0, 1fr); }
+  .cs-role { margin-left: 0; }
+}

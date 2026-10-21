@@ -717,7 +717,7 @@ pub fn percentil_tramo(band: Option<&str>, role: &str, tramo: usize, wpa: f64) -
 // ------------------------------------------------------------ el resumen
 
 /// Una de las peores jugadas de una fila, lista para la lista de reproducción.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct JugadaRef {
     pub match_id: String,
     pub champion: String,

@@ -118,6 +118,12 @@ Todo se muestra en la ventana de la app durante champ select (fase `ChampSelect`
 
 **Descartado:** auto-hover y auto-lock (poco valor y riesgo), y modelo de draft (necesita millones de partidas).
 
+**Hecho (2026-10-21), 5.1-5.3:** `champ_select.rs`, la lectura de la sesión en `lcu.rs` (`parse_seleccion`, solo campeones y puestos) y la pantalla `ChampSelectPanel`, que se abre sola al entrar en la selección (`ChampSelectFlow`). Lo que no sale de la tabla de arriba:
+- **Carril de los rivales:** la tabla campeón → puestos sale del corpus (`carriles_campeon.rs`, generada por un test). No se usa el puesto más común de cada uno por separado: se reparten los cinco puestos entre las cinco plazas, y las que aún no han fijado cuentan como un campeón cualquiera. Sola, Gwen es top al 40 % y mid al 34 % en el corpus; con Lee Sin y Ahri al lado, top al 83 %. Dos junglas a la vez (Graves y Lee Sin) se quedan a medias, 46 % y 51 %, y la pantalla lo dice como «probablemente». El rival de carril se da a partir del 50 %.
+- **Tiers del pool:** el WR crudo de pocas partidas no sirve con cortes a un punto. Medido en el corpus: la dispersión real del WR de un jugador entre campeones es de 5 a 7 puntos (K ≈ 48-96). El tier usa el WR encogido hacia tu media con K = 50.
+- **Personalizadas:** desde 2026 tienen cola propia (3100 a ciegas, 3110 reclutamiento…). Que haya carriles lo dice el `mapId` de la cola.
+- **Ponerse delante:** sube la ventana sin activarla, salvo que tape más del 15 % de la ventana en uso. Con un solo monitor, esa es el cliente y no se le tapa el reloj de la elección: entonces solo parpadea en la barra de tareas.
+
 ## 5. Orden propuesto
 
 1. **§2.1 + 3.1** (jugadas con ΔWP + muertes con precio): es la base de todo lo demás.

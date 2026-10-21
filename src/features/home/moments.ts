@@ -1,5 +1,5 @@
 import type { MatchEvent, MatchMetadata, Participant } from "../../types";
-import type { CameraLook, ErrorClipMetadata, PressureEpisode } from "../../core/tauri-ipc";
+import type { CameraLook, ErrorClipMetadata, MatchPlays, PressureEpisode } from "../../core/tauri-ipc";
 import { individualEvents } from "../../core/matchEvents";
 import { describeEventFull, nonChampionKiller, type Translate } from "../../core/eventText";
 import { eventMeta } from "../player/components/eventMeta";
@@ -28,6 +28,22 @@ export type MomentVerdict = "Mistake" | "Finding" | "Excellent" | "Good";
 /** Qué va en la cabecera cuando no hay duelo de campeones que enseñar. */
 export type MomentGlyph = "objective" | "flag" | "eye" | "gank" | "pressure" | "death" | "kill";
 
+/**
+ * De qué jugada del modelo de probabilidad de victoria (`winprob.rs`) sale el
+ * ΔWP de un momento. Horas en el eje del VÍDEO, como el momento; se pasan a
+ * las de la partida al buscar. Un momento sin ancla (un error que marcaste, un
+ * episodio de presión, un hueco sin mirar) no es UNA jugada y no lleva ΔWP.
+ */
+export type WpAnchor =
+  /** Tu muerte: el asesinato o la ejecución cuya víctima eres tú. */
+  | { kind: "death"; time: number }
+  /** Un asesinato tuyo (lo rematas o lo asistes). */
+  | { kind: "kill"; time: number }
+  /** Una racha: la suma de tus asesinatos en la ventana. */
+  | { kind: "kills"; from: number; to: number }
+  /** Un objetivo o una estructura: `play` es `Play.kind` ("dragon", "tower"…). */
+  | { kind: "objective"; time: number; play: string; ally: boolean };
+
 export interface TeachMoment {
   kind: MomentKind;
   verdict: MomentVerdict;
@@ -43,6 +59,8 @@ export interface TeachMoment {
   caption?: string;
   /** El suceso de un objetivo, para pintar su glifo (el mismo que en el reproductor). */
   event?: MatchEvent;
+  /** La jugada de la que sale su ΔWP, si es una. */
+  anchor?: WpAnchor;
 }
 
 /* ------------------------------------------------------------------ nombres */
@@ -103,6 +121,18 @@ const gainWeight = (e: MatchEvent): number => {
   if (e.type === "TowerKill" && e.subtype === "enemy") return 1;
   return 0;
 };
+
+/** El `Play.kind` de `winprob.rs` que corresponde a un suceso de objetivo. */
+function playKind(e: MatchEvent): string | null {
+  switch (e.type) {
+    case "DragonKill": return "dragon";
+    case "BaronKill": return "baron";
+    case "HeraldKill": return "herald";
+    case "TowerKill": return "tower";
+    case "InhibKill": return "inhibitor";
+    default: return null;
+  }
+}
 
 /**
  * Texto de un suceso. El de la API ya compone la frase; los que vienen de un
@@ -188,6 +218,7 @@ function pickError(
       .filter((e) => costWeight(e) > 0)
       .sort((a, b) => costWeight(b) - costWeight(a) || a.time - b.time)[0];
     if (!perdido) return null;
+    const play = playKind(perdido);
     return {
       kind: "error",
       verdict: "Mistake",
@@ -196,6 +227,7 @@ function pickError(
       glyph: "objective",
       caption: objectiveName(perdido, t),
       event: perdido,
+      anchor: play ? { kind: "objective", time: perdido.time, play, ally: false } : undefined,
     };
   }
 
@@ -248,6 +280,7 @@ function pickError(
     you: self,
     other: killer,
     glyph: killer ? undefined : "death",
+    anchor: { kind: "death", time: death.time },
   };
 }
 
@@ -295,7 +328,17 @@ function pickFinding(
         })
       : undefined;
     const f = enTramo ?? ciegas[0];
-    return { kind: "finding", verdict: "Finding", time: f.time, title: f.title, why: f.detail, glyph: "eye", caption: detected };
+    return {
+      kind: "finding",
+      verdict: "Finding",
+      time: f.time,
+      title: f.title,
+      why: f.detail,
+      glyph: "eye",
+      caption: detected,
+      // El hallazgo acaba en la muerte (`f.end`): lo que costó es lo que costó ella.
+      anchor: { kind: "death", time: f.end },
+    };
   }
 
   // 1. Un episodio de presión de esta partida: te sujetan varios y el equipo
@@ -424,12 +467,15 @@ function pickBest(ctx: Ctx, taken: number[]): TeachMoment | null {
       you: self,
       other: face,
       glyph: face ? undefined : "kill",
+      // La misma ventana en la que se buscan las víctimas.
+      anchor: { kind: "kills", from: m.e.time - 12, to: m.e.time + 2 },
     };
   };
 
   const objMoment = (o: MatchEvent): TeachMoment => {
     const antes = evs.filter((e) => isTakedown(e) && e.time <= o.time && o.time - e.time <= 30).length;
     const dragones = evs.filter((e) => e.type === "DragonKill" && e.subtype === "ally" && e.time <= o.time).length;
+    const play = playKind(o);
     return {
       kind: "best",
       verdict: "Excellent",
@@ -444,6 +490,7 @@ function pickBest(ctx: Ctx, taken: number[]): TeachMoment | null {
       glyph: "objective",
       caption: objectiveName(o, t),
       event: o,
+      anchor: play ? { kind: "objective", time: o.time, play, ally: true } : undefined,
     };
   };
 
@@ -464,6 +511,7 @@ function pickBest(ctx: Ctx, taken: number[]): TeachMoment | null {
       you: self,
       other: victima ? championOf(victima.target, parts) : null,
       glyph: "kill",
+      anchor: { kind: "kill", time: sangre.time },
     };
   }
   if (objetivos[0]) return objMoment(objetivos[0]);
@@ -492,6 +540,7 @@ function pickBest(ctx: Ctx, taken: number[]): TeachMoment | null {
     you: self,
     other: victim,
     glyph: victim ? undefined : "kill",
+    anchor: { kind: "kill", time: kill.time },
   };
 }
 
@@ -518,6 +567,81 @@ export function teachMoments(opts: {
   const best = pickBest(ctx, out.map((m) => m.time));
   if (best) out.push(best);
   return out;
+}
+
+/* ------------------------------------------------------------ ΔWP */
+
+/**
+ * Holgura al casar un momento con su jugada. Los sucesos del directo y los de
+ * la Timeline de Riot no caen en el mismo segundo; más allá de esto ya sería
+ * otra jugada.
+ */
+const WP_TOLERANCE = 5;
+
+/**
+ * Lo que un momento movió tu probabilidad de victoria (−1…1, desde tu equipo),
+ * de las jugadas de `get_match_plays`. null si el momento no es una jugada, si
+ * la partida no tiene jugadas o si no aparece la suya: nunca se inventa.
+ */
+export function momentWp(
+  m: TeachMoment,
+  plays: MatchPlays | null | undefined,
+  /** `video_offset` de la partida: segundo de vídeo − este = segundo de partida. */
+  offset: number,
+  myTeam: number | null | undefined
+): number | null {
+  const a = m.anchor;
+  if (!a || !plays || plays.plays.length === 0 || myTeam == null) return null;
+  const self = plays.self_participant_id;
+  const mine = (p: MatchPlays["plays"][number]) => (p.team_id === myTeam ? p.wpa : -p.wpa);
+  const conmigo = (p: MatchPlays["plays"][number]) => self != null && p.shares.some(([pid]) => pid === self);
+  const nearest = (time: number, ok: (p: MatchPlays["plays"][number]) => boolean) => {
+    const g = time - offset;
+    let best: MatchPlays["plays"][number] | null = null;
+    for (const p of plays.plays) {
+      if (!ok(p) || Math.abs(p.time - g) > WP_TOLERANCE) continue;
+      if (!best || Math.abs(p.time - g) < Math.abs(best.time - g)) best = p;
+    }
+    return best;
+  };
+
+  switch (a.kind) {
+    case "death": {
+      if (self == null) return null;
+      const p = nearest(a.time, (x) => (x.kind === "kill" || x.kind === "execution") && x.victim === self);
+      return p ? mine(p) : null;
+    }
+    case "kill": {
+      const p = nearest(a.time, (x) => x.kind === "kill" && x.team_id === myTeam && conmigo(x));
+      return p ? mine(p) : null;
+    }
+    case "kills": {
+      const from = a.from - offset - WP_TOLERANCE;
+      const to = a.to - offset + WP_TOLERANCE;
+      const racha = plays.plays.filter(
+        (x) => x.kind === "kill" && x.team_id === myTeam && conmigo(x) && x.time >= from && x.time <= to
+      );
+      return racha.length > 0 ? racha.reduce((s, x) => s + mine(x), 0) : null;
+    }
+    case "objective": {
+      const p = nearest(a.time, (x) => x.kind === a.play && (x.team_id === myTeam) === a.ally);
+      return p ? mine(p) : null;
+    }
+  }
+}
+
+/**
+ * "−6", "+0,4": los puntos de probabilidad de un momento, con signo. Entero
+ * desde un punto; por debajo, con un decimal para que no salga «0».
+ */
+export function wpDeltaNumber(d: number, lang: string): string {
+  const p = Math.abs(d) * 100;
+  const digits = p < 1 ? 1 : 0;
+  const n = p.toLocaleString(lang === "es" ? "es-ES" : "en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+  return `${d < 0 ? "−" : "+"}${n}`;
 }
 
 /** Cuántos sucesos enseña la lista del reproductor para esta partida. */

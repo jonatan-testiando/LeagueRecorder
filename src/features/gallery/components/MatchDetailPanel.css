@@ -1,120 +1,116 @@
 /* =========================================================================
-   Panel de detalle de la biblioteca (maestro-detalle).
+   Panel de detalle de la biblioteca (maestro-detalle). Figma, Pantallas ·
+   Biblioteca, «Detalle de la partida».
 
-   Tarjeta de 392 px a la derecha de la lista: cabecera con el ambiente del
-   campeón, tres cifras, marcador o cómo conseguirlo, momentos por revisar y,
-   abajo del todo, la única acción en oro. El centro hace scroll y las
-   acciones se quedan quietas: a 720 px de alto no cabe todo.
+   Tarjeta a la derecha de la lista: 336 px y, si sobra ancho (la lista tiene
+   tope), hasta 480. Cabecera con el resultado, tres cifras, los dos equipos o
+   cómo conseguirlos, los momentos por revisar con su ΔWP y, abajo del todo,
+   la única acción en oro. El centro hace scroll y las acciones se quedan
+   quietas: a 720 px de alto no cabe todo.
 
    Solo tokens: el tema claro los redefine y aquí no hay colores fijos.
    ========================================================================= */
 
 .mdp {
-  width: 392px;
-  flex: none;
+  flex: 1 0 336px;
+  min-width: 336px;
+  max-width: 480px;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-radius: 16px;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  box-sizing: border-box;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim), var(--shadow-2);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
   font-variant-numeric: tabular-nums;
 }
 
 /* ---- Cabecera ---------------------------------------------------------- */
-.mdp-hero {
-  position: relative;
-  overflow: hidden;
+.mdp-head {
   flex: none;
-  padding: 22px 20px 18px;
-}
-.mdp-hero__row {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-3);
   min-width: 0;
 }
-.mdp-portrait {
+.mdp-avatar {
   display: block;
   flex: none;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--ring),
-    0 0 0 5px color-mix(in srgb, var(--panel) 90%, transparent),
-    0 10px 24px -8px color-mix(in srgb, var(--ring) 45%, transparent);
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--hair-strong);
 }
-.mdp-hero__txt {
+.mdp-head__txt {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
 }
-.mdp-hero__res {
+.mdp-head__res {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
+  min-width: 0;
 }
 .mdp-res {
-  font-size: 28px;
-  line-height: 1.05;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.mdp-lp {
-  font-size: 13px;
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
   font-weight: 500;
-  padding: 2px 9px;
-  border-radius: 999px;
+  letter-spacing: -0.0025em;
+  color: var(--muted);
   white-space: nowrap;
 }
-.mdp-lp--win { color: var(--cool-ink); background: color-mix(in srgb, var(--win) 14%, transparent); }
-.mdp-lp--loss { color: var(--loss-ink); background: color-mix(in srgb, var(--loss) 14%, transparent); }
-.mdp-lp--neutral { color: var(--muted); background: color-mix(in srgb, var(--text) 7%, transparent); }
+.mdp-res--win { color: var(--win); }
+.mdp-res--loss { color: var(--loss); }
 .mdp-meta {
   font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mdp-meta__champ { color: var(--text); }
 
-/* ---- Tres cifras ------------------------------------------------------- */
+/* ---- Tres cifras (Figma, Componentes · Métrica, en su tamaño de panel) -- */
 .mdp-figs {
   flex: none;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0 20px;
-  padding: 14px 0;
-  box-shadow: inset 0 1px 0 var(--hair), inset 0 -1px 0 var(--hair);
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 .mdp-fig {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
-.mdp-fig + .mdp-fig {
-  padding-left: 16px;
-  box-shadow: inset 1px 0 0 var(--hair);
+.mdp-fig--end { align-items: flex-end; text-align: right; }
+.mdp-fig__lbl {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+  color: var(--faint);
 }
-.mdp-fig__lbl { font-size: var(--fs-12); color: var(--faint); }
 .mdp-fig__val {
-  font-size: 20px;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
 }
 .mdp-fig__sub {
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.mdp-none { color: var(--faint); }
 
 /* ---- Centro con scroll ------------------------------------------------- */
 .mdp-body {
@@ -123,252 +119,191 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 16px 20px 14px;
+  gap: var(--space-4);
   /* Si no cabe todo, el borde de abajo se funde: dice "hay más" sin cortar
      una fila a cuchillo contra las acciones. */
-  mask-image: linear-gradient(180deg, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(180deg, #000 calc(100% - 12px), transparent);
 }
 
-/* Marcador de los diez: dos columnas y el puesto en medio. */
-.mdp-board { display: flex; flex-direction: column; gap: 2px; }
+/* Los dos equipos: tu lado a la izquierda, el rival en espejo. */
+.mdp-board { display: flex; flex-direction: column; gap: 6px; }
 .mdp-board__head,
 .mdp-board__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
-  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
 }
 .mdp-board__head {
+  justify-content: space-between;
   font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
   color: var(--faint);
-  margin-bottom: 6px;
 }
-.mdp-board__head > span { display: flex; align-items: center; gap: 6px; }
-.mdp-board__right { justify-content: flex-end; }
-.mdp-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
-.mdp-dot--win { background: var(--win); }
-.mdp-dot--loss { background: var(--loss); }
-.mdp-board__row { height: 30px; }
-.mdp-board__pos { display: flex; justify-content: center; color: var(--faint); }
 .mdp-side {
+  flex: 1 1 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 30px;
+  gap: var(--space-2);
   min-width: 0;
-  padding: 0 8px 0 2px;
-  border-radius: 8px;
 }
-.mdp-side--enemy { flex-direction: row-reverse; padding: 0 2px 0 8px; }
-.mdp-side--me { background: var(--raised); box-shadow: inset 0 1px 0 var(--rim); }
-.mdp-side--me .mdp-side__name { font-weight: 500; }
+.mdp-face { display: block; flex: none; width: 20px; height: 20px; }
 .mdp-side__name {
-  font-size: 13px;
-  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 0;
 }
+.mdp-side--enemy .mdp-side__name { text-align: right; }
+.mdp-side--me .mdp-side__name { color: var(--text); font-weight: 500; }
 .mdp-side__kda {
-  margin-left: auto;
-  font-size: 12px;
+  flex: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--faint);
   white-space: nowrap;
 }
-.mdp-side--enemy .mdp-side__kda { margin-left: 0; margin-right: auto; }
-/* El retrato de ChampionAvatar es redondo por dentro (estilo en línea); en el
-   marcador va en cuadrado suave, como en el cliente. */
-.mdp-sq { display: block; flex: none; }
-.mdp-sq > div { border-radius: 7px !important; }
 
-/* Bloque vacío amable: qué falta y el botón que lo trae. */
+/* Sin marcador: qué falta y el botón que lo trae. */
 .mdp-empty {
-  min-height: 168px;
+  flex: none;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 18px 24px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--sunken) 55%, transparent);
-  box-shadow: inset 0 0 0 1px var(--hair);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--sunken);
   text-align: center;
 }
 .mdp-empty__icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
   background: var(--raised);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--muted);
 }
-.mdp-empty__txt { font-size: var(--fs-13); line-height: 1.45; color: var(--muted); max-width: 280px; }
-.mdp-empty__err { font-size: var(--fs-13); line-height: 1.4; color: var(--loss); overflow-wrap: anywhere; }
+.mdp-empty__txt {
+  max-width: 280px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+}
+.mdp-empty__err {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--loss);
+  overflow-wrap: anywhere;
+}
 
-/* Secciones con cabecera en frase. */
-.mdp-sec { display: flex; flex-direction: column; gap: 6px; }
+/* Momentos por revisar: cabecera de etiqueta y filas de 30 (el chip de 22
+   más 4 arriba y abajo) separadas por 4. */
+.mdp-sec { display: flex; flex-direction: column; gap: var(--space-1); }
 .mdp-sec__head {
   display: flex;
-  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
+  gap: var(--space-3);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.mdp-none-txt {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--faint);
 }
-.mdp-sec__aside { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
-.mdp-none { margin: 4px 0 0; font-size: 13px; color: var(--faint); }
 
-.mdp-list { display: flex; flex-direction: column; }
+.mdp-list { display: flex; flex-direction: column; gap: var(--space-1); }
+/* Guardando el sitio de tres filas mientras se leen las jugadas. */
+.mdp-list[aria-busy="true"] { min-height: 98px; }
 .mdp-moment {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 36px;
+  /* Caja de contenido: el relleno y el margen negativo dejan que el hover
+     sangre 8 px a cada lado sin mover el texto. */
+  min-height: 22px;
   width: 100%;
-  padding: 0 6px;
-  margin: 0 -6px;
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
   box-sizing: content-box;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 0 -1px 0 var(--hair);
+  transition: background-color var(--t-hover) var(--e-color);
 }
-.mdp-moment:last-child { box-shadow: none; }
-.mdp-moment:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
-.mdp-moment:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-/* Marca de tiempo de vídeo: la única voz mono del panel junto a los atajos. */
+.mdp-moment:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) {
+  .mdp-moment:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+}
+.mdp-moment--skel { cursor: default; }
+.mdp-moment--skel > .skeleton { flex: none; }
+/* Marca de tiempo de vídeo (.t-time): la única voz mono del panel junto a
+   los atajos, en su caja hundida de 20. */
 .mdp-time {
   flex: none;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
+  min-width: 48px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
   background: var(--sunken);
-  padding: 2px 7px;
-  border-radius: 5px;
-  letter-spacing: 0;
+  line-height: 20px;
+  text-align: center;
+  color: var(--muted);
 }
 .mdp-moment__txt {
   flex: 1;
   min-width: 0;
   font-size: var(--fs-13);
+  line-height: var(--lh-13);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mdp-moment__txt--note { color: var(--muted); }
-.mdp-chip {
-  flex: none;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.mdp-chip--loss { color: var(--loss); background: color-mix(in srgb, var(--loss) 12%, transparent); }
-.mdp-chip--gold { color: var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
-.mdp-chip--flag { color: var(--flag); background: color-mix(in srgb, var(--flag) 14%, transparent); }
 
 /* ---- Acciones ---------------------------------------------------------- */
 .mdp-actions {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 14px 20px 20px;
+  gap: var(--space-2);
 }
-/* El botón de acción de la pantalla: la clase global pone el oro; aquí solo
-   el tamaño y la voz (sans, frase). */
-.mdp-cta {
-  position: relative;
+/* La acción de la pantalla: el oro del primitivo a 36 y a todo el ancho, con
+   su tecla dentro. */
+.mdp .mdp-cta {
   width: 100%;
-  height: 44px;
-  gap: 10px;
-  border-radius: 10px;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.mdp-cta:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-.mdp-cta__kbd {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--on-action);
-  background: color-mix(in srgb, var(--on-action) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-action) 18%, transparent);
-  padding: 1px 6px;
-  border-radius: 5px;
-}
-.mdp-actions__row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-
-/* Botón de superficie: el segundo escalón, sin tinte. */
-.mdp-sbtn {
   height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--raised);
-  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
-  color: var(--text);
-  font: inherit;
-  font-size: var(--fs-13);
-  font-weight: 500;
-  cursor: pointer;
+  padding-top: 0;
+  padding-bottom: 0;
 }
-.mdp-sbtn svg { color: var(--muted); }
-.mdp-sbtn:hover:not(:disabled) { box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong); }
-.mdp-sbtn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.mdp-sbtn:disabled { cursor: default; opacity: 0.7; }
-.mdp-sbtn--danger:hover:not(:disabled) { color: var(--loss); }
-.mdp-sbtn--danger:hover:not(:disabled) svg { color: var(--loss); }
+.mdp-cta .btn__label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.mdp-cta__kbd { font-weight: 500; }
+.mdp-actions__row { display: flex; gap: var(--space-2); }
+.mdp-actions__row > .btn { flex: 1 1 0; min-width: 0; height: 28px; padding-top: 0; padding-bottom: 0; }
+/* Abrir carpeta: texto con icono, sin filo. Eliminar: el rojo suave en
+   reposo, que es lo que es. Dos clases para ganar al primitivo, que se carga
+   después. */
+.mdp .mdp-quiet { border-color: transparent; }
+.mdp .mdp-del { background: var(--loss-soft); color: var(--loss-ink); }
 
-.mdp-spin { animation: spin 0.8s linear infinite; }
-
-/* Ventana baja (720-820 px): todo un escalón más prieto para que los momentos
-   por revisar sigan a la vista sin hacer scroll. */
+/* Ventana baja (720-820 px): un escalón más prieto para que los momentos por
+   revisar sigan a la vista sin hacer scroll. */
 @media (max-height: 820px) {
-  .mdp-hero { padding-top: 16px; padding-bottom: 12px; }
-  .mdp-hero__row { gap: 14px; }
-  .mdp-portrait { width: 52px; height: 52px; }
-  .mdp-portrait > div { width: 52px !important; height: 52px !important; }
-  .mdp-hero__txt { gap: 4px; }
-  .mdp-res { font-size: 22px; }
-  .mdp-figs { padding: 10px 0; }
-  .mdp-fig__val { font-size: 18px; }
-  .mdp-body { gap: 12px; padding-top: 12px; }
-  .mdp-board__head { margin-bottom: 2px; }
-  .mdp-board__row,
-  .mdp-side { height: 27px; }
-  .mdp-empty { min-height: 0; padding: 14px 20px; gap: 10px; }
-  .mdp-moment { height: 32px; }
-  .mdp-actions { gap: 6px; padding-top: 10px; padding-bottom: 14px; }
-  .mdp-cta { height: 40px; }
-  .mdp-sbtn { height: 32px; }
-}
-
-/* Entre 1280 y 1440 el panel cede ancho a la lista. */
-@media (max-width: 1439px) {
-  .mdp { width: 348px; }
-  .mdp-hero { padding-left: 18px; padding-right: 18px; }
-  .mdp-figs { margin: 0 18px; }
-  .mdp-body { padding-left: 18px; padding-right: 18px; }
-  .mdp-actions { padding-left: 18px; padding-right: 18px; }
+  .mdp { gap: var(--space-3); padding: var(--space-4) var(--space-5); }
+  .mdp-body { gap: var(--space-3); }
+  .mdp-board { gap: 0; }
+  .mdp-board__head { margin-bottom: var(--space-1); }
 }

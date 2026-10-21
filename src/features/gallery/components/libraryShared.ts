@@ -1,6 +1,8 @@
 import { MatchMetadata, Participant } from "../../../types";
 import { type KDA } from "../../../core/matchStats";
 import type { Translate } from "../../../core/eventText";
+import type { MatchPlays, Play } from "../../../core/tauri-ipc";
+import type { Moment } from "../../player/components/ReviewQueue";
 
 /**
  * Lo que la lista de la biblioteca y su panel de detalle leen igual de una
@@ -80,4 +82,148 @@ export const cap = (s: string): string => (s ? s.charAt(0).toUpperCase() + s.sli
 export const hourOf = (iso: string): string | null => {
   const m = /\s(\d{2}):(\d{2})/.exec(iso);
   return m ? `${m[1]}:${m[2]}` : null;
+};
+
+/* ---------------------------------------------------------------- fechas */
+
+const localeOf = (lang: string): string => (lang === "es" ? "es-ES" : "en-US");
+
+const fechaDe = (iso: string): Date | null => {
+  const d = new Date(iso.replace(" ", "T"));
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/** Días naturales entre la fecha y hoy (0 = hoy, 1 = ayer). */
+const diasAtras = (d: Date): number => {
+  const inicio = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  return Math.round((inicio(new Date()) - inicio(d)) / 86400000);
+};
+
+/**
+ * Encabezado de un grupo de la lista: «Hoy», «Ayer» o el día con nombre,
+ * «Sábado, 5 sept» / «Saturday, Sep 5» (con el año si no es el actual).
+ *
+ * No es `relativeDay`: ese dice «hace 3d», que sirve en una frase pero no
+ * como rótulo de un grupo, donde se busca el día y no la distancia.
+ */
+export const dayLabel = (iso: string, t: Translate, lang: string): string => {
+  const d = fechaDe(iso);
+  if (!d) return iso.split(" ")[0];
+  const n = diasAtras(d);
+  if (n <= 0) return cap(t("today"));
+  if (n === 1) return cap(t("yesterday"));
+  return cap(
+    new Intl.DateTimeFormat(localeOf(lang), {
+      weekday: "long",
+      day: "numeric",
+      month: "short",
+      year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    }).format(d)
+  );
+};
+
+/**
+ * El día en corto para una línea de metadatos: «hoy 18:32», «ayer 21:10» y,
+ * más atrás, «sáb 5 sept» / «Sat Sep 5», donde la hora ya no ubica.
+ */
+export const shortDay = (iso: string, t: Translate, lang: string): string => {
+  const d = fechaDe(iso);
+  if (!d) return iso.split(" ")[0];
+  const n = diasAtras(d);
+  const hora = hourOf(iso);
+  if (n <= 1) {
+    const dia = t(n <= 0 ? "today" : "yesterday");
+    return hora ? `${dia} ${hora}` : dia;
+  }
+  return new Intl.DateTimeFormat(localeOf(lang), {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+  })
+    .formatToParts(d)
+    .filter((p) => p.type !== "literal")
+    .map((p) => p.value)
+    .join(" ");
+};
+
+/* ------------------------------------------- ΔWP de un momento por revisar */
+
+/**
+ * Cuánto pueden separarse la hora de un suceso grabado (eje del vídeo) y la de
+ * su jugada en la timeline de Riot (eje de la partida), ya descontado el
+ * desfase. Las muertes usan los 3 s de «Tus muertes»; los objetivos llegan
+ * por la API en directo con algo más de holgura.
+ */
+const MISMA_JUGADA_S = 3;
+const MISMO_OBJETIVO_S = 6;
+
+/** Suceso grabado → tipo de jugada de `winprob.rs`. */
+const JUGADA_DE: Record<string, string> = {
+  DragonKill: "dragon",
+  BaronKill: "baron",
+  HeraldKill: "herald",
+  TowerKill: "tower",
+  InhibKill: "inhibitor",
+};
+
+/**
+ * Lo que un momento de la cola movió TU probabilidad de victoria (−0,06 =
+ * «−6 %»), o null si no se sabe.
+ *
+ * No se inventa: sale de la jugada de Riot que cae en el mismo instante
+ * (`get_match_plays`), y solo para lo que tiene jugada propia: tus muertes
+ * (víctima = tú) y los objetivos y estructuras. Un error marcado a mano o un
+ * salto de cámara no son jugadas y se quedan sin cifra.
+ */
+export const momentWpa = (
+  m: Moment,
+  plays: MatchPlays | null | undefined,
+  videoOffset: number,
+  myTeam: number | null
+): number | null => {
+  if (!plays || myTeam == null || m.source !== "event") return null;
+  const [origen, , type = "", subtype = ""] = m.id.split(":");
+  if (origen !== "event") return null;
+
+  let es: (p: Play) => boolean;
+  let tol = MISMA_JUGADA_S;
+  if (type === "ChampionKill" && subtype === "death") {
+    const yo = plays.self_participant_id;
+    if (yo == null) return null;
+    es = (p) => (p.kind === "kill" || p.kind === "execution") && p.victim === yo;
+  } else if (JUGADA_DE[type]) {
+    const kind = JUGADA_DE[type];
+    es = (p) => p.kind === kind;
+    tol = MISMO_OBJETIVO_S;
+  } else {
+    return null;
+  }
+
+  let mejor: Play | null = null;
+  let dist = Infinity;
+  for (const p of plays.plays) {
+    if (!es(p)) continue;
+    const d = Math.abs(p.time + videoOffset - m.time);
+    if (d <= tol && d < dist) {
+      mejor = p;
+      dist = d;
+    }
+  }
+  if (!mejor) return null;
+  // `wpa` va desde la óptica de `team_id`: se gira si la jugada es del rival.
+  return mejor.team_id === myTeam ? mejor.wpa : -mejor.wpa;
+};
+
+/**
+ * «−6 %», «+5 %», «−0,4 %»: el ΔWP en puntos, entero salvo por debajo de 1,
+ * con el signo siempre a la vista (menos tipográfico) y el espacio fino antes
+ * del % en español.
+ */
+export const wpaText = (delta: number, lang: string): string => {
+  const pct = delta * 100;
+  const digits = Math.abs(pct) < 0.95 ? 1 : 0;
+  const r = Number(pct.toFixed(digits));
+  const sign = r > 0 ? "+" : r < 0 ? "−" : "±";
+  return `${sign}${fmtDec(Math.abs(r), digits, lang)}${lang === "es" ? " %" : "%"}`;
 };

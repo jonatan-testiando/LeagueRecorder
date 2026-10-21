@@ -593,7 +593,7 @@ const ES: Record<string, string> = {
   "Awareness": "Lectura de mapa",
   "Setup": "Configuración",
   "Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.":
-    "Las teclas de cámara no son un problema de velocidad. Son un hábito, una lectura de 400 ms y una pregunta que intentas responder.",
+    "Las teclas de cámara no son un problema de velocidad. Son un hábito, una lectura de 400 ms y una pregunta que intentas responder.",
   "Avg latency, last {n} sessions": "Latencia media, últimas {n} sesiones",
   "{ms} ms faster than your first": "{ms} ms más rápido que tu primera",
   "{ms} ms slower than your first": "{ms} ms más lento que tu primera",
@@ -605,7 +605,7 @@ const ES: Record<string, string> = {
   // drill de mapeo
   "Key mapping drill": "Ejercicio de mapeo de teclas",
   "A role appears — press its camera key. Target: under 400 ms with 95% accuracy, without looking at the keyboard.":
-    "Aparece un rol — pulsa su tecla de cámara. Objetivo: menos de 400 ms con un 95% de acierto, sin mirar el teclado.",
+    "Aparece un rol — pulsa su tecla de cámara. Objetivo: menos de 400 ms con un 95 % de acierto, sin mirar el teclado.",
   "Rounds": "Rondas",
   "Prompt": "Estímulo",
   "Role": "Rol",
@@ -2375,6 +2375,11 @@ const ES: Record<string, string> = {
   "Your focus · {n}-game plan": "Tu foco · plan de {n} partidas",
   "{k} of {n}": "{k} de {n}",
   "Watch your {n} worst plays": "Ver tus {n} peores jugadas",
+  // Training y Análisis del vídeo (rediseño «Ritmo», 3g).
+  "No load": "Sin carga",
+  "Couldn't load the training settings: {msg}": "No se pudo cargar la configuración del entrenamiento: {msg}",
+  "Grading…": "Corrigiendo…",
+  "Analysed videos": "Vídeos analizados",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

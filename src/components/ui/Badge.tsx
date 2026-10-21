@@ -1,4 +1,5 @@
 import React from "react";
+import { Chip, type ChipTone } from "./Chip";
 
 /**
  * Insignia. El tono es semántico y de ahí sale el color: nadie escribe un hex
@@ -7,7 +8,8 @@ import React from "react";
  * Nota de diseño: en la fila de partida las insignias estaban compitiendo entre
  * sí (cinco a la vez, todas con el mismo peso y fondos translúcidos distintos).
  * Por eso hay dos intensidades. `solid` es para lo único que importa de un
- * vistazo; `quiet` es el resto, que se lee cuando ya has decidido mirar.
+ * vistazo y es un Chip; `quiet` es el resto, solo texto tintado, que se lee
+ * cuando ya has decidido mirar.
  */
 export type BadgeTone = "win" | "loss" | "objective" | "flag" | "neutral";
 
@@ -19,14 +21,12 @@ const TONE_VAR: Record<BadgeTone, string> = {
   neutral: "var(--muted)",
 };
 
-/** El texto sobre el fondo tintado de `solid` va en tinta: en claro, el tinte
- *  sobre su propio 14 % no llega a AA. */
-const TONE_INK: Record<BadgeTone, string> = {
-  win: "var(--cool-ink)",
-  loss: "var(--loss-ink)",
-  objective: "var(--brand-ink)",
-  flag: "var(--flag-ink)",
-  neutral: "var(--muted)",
+const CHIP_TONE: Record<BadgeTone, ChipTone> = {
+  win: "win",
+  loss: "loss",
+  objective: "gold",
+  flag: "finding",
+  neutral: "neutral",
 };
 
 export interface BadgeProps {
@@ -42,23 +42,13 @@ export const Badge: React.FC<BadgeProps> = ({
   emphasis = "quiet",
   title,
   children,
-}) => {
-  const c = TONE_VAR[tone];
-  return (
-    <span
-      className="badge"
-      title={title}
-      style={
-        emphasis === "solid"
-          ? {
-              color: TONE_INK[tone],
-              background: `color-mix(in srgb, ${c} 14%, transparent)`,
-              border: `1px solid color-mix(in srgb, ${c} 32%, transparent)`,
-            }
-          : { color: c, background: "transparent", border: "1px solid transparent" }
-      }
-    >
+}) =>
+  emphasis === "solid" ? (
+    <Chip tone={CHIP_TONE[tone]} title={title}>
+      {children}
+    </Chip>
+  ) : (
+    <span className="badge" title={title} style={{ color: TONE_VAR[tone], border: "1px solid transparent" }}>
       {children}
     </span>
   );
-};

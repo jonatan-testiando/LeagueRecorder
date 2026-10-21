@@ -11,6 +11,7 @@ import {
 } from "../api";
 import { useT } from "../../../core/LanguageProvider";
 import { roleLabel, sameRole } from "../../../core/roles";
+import { Select } from "../../../components/ui/Select";
 
 /** Valores GUARDADOS de los puestos. No se pintan tal cual: ver `roleLabel`. */
 const ROLE_OPTIONS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
@@ -168,19 +169,17 @@ export const TrainingSetup: React.FC<{
             {(() => {
               const conocido = ROLE_OPTIONS.find((r) => sameRole(r, b.role));
               return (
-                <select
+                // El VALOR es el que se guarda; lo que se lee es la etiqueta.
+                <Select
+                  style={{ flex: 1, maxWidth: 200 }}
+                  label={t("Role")}
                   value={conocido ?? b.role}
-                  onChange={(e) => patchBinding(i, { role: e.target.value })}
-                  style={styles.select}
-                >
-                  {/* El VALOR es el que se guarda; lo que se lee es la etiqueta. */}
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {t(roleLabel(r))}
-                    </option>
-                  ))}
-                  {!conocido && <option value={b.role}>{b.role}</option>}
-                </select>
+                  onChange={(v) => patchBinding(i, { role: v })}
+                  options={[
+                    ...ROLE_OPTIONS.map((r) => ({ value: r as string, label: t(roleLabel(r)) })),
+                    ...(!conocido ? [{ value: b.role, label: b.role }] : []),
+                  ]}
+                />
               );
             })()}
             <button
@@ -352,17 +351,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "var(--font-sans)",
     color: "var(--cool)",
     borderColor: "var(--cool)",
-  },
-  select: {
-    flex: 1,
-    maxWidth: 200,
-    background: "var(--surface-2)",
-    color: "var(--text)",
-    border: "1px solid var(--line)",
-    borderRadius: "var(--radius-md)",
-    padding: "8px 10px",
-    fontSize: "var(--font-sm)",
-    fontFamily: "var(--font-sans)",
   },
   chip: { padding: "6px 14px", fontSize: 13, alignSelf: "flex-start" },
   keyCapture: { display: "inline-flex", flexDirection: "column", gap: 4 },

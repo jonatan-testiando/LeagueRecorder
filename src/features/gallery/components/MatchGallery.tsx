@@ -13,7 +13,6 @@ import { useAppStore, useErrorClips } from "../../../store/useAppStore";
 import {
   ArrowDownWideNarrow,
   Check,
-  ChevronDown,
   FolderOpen,
   Gamepad2,
   HardDrive,
@@ -33,6 +32,9 @@ import { useLang, useT } from "../../../core/LanguageProvider";
 import { relativeDay } from "../../../core/time";
 import { MatchDetailPanel } from "./MatchDetailPanel";
 import { cap, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
+import { Segmented } from "../../../components/ui/Segmented";
+import { Chip } from "../../../components/ui/Chip";
+import { Select } from "../../../components/ui/Select";
 import "./MatchGallery.css";
 
 interface DiskSpaceInfo {
@@ -550,7 +552,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     abrir(m);
   };
 
-  const sortLabel = t(SORTS.find((s) => s.key === sort)!.label);
 
   return (
     <div ref={rootRef} className={`lib panel-enter${wide ? "" : " lib--narrow"}`}>
@@ -590,22 +591,17 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
       {/* Una fila: estado · puesto · campeón · orden · seleccionar. */}
       <div className="lib-filters">
-        <div className="lib-seg" role="group" aria-label={t("Filter by status")}>
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className="lib-seg__btn"
-              aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
-            >
-              {t(f.label)}
-              <span className={`lib-seg__n${f.key === "unreviewed" ? " lib-seg__n--gold" : ""}`}>
-                {cargando ? "—" : counts[f.key]}
-              </span>
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Filter by status")}
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((f) => ({
+            value: f.key,
+            label: t(f.label),
+            count: cargando ? "—" : counts[f.key],
+            countTone: f.key === "unreviewed" ? ("gold" as const) : undefined,
+          }))}
+        />
 
         <span className="lib-sep" aria-hidden />
 
@@ -644,16 +640,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         {/* Orden. La nota es lo único de la fila que separa una partida buena de
             una mala, así que ordenar por ella es lo que convierte la lista en
             "enséñame lo peor", que es a lo que se viene. */}
-        <label className="lib-sort">
-          <ArrowDownWideNarrow size={15} aria-hidden className="lib-sort__ico" />
-          <span>{sortLabel}</span>
-          <ChevronDown size={14} aria-hidden className="lib-sort__chev" />
-          <select aria-label={t("Sort")} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>{t(s.label)}</option>
-            ))}
-          </select>
-        </label>
+        <Select
+          variant="plain"
+          className="lib-sort"
+          label={t("Sort")}
+          value={sort}
+          onChange={setSort}
+          icon={<ArrowDownWideNarrow size={15} aria-hidden className="lib-sort__ico" />}
+          options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+        />
 
         <button
           type="button"
@@ -1053,10 +1048,9 @@ const LibraryRow: React.FC<RowProps> = ({
       {/* Revisión: hecha, a medias (barra y cuenta) o por empezar. */}
       <span className="lib-review">
         {progress?.reviewed ? (
-          <span className="lib-pill lib-pill--done">
-            <Check size={12} strokeWidth={2.4} aria-hidden />
+          <Chip tone="win" icon={<Check size={12} strokeWidth={2.4} aria-hidden />}>
             {t("Reviewed")}
-          </span>
+          </Chip>
         ) : progress && progress.done > 0 ? (
           <span className="lib-prog" title={t("{done} of {total} reviewed", { done: progress.done, total: progress.total })}>
             <span className="lib-prog__bar">
@@ -1065,7 +1059,7 @@ const LibraryRow: React.FC<RowProps> = ({
             <span className="lib-sub lib-sub--muted">{progress.done}/{progress.total}</span>
           </span>
         ) : (
-          <span className="lib-pill lib-pill--todo">{t("To review")}</span>
+          <Chip tone="gold">{t("To review")}</Chip>
         )}
       </span>
 

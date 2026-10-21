@@ -11,6 +11,8 @@ import { formatGold, formatSigned } from "./pressureFormat";
 import { BLIND_LOOKBACK_S as ANTES_S } from "./ReviewQueue";
 import { HelpDot } from "./HelpDot";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -216,7 +218,8 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
   const t = useT();
   const { filas, cargando } = useDeathRows(matchId, markers, cameraSnaps, videoOffset, selfPid);
 
-  if (cargando) return <div className="ds-loading"><div className="spinner" /></div>;
+  const esqueleto = useDelayedLoading(cargando);
+  if (cargando || esqueleto) return esqueleto ? <SkeletonLines lines={4} /> : null;
   if (filas.length === 0) return <p className="note" style={{ margin: 0 }}>{t("You didn't die this game.")}</p>;
 
   const ciegas = filas.filter((f) => f.miradas === 0).length;

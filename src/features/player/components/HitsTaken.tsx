@@ -12,6 +12,8 @@ import {
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { HelpDot } from "./HelpDot";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./HitsTaken.css";
 import "./MatchTab.css";
@@ -111,7 +113,8 @@ export const HitsTaken: React.FC<Props> = ({ matchId, onOpenMap }) => {
     });
   };
 
-  if (r === undefined) return <div className="ds-loading"><div className="spinner" /></div>;
+  const esqueleto = useDelayedLoading(r === undefined);
+  if (r === undefined || esqueleto) return esqueleto ? <SkeletonLines /> : null;
   if (r === null) return <p className="note" style={{ margin: 0 }}>{t("Couldn't load this section.")}</p>;
 
   if (avance != null || r.status === "reading") {

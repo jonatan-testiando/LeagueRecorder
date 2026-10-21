@@ -15,12 +15,16 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Segmented } from "../../../components/ui/Segmented";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
 import { matchAge } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Skeleton } from "../../../components/ui/Skeleton";
+import { Select } from "../../../components/ui/Select";
 import "./ClipsGallery.css";
 
 /**
@@ -382,12 +386,17 @@ export const ClipsGallery: React.FC = () => {
     return t("Expires in ~{m} min", { m });
   };
 
-  if (loading) {
+  const esqueleto = useDelayedLoading(loading);
+  if (loading || esqueleto) {
     return (
       <div className="cg panel-enter">
-        <div className="cg-center">
-          <div className="spinner" />
-        </div>
+        {esqueleto && (
+          <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
+            <Skeleton width={180} height={28} />
+            <Skeleton shape="block" width={300} height={34} style={{ borderRadius: 999 }} />
+            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={132} />)}
+          </div>
+        )}
       </div>
     );
   }
@@ -433,29 +442,28 @@ export const ClipsGallery: React.FC = () => {
       </div>
 
       <div className="cg__tools">
-        <div className="cg-seg" role="group" aria-label={t("Filter clips")}>
-          <button type="button" aria-pressed={!onlyFavorites} onClick={() => setOnlyFavorites(false)}>
-            {t("All clips")} <span className="cg-seg__n">{clips.length}</span>
-          </button>
-          <button type="button" aria-pressed={onlyFavorites} onClick={() => setOnlyFavorites(true)}>
-            <Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />
-            {t("Favourites")} <span className="cg-seg__n">{favCount}</span>
-          </button>
-        </div>
+        <Segmented
+          label={t("Filter clips")}
+          value={onlyFavorites ? "fav" : "all"}
+          onChange={(v) => setOnlyFavorites(v === "fav")}
+          options={[
+            { value: "all", label: t("All clips"), count: clips.length },
+            {
+              value: "fav",
+              label: t("Favourites"),
+              count: favCount,
+              icon: <Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />,
+            },
+          ]}
+        />
         <span className="cg__spacer" />
         <span className="cg__toolLabel">{t("Sort")}</span>
-        <div className="cg-seg" role="group" aria-label={t("Sort")}>
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              aria-pressed={sort === s.key}
-              onClick={() => setSort(s.key)}
-            >
-              {t(s.label)}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Sort")}
+          value={sort}
+          onChange={setSort}
+          options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+        />
       </div>
 
       {visible.length === 0 ? (
@@ -622,18 +630,15 @@ export const ClipsGallery: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <select
-                            className="cg-select"
+                          <Select
+                            size="sm"
                             value={exp}
                             disabled={isUploading}
-                            onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
-                            aria-label={t("How long the link lasts")}
+                            onChange={(v) => setExpiry(prev => ({ ...prev, [clip.path]: v }))}
+                            label={t("How long the link lasts")}
                             title={t("How long the link lasts")}
-                          >
-                            {EXPIRY_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{t(o.label)}</option>
-                            ))}
-                          </select>
+                            options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))}
+                          />
                           <Button
                             variant={isSelected ? "primary" : "ghost"}
                             size="sm"

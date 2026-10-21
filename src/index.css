@@ -81,6 +81,7 @@
      título, HUD del reproductor, toasts, Ctrl K). Con transparencia reducida
      pasa a opaco (ver el bloque de movimiento reducido). */
   --glass: color-mix(in srgb, var(--panel) 78%, transparent);
+  --glass-filter: blur(16px);   /* el desenfoque del vidrio: 16 px como mucho */
   /* Velo bajo un diálogo o Ctrl K. */
   --scrim: rgba(4, 7, 14, 0.62);
 
@@ -1129,17 +1130,18 @@ button.cap:not(:disabled):active { transform: none; }
   .rec-dot,
   .rec-dot::after,
   .cap__dot--rec,
-  .updpill__dot,
-  .skeleton { animation: none; }
+  .updpill__dot { animation: none; }
+  .skeleton::after { display: none; }
   .skeleton { opacity: 0.7; }
   /* El latido de progreso conserva el pulso de opacidad, sin la escala. */
   @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
-  /* El spinner del botón se sustituye por un texto de progreso (Button, fase 2). */
+  /* El spinner del botón se quita: queda el verbo («Comprobando…») o, si el
+     botón no lo tiene, su texto con puntos suspensivos. */
   .btn[data-loading] .btn__spinner { display: none; }
-  .btn[data-loading] .btn__label::after { content: "…"; }
+  .btn[data-loading="spin"] .btn__label::after { content: "…"; }
   /* Plegar el rail: sin recorte ni ancho animados. */
   .rail,
   .rail-profile,
@@ -1153,6 +1155,7 @@ button.cap:not(:disabled):active { transform: none; }
   :root[data-theme="light"] {
     --glass: var(--panel);
     --glass-blur: none;
+    --glass-filter: none;
   }
 }
 
@@ -1235,55 +1238,79 @@ button.cap:not(:disabled):active { transform: none; }
 /* =========================================================================
    Estados vacíos y esqueletos de carga
    ========================================================================= */
+/* Estado vacío (EmptyState.tsx). Figma, Componentes · Estado vacío: un
+   círculo de 48 en --raised con el icono a 20, el título como título de
+   tarjeta y el texto que dice qué hacer, no solo que no hay nada. El icono lo
+   trae quien lo usa, a cualquier tamaño: aquí se ajusta a 20. Si no trae
+   color, va en --muted; uno de error puede traer el suyo. */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  padding: var(--space-12);
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
   text-align: center;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 .empty-state__icon {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
+  flex: none;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-1);
-  border: 1px solid var(--glass-line-soft);
-  box-shadow: var(--shadow-1);
+  background: var(--raised);
+  color: var(--muted);
 }
+.empty-state__icon svg { width: 20px; height: 20px; }
 .empty-state__title {
-  font-size: var(--font-md);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text);
   margin: 0;
 }
 .empty-state__text {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--muted);
   margin: 0;
-  max-width: 340px;
+  max-width: 420px;
 }
+.empty-state > .btn { margin-top: var(--space-1); }
 
+/* Esqueleto (Skeleton.tsx): un escalón por encima de la lámina, para que se
+   vea sobre el panel en los dos temas, y un barrido que se mueve con
+   transform (animar background-position repintaba en cada fotograma). */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-card) 25%,
-    var(--bg-elevated) 37%,
-    var(--bg-card) 63%
-  );
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
+  position: relative;
+  overflow: hidden;
+  background: var(--raised);
   border-radius: var(--radius-md);
 }
-@keyframes skeleton-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 5%, transparent), transparent);
+  animation: skeleton-sweep 1.4s var(--e-move) infinite;
 }
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+.skeleton--line,
+.skeleton--block,
+.skeleton--circle { display: block; }
+.skeleton--line { height: 12px; border-radius: var(--radius-sm); }
+.skeleton--block { height: 72px; }
+.skeleton--circle { width: 40px; height: 40px; border-radius: var(--radius-full); }
+.skeleton-lines { display: flex; flex-direction: column; gap: 10px; padding: var(--space-2) 0; }
+/* Esqueleto de una pantalla entera mientras llega su primera carga. */
+.page-skel { display: flex; flex-direction: column; gap: var(--space-5); }
+.page-skel__cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-5); align-items: start; }
 
 /* =========================================================================
    Turquesa atenuado para superficies grandes.
@@ -1318,12 +1345,30 @@ button.cap:not(:disabled):active { transform: none; }
   box-shadow: none;
   border: 1px solid transparent;
   white-space: nowrap;
-  transition: background-color var(--t-instant) var(--e-move),
-    border-color var(--t-instant) var(--e-move),
-    color var(--t-instant) var(--e-move);
+  transition: transform var(--t-press) var(--e-out),
+    background-color var(--t-hover) var(--e-color),
+    border-color var(--t-hover) var(--e-color),
+    color var(--t-hover) var(--e-color);
 }
 .btn--md { padding: 8px var(--space-4); }
 .btn--sm { padding: 5px var(--space-3); font-size: var(--fs-13); }
+/* Pulsar: responde en el pointerdown (:active), no al soltar. Gana a la regla
+   global de button:active, que desplaza 1 px. */
+.btn:active:not(:disabled):not([data-loading]) { transform: scale(var(--pop-scale)); }
+.btn__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Cargando: el spinner ocupa el sitio del icono y el texto pasa a gerundio
+   («Comprobando…»). No se apaga el botón entero, solo deja de responder. */
+.btn[data-loading] { cursor: progress; }
+.btn__spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.8s linear infinite;
+}
+.btn--sm .btn__spinner { width: 12px; height: 12px; }
 
 /* El botón es la superficie más pequeña de la app y por eso es donde más se
    nota que hay volumen: filo iluminado arriba, cuerpo, y base un punto más
@@ -1340,26 +1385,17 @@ button.cap:not(:disabled):active { transform: none; }
   font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 1px 2px rgba(0, 0, 0, 0.45);
 }
-.btn--primary:hover:not(:disabled) {
-  background: linear-gradient(
-    152deg,
-    color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
-    var(--action-hover) 60%,
-    var(--action) 100%
-  );
-  box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
-}
-
 .btn--ghost {
   background: transparent;
   border-color: var(--hair-strong);
   color: var(--text);
 }
-.btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
+/* El fantasma pequeño habla en --muted: en --text competía con la acción de
+   la pantalla, y en --faint («Descargar», «Quitar») apenas se veía. */
+.btn--ghost.btn--sm { color: var(--muted); }
 .btn--ghost[aria-pressed="true"] { background: var(--surface-2); color: var(--text); border-color: var(--glass-line); }
 
 .btn--danger { background: transparent; border-color: transparent; color: var(--faint); }
-.btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
 
 .btn--icon {
   background: transparent;
@@ -1367,7 +1403,236 @@ button.cap:not(:disabled):active { transform: none; }
   color: var(--faint);
   padding: var(--space-2);
 }
-.btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+/* Hover solo con ratón: en una pantalla táctil el hover se queda pegado
+   después de tocar. */
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover:not(:disabled) {
+    background: linear-gradient(
+      152deg,
+      color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
+      var(--action-hover) 60%,
+      var(--action) 100%
+    );
+    box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
+  }
+  .btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
+  .btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
+  .btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+}
+
+/* --- Segmentado (Segmented.tsx) ------------------------------------------
+   Carril hundido en píldora y una lámina flotante que se desliza a la opción
+   elegida. La lámina la coloca useIndicator con --ind-x/--ind-w; sin medida
+   (panel oculto) la pinta la propia opción. */
+.seg {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  /* Mide lo que sus opciones: en una columna flex no se estira a lo ancho. */
+  width: max-content;
+  max-width: 100%;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.seg__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: var(--ind-w, 0);
+  transform: translateX(var(--ind-x, 0));
+  border-radius: var(--radius-full);
+  background: var(--overlay);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  opacity: 0;
+  pointer-events: none;
+}
+.seg[data-measured] .seg__thumb { opacity: 1; }
+.seg[data-ready] .seg__thumb {
+  transition: transform var(--t-base) var(--e-move), width var(--t-base) var(--e-move);
+}
+.seg__opt {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-hover) var(--e-color);
+}
+.seg__opt[aria-pressed="true"] { color: var(--text); }
+.seg:not([data-measured]) .seg__opt[aria-pressed="true"] {
+  background: var(--overlay);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+}
+.seg__opt:not(:disabled):active { transform: none; }
+.seg__opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.seg__n {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.seg__n--gold { color: var(--brand-ink); }
+.seg--sm .seg__opt {
+  height: 22px;
+  gap: 4px;
+  padding: 0 10px;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* --- Selector (Select.tsx) ------------------------------------------------
+   El botón es un campo hundido (Figma, Componentes · Selector); el menú, una
+   lámina flotante con la Elevación 1 que nace del borde del botón. */
+/* Base y variante plain con :where(), sin peso: index.css se carga después de
+   los CSS de pantalla, y la clase de quien lo usa (.lib-sort) tiene que ganar. */
+:where(.select) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.select:not(:disabled):active { transform: none; }
+:where(.select--plain) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.select--block { width: 100%; flex: 1; }
+.select--field {
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
+  color: var(--text);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  transition: box-shadow var(--t-hover) var(--e-color);
+}
+.select--field.select--sm { height: 28px; padding: 0 8px 0 10px; font-size: var(--fs-13); line-height: var(--lh-13); }
+.select--field:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus), var(--inset-sunken); }
+.select__value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select__chev { flex: none; color: var(--muted); transition: transform var(--t-quick) var(--e-move); }
+.select[aria-expanded="true"] .select__chev { transform: rotate(180deg); }
+@media (hover: hover) and (pointer: fine) {
+  .select--field:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--hair-strong), var(--inset-sunken); }
+}
+.select-menu {
+  position: fixed;
+  z-index: 10000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--overlay);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--shadow-2);
+  transform-origin: top left;
+  animation: menu-in var(--t-quick) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+.select-menu[data-up] { transform-origin: bottom left; }
+.select-menu[data-closing] { opacity: 0; pointer-events: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(var(--pop-scale)); }
+  to { opacity: 1; transform: none; }
+}
+.select-menu__opt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.select-menu__opt[data-active] { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.select-menu__opt[aria-selected="true"] { font-weight: 500; }
+.select-menu__opt[aria-disabled] { color: var(--faint); cursor: default; }
+.select-menu__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.select-menu__check { flex: none; color: var(--cool); }
+
+/* --- Pestañas (Tabs.tsx) -------------------------------------------------
+   Subrayado de oro de 2 px que se desliza; el contenido cambia al instante. */
+.tabs {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.tabs__tab {
+  height: 40px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  font-weight: 500;
+  line-height: var(--lh-14);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-hover) var(--e-color);
+}
+.tabs__tab[aria-selected="true"] { color: var(--text); }
+.tabs__tab:not(:disabled):active { transform: none; }
+.tabs__tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -4px; border-radius: var(--radius-sm); }
+.tabs__ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: var(--ind-w, 0);
+  transform: translateX(var(--ind-x, 0));
+  border-radius: var(--radius-full);
+  background: var(--brand);
+  opacity: 0;
+  pointer-events: none;
+}
+.tabs[data-measured] .tabs__ink { opacity: 1; }
+.tabs[data-ready] .tabs__ink {
+  transition: transform var(--t-base) var(--e-move), width var(--t-base) var(--e-move);
+}
+.tabs:not([data-measured]) .tabs__tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--brand); }
+
+@media (hover: hover) and (pointer: fine) {
+  .seg__opt:hover:not(:disabled):not([aria-pressed="true"]),
+  .tabs__tab:hover { color: var(--text); }
+}
+/* Con movimiento reducido el indicador salta: deslizarse es desplazarse. */
+@media (prefers-reduced-motion: reduce) {
+  .seg[data-ready] .seg__thumb,
+  .tabs[data-ready] .tabs__ink { transition: none; }
+}
 
 /* Chip de estado ("Error", "Hallazgo", "Excelente"): píldora en sans. */
 .badge {
@@ -1384,6 +1649,32 @@ button.cap:not(:disabled):active { transform: none; }
   white-space: nowrap;
 }
 
+/* --- Chip de estado (Chip.tsx) ---------------------------------------------
+   22 px, píldora, Etiqueta 12/16. Fondo en el tono suave y texto en tinta. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  flex: none;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  --chip-dot: var(--muted);
+}
+.chip svg { flex: none; }
+.chip__dot { width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--chip-dot); }
+.chip--neutral { background: var(--raised); color: var(--muted); }
+.chip--win { background: var(--cool-soft); color: var(--cool-ink); --chip-dot: var(--cool); }
+.chip--loss { background: var(--loss-soft); color: var(--loss-ink); --chip-dot: var(--loss); }
+.chip--finding { background: var(--flag-soft); color: var(--flag-ink); --chip-dot: var(--flag); }
+.chip--gold { background: var(--brand-soft); color: var(--brand-ink); --chip-dot: var(--brand); }
+.chip--outline { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+
 .metric__value {
   font-family: var(--font-sans);
   font-size: var(--fs-14);
@@ -1399,7 +1690,74 @@ button.cap:not(:disabled):active { transform: none; }
   margin-top: 3px;
 }
 
-/* --- avisos (Toaster) ------------------------------------------------------ */
+/* --- avisos (Toaster) ------------------------------------------------------
+   Abajo a la derecha. Cada aviso va en una ranura absoluta que se coloca con
+   transform según lo que miden los de debajo: al irse uno, los demás se
+   deslizan a su sitio. Entra subiendo --rise-toast con fundido; sale solo con
+   fundido. Lámina de vidrio, como en Figma (Componentes · Toast). */
+.toasts {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  width: 360px;
+  max-width: calc(100vw - var(--space-8));
+  /* Por debajo del diálogo (9999): si coinciden, el aviso se colaría por
+     encima del velo del modal. */
+  z-index: 9000;
+  /* La columna vacía no se come los clics de lo que hay detrás. */
+  pointer-events: none;
+}
+.toast-slot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  transition: transform var(--t-base) var(--e-move);
+}
+.toast {
+  pointer-events: auto;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  backdrop-filter: var(--glass-filter);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-3);
+  animation: toast-in var(--t-base) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+.toast-slot[data-leaving] { pointer-events: none; }
+.toast-slot[data-leaving] .toast { opacity: 0; pointer-events: none; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(var(--rise-toast)); }
+  to { opacity: 1; transform: none; }
+}
+.toast__row { display: flex; align-items: flex-start; gap: var(--space-3); padding: 12px 12px 12px 16px; }
+.toast__icon { display: flex; flex-shrink: 0; padding-top: 2px; }
+.toast__media { display: flex; flex-shrink: 0; margin: 2px; }
+.toast__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.toast__head { display: flex; align-items: center; gap: var(--space-2); min-height: 22px; }
+.toast__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+  color: var(--text);
+}
+.toast__meta { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
+.toast__body {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  /* Una ruta larga sin espacios rompería el ancho de la tarjeta. */
+  overflow-wrap: anywhere;
+}
+.toast__actions { display: flex; align-items: center; gap: var(--space-2); margin-top: 10px; }
+.toast__line { height: 2px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+/* Con movimiento reducido la pila salta a su sitio en vez de deslizarse. */
+@media (prefers-reduced-motion: reduce) {
+  .toast-slot { transition: none; }
+}
 .toast__close {
   width: 24px;
   height: 24px;
@@ -1679,29 +2037,6 @@ button.cap:not(:disabled):active { transform: none; }
   flex-shrink: 0;
   margin: 0 var(--space-1);
 }
-
-.tp-seg {
-  display: flex;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.tp-seg button {
-  font-family: var(--font-sans);
-  font-size: var(--fs-12);
-  font-weight: 500;
-  padding: 4px 10px;
-  background: transparent;
-  border: 0;
-  color: var(--faint);
-  cursor: pointer;
-  transition: color var(--t-instant) var(--e-move),
-    background-color var(--t-instant) var(--e-move);
-}
-.tp-seg button + button { border-left: 1px solid var(--line); }
-.tp-seg button:hover { color: var(--text); }
-.tp-seg button[data-on] { background: var(--surface-2); color: var(--text); }
 
 /* El volumen se despliega al pasar por encima: se ajusta una vez y no merece
    ocupar sitio permanente en horizontal. */

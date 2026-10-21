@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useT } from "../../../core/LanguageProvider";
 import { getWavesCareer, type WavesReport } from "../../../core/tauri-ipc";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./WavesSection.css";
 
@@ -25,7 +27,8 @@ export const WavesCareer: React.FC = () => {
     return () => { vivo = false; };
   }, []);
 
-  if (r === undefined) return <div className="ds-loading"><div className="spinner" /></div>;
+  const esqueleto = useDelayedLoading(r === undefined);
+  if (r === undefined || esqueleto) return esqueleto ? <SkeletonLines /> : null;
   if (!r || r.status !== "ok" || r.matches === 0) {
     return (
       <p className="note" style={{ margin: 0 }}>

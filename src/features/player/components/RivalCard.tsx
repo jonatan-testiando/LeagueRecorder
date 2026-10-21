@@ -7,6 +7,7 @@ import { roleLabel } from "../../../core/roles";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { PositionIcon, normalizePosition } from "../../../components/PositionIcon";
 import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
+import { Segmented } from "../../../components/ui/Segmented";
 import "./RivalCard.css";
 
 /**
@@ -264,19 +265,13 @@ const DuelCurve: React.FC<{
       <div className="rv__curveHead">
         <span className="u-label">{t("The duel, minute by minute")}</span>
         {modes.length > 1 && (
-          <div className="tp-seg">
-            {modes.map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => setMetric(m.key)}
-                aria-pressed={metric === m.key}
-                data-on={metric === m.key ? "" : undefined}
-              >
-                {t(m.label)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            size="sm"
+            label={t("Compare")}
+            value={metric}
+            onChange={setMetric}
+            options={modes.map((m) => ({ value: m.key, label: t(m.label) }))}
+          />
         )}
       </div>
       <svg

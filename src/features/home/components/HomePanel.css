@@ -67,20 +67,6 @@
 .home-link--warn { color: var(--signal); }
 .home-link--warn:hover:not(:disabled) { color: var(--signal); text-decoration: underline; }
 
-/* Píldora de estado. */
-.home-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.home-pill--gold { color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
-.home-pill--win { color: var(--win); background: color-mix(in srgb, var(--win) 12%, transparent); }
-
 /* Botones de la pantalla: tamaño de sala, en sans. La variante (oro / fantasma)
    la pone el componente Button; aquí solo la escala. */
 .btn.home-btn {
@@ -571,16 +557,6 @@ button.home-sig:focus-visible { outline: 2px solid var(--brand); outline-offset:
 .home-skel__line { display: block; max-width: 100%; }
 .home-skel .home-skel__card { display: block; height: 214px; border-radius: 12px; }
 .home-skel__card--tall { height: 100%; min-height: 260px; }
-/* Dentro del héroe el esqueleto va sobre la lámina (--panel), que es el mismo
-   color que el .skeleton de serie: se hunde un escalón para que se vea. */
-.home-skel .home-hero .skeleton {
-  background-image: linear-gradient(
-    90deg,
-    var(--sunken) 25%,
-    color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%,
-    var(--sunken) 63%
-  );
-}
 
 /* ------------------------------------------------------------- respuesta */
 @media (max-width: 1360px) {

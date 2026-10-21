@@ -77,45 +77,6 @@
 .lib-grow { flex: 1; min-width: 0; }
 .lib-sep { width: 1px; height: 20px; background: var(--hair); flex: none; }
 
-/* Píldoras segmentadas de estado. */
-.lib-seg {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 34px;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair);
-  flex: none;
-}
-.lib-seg__btn {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 13px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.lib-seg__btn:hover { color: var(--text); }
-.lib-seg__btn[aria-pressed="true"] {
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
-  color: var(--text);
-  font-weight: 500;
-}
-.lib-seg__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
-.lib-seg__n { color: var(--faint); font-weight: 400; }
-.lib-seg__n--gold { color: var(--brand); }
-
 /* Posiciones: botones de icono, como en el cliente. */
 .lib-pos {
   display: flex;
@@ -198,17 +159,8 @@
   cursor: pointer;
 }
 .lib-sort__ico,
-.lib-sort__chev { color: var(--faint); flex: none; }
-.lib-sort select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  font: inherit;
-}
-.lib-sort:has(select:focus-visible) { outline: 2px solid var(--brand); outline-offset: 2px; }
+.lib-sort .select__chev { color: var(--faint); flex: none; }
+.lib-sort:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
 /* Botón de herramienta (Seleccionar, limpieza rápida): fantasma. */
 .lib-tool {
@@ -346,17 +298,6 @@
 .lib-skel__row .lib-cell > .skeleton { display: block; max-width: 100%; }
 .lib-skel__detail { gap: 12px; padding: 24px; box-sizing: border-box; }
 .lib-skel__detail > .skeleton { display: block; flex: none; }
-/* Lista y detalle son láminas (--panel), el mismo color que el .skeleton de
-   serie: las piezas se hunden un escalón para que se vean. */
-.lib-skel .skeleton,
-.lib-skel__detail .skeleton {
-  background-image: linear-gradient(
-    90deg,
-    var(--sunken) 25%,
-    color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%,
-    var(--sunken) 63%
-  );
-}
 /* Resultado en reposo: una barra a la izquierda (gris si aún no hay
    resultado) y la palabra. El tinte solo al pasar por encima o con la fila
    seleccionada: fijo, 26 filas seguidas hacían persiana en claro. */
@@ -495,18 +436,6 @@
 
 /* Revisión. */
 .lib-review { display: flex; align-items: center; min-width: 0; }
-.lib-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.lib-pill--done { color: var(--cool-ink); background: color-mix(in srgb, var(--win) 13%, transparent); padding-left: 7px; }
-.lib-pill--todo { color: var(--brand-ink); background: color-mix(in srgb, var(--brand) 13%, transparent); }
 .lib-prog { display: flex; align-items: center; gap: 6px; }
 .lib-prog__bar {
   display: block;

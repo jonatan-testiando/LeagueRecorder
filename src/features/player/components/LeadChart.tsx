@@ -13,6 +13,7 @@ import { champLabel } from "../../../core/matchEvents";
 import { clock } from "../../../core/time";
 import { ChampFace, IconBaron, IconDragon, IconHerald, IconTower } from "./eventMeta";
 import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
+import { Segmented } from "../../../components/ui/Segmented";
 import "./LeadChart.css";
 
 /**
@@ -404,30 +405,24 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
   return (
     <div className="lc">
       <div className="lc-controls">
-        <div className="tp-seg" role="group" aria-label={t("Series")}>
-          {SERIES.map((s) => (
-            <button key={s.key} type="button" aria-pressed={serie === s.key} data-on={serie === s.key ? "" : undefined} onClick={() => setSerie(s.key)}>
-              {t(s.label)}
-            </button>
-          ))}
-        </div>
-        <div className="tp-seg" role="group" aria-label={t("Compare")}>
-          {MODOS.map((m) => {
-            const off = !me && (m.key === "rival" || m.key === "enemyAvg");
-            return (
-              <button
-                key={m.key}
-                type="button"
-                disabled={off}
-                aria-pressed={modoEf === m.key}
-                data-on={modoEf === m.key ? "" : undefined}
-                onClick={() => setModo(m.key)}
-              >
-                {t(m.label)}
-              </button>
-            );
-          })}
-        </div>
+        <Segmented
+          size="sm"
+          label={t("Series")}
+          value={serie}
+          onChange={setSerie}
+          options={SERIES.map((s) => ({ value: s.key, label: t(s.label) }))}
+        />
+        <Segmented
+          size="sm"
+          label={t("Compare")}
+          value={modoEf}
+          onChange={setModo}
+          options={MODOS.map((m) => ({
+            value: m.key,
+            label: t(m.label),
+            disabled: !me && (m.key === "rival" || m.key === "enemyAvg"),
+          }))}
+        />
       </div>
       <p className="lc-caption">
         {caption}

@@ -9,6 +9,8 @@ import { BUDGET_PARTS } from "../jungleRoute";
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { useFirstClearMedian } from "./matchMoves";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./JungleRouteWidget.css";
 import "./MatchTab.css";
 
@@ -40,12 +42,13 @@ export const JungleRouteWidget: React.FC<Props> = ({ matchId, onOpenMap }) => {
   // Compartida con "Tus muertes" y el resumen: se pide una vez.
   const resp = useJungleRoute(matchId);
   const mediana = useFirstClearMedian(matchId) ?? null;
+  const esqueleto = useDelayedLoading(resp === undefined);
 
-  if (resp === null) {
+  if (resp === null && !esqueleto) {
     return <EmptyState title={t("Could not read the route")} text={t("Try opening the game again.")} />;
   }
-  if (resp === undefined) {
-    return <div className="jr-loading"><div className="spinner" /></div>;
+  if (resp === undefined || resp === null || esqueleto) {
+    return esqueleto ? <SkeletonLines lines={4} /> : null;
   }
   if (resp.status === "no_minimap") {
     return (

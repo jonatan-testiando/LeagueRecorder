@@ -17,9 +17,11 @@ import { RIOT_PLATFORMS, platformLabel, AUTO_PLATFORM } from "../../../core/riot
 import { RIOT_DEV_PORTAL } from "../../../components/RiotKeyBanner";
 import { BrandMark } from "../../../components/BrandMark";
 import { Button } from "../../../components/ui/Button";
+import { Segmented } from "../../../components/ui/Segmented";
 import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 import type { VideoSettings } from "../../../types";
+import { Select } from "../../../components/ui/Select";
 
 /**
  * Primer arranque.
@@ -221,35 +223,29 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) =>
 
               <div style={styles.row}>
                 <label style={styles.rowLabel} htmlFor="onb-lang">{t("Interface language")}</label>
-                <div className="tp-seg" id="onb-lang">
-                  {LANGUAGES.map((l) => (
-                    <button
-                      key={l.code}
-                      type="button"
-                      onClick={() => setLang(l.code as Language)}
-                      {...(lang === l.code ? { "data-on": true } : {})}
-                    >
-                      {l.label}
-                    </button>
-                  ))}
-                </div>
+                <Segmented
+                  id="onb-lang"
+                  label={t("Interface language")}
+                  value={lang}
+                  onChange={(l) => setLang(l)}
+                  options={LANGUAGES.map((l) => ({ value: l.code as Language, label: l.label }))}
+                />
               </div>
 
               <div style={styles.row}>
                 <label style={styles.rowLabel} htmlFor="onb-region">{t("Region")}</label>
                 <div style={styles.rowField}>
-                  <select
+                  <Select
                     id="onb-region"
-                    className="field"
+                    className="select--block"
                     value={config?.riot_platform ?? AUTO_PLATFORM}
                     disabled={config === null}
-                    onChange={(e) => guardar({ riot_platform: e.target.value })}
-                  >
-                    <option value={AUTO_PLATFORM}>{etiquetaAuto}</option>
-                    {RIOT_PLATFORMS.map((p) => (
-                      <option key={p.code} value={p.code}>{p.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => guardar({ riot_platform: v })}
+                    options={[
+                      { value: AUTO_PLATFORM, label: etiquetaAuto },
+                      ...RIOT_PLATFORMS.map((p) => ({ value: p.code, label: p.label })),
+                    ]}
+                  />
                   <p style={styles.hint}>
                     {t("Where you play. Auto figures it out from your recent matches the first time.")}
                   </p>
@@ -351,55 +347,37 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) =>
 
               <div style={styles.row}>
                 <label style={styles.rowLabel}>{t("Quality")}</label>
-                <div className="tp-seg">
-                  {(["High", "Medium", "Low"] as const).map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      onClick={() => video && guardarVideo(video.fps, q)}
-                      {...(video?.quality === q ? { "data-on": true } : {})}
-                    >
-                      {t(q)}
-                    </button>
-                  ))}
-                </div>
+                <Segmented
+                  label={t("Quality")}
+                  value={video?.quality}
+                  onChange={(q) => video && guardarVideo(video.fps, q)}
+                  options={(["High", "Medium", "Low"] as const).map((q) => ({ value: q, label: t(q) }))}
+                />
               </div>
 
               <div style={styles.row}>
                 <label style={styles.rowLabel}>{t("Frame rate")}</label>
-                <div className="tp-seg">
-                  {[60, 30].map((f) => (
-                    <button
-                      key={f}
-                      type="button"
-                      onClick={() => video && guardarVideo(f, video.quality)}
-                      {...(video?.fps === f ? { "data-on": true } : {})}
-                    >
-                      {f} FPS
-                    </button>
-                  ))}
-                </div>
+                <Segmented
+                  label={t("Frame rate")}
+                  value={video?.fps}
+                  onChange={(f) => video && guardarVideo(f, video.quality)}
+                  options={[60, 30].map((f) => ({ value: f, label: `${f} FPS` }))}
+                />
               </div>
 
               <div style={styles.row}>
                 <label style={styles.rowLabel}>{t("Resolution")}</label>
                 <div style={styles.rowField}>
-                  <div className="tp-seg">
-                    {([
-                      { key: "native", label: t("Native") },
-                      { key: "1080p", label: "1080p" },
-                      { key: "1440p", label: "1440p" },
-                    ] as const).map((r) => (
-                      <button
-                        key={r.key}
-                        type="button"
-                        onClick={() => video && guardarVideo(video.fps, video.quality, r.key)}
-                        {...((video?.resolution ?? "native") === r.key ? { "data-on": true } : {})}
-                      >
-                        {r.label}
-                      </button>
-                    ))}
-                  </div>
+                  <Segmented
+                    label={t("Resolution")}
+                    value={video?.resolution ?? "native"}
+                    onChange={(r) => video && guardarVideo(video.fps, video.quality, r)}
+                    options={[
+                      { value: "native" as const, label: t("Native") },
+                      { value: "1080p" as const, label: "1080p" },
+                      { value: "1440p" as const, label: "1440p" },
+                    ]}
+                  />
                   <p style={styles.hint}>
                     {t("Encoded on the GPU (NVENC), so your in-game FPS is untouched.")}
                   </p>

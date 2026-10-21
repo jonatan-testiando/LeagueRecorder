@@ -3,7 +3,6 @@
    La tira de campamentos, sus fichas y la lista de muertes se fueron el
    2026-10-17 (ver la cabecera de JungleRouteWidget.tsx). */
 
-.jr-loading { display: grid; place-items: center; padding: var(--space-6) 0; }
 
 .jr-warn {
   display: flex;

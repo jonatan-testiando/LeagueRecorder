@@ -2174,6 +2174,7 @@ const ES: Record<string, string> = {
   "All 10": "Los 10",
   "Series": "Serie",
   "Compare": "Comparar",
+  "Scope": "Alcance",
   "You minus {champ}, your lane opponent.": "Tú menos {champ}, tu rival de línea.",
   "You minus the enemy team's average.": "Tú menos la media del equipo rival.",
   "Your team minus the enemy team.": "Tu equipo menos el rival.",

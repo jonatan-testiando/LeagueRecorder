@@ -5,6 +5,8 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { Button } from "../../../components/ui/Button";
 import { useT } from "../../../core/LanguageProvider";
 import { roleLabel } from "../../../core/roles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 // Las etiquetas, el formato y el orden por puesto viven en `benchmarkFormat`
 // porque Patrones enseña este mismo baremo (la media de varias partidas): con
 // una tabla en cada sitio la misma métrica acaba con dos nombres.
@@ -82,6 +84,8 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
       ? t("Players in {band} on {role}", { role: t(puesto), band: t(banda) })
       : t("All players on {role}", { role: t(puesto) });
 
+  const esqueleto = useDelayedLoading(err === null && rows === null);
+
   if (err !== null) {
     return (
       <div style={styles.aviso}>
@@ -100,12 +104,8 @@ export const BenchmarkWidget: React.FC<BenchmarkWidgetProps> = ({ matchId, role,
     );
   }
 
-  if (rows === null) {
-    return (
-      <div style={styles.cargando}>
-        <div className="spinner" />
-      </div>
-    );
+  if (rows === null || esqueleto) {
+    return esqueleto ? <SkeletonLines lines={4} /> : null;
   }
 
   if (rows.length === 0) {
@@ -279,11 +279,6 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "right",
   },
   mas: { marginTop: "var(--space-2)" },
-  cargando: {
-    display: "grid",
-    placeItems: "center",
-    padding: "var(--space-5) 0",
-  },
   aviso: {
     display: "flex",
     alignItems: "center",

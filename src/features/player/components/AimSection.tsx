@@ -3,6 +3,8 @@ import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { getAim, type AimBucket, type AimReport } from "../../../core/tauri-ipc";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./HitsTaken.css";
 import "./WavesSection.css";
@@ -38,7 +40,8 @@ export const AimSection: React.FC<Props> = ({ matchId, videoOffset, onSeek }) =>
     return () => { vivo = false; };
   }, [matchId]);
 
-  if (r === undefined) return <div className="ds-loading"><div className="spinner" /></div>;
+  const esqueleto = useDelayedLoading(r === undefined);
+  if (r === undefined || esqueleto) return esqueleto ? <SkeletonLines /> : null;
   if (!r || r.status === "no_keys" || r.status === "no_match") {
     return (
       <p className="note" style={{ margin: 0 }}>

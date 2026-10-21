@@ -2534,6 +2534,38 @@ const ES: Record<string, string> = {
   "Open the Coach": "Abrir el Coach",
   "click a dot = that moment": "clic en un punto = ese instante",
   "{window} (your focus)": "{window} (tu foco)",
+  // Reproductor · inspector Partida e Impacto (rediseño «Ritmo», 3c y 4.4).
+  "What this game cost you": "Lo que te costó esta partida",
+  "What all your deaths cost your team in win probability, with their share of what the enemy took right after.":
+    "Lo que costaron todas tus muertes a tu equipo en probabilidad de victoria, con su parte de lo que el rival tomó justo después.",
+  "Death to the enemy jungler": "Muerte al jungla rival",
+  "Caught from the fog": "Te abren desde la niebla",
+  "Thrown while ahead": "Tirada con ventaja",
+  "Caught away from your lane": "Muerte lejos de tu carril",
+  "Death at a tower": "Muerte junto a una torre",
+  "Died without trading back": "Muerte sin devolver daño",
+  "Death before an enemy objective": "Muerte antes de un objetivo rival",
+  "Death without looking at the map": "Muerte sin mirar el mapa",
+  "thrown (team ≥ 65%)": "tirada (equipo ≥ 65 %)",
+  "before an enemy objective": "antes de objetivo rival",
+  "the dragon": "el dragón",
+  "the Baron": "el Barón Nashor",
+  "the Rift Herald": "el Heraldo de la Grieta",
+  "the Void Grubs": "las larvas del Vacío",
+  "And {objective} {s} s later: {p}% more.": "Y {objective} {s} s después: {p} % más.",
+  "And {objective} right after: {p}% more.": "Y {objective} justo después: {p} % más.",
+  "Your team had a {p}% win chance.": "Tu equipo tenía un {p} % de victoria.",
+  "Watch it in the video": "Verla en el vídeo",
+  "Watch the {n} in a row": "Ver las {n} seguidas",
+  "One more death: {cost}": "Una muerte más: {cost}",
+  "{n} more deaths: {cost}": "{n} muertes más: {cost}",
+  "What this game cost you, your rival and the pressure you took come from Riot's data for the game.":
+    "Lo que te costó la partida, tu rival y la presión que absorbiste salen de los datos de Riot de la partida.",
+  "Impact needs your Riot API key": "Impacto necesita tu clave de la API de Riot",
+  "Couldn't load Riot's data for this game": "No se pudieron cargar los datos de Riot de esta partida",
+  "Usually it's the connection or a hiccup in Riot's API: trying again is enough.":
+    "Suele ser la conexión o un tropiezo de la API de Riot: basta con reintentar.",
+  "Game sections": "Secciones de la partida",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

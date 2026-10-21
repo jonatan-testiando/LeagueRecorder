@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Play, RotateCcw, Zap, Target, Check, X } from "lucide-react";
+import { Play, RotateCcw, Zap, Target, Check, X, Lock } from "lucide-react";
 import {
   CameraBinding,
   DrillSession,
@@ -12,6 +12,9 @@ import {
 import { useChampionIcon } from "../../../core/ddragon";
 import { roleLabel } from "../../../core/roles";
 import { useT } from "../../../core/LanguageProvider";
+import { Button } from "../../../components/ui/Button";
+import { Segmented } from "../../../components/ui/Segmented";
+import "./TrainingPanel.css";
 
 /** Cuánto esperamos una respuesta antes de contar la ronda como fallada. */
 const TIMEOUT_MS = 3000;
@@ -47,15 +50,15 @@ interface Prompt {
 const ChampionPrompt: React.FC<{ champion: string }> = ({ champion }) => {
   const icon = useChampionIcon(champion);
   return (
-    <div style={styles.champWrap}>
+    <div className="trn-champ">
       {icon ? (
-        <img src={icon} alt={champion} style={styles.champImg} />
+        <img src={icon} alt={champion} className="trn-champ__img" />
       ) : (
-        <div style={{ ...styles.champImg, ...styles.champFallback }}>
+        <div className="trn-champ__img trn-champ__img--none t-page">
           {champion.slice(0, 2).toUpperCase()}
         </div>
       )}
-      <span style={styles.champName}>{champion}</span>
+      <span className="trn-stage__big t-section">{champion}</span>
     </div>
   );
 };
@@ -276,90 +279,106 @@ export const ReflexDrill: React.FC<{
   // -------------------------------------------------------------------------
 
   if (phase === "idle") {
+    // «Campeón» sin campeones grabados se desactiva con candado y tooltip, no
+    // solo con el color: antes parecía apagado sin estarlo (auditoría V5).
+    const champLocked = !champModeAvailable && !poolFailed && !poolLoading;
     return (
-      <div style={styles.panel}>
-        <div style={styles.headerRow}>
-          <Zap size={18} color="var(--cool)" />
-          <h3 style={styles.title}>{t("Key mapping drill")}</h3>
-        </div>
-        <p style={styles.desc}>
+      <section className="card trn-card">
+        <header className="trn-card__head">
+          <Zap size={18} />
+          <h2 className="trn-card__title t-card">{t("Key mapping drill")}</h2>
+        </header>
+        <p className="trn-desc t-body">
           {t("A role appears — press its camera key. Target: under {ms} ms with 95% accuracy, without looking at the keyboard.", { ms: CONSCIOUS_MS })}
         </p>
 
-        <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>{t("Rounds")}</span>
-          {[20, 30, 50].map((n) => (
-            <button
-              key={n}
-              className="btn btn--ghost btn--sm" aria-pressed={n === rounds}
-              style={styles.chip}
-              onClick={() => setRounds(n)}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
+        <div className="trn-opts">
+          <span className="trn-opts__label t-small">{t("Rounds")}</span>
+          <div className="trn-opts__ctl">
+            <Segmented
+              label={t("Rounds")}
+              value={rounds}
+              onChange={setRounds}
+              options={[20, 30, 50].map((n) => ({ value: n, label: n }))}
+            />
+          </div>
 
-        <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>{t("Prompt")}</span>
-          <button
-            className="btn btn--ghost btn--sm" aria-pressed={mode === "role"}
-            style={styles.chip}
-            onClick={() => setMode("role")}
-          >
-            {t("Role")}
-          </button>
-          {/* Con un fallo de la petición el modo NO se desactiva: se puede
-              reintentar sin salir de la pantalla. Antes quedaba gris con el
-              mensaje de "juega una partida primero", que era mentira. */}
-          <button
-            className="btn btn--ghost btn--sm" aria-pressed={mode === "champion"}
-            style={{ ...styles.chip, opacity: champModeAvailable || poolFailed ? 1 : 0.4 }}
-            onClick={() => (champModeAvailable ? setMode("champion") : poolFailed && loadPool())}
-            disabled={!champModeAvailable && !poolFailed && !poolLoading}
-            title={t(
-              poolFailed
-                ? "Couldn't read your champion pool. Click to try again."
-                : champModeAvailable
-                ? "Uses champions seen in your recorded games"
-                : "Play a recorded game first to build your champion pool"
+          <span className="trn-opts__label t-small">{t("Prompt")}</span>
+          <div className="trn-opts__ctl">
+            {/* Con un fallo de la petición el modo NO se desactiva: se puede
+                reintentar sin salir de la pantalla. Antes quedaba gris con el
+                mensaje de "juega una partida primero", que era mentira. */}
+            <Segmented
+              label={t("Prompt")}
+              value={mode}
+              onChange={(m) => {
+                if (m === "role") setMode("role");
+                else if (champModeAvailable) setMode("champion");
+                else if (poolFailed) loadPool();
+              }}
+              options={[
+                { value: "role" as const, label: t("Role") },
+                {
+                  value: "champion" as const,
+                  label: t("Champion"),
+                  icon: champLocked ? <Lock size={12} /> : undefined,
+                  disabled: !champModeAvailable && !poolFailed,
+                  title: t(
+                    poolFailed
+                      ? "Couldn't read your champion pool. Click to try again."
+                      : champModeAvailable
+                      ? "Uses champions seen in your recorded games"
+                      : "Play a recorded game first to build your champion pool"
+                  ),
+                },
+              ]}
+            />
+            {poolFailed && (
+              <span className="trn-opts__error t-small">
+                {t("Couldn't read your champion pool.")}
+                <Button size="sm" onClick={loadPool}>{t("Retry")}</Button>
+              </span>
             )}
-          >
-            {t("Champion")}
-          </button>
-          {poolFailed && (
-            <span style={styles.poolError}>
-              {t("Couldn't read your champion pool.")}{" "}
-              <button className="btn btn--ghost btn--sm" onClick={loadPool}>{t("Retry")}</button>
-            </span>
-          )}
+          </div>
+
+          <span className="trn-opts__label t-small">{t("Load")}</span>
+          <div className="trn-opts__ctl">
+            <Segmented
+              label={t("Load")}
+              value={withLoad ? "tracking" : "none"}
+              onChange={(v) => setWithLoad(v === "tracking")}
+              options={[
+                { value: "none" as const, label: t("No load") },
+                {
+                  value: "tracking" as const,
+                  label: t("Mouse tracking"),
+                  icon: <Target size={14} />,
+                  title: t("Adds a mouse-tracking task on top — this is where most people break"),
+                },
+              ]}
+            />
+          </div>
         </div>
 
-        <div style={styles.optionRow}>
-          <span style={styles.optionLabel}>{t("Load")}</span>
-          <button
-            className="btn btn--ghost btn--sm" aria-pressed={withLoad}
-            style={styles.chip}
-            onClick={() => setWithLoad((v) => !v)}
-            title={t("Adds a mouse-tracking task on top — this is where most people break")}
-          >
-            <Target size={14} /> {t("Mouse tracking")}
-          </button>
+        <div className="trn-actions">
+          <Button variant="primary" icon={<Play size={16} />} onClick={start}>
+            {t("Start")}
+          </Button>
         </div>
-
-        <button className="btn btn--primary" style={styles.bigBtn} onClick={start}>
-          <Play size={18} /> {t("Start")}
-        </button>
-      </div>
+      </section>
     );
   }
 
   if (phase === "countdown") {
     return (
-      <div style={styles.panel}>
-        <div style={styles.countdown}>{countdown === 0 ? t("Go!") : countdown}</div>
-        <p style={styles.desc}>{t("Hands on the keys.")}</p>
-      </div>
+      <section className="card trn-card">
+        <div className="trn-stage" aria-live="assertive">
+          <span className="trn-stage__big trn-stage__big--count t-hero">
+            {countdown === 0 ? t("Go!") : countdown}
+          </span>
+          <span className="trn-stage__hint t-body">{t("Hands on the keys.")}</span>
+        </div>
+      </section>
     );
   }
 
@@ -367,12 +386,12 @@ export const ReflexDrill: React.FC<{
     const acc = done.length ? (hits / done.length) * 100 : 0;
     const roles = Array.from(new Set(done.map((r) => r.role)));
     return (
-      <div style={styles.panel}>
-        <div style={styles.headerRow}>
-          <Zap size={18} color="var(--cool)" />
-          <h3 style={styles.title}>{t("Session complete")}</h3>
-        </div>
-        <div style={styles.statRow}>
+      <section className="card trn-card">
+        <header className="trn-card__head">
+          <Zap size={18} />
+          <h2 className="trn-card__title t-card">{t("Session complete")}</h2>
+        </header>
+        <div className="trn-stats">
           <Stat label={t("Accuracy")} value={`${acc.toFixed(0)}%`} good={acc >= 95} />
           <Stat label={t("Avg latency")} value={`${avg.toFixed(0)} ms`} good={avg > 0 && avg < CONSCIOUS_MS} />
           <Stat
@@ -382,31 +401,24 @@ export const ReflexDrill: React.FC<{
           {withLoad && <Stat label={t("Tracking")} value={`${tracking.toFixed(0)}%`} />}
         </div>
 
-        <div style={styles.breakdown}>
+        <div className="trn-break">
           {roles.map((role) => {
             const rr = done.filter((r) => r.role === role);
             const rh = rr.filter((r) => r.ok);
             const rAvg = rh.length ? rh.reduce((a, r) => a + r.latencyMs, 0) / rh.length : 0;
             const rAcc = (rh.length / rr.length) * 100;
             return (
-              <div key={role} style={styles.breakdownRow}>
-                <span style={styles.breakdownRole}>{t(roleLabel(role))}</span>
-                <div style={styles.bar}>
-                  <div
-                    style={{
-                      ...styles.barFill,
-                      width: `${Math.min(100, (rAvg / 800) * 100)}%`,
-                      background: rAvg < CONSCIOUS_MS ? "var(--win)" : "var(--brand)",
-                    }}
+              <div key={role} className="trn-break__row t-small">
+                <span className="trn-break__role">{t(roleLabel(role))}</span>
+                <div className="trn-bar">
+                  <span
+                    className="trn-bar__fill"
+                    data-tone={rAvg < CONSCIOUS_MS ? "good" : undefined}
+                    style={{ "--p": Math.min(1, rAvg / 800) } as React.CSSProperties}
                   />
                 </div>
-                <span style={styles.breakdownVal}>{rAvg ? `${rAvg.toFixed(0)} ms` : "—"}</span>
-                <span
-                  style={{
-                    ...styles.breakdownAcc,
-                    color: rAcc >= 95 ? "var(--win)" : "var(--loss)",
-                  }}
-                >
+                <span className="trn-break__val">{rAvg ? `${rAvg.toFixed(0)} ms` : "—"}</span>
+                <span className="trn-break__acc trn-tone" data-tone={rAcc >= 95 ? "good" : "bad"}>
                   {rAcc.toFixed(0)}%
                 </span>
               </div>
@@ -414,90 +426,87 @@ export const ReflexDrill: React.FC<{
           })}
         </div>
 
-        <div style={{ display: "flex", gap: "var(--space-3)" }}>
-          <button className="btn btn--primary" style={styles.bigBtn} onClick={start}>
-            <RotateCcw size={18} /> {t("Again")}
-          </button>
-          <button className="btn btn--ghost" style={styles.bigBtn} onClick={reset}>
-            {t("Back")}
-          </button>
+        <div className="trn-actions">
+          <Button variant="primary" icon={<RotateCcw size={16} />} onClick={start}>
+            {t("Again")}
+          </Button>
+          <Button onClick={reset}>{t("Back")}</Button>
         </div>
-      </div>
+      </section>
     );
   }
 
   // --- running ---
   return (
-    <div style={styles.panel}>
-      <div style={styles.progressRow}>
-        <span style={styles.progressText}>
+    <section className="card trn-card">
+      <div className="trn-run">
+        <span className="trn-run__count t-small">
           {done.length} / {rounds}
         </span>
-        <div style={styles.progressTrack}>
-          <div style={{ ...styles.progressFill, width: `${(done.length / rounds) * 100}%` }} />
+        <div
+          className="trn-progress"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={rounds}
+          aria-valuenow={done.length}
+        >
+          <span className="trn-progress__fill" style={{ "--p": done.length / rounds } as React.CSSProperties} />
         </div>
-        <button className="btn btn--ghost" style={styles.chip} onClick={reset}>
-          {t("Stop")}
-        </button>
+        <Button size="sm" onClick={reset}>{t("Stop")}</Button>
       </div>
 
       {withLoad && <TrackingTask onScore={setTracking} />}
 
-      <div style={styles.stage}>
+      <div className="trn-stage">
         {feedback ? (
-          <div style={styles.feedback}>
-            {feedback.ok ? (
-              <>
-                <Check size={48} color="var(--win)" />
-                <span style={{ ...styles.feedbackMs, color: "var(--win)" }}>
-                  {feedback.latencyMs.toFixed(0)} ms
-                </span>
-              </>
-            ) : (
-              <>
-                <X size={48} color="var(--loss)" />
-                <span style={{ ...styles.feedbackMs, color: "var(--loss)" }}>
-                  {feedback.pressedKey
-                    ? t("{pressed} — it was {expected}", {
-                        pressed: feedback.pressedKey,
-                        expected: feedback.expectedKey,
-                      })
-                    : t("Too slow")}
-                </span>
-              </>
-            )}
-          </div>
+          feedback.ok ? (
+            <>
+              <Check size={40} className="trn-ic-ok" />
+              <span className="trn-stage__ok t-metric">{feedback.latencyMs.toFixed(0)} ms</span>
+            </>
+          ) : (
+            <>
+              <X size={40} className="trn-ic-miss" />
+              <span className="trn-stage__miss t-metric">
+                {feedback.pressedKey
+                  ? t("{pressed} — it was {expected}", {
+                      pressed: feedback.pressedKey,
+                      expected: feedback.expectedKey,
+                    })
+                  : t("Too slow")}
+              </span>
+            </>
+          )
         ) : prompt ? (
           prompt.champion ? (
             <ChampionPrompt champion={prompt.champion} />
           ) : (
-            <div style={styles.roleprompt}>{t(roleLabel(prompt.binding.role))}</div>
+            <span className="trn-stage__big t-hero">{t(roleLabel(prompt.binding.role))}</span>
           )
         ) : null}
       </div>
 
-      <div style={styles.liveStats}>
+      <div className="trn-live t-small">
         <span>
           {hits}/{done.length} {t("correct")}
         </span>
         <span>{avg ? t("{ms} ms avg", { ms: avg.toFixed(0) }) : "—"}</span>
       </div>
-    </div>
+    </section>
   );
 };
 
+/** Métrica del resultado: jade si ya está en el objetivo, oro si todavía no. */
 const Stat: React.FC<{ label: string; value: string; good?: boolean }> = ({
   label,
   value,
   good,
 }) => (
-  <div style={styles.stat}>
-    <span style={styles.statLabel}>{label}</span>
+  <div className="trn-stat">
+    <span className="trn-stat__label t-label">{label}</span>
     <span
-      style={{
-        ...styles.statValue,
-        color: good === undefined ? "var(--text)" : good ? "var(--win)" : "var(--brand)",
-      }}
+      className="trn-stat__value t-metric"
+      data-tone={good === undefined ? undefined : good ? "good" : "warn"}
     >
       {value}
     </span>
@@ -563,175 +572,10 @@ const TrackingTask: React.FC<{ onScore: (pct: number) => void }> = ({ onScore })
   }, [onScore]);
 
   return (
-    <div ref={areaRef} style={styles.trackArea}>
-      <div style={{ ...styles.trackTarget, left: `${pos.x}%`, top: `${pos.y}%` }} />
-      <span style={styles.trackHint}>{t("Keep the cursor on the dot")}</span>
+    <div ref={areaRef} className="trn-track">
+      {/* La posición cambia en cada fotograma: es lo único que va en línea. */}
+      <div className="trn-track__dot" style={{ left: `${pos.x}%`, top: `${pos.y}%` }} />
+      <span className="trn-track__hint t-label">{t("Keep the cursor on the dot")}</span>
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  panel: {
-    background: "var(--surface-1)",
-    border: "1px solid var(--line-soft)",
-    borderRadius: "var(--radius-xl)",
-    padding: "var(--space-6)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-  },
-  headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: 16, fontWeight: 500, color: "var(--text)" },
-  desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 560 },
-  optionRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" },
-  poolError: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    fontSize: 13,
-    color: "var(--loss)",
-  },
-  optionLabel: {
-    fontSize: 13,
-    fontWeight: 400,
-    color: "var(--faint)",
-    width: 70,
-  },
-  chip: { padding: "6px 14px", fontSize: 13, fontVariantNumeric: "tabular-nums" },
-  bigBtn: {
-    padding: "10px 20px",
-    fontSize: "var(--font-sm)",
-    alignSelf: "flex-start",
-    justifyContent: "center",
-  },
-  countdown: {
-    fontSize: 96,
-    fontWeight: 600,
-    color: "var(--accent-violet)",
-    textAlign: "center",
-    fontVariantNumeric: "tabular-nums",
-  },
-  stage: {
-    height: 220,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "var(--bg-app)",
-    borderRadius: "var(--radius-lg)",
-    border: "1px solid var(--line-soft)",
-  },
-  roleprompt: {
-    fontSize: 56,
-    fontWeight: 600,
-    color: "var(--text)",
-  },
-  champWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-3)" },
-  champImg: {
-    width: 112,
-    height: 112,
-    borderRadius: "var(--radius-full)",
-    border: "2px solid var(--line)",
-    objectFit: "cover",
-  },
-  champFallback: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "var(--surface-2)",
-    fontWeight: 600,
-    fontSize: 32,
-    color: "var(--muted)",
-  },
-  champName: { fontSize: "var(--font-xl)", fontWeight: 500, color: "var(--text)" },
-  feedback: { display: "flex", flexDirection: "column", alignItems: "center", gap: "var(--space-2)" },
-  feedbackMs: { fontSize: "var(--font-lg)", fontWeight: 500, fontVariantNumeric: "tabular-nums" },
-  progressRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  progressText: {
-    fontSize: 13,
-    fontVariantNumeric: "tabular-nums",
-    color: "var(--faint)",
-    minWidth: 60,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 4,
-    background: "var(--surface-2)",
-    borderRadius: "var(--radius-full)",
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    background: "var(--accent-violet)",
-    transition: "width 0.2s ease",
-  },
-  liveStats: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: 13,
-    color: "var(--faint)",
-    fontVariantNumeric: "tabular-nums",
-  },
-  statRow: { display: "flex", gap: "var(--space-6)", flexWrap: "wrap" },
-  stat: { display: "flex", flexDirection: "column", gap: 2 },
-  statLabel: {
-    fontSize: 13,
-    color: "var(--faint)",
-    fontWeight: 400,
-  },
-  statValue: { fontSize: 24, fontWeight: 500, fontVariantNumeric: "tabular-nums" },
-  breakdown: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  breakdownRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  breakdownRole: {
-    width: 90,
-    fontSize: 13,
-    fontWeight: 500,
-    color: "var(--muted)",
-  },
-  bar: {
-    flex: 1,
-    height: 6,
-    background: "var(--surface-2)",
-    borderRadius: "var(--radius-full)",
-    overflow: "hidden",
-  },
-  barFill: { height: "100%", borderRadius: "var(--radius-full)" },
-  breakdownVal: {
-    width: 70,
-    textAlign: "right",
-    fontVariantNumeric: "tabular-nums",
-    fontSize: 13,
-    color: "var(--muted)",
-  },
-  breakdownAcc: {
-    width: 50,
-    textAlign: "right",
-    fontVariantNumeric: "tabular-nums",
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  trackArea: {
-    position: "relative",
-    height: 90,
-    background: "var(--bg-app)",
-    border: "1px dashed var(--line)",
-    borderRadius: "var(--radius-lg)",
-    overflow: "hidden",
-  },
-  trackTarget: {
-    position: "absolute",
-    width: 26,
-    height: 26,
-    marginLeft: -13,
-    marginTop: -13,
-    borderRadius: "var(--radius-full)",
-    background: "var(--accent-teal)",
-    boxShadow: "0 0 12px color-mix(in srgb, var(--cool) 50%, transparent)",
-  },
-  trackHint: {
-    position: "absolute",
-    left: "var(--space-3)",
-    bottom: "var(--space-2)",
-    fontSize: 12,
-    color: "var(--faint)",
-  },
 };

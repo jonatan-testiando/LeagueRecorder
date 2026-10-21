@@ -6,8 +6,13 @@ import { RecallDrill } from "./RecallDrill";
 import { AwarenessQuiz } from "./AwarenessQuiz";
 import { TrainingSetup } from "./TrainingSetup";
 import { useT } from "../../../core/LanguageProvider";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { Segmented } from "../../../components/ui/Segmented";
+import { Button } from "../../../components/ui/Button";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { Skeleton, SkeletonLines } from "../../../components/ui/Skeleton";
+import "./TrainingPanel.css";
 
 type Section = "drills" | "awareness" | "setup";
 
@@ -49,72 +54,63 @@ const ProgressChart: React.FC<{ sessions: DrillSession[] }> = ({ sessions }) => 
   const delta = last - first;
 
   return (
-    <div style={styles.progressCard}>
-      <div style={styles.progressHead}>
-        <TrendingUp size={15} color="var(--faint)" />
-        <span style={styles.progressTitle}>{t("Avg latency, last {n} sessions", { n: data.length })}</span>
-      </div>
-      {/* La etiqueta de la referencia va en HTML y no dentro del SVG: el gráfico
-          usa preserveAspectRatio="none" para estirarse a lo ancho, y eso deforma
-          también el texto. 400 ms es el umbral en que la lectura deja de ser
-          consciente, y es la única razón por la que esa línea está ahí. */}
-      <div style={styles.sparkWrap}>
-        <span
-          style={{
-            ...styles.sparkRef,
-            bottom: `${(CONSCIOUS_MS / max) * 100}%`,
-          }}
-        >
+    <section className="card trn-card">
+      <header className="trn-card__head">
+        <TrendingUp size={16} />
+        <h2 className="trn-card__title t-card">{t("Avg latency, last {n} sessions", { n: data.length })}</h2>
+      </header>
+      {/* 400 ms es el umbral en que la lectura deja de ser consciente, y es la
+          única razón por la que esa línea está ahí. */}
+      <div className="trn-spark">
+        <span className="trn-spark__ref t-label" style={{ "--y": CONSCIOUS_MS / max } as React.CSSProperties}>
           {t("{n} ms", { n: CONSCIOUS_MS })}
         </span>
-      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={styles.spark}>
-        {/* Línea de referencia de los 400 ms: el umbral en que deja de ser consciente. */}
-        <line
-          x1="0"
-          x2={w}
-          y1={refY}
-          y2={refY}
-          stroke="var(--line)"
-          strokeWidth="0.4"
-          strokeDasharray="2 2"
-          vectorEffect="non-scaling-stroke"
-        />
-
-        <polyline
-          points={pts}
-          fill="none"
-          stroke="var(--cool)"
-          strokeWidth="1.5"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
+          <line
+            x1="0"
+            x2={w}
+            y1={refY}
+            y2={refY}
+            stroke="var(--line)"
+            strokeWidth="0.4"
+            strokeDasharray="2 2"
+            vectorEffect="non-scaling-stroke"
+          />
+          <polyline
+            points={pts}
+            fill="none"
+            stroke="var(--cool)"
+            strokeWidth="1.5"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
       </div>
-      <div style={styles.progressFoot}>
+      <div className="trn-spark__foot t-small">
         <span>{t("{n} ms", { n: last.toFixed(0) })}</span>
-        <span
-          style={{
-            color: delta <= 0 ? "var(--win)" : "var(--loss)",
-          }}
-        >
-          {delta <= 0 ? "" : "+"}
+        {/* La frase ya dice el sentido: con el signo delante salía «+48 ms más
+            lento» y, al mejorar, «-48 ms más rápido». */}
+        <span className="trn-tone" data-tone={delta <= 0 ? "good" : "bad"}>
           {t(delta <= 0 ? "{ms} ms faster than your first" : "{ms} ms slower than your first", {
-            ms: delta.toFixed(0),
+            ms: Math.abs(delta).toFixed(0),
           })}
         </span>
       </div>
-    </div>
+    </section>
   );
 };
 
 export const TrainingPanel: React.FC = () => {
   const [section, setSection] = useState<Section>("drills");
   const [config, setConfig] = useState<TrainingConfig | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
   const [sessions, setSessions] = useState<DrillSession[]>([]);
   // Cambios sin guardar en Ajustes. Salir de la pestaña los tira sin decir
   // nada, así que se pregunta antes.
   const [setupDirty, setSetupDirty] = useState(false);
   const t = useT();
   const { showConfirm } = useDialog();
+  // Esqueleto solo si la configuración tarda: por debajo de 150 ms, nada.
+  const showSkeleton = useDelayedLoading(config === null && configError === null);
 
   const goTo = async (next: Section) => {
     if (next === section) return;
@@ -136,117 +132,74 @@ export const TrainingPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    getTrainingConfig().then(setConfig).catch(console.error);
+    // Antes un fallo aquí dejaba «Cargando…» para siempre.
+    getTrainingConfig()
+      .then(setConfig)
+      .catch((e) => setConfigError(String(e)));
     loadSessions();
   }, [loadSessions]);
 
-  if (!config) {
-    return <div style={styles.wrapper}>{t("Loading…")}</div>;
-  }
-
-  const noBindings = config.bindings.length === 0;
+  const body = () => {
+    if (configError !== null) {
+      return <p className="trn-error t-body">{t("Couldn't load the training settings: {msg}", { msg: configError })}</p>;
+    }
+    if (!config) {
+      return showSkeleton ? (
+        <div className="card trn-card" role="status" aria-busy="true" aria-label={t("Loading…")}>
+          <Skeleton width="40%" height={16} />
+          <SkeletonLines lines={2} />
+          <Skeleton shape="block" height={96} />
+        </div>
+      ) : null;
+    }
+    if (section === "setup") {
+      return <TrainingSetup config={config} onSaved={setConfig} onDirtyChange={setSetupDirty} />;
+    }
+    if (section === "awareness") return <AwarenessQuiz />;
+    if (config.bindings.length === 0) {
+      return (
+        <div className="card">
+          <EmptyState
+            icon={<Keyboard />}
+            title={t("No camera keys configured")}
+            text={t("Set which key you press for each ally in Setup, then come back.")}
+            action={
+              <Button variant="primary" onClick={() => { void goTo("setup"); }}>
+                {t("Go to Setup")}
+              </Button>
+            }
+          />
+        </div>
+      );
+    }
+    return (
+      <>
+        <ReflexDrill config={config} onFinished={loadSessions} />
+        <RecallDrill config={config} onFinished={loadSessions} />
+        <ProgressChart sessions={sessions} />
+      </>
+    );
+  };
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
-        <div>
-          <h2 style={styles.pageTitle}>{t("Training")}</h2>
-          <p style={styles.pageSub}>
+    <div className="trn">
+      <div className="trn__col">
+        <header className="trn__head">
+          <h1 className="trn__title t-page">{t("Training")}</h1>
+          <p className="trn__sub t-body">
             {t("Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.")}
           </p>
-        </div>
-      </div>
+        </header>
 
-      <div style={styles.tabs}>
         <Segmented
           label={t("Training")}
           value={section}
           onChange={(k) => { void goTo(k); }}
           options={SECTIONS.map((s) => ({ value: s.key, label: t(s.label), icon: s.icon }))}
         />
-      </div>
 
-      <div style={styles.content}>
-        {section === "setup" ? (
-          <TrainingSetup config={config} onSaved={setConfig} onDirtyChange={setSetupDirty} />
-        ) : section === "awareness" ? (
-          <AwarenessQuiz />
-        ) : noBindings ? (
-          <div className="empty-state">
-            <div className="empty-state__icon">
-              <Keyboard size={30} color="var(--faint)" />
-            </div>
-            <p className="empty-state__title">{t("No camera keys configured")}</p>
-            <p className="empty-state__text">
-              {t("Set which key you press for each ally in Setup, then come back.")}
-            </p>
-            <button className="btn btn--primary" style={styles.tab} onClick={() => { void goTo("setup"); }}>
-              {t("Go to Setup")}
-            </button>
-          </div>
-        ) : (
-          <div style={styles.drillsGrid}>
-            <ReflexDrill config={config} onFinished={loadSessions} />
-            <RecallDrill config={config} onFinished={loadSessions} />
-            <ProgressChart sessions={sessions} />
-          </div>
-        )}
+        <div className="trn__body">{body()}</div>
       </div>
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100%",
-    padding: "var(--space-6) var(--space-8)",
-    gap: "var(--space-5)",
-    overflowY: "auto",
-    boxSizing: "border-box",
-  },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  pageTitle: { margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.15, color: "var(--text)" },
-  pageSub: {
-    margin: "var(--space-2) 0 0",
-    fontSize: "var(--font-sm)",
-    color: "var(--muted)",
-    maxWidth: 620,
-  },
-  tabs: { display: "flex", gap: "var(--space-2)" },
-  tab: { padding: "8px 16px", fontSize: 14 },
-  content: { flex: 1, minHeight: 0 },
-  drillsGrid: { display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: 820 },
-  progressCard: {
-    background: "var(--surface-1)",
-    border: "1px solid var(--line-soft)",
-    borderRadius: "var(--radius-xl)",
-    padding: "var(--space-5)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-3)",
-  },
-  progressHead: { display: "flex", alignItems: "center", gap: "var(--space-2)" },
-  progressTitle: { fontSize: 15, fontWeight: 500, color: "var(--text)" },
-  spark: { width: "100%", height: 60, display: "block" },
-  sparkWrap: { position: "relative" },
-  sparkRef: {
-    position: "absolute",
-    left: 0,
-    transform: "translateY(50%)",
-    fontSize: 12,
-    fontVariantNumeric: "tabular-nums",
-    color: "var(--faint)",
-    background: "var(--surface-1)",
-    paddingRight: 6,
-    pointerEvents: "none",
-  },
-  progressFoot: {
-    display: "flex",
-    justifyContent: "space-between",
-    fontSize: 13,
-    fontVariantNumeric: "tabular-nums",
-    color: "var(--faint)",
-  },
 };

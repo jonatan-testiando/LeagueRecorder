@@ -58,11 +58,12 @@ export const HotkeyCapture: React.FC<{
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [listening, onCapture, keyName]);
 
+  // Estilos en SettingsPanel.css (`.stg-hotkey*`, `.stg-key`).
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+    <span className="stg-hotkey">
+      <span className="stg-hotkey__line">
         <span
-          className="stg-key"
+          className="u-kbd stg-key"
           {...(listening ? { "data-listening": true } : {})}
           title={listening ? t("Press a key, or Escape to cancel") : undefined}
           aria-live="polite"
@@ -87,9 +88,7 @@ export const HotkeyCapture: React.FC<{
         </button>
       </span>
       {error && (
-        <span className="u-meta" style={{ color: "var(--loss)", maxWidth: "32ch", textAlign: "right" }}>
-          {error}
-        </span>
+        <span className="u-meta stg-hotkey__err">{error}</span>
       )}
     </span>
   );

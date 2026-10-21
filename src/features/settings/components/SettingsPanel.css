@@ -1,151 +1,188 @@
 /* =========================================================================
-   Ajustes — cinco categorías con sub-navegación.
+   Ajustes — seis categorías con sub-navegación.
 
-   Antes era una lista larga de once secciones. Ahora: cabecera, una columna
-   de 200px con las cinco categorías (misma anatomía que .nav-btn del rail) y a
-   la derecha SOLO la categoría activa, en tarjetas de filas. Solo tokens: el
-   tema claro redefine los tokens y aquí nadie sabe qué tema hay.
+   Cabecera, una columna de 200 px con las categorías y a la derecha SOLO la
+   categoría activa, en tarjetas de filas. Solo tokens: el tema claro
+   redefine los tokens y aquí nadie sabe qué tema hay.
+
+   Rediseño «Ritmo» (fase 3e): el bloque entero (cabecera, nav y formulario)
+   se corta a --form-max y se centra, como los paneles de datos a
+   --content-max. Antes la columna se cortaba a su aire (770 a 1280, 880 a
+   1920) y a 1920 dejaba un hueco a la derecha.
    ========================================================================= */
 
+/* La página entera hace scroll y la nav se queda pegada: así la barra de
+   scroll va al borde de la ventana y no a media pantalla, al lado de un
+   formulario centrado. */
 .stg {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-6) 0;
+}
+.stg__wrap {
+  width: 100%;
+  max-width: var(--form-max);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 24px 32px 0;
-  overflow: hidden;
+  gap: var(--space-5);
+  padding-bottom: var(--space-8);
 }
 
 .stg__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 14px;
-  flex: none;
+  column-gap: var(--space-3);
 }
 .stg__head h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-28);
+  line-height: var(--lh-28);
   font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
+  letter-spacing: -0.005em;
 }
 .stg__sub {
   margin: 0;
   color: var(--faint);
-  font-size: 14px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
 
-/* Cuerpo: nav fija a la izquierda, contenido con su propio scroll. El scroll
-   va en la columna de contenido y no en la página para que la nav y su pie
-   ("Versión · al día") se queden a la vista. */
 .stg__body {
-  flex: 1;
-  min-height: 0;
   display: flex;
-  gap: 28px;
+  align-items: flex-start;
+  gap: var(--space-6);
 }
 
 /* --- sub-navegación ------------------------------------------------------ */
 .stg-nav {
+  position: sticky;
+  top: var(--space-6);
   width: 200px;
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-bottom: 24px;
 }
 .stg-nav__btn {
   width: 100%;
+  height: 36px;
   border: 0;
   background: transparent;
   border-radius: var(--radius-md);
-  padding: 9px 12px;
+  padding: 0 var(--space-3);
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.2;
+  font-size: var(--fs-14);
+  font-weight: 500;
+  line-height: var(--lh-14);
   color: var(--muted);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   box-shadow: none;
-  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
+  transition: background-color var(--t-hover) var(--e-color), color var(--t-hover) var(--e-color);
 }
-.stg-nav__btn:hover {
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-  color: var(--text);
+/* Sin el desplazamiento de 1 px de los botones: es una pestaña, no una acción. */
+.stg-nav__btn:not(:disabled):active { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .stg-nav__btn:hover {
+    background: color-mix(in srgb, var(--text) 4%, transparent);
+    color: var(--text);
+  }
 }
 .stg-nav__btn[aria-current="page"] {
   background: var(--raised);
   color: var(--text);
-  font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
 .stg-nav__btn:focus-visible {
-  outline: 1px solid var(--cool);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
-.stg-nav__meta { margin-left: auto; font-variant-numeric: tabular-nums; }
-.stg-nav__meta[data-tone="bad"] { color: var(--signal); }
+.stg-nav__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* El dato al lado de la categoría: «17 %» del disco y el tema puesto. */
+.stg-nav__meta {
+  flex: none;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.stg-nav__meta[data-tone="bad"] { color: var(--loss); }
 
+/* Versión y actualizaciones, debajo de las categorías. */
 .stg-nav__foot {
-  margin-top: auto;
+  margin-top: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-3) 0;
+  box-shadow: inset 0 1px 0 var(--hair);
 }
-/* Enlace de texto, como en la maqueta: sin caja. */
+/* Enlace de texto: sin caja. */
 .stg-nav__link {
+  /* 24 px de alto aunque el texto mida 20: es un objetivo de clic. */
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 24px;
   border: 0;
   background: transparent;
   padding: 0;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   text-align: left;
   color: var(--cool);
   cursor: pointer;
 }
+.stg-nav__link:not(:disabled):active { transform: none; }
 .stg-nav__link:hover:not(:disabled) { color: var(--cool-hover); }
 .stg-nav__link:disabled { color: var(--faint); cursor: default; }
 
 /* --- contenido ------------------------------------------------------------ */
-.stg__content {
+.stg__col {
   flex: 1;
   min-width: 0;
-  overflow-y: auto;
-  padding-bottom: 28px;
-}
-.stg__col {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-width: 880px;
+  gap: var(--space-4);
 }
 
-/* --- tira de diagnóstico (solo en Grabación) ------------------------------
-   Dos celdas: el grabador y el disco libre ya viven en la barra de título. */
+/* --- tira de diagnóstico (Grabación y Diagnóstico) -------------------------
+   Las celdas de estado a la izquierda y la prueba (la acción oro) empujada
+   a la derecha. En estrecho la prueba baja de línea y se queda a la derecha. */
 .stg-diag {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-  gap: 20px;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 18px 22px;
+  gap: var(--space-4) var(--space-8);
+  padding: var(--space-5);
 }
 .stg-diag__c {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
+  max-width: 100%;
 }
 .stg-diag__v {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: var(--space-2);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
   color: var(--text);
   min-width: 0;
 }
@@ -154,103 +191,119 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.stg-diag__act { margin-left: auto; }
+.stg-diag__note {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* Icono de estado: el color acompaña a la forma (marca o exclamación). */
+.stg-ico { flex: none; color: var(--faint); }
+.stg-ico[data-tone="ok"] { color: var(--cool); }
+.stg-ico[data-tone="bad"] { color: var(--loss); }
+
+/* Grabando: el punto rojo que late, el de «grabando» en toda la app. Ocupa la
+   caja de 16 px de los iconos para que el texto no salte. */
 .stg-dot {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.stg-dot::before {
+  content: "";
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--cool);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cool) 16%, transparent);
-}
-.stg-dot[data-tone="bad"] {
-  background: var(--signal);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 16%, transparent);
-}
-/* Grabando: frambuesa, que es el color de "grabando" en toda la app. */
-.stg-dot[data-tone="rec"] {
+  border-radius: var(--radius-full);
   background: var(--signal);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent);
   animation: stg-rec 1.4s ease-in-out infinite;
 }
 @keyframes stg-rec { 50% { opacity: 0.45; } }
-/* Apagado: no es un fallo (el cliente de League cerrado, p. ej.), solo no hay nada. */
-.stg-dot[data-tone="off"] {
-  background: var(--faint);
-  box-shadow: none;
-}
-.stg-diag__note {
-  grid-column: 1 / -1;
-  margin: 0;
-}
-@media (max-width: 1000px) {
-  .stg-diag { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stg-diag > .btn { grid-column: 1 / -1; justify-self: start; }
+@media (prefers-reduced-motion: reduce) {
+  .stg-dot::before { animation: none; }
 }
 
 /* --- tarjeta de filas ----------------------------------------------------- */
-.stg-card { padding: 6px 22px 8px; }
-/* Etiqueta de grupo cuando una categoría tiene más de una tarjeta. */
+.stg-card { padding: 0 var(--space-5); }
+/* Etiqueta de grupo cuando una categoría tiene más de una tarjeta: separada
+   de lo de arriba como una sección y pegada a su tarjeta. */
 .stg-grp {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin: 4px 0 -8px;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 calc(var(--space-2) * -1);
 }
 .stg-grp .note { margin: 0; }
 
 .stg-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
+  gap: var(--space-6);
   align-items: center;
-  padding: 16px 0;
+  padding: var(--space-4) 0;
   box-shadow: inset 0 1px 0 var(--hair);
 }
 .stg-row:first-child { box-shadow: none; }
+.stg-row__txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 .stg-row__title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
   font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
   color: var(--text);
 }
 .stg-row__help {
-  margin: 3px 0 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--faint);
+  margin: 0;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
   max-width: 56ch;
+}
+/* Lo que ocupa la fila entera (la lista de dispositivos de Diagnóstico). */
+.stg-row__full {
+  grid-column: 1 / -1;
+  max-width: none;
 }
 .stg-row__ctl {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  gap: var(--space-2);
   min-width: 0;
 }
 /* Filas con varios controles: pueden bajar de línea sin aplastar el título. */
 .stg-row--wrap .stg-row__ctl {
   flex-wrap: wrap;
-  row-gap: 8px;
   max-width: 440px;
 }
 .stg-row .field { min-width: 180px; }
 .stg-row .field--num { min-width: 0; }
 .stg-row .field--path { min-width: 260px; }
+/* Nombre de la grabación manual. */
+.stg-row .stg-name { flex: 0 0 120px; min-width: 0; }
 
-/* Un dato de solo lectura con la piel de campo (dispositivo de audio). */
+/* Un dato de solo lectura con la piel de campo (dispositivo de audio). No es
+   un selector: el motor graba la salida por defecto y no hay nada que elegir,
+   así que no lleva flecha. */
 .stg-field {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   height: 32px;
-  padding: 0 12px;
+  padding: 0 var(--space-3);
   border-radius: var(--radius-md);
   background: var(--sunken);
   box-shadow: var(--inset-sunken), inset 0 0 0 1px var(--hair);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   min-width: 220px;
   max-width: 320px;
 }
@@ -259,42 +312,115 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.stg-field[data-tone="bad"] { color: var(--signal); }
+.stg-field[data-tone="bad"] { color: var(--loss); }
 
-/* Tecla como tapa de teclado. */
-.stg-key {
+/* Resultado de comprobar la clave de Riot. */
+.stg-keystate[data-tone="ok"] { color: var(--win); }
+.stg-keystate[data-tone="bad"] { color: var(--loss); }
+
+/* Porcentaje de la descarga de la actualización. */
+.stg-upd-pct {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* Icono del velo de instalación. */
+.stg-updv-spin {
+  margin: 0 auto;
+  color: var(--cool);
+  animation: spin 1s linear infinite;
+}
+
+/* --- atajo (HotkeyCapture) ------------------------------------------------ */
+.stg-hotkey {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+.stg-hotkey__line {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 30px;
-  padding: 0 10px;
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--fs-12);
-  color: var(--text);
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 -2px 0 color-mix(in srgb, black 40%, transparent);
+  gap: var(--space-2);
 }
-.stg-key[data-listening] {
-  /* "pulsa…" es una frase, no una tecla: va en la voz de la interfaz. */
+.u-meta.stg-hotkey__err {
+  color: var(--loss);
+  max-width: 32ch;
+  text-align: right;
+}
+/* La tecla: la de .u-kbd en caja hundida con filo, como en Figma (Tecla). */
+.u-kbd.stg-key {
+  height: 20px;
+  padding: 0 var(--space-1);
+  font-weight: 500;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+}
+.u-kbd.stg-key[data-listening] {
+  /* «pulsa…» es una frase, no una tecla: va en la voz de la interfaz. */
   font-family: var(--font-sans);
+  font-size: var(--fs-12);
   color: var(--cool);
-  box-shadow: inset 0 0 0 1px var(--cool), inset 0 -2px 0 color-mix(in srgb, black 40%, transparent);
+  box-shadow: inset 0 0 0 1px var(--cool);
 }
+
+/* --- disco (DiskMeter) ----------------------------------------------------- */
+.stg-disk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) 0 var(--space-3);
+}
+.stg-disk__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.stg-disk__line--start {
+  justify-content: flex-start;
+  gap: var(--space-2);
+}
+.stg-disk__label {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.stg-disk__line[data-tone="bad"] .stg-disk__label { color: var(--loss); }
+.upd__track.stg-disk__track {
+  flex: none;
+  width: 100%;
+}
+/* Cuota casi llena: oro, que avisa sin gritar (borrará lo más viejo). */
+.stg-disk__track .upd__fill[data-tone="full"] { background: var(--brand); }
 
 /* Lista de dispositivos (Diagnóstico). */
 .stg-list {
   margin: 0;
-  padding: 0 0 6px;
+  padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
+  gap: var(--space-1);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--muted);
 }
 .stg-list li[data-used] { color: var(--cool); }
 
 .stg-foot { margin: 0; }
 
+/* Estrecho: la nav pasa arriba, en fila, y deja todo el ancho al formulario. */
+@media (max-width: 900px) {
+  .stg__body { flex-direction: column; align-items: stretch; }
+  .stg-nav {
+    position: static;
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .stg-nav__btn { width: auto; }
+  .stg-nav__foot { display: none; }
+}

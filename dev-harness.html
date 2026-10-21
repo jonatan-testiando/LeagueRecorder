@@ -368,6 +368,182 @@
   // evento -> ids de callback registrados por listen()
   const OYENTES = {};
 
+  /* --- Coach -----------------------------------------------------------------
+     Dobles de get_coach_summary, get_coach_plan, start_coach_plan y
+     abandon_coach_plan (coach.rs y coach_plan.rs), con la forma de sus tipos en
+     core/tauri-ipc.ts. Las cifras imitan las 26 partidas del usuario: pierde
+     menos que su baremo en casi todo y el foco es «sin mirar el mapa, 14-21»
+     (el 92 % de sus muertes a ciegas frente al 38 % de un instante cualquiera).
+     Todo en probabilidad de victoria (0-1), como el backend.
+
+     `?coach=` elige el estado del plan:
+       active (por defecto)  plan en curso, 4 de 10 (y una que no mide el foco)
+       none                  nunca hubo plan; propone el foco
+       closed                el último plan se cerró. `&verdict=` improved,
+                             same, worse o short_sample (por defecto: es lo
+                             normal tras diez partidas)
+       abandoned             el último plan se abandonó; propone el foco
+       few                   pocas partidas (6 de 10)
+       error                 los dos comandos fallan
+     Empezar y abandonar cambian el estado de verdad, como el backend. */
+  const COACH_Q = new URLSearchParams(location.search);
+  const COACH_MODE = COACH_Q.get("coach") || "active";
+  const VERDICT = COACH_Q.get("verdict") || "short_sample";
+  const DIA = 86400000;
+
+  // Una jugada de las peores de una fila: muerte u objetivo sin ti.
+  const coachPlay = (cat, i, lost) => {
+    const m = matches[i % matches.length];
+    const obj = cat === "ausente_objetivo";
+    return {
+      match_id: m.id,
+      champion: m.champion,
+      date: m.date,
+      time: 480 + i * 211,
+      // La cuarta no conserva su vídeo: la lista de reproducción la salta.
+      video_time: i === 3 ? null : 525 + i * 211,
+      lost,
+      kind: obj ? "objective" : "death",
+      killer: obj ? null : ["Lee Sin", "Kaisa", "Orianna", "Nautilus", "Jax"][i % 5],
+      objective: obj ? ["dragon", "grubs", "baron"][i % 3] : null,
+      state: obj ? ["far", "dead", "base"][i % 3] : null,
+    };
+  };
+
+  // [categoría, coste por partida, baremo, origen, reparto por tramo del coste,
+  //  reparto del baremo, rate_deaths, rate_any]
+  const COACH_CATS = [
+    ["sin_mirar_mapa", 0.068, 0.051, "own", [0.06, 0.14, 0.44, 0.24, 0.12], [0.1, 0.2, 0.3, 0.25, 0.15], 0.92, 0.38],
+    ["desde_niebla", 0.048, 0.049, "own", [0.1, 0.2, 0.35, 0.22, 0.13], [0.1, 0.2, 0.35, 0.22, 0.13], 0.41, 0.29],
+    ["antes_de_objetivo", 0.039, 0.044, "corpus", [0.05, 0.2, 0.3, 0.25, 0.2], [0.05, 0.2, 0.3, 0.25, 0.2]],
+    ["ausente_objetivo", 0.027, 0.019, "corpus", [0.05, 0.15, 0.3, 0.35, 0.15], [0.1, 0.2, 0.35, 0.2, 0.15]],
+    ["tirada", 0.022, 0.026, "corpus", [0, 0.05, 0.2, 0.35, 0.4], [0, 0.05, 0.2, 0.35, 0.4]],
+    ["jungla", 0.021, 0.034, "corpus", [0.15, 0.4, 0.25, 0.12, 0.08], [0.15, 0.4, 0.25, 0.12, 0.08]],
+    ["poco_dano_devuelto", 0.015, 0.021, "corpus", [0.1, 0.2, 0.3, 0.25, 0.15], [0.1, 0.2, 0.3, 0.25, 0.15]],
+    ["bajo_torre_pre14", 0.009, 0.014, "corpus", [0.45, 0.55], [0.45, 0.55]],
+    ["fuera_de_zona", 0.006, 0.004, "corpus", [0.4, 0.6], [0.5, 0.5]],
+  ];
+  const TRAMO_GAMES = [26, 26, 26, 21, 12];
+  const coachRow = (c, tramo) => {
+    const [category, user, base, baseline, wu, wb, rd, ra] = c;
+    const u = tramo == null ? user : user * wu[tramo];
+    const b = tramo == null ? base : base * wb[tramo];
+    return {
+      category,
+      tramo,
+      games: tramo == null ? 26 : TRAMO_GAMES[tramo],
+      plays: Math.max(1, Math.round(u * 26 / 0.02)),
+      user: u,
+      base: b,
+      excess: u - b,
+      baseline,
+      rate_deaths: rd ?? null,
+      rate_any: ra ?? null,
+      worst: [0.031, 0.024, 0.019, 0.015, 0.012].map((l, i) => coachPlay(category, i + (tramo ?? 0), l * (tramo == null ? 1 : 0.6))),
+    };
+  };
+  const COACH_ROWS = COACH_CATS.flatMap((c) => [coachRow(c, null), ...c[4].map((_, k) => coachRow(c, k))]);
+  const fila = (cat, tramo) => COACH_ROWS.find((r) => r.category === cat && r.tramo === tramo);
+  const FOCO = fila("sin_mirar_mapa", 2);
+
+  const coachSummary = () =>
+    COACH_MODE === "few"
+      ? { games: 6, band: "medio", band_uniform: true, min_games: 10, rows: [], focus: null,
+          tramos: [0, 1, 2, 3, 4].map((tramo) => ({ tramo, games: 6, wpa: 0, percentile: null })) }
+      : {
+          games: 26, band: "medio", band_uniform: true, min_games: 10, rows: COACH_ROWS, focus: FOCO,
+          tramos: [62, 41, 31, 70, 48].map((percentile, tramo) => ({
+            tramo, games: TRAMO_GAMES[tramo], wpa: (percentile - 50) / 1000, percentile,
+          })),
+        };
+
+  // Una partida del plan o de su antes.
+  const planGame = (id, date, champion, cost) => ({
+    match_id: id, date, champion, cost,
+    plays: cost == null ? 0 : cost === 0 ? 0 : Math.max(1, Math.round(cost / 0.022)),
+    base: cost == null ? null : 0.015,
+  });
+  // Veinte de antes con media 3,0 (casi todas a cero y alguna muerte cara).
+  const ANTES = [0, 0.081, 0, 0.034, 0, 0.112, 0.028, 0, 0, 0.047, 0, 0.091, 0, 0, 0.039, 0.018, 0, 0.086, 0, 0.064]
+    .map((c, i) => planGame("b" + i, iso(now - (24 - i) * DIA), champs[i % champs.length], c));
+  const media = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const cuentan = (games) => games.map((g) => g.cost).filter((c) => c != null);
+
+  const nuevoPlan = (id, cat, tramo, started, games, extra) => {
+    const r = fila(cat, tramo);
+    const before = ANTES.map((g) => ({ ...g, cost: g.cost == null ? null : g.cost * (r.user / FOCO.user) }));
+    const before_cost = media(cuentan(before));
+    return {
+      id, category: cat, tramo, status: "active", started_at: started, start_match: "m5", target: 10,
+      before, before_cost, before_base: r.base, regression: 1.2,
+      expected_cost: before_cost * 0.67,
+      games, after_cost: media(cuentan(games)), ended_at: null, result: null,
+      ...extra,
+    };
+  };
+  // Cerrado con su veredicto: antes 3,0 · se esperaba 2,0 · y el después que toque.
+  const RESULTADOS = {
+    improved: { after: 0.004, effect: -0.016, low: -0.025, high: -0.007 },
+    same: { after: 0.0205, effect: 0.0005, low: -0.006, high: 0.007 },
+    worse: { after: 0.037, effect: 0.017, low: 0.006, high: 0.028 },
+    short_sample: { after: 0.019, effect: -0.001, low: -0.012, high: 0.01 },
+  };
+  const cerrado = (id, cat, tramo, daysAgo, verdict) => {
+    const r = RESULTADOS[verdict];
+    const games = [0, 0.012, 0, 0.041, null, 0, 0.019, 0.031, 0, 0.044, 0]
+      .map((c, i) => planGame(i < 9 ? "m" + (8 - i) : "x" + i, iso(now - (daysAgo + 10 - i) * DIA), champs[i % champs.length], c));
+    const p = nuevoPlan(id, cat, tramo, iso(now - (daysAgo + 11) * DIA), games);
+    const k = p.before_cost / 0.03;
+    return {
+      ...p,
+      status: "closed",
+      after_cost: r.after * k,
+      ended_at: iso(now - daysAgo * DIA),
+      result: {
+        before: p.before_cost, after: r.after * k, n_before: 20, n_after: 10,
+        diff: (r.after - 0.03) * k, expected: p.expected_cost, effect: r.effect * k,
+        low: r.low * k, high: r.high * k, level: 0.9, relevant: p.expected_cost * 0.5, verdict,
+      },
+    };
+  };
+  const HISTORIA = [
+    cerrado("p2", "jungla", 1, 9, "improved"),
+    cerrado("p1", "poco_dano_devuelto", 3, 24, "same"),
+    { ...nuevoPlan("p0", "tirada", 4, iso(now - 50 * DIA), ANTES.slice(0, 6)), status: "abandoned", ended_at: iso(now - 41 * DIA) },
+  ];
+  const propuesta = (repeat) =>
+    repeat
+      ? { row: FOCO, before_games: 20, before_cost: 0.026, repeat: true }
+      : { row: FOCO, before_games: 20, before_cost: 0.03, repeat: false };
+
+  // El estado del plan, mutable: empezar y abandonar lo cambian.
+  const PLAN = (() => {
+    const base = { target: 10, min_before: 10, games: 26, active: null, history: HISTORIA.slice(), proposal: null };
+    if (COACH_MODE === "few") return { ...base, state: "few_games", games: 6, history: [] };
+    if (COACH_MODE === "none") return { ...base, state: "no_plan", history: [], proposal: propuesta(false) };
+    if (COACH_MODE === "closed") {
+      const ultimo = cerrado("p3", "sin_mirar_mapa", 2, 0.3, VERDICT);
+      // Tras «mejoró» se propone el siguiente candidato; si no, el mismo.
+      const proposal = VERDICT === "improved"
+        ? { row: fila("ausente_objetivo", 3), before_games: 18, before_cost: fila("ausente_objetivo", 3).user, repeat: false }
+        : propuesta(true);
+      return { ...base, state: "closed", history: [ultimo, ...HISTORIA], proposal };
+    }
+    if (COACH_MODE === "abandoned") {
+      const ultimo = { ...nuevoPlan("p3", "sin_mirar_mapa", 2, iso(now - 6 * DIA), ANTES.slice(0, 3)), status: "abandoned", ended_at: iso(now - DIA) };
+      return { ...base, state: "abandoned", history: [ultimo, ...HISTORIA], proposal: propuesta(true) };
+    }
+    // En curso desde hace tres días: entran m4..m0, y m2 no mide el foco
+    // (acabó antes del minuto 14).
+    const games = [[4, 0.012], [3, 0.041], [2, null], [1, 0], [0, 0.019]]
+      .map(([i, c]) => planGame("m" + i, matches[i].date, matches[i].champion, c));
+    return { ...base, state: "active", active: nuevoPlan("p3", "sin_mirar_mapa", 2, iso(now - 3.2 * DIA), games) };
+  })();
+  const coachFalla = () => {
+    if (COACH_MODE === "error") throw "io: no se pudo leer coach_v1.json";
+  };
+  const copiaPlan = () => JSON.parse(JSON.stringify(PLAN));
+
   const HANDLERS = {
     "plugin:app|version": () => "1.2.11",
     // Se apunta qué callback escucha cada evento para poder dispararlos a mano
@@ -824,6 +1000,36 @@
     // Sin este doble, `null` hacía reventar Patrones (`rutas.filter`). La app
     // real devuelve [] cuando no hay rutas.
     get_jungle_routes: () => [],
+    // --- Coach (ver COACH arriba) ------------------------------------------
+    get_coach_summary: () => {
+      coachFalla();
+      return JSON.parse(JSON.stringify(coachSummary()));
+    },
+    get_coach_plan: () => {
+      coachFalla();
+      return copiaPlan();
+    },
+    // Con las claves de error del backend: `few_games`, `active_plan`.
+    start_coach_plan: ({ category, tramo } = {}) => {
+      if (PLAN.state === "few_games") throw "few_games";
+      if (PLAN.active) throw "active_plan";
+      const foco = PLAN.proposal ? PLAN.proposal.row : FOCO;
+      const cat = category ?? foco.category;
+      const tr = tramo ?? foco.tramo;
+      if (!fila(cat, tr)) throw "bad_focus";
+      PLAN.active = nuevoPlan("p" + (PLAN.history.length + 10), cat, tr, iso(Date.now()), []);
+      PLAN.state = "active";
+      PLAN.proposal = null;
+      return copiaPlan();
+    },
+    abandon_coach_plan: () => {
+      if (!PLAN.active) throw "no_active_plan";
+      PLAN.history.unshift({ ...PLAN.active, status: "abandoned", ended_at: iso(Date.now()) });
+      PLAN.active = null;
+      PLAN.state = "abandoned";
+      PLAN.proposal = propuesta(true);
+      return copiaPlan();
+    },
   };
 
   /**
@@ -859,11 +1065,21 @@
         console.warn("[arnés] sin doble para", cmd);
         return Promise.resolve(null);
       }
+      // Un doble que lanza (`throw "few_games"`) es un comando que falla: se
+      // devuelve como promesa rechazada, también con `?slow`, donde antes el
+      // error se escapaba del setTimeout y la promesa no acababa nunca.
+      const call = (ok, ko) => {
+        try {
+          ok(h(args));
+        } catch (e) {
+          ko(e);
+        }
+      };
       // Los eventos (listen/unlisten) no se retrasan: no son datos.
       if (SLOW > 0 && !cmd.startsWith("plugin:event")) {
-        return new Promise((ok) => setTimeout(() => ok(h(args)), SLOW));
+        return new Promise((ok, ko) => setTimeout(() => call(ok, ko), SLOW));
       }
-      return Promise.resolve(h(args));
+      return new Promise(call);
     },
   };
 })();

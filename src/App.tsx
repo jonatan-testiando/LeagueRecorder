@@ -12,8 +12,9 @@ import { VideoPlayer } from "./features/player/components/VideoPlayer";
 import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
+import { CoachPanel } from "./features/coach/components/CoachPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot } from "lucide-react";
+import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap } from "lucide-react";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
 import { RailProfile } from "./components/RailProfile";
@@ -35,9 +36,9 @@ import { useAppStore, useErrorClips } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 
-type Tab = "home" | "clips" | "errors" | "review" | "patterns" | "vod" | "training" | "settings";
+type Tab = "home" | "clips" | "errors" | "review" | "coach" | "patterns" | "vod" | "training" | "settings";
 
-type Panel = "/home" | "/review" | "/clips" | "/errors" | "/patterns" | "/vod" | "/training" | "/settings";
+type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/vod" | "/training" | "/settings";
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
@@ -64,7 +65,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: "Improving",
     items: [
-      // La unica seccion que mira mas de una partida a la vez.
+      // El plan de 10 partidas: primero, porque es lo que te dice qué mejorar.
+      { key: "coach", path: "/coach", label: "Coach", icon: <GraduationCap {...NAV_ICON} /> },
       { key: "patterns", path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn {...NAV_ICON} /> },
       { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
     ],
@@ -343,6 +345,7 @@ export const App: React.FC = () => {
 
         {panel("/clips", <ClipsGallery />)}
         {panel("/patterns", <PatternsPanel />)}
+        {panel("/coach", <CoachPanel />)}
 
         {panel(
           "/home",

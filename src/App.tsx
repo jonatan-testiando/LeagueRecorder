@@ -13,13 +13,16 @@ import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
 import { SettingsPanel } from "./features/settings/components/SettingsPanel";
 import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { CoachPanel } from "./features/coach/components/CoachPanel";
+import { ChampSelectPanel } from "./features/champselect/components/ChampSelectPanel";
 import { Titlebar } from "./components/Titlebar";
-import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap } from "lucide-react";
+import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap, Swords } from "lucide-react";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
 import { RailProfile } from "./components/RailProfile";
 import { CommandPalette } from "./components/CommandPalette";
 import { PostGameFlow } from "./components/PostGameFlow";
+import { ChampSelectFlow, CHAMP_SELECT_PATH } from "./components/ChampSelectFlow";
+import { useChampSelect } from "./core/useChampSelect";
 import { isReviewed } from "./core/review";
 import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
@@ -41,7 +44,7 @@ import { withPercent } from "./core/benchmarkFormat";
 import { jungleRoutesOnce } from "./features/player/components/matchMoves";
 type Tab = "home" | "clips" | "errors" | "review" | "coach" | "patterns" | "vod" | "training" | "settings";
 
-type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/vod" | "/training" | "/settings";
+type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/vod" | "/training" | "/settings" | "/champ-select";
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
@@ -84,6 +87,14 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   },
 ];
 const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((g) => g.items);
+
+// La selección de campeón solo está en el rail mientras dura (o mientras se
+// mira lo que quedó de ella): fuera de ahí no tiene nada que enseñar.
+const CHAMP_SELECT_ITEM = {
+  path: CHAMP_SELECT_PATH,
+  label: "Champ select",
+  icon: <Swords {...NAV_ICON} />,
+};
 
 export const App: React.FC = () => {
   const navigate = useNavigate();
@@ -155,6 +166,8 @@ export const App: React.FC = () => {
   }, []);
 
   const currentPath = location.pathname;
+  const { view: champSelect } = useChampSelect();
+  const onChampSelect = currentPath.startsWith(CHAMP_SELECT_PATH);
 
   // "/games" era una segunda entrada al mismo panel que "/review"; se quitó del menú, pero la
   // ruta se redirige para no romper el estado de navegación guardado de versiones anteriores.
@@ -209,12 +222,16 @@ export const App: React.FC = () => {
     ? matchedNav.key
     : currentPath.startsWith("/settings")
       ? "settings"
-      : "home";
+      : onChampSelect
+        ? "champ-select"
+        : "home";
 
   const activePanel: Panel =
     currentPath.startsWith("/settings")
       ? "/settings"
-      : ((matchedNav?.path ?? "/home") as Panel);
+      : onChampSelect
+        ? "/champ-select"
+        : ((matchedNav?.path ?? "/home") as Panel);
 
   // Los paneles se quedan montados una vez visitados para no perder su estado (el
   // punto del vídeo, el scroll), pero no se montan de entrada: al abrir la app solo
@@ -248,7 +265,7 @@ export const App: React.FC = () => {
         {/* Cada panel con su red: si uno revienta al pintar, cae solo él y
             la barra de título y el rail siguen ahí. */}
         {mountedPanels.has(path) ? (
-          <ErrorBoundary name={t(NAV_ITEMS.find((n) => n.path === path)?.label ?? "Section")}>
+          <ErrorBoundary name={t([...NAV_ITEMS, CHAMP_SELECT_ITEM].find((n) => n.path === path)?.label ?? "Section")}>
             {content}
           </ErrorBoundary>
         ) : null}
@@ -287,6 +304,23 @@ export const App: React.FC = () => {
           navegación. */}
       <nav className={`rail${playerOpen ? " rail--collapsed" : ""}`} aria-label={t("Sections")}>
         <div className="rail__nav">
+          {(!!champSelect || onChampSelect) && (
+            <>
+              <div className="nav-grp" aria-hidden={playerOpen ? true : undefined}>{t("Now")}</div>
+              <button
+                type="button"
+                onClick={(e) => goTo(CHAMP_SELECT_ITEM.path, originOf(e))}
+                className={`nav-btn${onChampSelect ? " nav-btn--active" : ""}`}
+                aria-current={onChampSelect ? "page" : undefined}
+                aria-label={t(CHAMP_SELECT_ITEM.label)}
+                title={playerOpen ? t(CHAMP_SELECT_ITEM.label) : undefined}
+              >
+                {CHAMP_SELECT_ITEM.icon}
+                <span className="nav-btn__label">{t(CHAMP_SELECT_ITEM.label)}</span>
+                {!!champSelect && <span className="nav-btn__live" aria-hidden="true" />}
+              </button>
+            </>
+          )}
           {NAV_GROUPS.map((group) => (
             <React.Fragment key={group.label}>
               <div className="nav-grp" aria-hidden={playerOpen ? true : undefined}>{t(group.label)}</div>
@@ -368,6 +402,7 @@ export const App: React.FC = () => {
         {panel("/clips", <ClipsGallery />)}
         {panel("/patterns", <PatternsPanel />)}
         {panel("/coach", <CoachPanel />)}
+        {panel("/champ-select", <ChampSelectPanel />)}
 
         {panel(
           "/home",
@@ -462,6 +497,11 @@ export const App: React.FC = () => {
           abierta cuando Riot la tiene analizada. Fuera del asistente de primer
           arranque: ahí no hay a dónde llevar a nadie. */}
       <PostGameFlow />
+
+      {/* Entrada en la selección de campeón: la app delante sin quitar el
+          foco y la pantalla de la selección abierta, salvo que estés con otra
+          cosa. Solo en la ventana de la app: nunca en el juego. */}
+      <ChampSelectFlow />
 
       {/* El tránsito de la actualización: el instalador cierra este proceso y
           la app vuelve sola en unos segundos. Sin el velo eso se lee como un

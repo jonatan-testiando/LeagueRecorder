@@ -9,7 +9,9 @@
 //!   - los ajustes del juego (`ajustes_juego`), que necesitan saber en qué
 //!     carpeta está instalado el League que se está jugando;
 //!   - la conexión al cliente de League (`lcu.rs`), que lee la línea de comandos
-//!     de `LeagueClientUx.exe` cuando no encuentra el lockfile.
+//!     de `LeagueClientUx.exe` cuando no encuentra el lockfile;
+//!   - la selección de campeón (`champ_select.rs`), que pone la ventana delante
+//!     sin quitarle el foco a nadie.
 //!
 //! Todo lo de aquí devuelve `Option`: no saber la respuesta es un resultado
 //! válido y cada llamante tiene su propio plan B.
@@ -285,6 +287,84 @@ mod imp {
         unsafe { CloseHandle(h) };
         r
     }
+
+    /// Lo que tapa la ventana de delante para que no cuente como «en uso»: el
+    /// escritorio y la barra de tareas ocupan la pantalla entera.
+    const SIN_USO: [&str; 3] = ["Progman", "WorkerW", "Shell_TrayWnd"];
+
+    /// Una ventana que cubre más que esto de la que estás usando la tapa.
+    const TAPA: f64 = 0.15;
+
+    /// Pone `hwnd` encima de las demás SIN activarla: no le quita el teclado
+    /// ni el ratón a nadie. Si está minimizada, la restaura igual.
+    ///
+    /// No lo hace si taparía la ventana que estás usando (más del 15 % de
+    /// ella): en la selección esa es el cliente, y con un solo monitor
+    /// subirse encima le taparía el reloj de la elección. Ahí basta con el
+    /// parpadeo en la barra de tareas, que pide la interfaz.
+    ///
+    /// Devuelve "front" (ya lo estaba), "raised", "covers" o "failed".
+    ///
+    /// El truco de TOPMOST y vuelta a NOTOPMOST es lo que deja a un proceso de
+    /// fondo subir en el orden de ventanas: el bloqueo de Windows es para
+    /// activar (`SetForegroundWindow`), no para eso.
+    pub fn subir_sin_foco(hwnd: HWND) -> &'static str {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetAncestor, GetClassNameW, GetForegroundWindow, GetWindowPlacement, GetWindowRect,
+            IsIconic, SetWindowPos, ShowWindow, GA_ROOTOWNER, HWND_NOTOPMOST, HWND_TOPMOST,
+            SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE, WINDOWPLACEMENT,
+        };
+        if hwnd.is_null() {
+            return "failed";
+        }
+        let rect = |h: HWND| -> Option<(i32, i32, i32, i32)> {
+            let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+            // SAFETY: h es una ventana (puede haber muerto: entonces devuelve 0).
+            (unsafe { GetWindowRect(h, &mut r) } != 0).then_some((r.left, r.top, r.right, r.bottom))
+        };
+        // SAFETY: sin punteros salvo los de las estructuras locales.
+        unsafe {
+            let fg = GetForegroundWindow();
+            if !fg.is_null() && GetAncestor(fg, GA_ROOTOWNER) == hwnd {
+                return "front";
+            }
+            let minimizada = IsIconic(hwnd) != 0;
+            // Minimizada, GetWindowRect da -32000: lo que tapará es donde
+            // volverá a estar.
+            let mia = if minimizada {
+                let mut wp: WINDOWPLACEMENT = std::mem::zeroed();
+                wp.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+                if GetWindowPlacement(hwnd, &mut wp) == 0 {
+                    return "failed";
+                }
+                let r = wp.rcNormalPosition;
+                Some((r.left, r.top, r.right, r.bottom))
+            } else {
+                rect(hwnd)
+            };
+            let Some(mia) = mia else { return "failed" };
+            if !fg.is_null() {
+                let mut clase = [0u16; 64];
+                let n = GetClassNameW(fg, clase.as_mut_ptr(), clase.len() as i32).max(0) as usize;
+                let clase = String::from_utf16_lossy(&clase[..n]);
+                let en_uso = !SIN_USO.contains(&clase.as_str());
+                if en_uso && rect(fg).is_some_and(|r| crate::champ_select::solape(mia, r) > TAPA) {
+                    return "covers";
+                }
+            }
+            if minimizada {
+                ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            }
+            let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+            let ok = SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags) != 0;
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+            if ok {
+                "raised"
+            } else {
+                "failed"
+            }
+        }
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -316,3 +396,5 @@ pub use imp::{
     disk_space, has_playback_device, monitor_of_window, process_command_line, window_client_size,
     window_process_path,
 };
+#[cfg(target_os = "windows")]
+pub use imp::subir_sin_foco;

@@ -2584,6 +2584,90 @@ const ES: Record<string, string> = {
   "Usually it's the connection or a hiccup in Riot's API: trying again is enough.":
     "Suele ser la conexión o un tropiezo de la API de Riot: basta con reintentar.",
   "Game sections": "Secciones de la partida",
+
+  // Selección de campeón (champ_select.rs, ChampSelectPanel)
+  "Now": "Ahora",
+  "Champ select": "Selección",
+  "Tier: iTero's cuts (S+ from 54%) on your win rate adjusted for the sample. With few games it stays close to your average.":
+    "Tier: los cortes de iTero (S+ desde el 54%) sobre tus victorias ajustadas por la muestra. Con pocas partidas se queda cerca de tu media.",
+  "When you enter champion select in the League client, this shows your record against your lane opponent, your pool for the role and your plan. Nothing here shows in the game.":
+    "Cuando entres en la selección de campeón del cliente de League, aquí verás tu historial contra tu rival de carril, tu pool para el rol y tu plan. Nada de esto sale en el juego.",
+  "Champion select is over": "La selección ha terminado",
+  "There are no lanes in this queue: your record and your pool are from Summoner's Rift.":
+    "En esta cola no hay carriles: tu historial y tu pool son de la Grieta del Invocador.",
+  "Only champions are read from champion select, never who is playing them. Nothing here shows in the game.":
+    "De la selección solo se leen los campeones, nunca quién los juega. Nada de esto sale en el juego.",
+  "your position, from the client": "tu puesto, según el cliente",
+  "the client doesn't say your position: this is the one you play most":
+    "el cliente no dice tu puesto: es el que más juegas",
+  "chosen here": "elegido aquí",
+  "pick your position": "elige tu puesto",
+  "Your position": "Tu puesto",
+  "Undo": "Deshacer",
+  "Your lane opponent isn't known yet": "Aún no se sabe quién es tu rival de carril",
+  "There's no enemy team in this champion select.": "En esta selección no hay equipo rival.",
+  "It shows up when they lock in their champion. In blind pick that only happens on the loading screen.":
+    "Aparece cuando fije su campeón. En una normal a ciegas eso no pasa hasta la pantalla de carga.",
+  "None of the enemies who have locked in plays {role} often enough yet.":
+    "Ninguno de los rivales que han fijado juega de {role} lo bastante a menudo.",
+  "Pick your position to know who your opponent is.": "Elige tu puesto para saber quién es tu rival.",
+  "Against {champion}": "Contra {champion}",
+  "Your lane opponent": "Tu rival de carril",
+  "Enemy you picked": "El rival que has elegido",
+  "{role} · from the champions they locked in": "{role} · por los campeones que han fijado",
+  "Probably {role} ({p})": "Probablemente {role} ({p})",
+  "Position unclear": "Puesto dudoso",
+  "Your games with {champion} as your lane opponent, playing {role}":
+    "Tus partidas con {champion} de rival de carril, jugando de {role}",
+  "Never your lane opponent; these are your games with {champion} on the enemy team, playing {role}":
+    "Nunca ha sido tu rival de carril: son tus partidas con {champion} en el otro equipo, jugando de {role}",
+  "Record": "Balance",
+  "Average WPA": "WPA medio",
+  "Deaths per game": "Muertes por partida",
+  "Just 1 game: a reminder, not a pattern.": "Solo 1 partida: un recordatorio, no un patrón.",
+  "Just {n} games: a reminder, not a pattern.": "Solo {n} partidas: un recordatorio, no un patrón.",
+  "Without games synced with Riot there's no record to show yet.":
+    "Sin partidas sincronizadas con Riot aún no hay historial que enseñar.",
+  "You haven't faced {champion} playing {role} in your recorded games.":
+    "No te has cruzado con {champion} jugando de {role} en tus partidas grabadas.",
+  "{champion} · probably {role} ({p})": "{champion} · probablemente {role} ({p})",
+  "{champion} · position unclear": "{champion} · puesto dudoso",
+  "Not locked in yet": "Aún sin fijar",
+  "No play cost you win chance in those games.": "En esas partidas ninguna jugada te costó probabilidad de victoria.",
+  "The play that cost you most": "La jugada que más te costó",
+  "The {n} plays that cost you most": "Las {n} jugadas que más te costaron",
+  "Watch all {n}": "Ver las {n}",
+  "{champion} · {date} · minute {m}": "{champion} · {date} · minuto {m}",
+  "Watch the clip": "Ver el clip",
+  "This game no longer has its video.": "Esta partida ya no conserva su vídeo.",
+  "No video": "Sin vídeo",
+  "Your {n}-game plan": "Tu plan de {n} partidas",
+  "Keep it in mind this game. So far: {line}.": "Tenlo en la cabeza esta partida. Hasta ahora: {line}.",
+  "Keep it in mind this game: it's the first of the plan.": "Tenlo en la cabeza esta partida: es la primera del plan.",
+  "Ban suggestion": "Sugerencia de baneo",
+  "No lane opponent beats you often enough playing {role} (2 games or more, more losses than wins).":
+    "Ningún rival de carril te gana lo bastante jugando de {role} (2 partidas o más, con más derrotas que victorias).",
+  "Pick your position to see who beats you.": "Elige tu puesto para ver quién te gana.",
+  "The lane opponents you lose to most playing {role}.": "Los rivales de carril contra los que más pierdes jugando de {role}.",
+  "Your pool playing {role}": "Tu pool de {role}",
+  "{n} games · your win rate {p}": "{n} partidas · tus victorias {p}",
+  "No recorded games in this position yet.": "Aún no tienes partidas grabadas en este puesto.",
+  "No champion has 3 games in this position yet.": "Ningún campeón tiene aún 3 partidas en este puesto.",
+  "Tier": "Tier",
+  "Win rate adjusted for the sample: {p}": "Victorias ajustadas por la muestra: {p}",
+  "locked in": "fijado",
+  "in your hand": "en tu mano",
+  "Under 15 games: a lead, not a verdict.": "Menos de 15 partidas: un indicio, no un veredicto.",
+  "short sample": "muestra corta",
+  "1 champion with fewer than 3 games isn't listed.": "No sale 1 campeón con menos de 3 partidas.",
+  "{n} champions with fewer than 3 games aren't listed.": "No salen {n} campeones con menos de 3 partidas.",
+  "Tiers use iTero's cuts (S+ from 54%, S 52%, A+ 51%, A 50%, B 49%, C 48%, D 47%) on your win rate adjusted for the sample: with few games it stays close to your average, because 10 games can't tell one champion from another.":
+    "Los tiers usan los cortes de iTero (S+ desde el 54%, S 52%, A+ 51%, A 50%, B 49%, C 48%, D 47%) sobre tus victorias ajustadas por la muestra: con pocas partidas se quedan cerca de tu media, porque 10 partidas no distinguen un campeón de otro.",
+  "Planning": "Planificación",
+  "Bans and picks": "Baneos y elecciones",
+  "Last seconds": "Últimos segundos",
+  "Your record against your lane opponent, your pool and your plan.":
+    "Tu historial contra tu rival de carril, tu pool y tu plan.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

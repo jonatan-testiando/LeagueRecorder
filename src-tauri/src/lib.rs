@@ -8,6 +8,8 @@ mod baselines;
 pub mod benchmarks;
 mod camera_input;
 mod camera_snaps;
+mod carriles_campeon;
+mod champ_select;
 mod coach;
 mod coach_baremos;
 mod coach_plan;
@@ -334,6 +336,8 @@ pub fn run() {
             ajustes_juego::get_minimap_detection,
             get_disk_usage,
             lcu::get_lcu_status,
+            champ_select::get_champ_select,
+            champ_select::champ_select_bring_forward,
             backup::export_backup,
             backup::import_backup,
             get_hotkeys,

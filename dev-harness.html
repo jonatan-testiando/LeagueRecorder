@@ -368,6 +368,71 @@
   // evento -> ids de callback registrados por listen()
   const OYENTES = {};
 
+  /* --- Selección de campeón ------------------------------------------------ */
+  let champActiva = true;
+  window.__champEnd = () => {
+    champActiva = false;
+    window.__emit("champ-select", { active: false });
+  };
+  function champSelectMock(role) {
+    const modo = new URLSearchParams(location.search).get("champ") || "rival";
+    if (modo === "none" || !champActiva) return null;
+    const jugada = (m, time, lost, killer, kind = "death", objective = null, state = null) => ({
+      match_id: m, champion: "Gwen", date: iso(now - 86400000 * (Number(m.slice(1)) * 0.7)), time,
+      video_time: m === "m7" ? null : time + 45, lost, kind, killer, objective, state,
+    });
+    const contra = (games, wins, wpa, deaths, plays) => ({ games, wins, wpa, wpa_games: games, deaths, plays });
+    const lanes = (l, p) => [0, 1, 2, 3, 4].map((i) => (i === l ? p : (1 - p) / 4));
+    const enemigos = {
+      rival: [
+        { champion: "LeeSin", lanes: lanes(1, 0.97), likely: "JUNGLE",
+          as_rival: contra(4, 1, -0.031, 4.5, [
+            jugada("m1", 742, 0.064, "LeeSin"),
+            jugada("m4", 1310, 0.041, null, "objective", "dragon", "dead"),
+            jugada("m7", 905, 0.027, "Ahri"),
+          ]),
+          as_enemy: contra(5, 2, -0.012, 4.0, []) },
+        { champion: "Ahri", lanes: lanes(2, 0.93), likely: "MIDDLE",
+          as_rival: contra(0, 0, null, 0, []), as_enemy: contra(3, 2, 0.044, 2.3, [jugada("m2", 1500, 0.035, "Ahri")]) },
+        { champion: null, lanes: lanes(0, 0.31), likely: null, as_rival: null, as_enemy: null },
+        { champion: "Jinx", lanes: lanes(3, 0.95), likely: "BOTTOM",
+          as_rival: contra(0, 0, null, 0, []), as_enemy: contra(0, 0, null, 0, []) },
+        { champion: null, lanes: lanes(4, 0.3), likely: null, as_rival: null, as_enemy: null },
+      ],
+    };
+    const nadie = Array.from({ length: 5 }, () => ({ champion: null, lanes: [0.2, 0.2, 0.2, 0.2, 0.2], likely: null, as_rival: null, as_enemy: null }));
+    const aram = modo === "aram";
+    const eleg = modo === "wait" ? nadie : modo === "blind" ? nadie : enemigos.rival;
+    const r = role || (modo === "blind" ? "JUNGLE" : "JUNGLE");
+    const fila = (champion, games, wins, adjusted, tier, wpa) => ({
+      champion, games, wins, wr: wins / games, adjusted, tier, wpa, short: games < 15,
+    });
+    return {
+      phase: aram ? "BAN_PICK" : modo === "wait" ? "PLANNING" : "BAN_PICK",
+      queue_id: aram ? 450 : modo === "blind" ? 430 : 420,
+      rift: !aram,
+      role: r,
+      role_source: role ? "chosen" : modo === "blind" ? "usual" : "assigned",
+      my_champion: "Gwen",
+      my_locked: false,
+      enemies: aram ? nadie : eleg,
+      rival: !aram && eleg === enemigos.rival && r === "JUNGLE" ? 0 : !aram && eleg === enemigos.rival && r === "MIDDLE" ? 1 : null,
+      rival_probability: eleg === enemigos.rival ? (r === "MIDDLE" ? 0.93 : 0.97) : null,
+      bans: ["Zed", "Yasuo"],
+      pool: r === "JUNGLE"
+        ? { games: 31, mean: 0.552, hidden: 2, rows: [
+            fila("Gwen", 22, 14, 0.571, "S+", 0.042),
+            fila("Viego", 5, 3, 0.556, "S+", 0.018),
+            fila("Shaco", 4, 1, 0.513, "A+", -0.027),
+          ] }
+        : { games: 0, mean: 0.5, hidden: 0, rows: [] },
+      ban_ideas: r === "JUNGLE"
+        ? [{ champion: "Kayn", games: 4, losses: 3 }, { champion: "Graves", games: 2, losses: 2 }]
+        : [],
+      games: 26,
+    };
+  }
+
   /* --- Coach -----------------------------------------------------------------
      Dobles de get_coach_summary, get_coach_plan, start_coach_plan y
      abandon_coach_plan (coach.rs y coach_plan.rs), con la forma de sus tipos en
@@ -1009,6 +1074,12 @@
       coachFalla();
       return copiaPlan();
     },
+    // --- Selección de campeón (champ_select.rs) ----------------------------
+    // `?champ=` elige: rival (por defecto: clasificatoria de jungla con Lee
+    // Sin de rival), wait (nadie ha fijado), blind (sin puesto del cliente),
+    // aram, none (fuera de la selección). `window.__champEnd()` la cierra.
+    get_champ_select: ({ role } = {}) => champSelectMock(role),
+    champ_select_bring_forward: () => "covers",
     // Con las claves de error del backend: `few_games`, `active_plan`.
     start_coach_plan: ({ category, tramo } = {}) => {
       if (PLAN.state === "few_games") throw "few_games";

@@ -321,8 +321,148 @@ pub struct LcuStatus {
     pub game_id: Option<i64>,
     /// `gameData.queue.id` (420 clasificatoria solo/dúo, 440 flex…).
     pub queue_id: Option<i32>,
+    /// `gameData.queue.mapId`: 11 es la Grieta, 12 el Abismo. Las
+    /// personalizadas tienen cola propia (3100, 3110…) y es el mapa lo que
+    /// dice si hay carriles.
+    pub map_id: Option<i32>,
     /// Plataforma del cliente ("LA1", "EUW1"): el prefijo del id de Match-V5.
     pub platform_id: Option<String>,
+}
+
+/// Una plaza de la selección de campeón: el campeón y el puesto, y nada de
+/// quién la ocupa. Riot prohíbe des-anonimizar en champ select, así que de la
+/// sesión no se copia ningún nombre, puuid ni id de invocador (ver
+/// `parse_seleccion`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Plaza {
+    pub cell: i64,
+    /// Campeón fijado o, si aún no, el que tiene en la mano (en tu equipo, la
+    /// intención marcada antes de su turno). 0 = ninguno. Los rivales solo
+    /// tienen campeón cuando lo fijan.
+    pub champion_id: i64,
+    /// ¿Lo ha fijado ya? Sale de su acción de elegir completada.
+    pub locked: bool,
+    /// "TOP", "JUNGLE", "MIDDLE", "BOTTOM" o "UTILITY". En clasificatoria el
+    /// cliente no lo da de los rivales; en una normal a ciegas, de nadie.
+    pub position: Option<String>,
+}
+
+/// Lo que se lee de `/lol-champ-select/v1/session`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SeleccionLcu {
+    /// Tu plaza.
+    pub local_cell: i64,
+    pub my_team: Vec<Plaza>,
+    pub their_team: Vec<Plaza>,
+    /// Campeones ya baneados, de los dos equipos.
+    pub bans: Vec<i64>,
+    /// `timer.phase`: "PLANNING", "BAN_PICK", "FINALIZATION"…
+    pub phase: Option<String>,
+}
+
+impl SeleccionLcu {
+    /// Tu plaza en tu equipo.
+    pub fn yo(&self) -> Option<&Plaza> {
+        self.my_team.iter().find(|p| p.cell == self.local_cell)
+    }
+}
+
+/// "jungle" → "JUNGLE", como `teamPosition` de Match-V5. Vacío o raro → `None`.
+pub fn puesto_lcu(p: &str) -> Option<String> {
+    let p = match p.trim().to_ascii_lowercase().as_str() {
+        "top" => "TOP",
+        "jungle" => "JUNGLE",
+        "middle" | "mid" => "MIDDLE",
+        "bottom" | "bot" | "adc" => "BOTTOM",
+        "utility" | "support" => "UTILITY",
+        _ => return None,
+    };
+    Some(p.to_string())
+}
+
+/// La sesión de selección, reducida a campeones y puestos.
+///
+/// Se lee campo a campo y no con un `Deserialize` de la sesión entera a
+/// propósito: lo que no se nombra aquí (nombres, puuid, ids de invocador,
+/// chat) no llega ni a memoria del proceso fuera del `Value` que se tira.
+///
+/// Los rivales no siempre traen su `championId` en `theirTeam` aunque hayan
+/// fijado; sus acciones de elegir completadas sí. Lo mismo con los baneos:
+/// `bans` viene vacío en las colas con baneos simultáneos y lo que hay que
+/// mirar son las acciones `ban` completadas. Se unen las dos fuentes.
+///
+/// `None` si no es una selección propia (espectador) o no tiene forma de una.
+pub fn parse_seleccion(s: &Value) -> Option<SeleccionLcu> {
+    if s.get("isSpectating").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let local_cell = s.get("localPlayerCellId").and_then(Value::as_i64)?;
+    let num = |v: &Value, k: &str| v.get(k).and_then(Value::as_i64).unwrap_or(0);
+
+    // Las acciones vienen en tandas (una lista de listas).
+    let acciones: Vec<&Value> = s
+        .get("actions")
+        .and_then(Value::as_array)
+        .map(|t| t.iter().filter_map(Value::as_array).flatten().collect())
+        .unwrap_or_default();
+    let completada = |a: &&Value| a.get("completed").and_then(Value::as_bool) == Some(true);
+    let tipo = |a: &Value| a.get("type").and_then(Value::as_str).unwrap_or("").to_string();
+    let fijado = |cell: i64| {
+        acciones
+            .iter()
+            .copied()
+            .filter(completada)
+            .find(|a| tipo(a) == "pick" && num(a, "actorCellId") == cell && num(a, "championId") > 0)
+            .map(|a| num(a, "championId"))
+    };
+
+    let plazas = |k: &str, propio: bool| -> Vec<Plaza> {
+        s.get(k)
+            .and_then(Value::as_array)
+            .map(|v| {
+                v.iter()
+                    .map(|p| {
+                        let cell = num(p, "cellId");
+                        let lock = fijado(cell);
+                        let elegido = num(p, "championId");
+                        // La intención solo existe en tu equipo: de los rivales
+                        // el cliente no la enseña.
+                        let intencion = if propio { num(p, "championPickIntent") } else { 0 };
+                        Plaza {
+                            cell,
+                            champion_id: lock.unwrap_or(if elegido > 0 { elegido } else { intencion.max(0) }),
+                            locked: lock.is_some(),
+                            position: p.get("assignedPosition").and_then(Value::as_str).and_then(puesto_lcu),
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let my_team = plazas("myTeam", true);
+    let their_team = plazas("theirTeam", false);
+    if my_team.is_empty() {
+        return None;
+    }
+
+    let mut bans: Vec<i64> = ["myTeamBans", "theirTeamBans"]
+        .iter()
+        .filter_map(|k| s.get("bans")?.get(k)?.as_array())
+        .flatten()
+        .filter_map(Value::as_i64)
+        .chain(acciones.iter().copied().filter(completada).filter(|a| tipo(a) == "ban").map(|a| num(a, "championId")))
+        .filter(|c| *c > 0)
+        .collect();
+    bans.sort_unstable();
+    bans.dedup();
+
+    Some(SeleccionLcu {
+        local_cell,
+        my_team,
+        their_team,
+        bans,
+        phase: s.get("timer").and_then(|t| t.get("phase")).and_then(Value::as_str).map(str::to_string),
+    })
 }
 
 /// La partida que el cliente dice que se está jugando.
@@ -336,6 +476,8 @@ pub struct PartidaLcu {
 struct Estado {
     status: LcuStatus,
     leido: Option<Instant>,
+    /// La selección de campeón en curso, solo en la fase `ChampSelect`.
+    seleccion: Option<SeleccionLcu>,
 }
 
 static ESTADO: Mutex<Estado> = Mutex::new(Estado {
@@ -344,14 +486,32 @@ static ESTADO: Mutex<Estado> = Mutex::new(Estado {
         phase: None,
         game_id: None,
         queue_id: None,
+        map_id: None,
         platform_id: None,
     },
     leido: None,
+    seleccion: None,
 });
 
 /// Último estado leído del cliente.
 pub fn status() -> LcuStatus {
     ESTADO.lock().map(|e| e.status.clone()).unwrap_or_default()
+}
+
+/// La selección de campeón en curso, si la lectura es reciente.
+pub fn seleccion() -> Option<SeleccionLcu> {
+    let e = ESTADO.lock().ok()?;
+    if !e.leido.is_some_and(|t| t.elapsed() < FRESCURA) {
+        return None;
+    }
+    e.seleccion.clone()
+}
+
+/// Lo que se avisa a la interfaz con `champ-select`. Sin datos: la vista la
+/// arma `champ_select::get_champ_select`, que es quien sabe de tus partidas.
+#[derive(Debug, Clone, Serialize)]
+pub struct AvisoSeleccion {
+    pub active: bool,
 }
 
 /// La partida en curso según el cliente, solo si la lectura es reciente y la
@@ -473,6 +633,17 @@ pub fn parse_sesion(sesion: &Value) -> (Option<i64>, Option<i32>) {
     (game_id, queue_id)
 }
 
+/// `gameData.queue.mapId` de `/lol-gameflow/v1/session`.
+pub fn mapa_de_sesion(sesion: &Value) -> Option<i32> {
+    sesion
+        .get("gameData")?
+        .get("queue")?
+        .get("mapId")?
+        .as_i64()
+        .filter(|m| *m > 0)
+        .and_then(|m| i32::try_from(m).ok())
+}
+
 /// Plataforma del cliente. `/lol-chat/v1/me` la da tal cual ("LA1"); si no
 /// contesta, la región de `/riotclient/region-locale` vale cuando coincide con
 /// una plataforma conocida (LA1, LA2, OC1…). Las que no coinciden ("EUW" no es
@@ -512,17 +683,51 @@ async fn sondear(lcu: &mut Lcu, plataforma: &mut Option<String>, antes: &LcuStat
         platform_id: plataforma.clone(),
         ..Default::default()
     };
-    if FASES_CON_PARTIDA.contains(&fase.as_str()) {
-        // La sesión se relee al cambiar de fase o mientras no traiga gameId;
-        // dentro de una misma fase no cambia.
-        if antes.phase.as_deref() == Some(fase.as_str()) && antes.game_id.is_some() {
+    // En la selección aún no hay `gameId`, pero ya se sabe la cola: la vista de
+    // la selección la necesita para no hablar de carriles en una ARAM.
+    let en_seleccion = fase == FASE_SELECCION;
+    if FASES_CON_PARTIDA.contains(&fase.as_str()) || en_seleccion {
+        // La sesión se relee al cambiar de fase o mientras no traiga lo que
+        // falta; dentro de una misma fase no cambia.
+        let completa = if en_seleccion { antes.queue_id.is_some() } else { antes.game_id.is_some() };
+        if antes.phase.as_deref() == Some(fase.as_str()) && completa {
             st.game_id = antes.game_id;
             st.queue_id = antes.queue_id;
+            st.map_id = antes.map_id;
         } else if let Ok(Some(sesion)) = lcu.get("/lol-gameflow/v1/session").await {
             (st.game_id, st.queue_id) = parse_sesion(&sesion);
+            st.map_id = mapa_de_sesion(&sesion);
         }
     }
     st
+}
+
+/// La fase de gameflow de la selección de campeón.
+pub const FASE_SELECCION: &str = "ChampSelect";
+
+/// La sesión de la selección, si se está en ella. Un fallo de lectura deja la
+/// anterior: entre una elección y otra el cliente a veces contesta 404 un
+/// instante, y la vista no debe parpadear por eso.
+async fn leer_seleccion(lcu: &mut Lcu, st: &LcuStatus, antes: Option<SeleccionLcu>) -> Option<SeleccionLcu> {
+    if st.phase.as_deref() != Some(FASE_SELECCION) {
+        return None;
+    }
+    match lcu.get("/lol-champ-select/v1/session").await {
+        Ok(Some(v)) => parse_seleccion(&v).or(antes),
+        _ => antes,
+    }
+}
+
+/// Nombres de los campeones según el propio cliente (`alias` = el id de Data
+/// Dragon, el `championName` de Match-V5). Solo hace falta para un campeón que
+/// no esté en la tabla del corpus: uno que salió después de generarla.
+async fn leer_nombres(lcu: &mut Lcu) -> Vec<(i64, String)> {
+    let Ok(Some(Value::Array(v))) = lcu.get("/lol-game-data/assets/v1/champion-summary.json").await else {
+        return Vec::new();
+    };
+    v.iter()
+        .filter_map(|c| Some((c.get("id")?.as_i64().filter(|i| *i > 0)?, c.get("alias")?.as_str()?.to_string())))
+        .collect()
 }
 
 /// Sondea el cliente cada 2 s, guarda el estado para `status()` y
@@ -538,11 +743,29 @@ pub fn spawn_monitor(app: tauri::AppHandle) {
         };
         let mut plataforma = None;
         let mut antes = LcuStatus::default();
+        let mut sel_antes: Option<SeleccionLcu> = None;
+        let mut nombres_pedidos = false;
         loop {
             let ahora = sondear(&mut lcu, &mut plataforma, &antes).await;
+            let sel = leer_seleccion(&mut lcu, &ahora, sel_antes.clone()).await;
+            if !nombres_pedidos && sel.as_ref().is_some_and(crate::champ_select::faltan_nombres) {
+                // Una vez por proceso; si el cliente no contestó, en el
+                // siguiente sondeo.
+                let nombres = leer_nombres(&mut lcu).await;
+                nombres_pedidos = !nombres.is_empty();
+                crate::champ_select::anadir_nombres(nombres);
+            }
             if let Ok(mut e) = ESTADO.lock() {
                 e.status = ahora.clone();
                 e.leido = Some(Instant::now());
+                e.seleccion = sel.clone();
+            }
+            if sel != sel_antes {
+                if sel.is_some() != sel_antes.is_some() {
+                    log::info!("LCU: selección de campeón {}", if sel.is_some() { "abierta" } else { "cerrada" });
+                }
+                let _ = app.emit("champ-select", AvisoSeleccion { active: sel.is_some() });
+                sel_antes = sel;
             }
             if ahora != antes {
                 log::info!(
@@ -682,6 +905,105 @@ mod tests {
         let s = serde_json::json!({ "gameData": { "gameId": 5, "queue": { "id": -1 } } });
         assert_eq!(parse_sesion(&s), (Some(5), None));
         assert_eq!(parse_sesion(&serde_json::json!({})), (None, None));
+        // La selección de una personalizada de la Grieta (medido el 2026-10-21):
+        // cola 3100 y mapa 11.
+        let s = serde_json::json!({ "gameData": { "gameId": 0, "queue": { "id": 3100, "mapId": 11, "gameMode": "CLASSIC" } } });
+        assert_eq!((parse_sesion(&s), mapa_de_sesion(&s)), ((None, Some(3100)), Some(11)));
+        assert_eq!(mapa_de_sesion(&serde_json::json!({ "gameData": { "queue": { "mapId": 0 } } })), None);
+    }
+
+    /// Recorte con la forma de `/lol-champ-select/v1/session` en una
+    /// clasificatoria a mitad de elecciones: tú (celda 2) jungla con una
+    /// intención marcada, un aliado que ya fijó, y dos rivales que fijaron
+    /// (uno solo se ve en sus acciones).
+    fn sesion_de_seleccion() -> Value {
+        serde_json::json!({
+            "localPlayerCellId": 2,
+            "isSpectating": false,
+            "myTeam": [
+                { "cellId": 0, "championId": 86, "championPickIntent": 0, "assignedPosition": "top",
+                  "gameName": "AliadoSecreto", "tagLine": "LAN", "puuid": "puuid-aliado", "summonerId": 111 },
+                { "cellId": 1, "championId": 0, "championPickIntent": 103, "assignedPosition": "middle",
+                  "gameName": "", "puuid": "puuid-otro", "summonerId": 222 },
+                { "cellId": 2, "championId": 0, "championPickIntent": 887, "assignedPosition": "jungle",
+                  "gameName": "YoMismo", "puuid": "puuid-yo", "summonerId": 333 }
+            ],
+            "theirTeam": [
+                { "cellId": 5, "championId": 64, "championPickIntent": 0, "assignedPosition": "",
+                  "gameName": "", "puuid": "puuid-rival", "summonerId": 0 },
+                { "cellId": 6, "championId": 0, "championPickIntent": 0, "assignedPosition": "" },
+                { "cellId": 7, "championId": 0, "championPickIntent": 0, "assignedPosition": "" }
+            ],
+            "actions": [
+                [ { "id": 1, "actorCellId": 0, "championId": 157, "completed": true, "isAllyAction": true, "type": "ban" },
+                  { "id": 2, "actorCellId": 5, "championId": 238, "completed": true, "isAllyAction": false, "type": "ban" },
+                  { "id": 3, "actorCellId": 6, "championId": 0, "completed": true, "isAllyAction": false, "type": "ban" } ],
+                [ { "id": 4, "actorCellId": 0, "championId": 86, "completed": true, "isAllyAction": true, "type": "pick" } ],
+                [ { "id": 5, "actorCellId": 5, "championId": 64, "completed": true, "isAllyAction": false, "type": "pick" },
+                  { "id": 6, "actorCellId": 6, "championId": 103, "completed": true, "isAllyAction": false, "type": "pick" } ],
+                [ { "id": 7, "actorCellId": 2, "championId": 887, "completed": false, "isAllyAction": true, "isInProgress": true, "type": "pick" } ]
+            ],
+            "bans": { "myTeamBans": [157], "theirTeamBans": [], "numBans": 10 },
+            "timer": { "phase": "BAN_PICK", "adjustedTimeLeftInPhase": 21000 },
+            "chatDetails": { "mucJwtDto": { "jwt": "no-debe-copiarse" } }
+        })
+    }
+
+    #[test]
+    fn seleccion_de_campeon() {
+        let s = parse_seleccion(&sesion_de_seleccion()).unwrap();
+        assert_eq!(s.local_cell, 2);
+        assert_eq!(s.phase.as_deref(), Some("BAN_PICK"));
+        // Tú: la intención marcada cuenta como tu campeón, sin fijar.
+        let yo = s.yo().unwrap();
+        assert_eq!((yo.champion_id, yo.locked, yo.position.as_deref()), (887, false, Some("JUNGLE")));
+        // El aliado que fijó, y el que solo tiene intención.
+        assert_eq!((s.my_team[0].champion_id, s.my_team[0].locked), (86, true));
+        assert_eq!((s.my_team[1].champion_id, s.my_team[1].locked), (103, false));
+        // Rivales: Lee Sin (64) está en theirTeam; Ahri (103) solo en sus
+        // acciones. El tercero no ha elegido. Ninguno trae puesto.
+        let rivales: Vec<(i64, bool)> = s.their_team.iter().map(|p| (p.champion_id, p.locked)).collect();
+        assert_eq!(rivales, vec![(64, true), (103, true), (0, false)]);
+        assert!(s.their_team.iter().all(|p| p.position.is_none()));
+        // Baneos de `bans` y de las acciones, sin repetir y sin el baneo vacío.
+        assert_eq!(s.bans, vec![157, 238]);
+    }
+
+    #[test]
+    fn la_seleccion_no_guarda_quien_es_nadie() {
+        let s = parse_seleccion(&sesion_de_seleccion()).unwrap();
+        let texto = serde_json::to_string(&s).unwrap() + &format!("{s:?}");
+        for prohibido in ["AliadoSecreto", "YoMismo", "puuid", "LAN", "111", "333", "jwt", "no-debe"] {
+            assert!(!texto.contains(prohibido), "{prohibido} se ha colado: {texto}");
+        }
+    }
+
+    #[test]
+    fn selecciones_que_no_son_tuyas() {
+        let mut v = sesion_de_seleccion();
+        v["isSpectating"] = Value::Bool(true);
+        assert!(parse_seleccion(&v).is_none());
+        assert!(parse_seleccion(&serde_json::json!({ "localPlayerCellId": 0, "myTeam": [] })).is_none());
+        assert!(parse_seleccion(&serde_json::json!({})).is_none());
+        // Práctica o personalizada contra nadie: tu equipo y nada más.
+        let s = parse_seleccion(&serde_json::json!({
+            "localPlayerCellId": 0,
+            "myTeam": [ { "cellId": 0, "championId": 887, "assignedPosition": "" } ],
+            "theirTeam": []
+        }))
+        .unwrap();
+        assert!(s.their_team.is_empty() && s.bans.is_empty() && s.phase.is_none());
+        assert_eq!(s.yo().map(|p| (p.champion_id, p.position.clone())), Some((887, None)));
+    }
+
+    #[test]
+    fn puestos_del_cliente() {
+        for (a, b) in [("top", "TOP"), ("JUNGLE", "JUNGLE"), ("middle", "MIDDLE"), ("bottom", "BOTTOM"), ("utility", "UTILITY")] {
+            assert_eq!(puesto_lcu(a).as_deref(), Some(b));
+        }
+        for raro in ["", "NONE", "fill", "unselected"] {
+            assert_eq!(puesto_lcu(raro), None, "{raro}");
+        }
     }
 
     #[test]
@@ -691,6 +1013,7 @@ mod tests {
             phase: Some("InProgress".into()),
             game_id: Some(42),
             queue_id: Some(420),
+            map_id: Some(11),
             platform_id: Some("LA1".into()),
         };
         assert_eq!(partida_de(&st).map(|p| p.game_id), Some(42));
@@ -769,6 +1092,46 @@ mod tests {
                 .send()
                 .await;
             assert!(r.is_err(), "un cliente sin la CA de Riot no debería conectar");
+        });
+    }
+
+    /// La selección de campeón contra el cliente de verdad, con tu biblioteca:
+    /// `LCU_EN_VIVO=1 cargo test --lib lcu::tests::seleccion_en_vivo -- --nocapture`.
+    /// Solo lee. Si el cliente no está en una selección, lo dice y ya.
+    #[test]
+    fn seleccion_en_vivo() {
+        if std::env::var("LCU_EN_VIVO").is_err() {
+            return;
+        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut lcu = Lcu::new().unwrap();
+            let mut plataforma = None;
+            let st = sondear(&mut lcu, &mut plataforma, &LcuStatus::default()).await;
+            println!("estado: {st:?}");
+            let Some(sel) = leer_seleccion(&mut lcu, &st, None).await else {
+                println!("sin selección de campeón");
+                return;
+            };
+            println!("selección: {sel:?}");
+            if crate::champ_select::faltan_nombres(&sel) {
+                crate::champ_select::anadir_nombres(leer_nombres(&mut lcu).await);
+            }
+            let partidas = crate::storage::load_all_matches()
+                .iter()
+                .filter(|m| crate::coach::cuenta(m))
+                .filter_map(|m| crate::champ_select::partida_de(m, crate::coach::cacheada(m).as_ref()))
+                .collect::<Vec<_>>();
+            let v = crate::champ_select::armar(
+                &sel,
+                st.queue_id,
+                st.map_id,
+                &partidas,
+                None,
+                crate::champ_select::nombre,
+                crate::champ_select::reparto,
+            );
+            println!("{}", serde_json::to_string_pretty(&v).unwrap());
         });
     }
 

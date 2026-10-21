@@ -1039,6 +1039,23 @@ button.cap:not(:disabled):active { transform: none; }
   border-radius: var(--radius-full);
   transition: opacity var(--t-quick) var(--e-move);
 }
+/* «Selección de campeón» mientras dura: un punto de jade, quieto. Va a la
+   derecha como el contador y, plegado el rail, a la esquina del icono. */
+.nav-btn__live {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--cool);
+}
+.rail--collapsed .nav-btn__live {
+  position: absolute;
+  top: 7px;
+  left: 26px;
+  margin: 0;
+  box-shadow: 0 0 0 2px var(--rail);
+}
 /* Grupo del rail: tipo oración, 12 px, --faint. */
 .nav-grp {
   font-family: var(--font-sans);

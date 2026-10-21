@@ -1,9 +1,11 @@
 import React, { useMemo } from "react";
 import { MatchMetadata } from "../../../types";
-import { Tv, Camera, TrendingUp, TrendingDown, Sparkles, UserCheck } from "lucide-react";
+import { Camera, Zap } from "lucide-react";
 import { clock } from "../../../core/time";
 import { roleLabel, sameRole } from "../../../core/roles";
+import { champLabel } from "../../../core/matchEvents";
 import { useT } from "../../../core/LanguageProvider";
+import { formatGold, formatSigned } from "./pressureFormat";
 
 interface EsportsPlayerOverlayProps {
   currentTime: number;
@@ -15,8 +17,18 @@ interface EsportsPlayerOverlayProps {
 const SNAP_WINDOW = 1.5;
 const EVENT_WINDOW = 3;
 
+/** "+1,2k" / "−850" / "0": la ventaja de equipo se lee de un vistazo, y a
+ *  partir de mil el detalle de las unidades no cambia nada. */
+const compactGold = (n: number): string =>
+  Math.abs(n) >= 1000 ? `${formatSigned(n / 1000, 1)}k` : formatGold(n, true);
+
 /**
- * HUD estilo retransmisión sobre el vídeo.
+ * HUD sobre el vídeo: dos láminas de vidrio arriba (reloj y oro a la
+ * izquierda, APM a la derecha) y, si toca, el salto de cámara y el suceso del
+ * momento. Va dentro del escenario, que es oscuro en los dos temas: sus clases
+ * (`vp-hud*`, VideoPlayer.css) toman los tokens del ámbito `.stage-dark`, no
+ * los del tema claro. Antes eran píldoras teñidas con los colores del claro
+ * sobre el vídeo, y suspendían AA (3,8).
  *
  * Los tiempos de esta pantalla son SEGUNDOS DE VÍDEO, y los `minute_frames` de
  * Riot son MINUTOS DE PARTIDA. El vídeo empieza antes (la pantalla de carga
@@ -72,14 +84,15 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
   /**
    * Contra QUIÉN es la diferencia individual. Estaba escrito "Jungla rival" a
    * fuego: un support veía que su oro se comparaba con el de la jungla enemiga,
-   * que no es lo que mide el dato.
+   * que no es lo que mide el dato. Se nombra por el campeón, que es lo que se
+   * ve en el vídeo; el puesto queda en la ayuda.
    */
   const rival = useMemo(() => {
     const ps = match.participants ?? [];
     const yo = ps.find((p) => p.is_self);
     if (!yo?.role) return null;
     const otro = ps.find((p) => p.team_id !== yo.team_id && sameRole(p.role, yo.role));
-    return otro ? { role: roleLabel(otro.role), champion: otro.champion } : null;
+    return otro ? { role: roleLabel(otro.role), champion: champLabel(otro.champion) } : null;
   }, [match.participants]);
 
   const isCameraSnap = (match.camera_snaps || []).some(
@@ -92,44 +105,27 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
   if (!visible) return null;
 
   return (
-    <div style={styles.layer}>
-      <div style={styles.topRow}>
-        {/* Telemetría de oro en vivo y reloj de partida. */}
-        <div style={styles.hud}>
-          <span style={styles.clockCell}>
-            <Tv size={13} color="var(--cool)" />
-            <span className="u-time">{clock(gameTime)}</span>
-          </span>
-
+    <div className="vp-hud">
+      <div className="vp-hud__row">
+        {/* Reloj de partida y oro en vivo, en una sola lámina. */}
+        <div className="vp-hud__pill">
+          <span className="t-time vp-hud__clock">{clock(gameTime)}</span>
           {teamGoldDiff !== null ? (
             <span
-              style={{
-                ...styles.pill,
-                color: teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)",
-                background: `color-mix(in srgb, ${teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)"} 18%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${teamGoldDiff >= 0 ? "var(--win)" : "var(--loss)"} 36%, transparent)`,
-              }}
+              className="vp-hud__gold"
+              data-down={teamGoldDiff < 0 || undefined}
               title={t("Your team's total gold lead over the enemy team, updated second by second")}
             >
-              {teamGoldDiff >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-              {t("{v}g team", { v: teamGoldDiff >= 0 ? `+${teamGoldDiff.toLocaleString()}` : teamGoldDiff.toLocaleString() })}
+              {t("Team {v} gold", { v: compactGold(teamGoldDiff) })}
             </span>
           ) : (
             // Decía "Sincronizando oro…" para siempre en cualquier partida sin
             // datos de Riot. No estaba sincronizando nada.
-            <span style={{ ...styles.pill, color: "var(--faint)", background: "var(--sunken)" }}>
-              {t("No gold data")}
-            </span>
+            <span className="vp-hud__soft">{t("No gold data")}</span>
           )}
-
           {selfGoldDiff !== null && (
             <span
-              style={{
-                ...styles.pill,
-                color: selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)",
-                background: `color-mix(in srgb, ${selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)"} 18%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${selfGoldDiff >= 0 ? "var(--cool)" : "var(--brand)"} 36%, transparent)`,
-              }}
+              className="vp-hud__rival"
               title={
                 rival
                   ? t("Your gold against your direct opponent ({role}, {champion}), in real time", {
@@ -139,109 +135,36 @@ export const EsportsPlayerOverlay: React.FC<EsportsPlayerOverlayProps> = ({
                   : t("Your gold against your direct lane opponent, in real time")
               }
             >
-              <UserCheck size={11} />
-              {t("{v}g vs {role}", {
-                v: selfGoldDiff >= 0 ? `+${selfGoldDiff.toLocaleString()}` : selfGoldDiff.toLocaleString(),
-                role: rival ? t(rival.role) : t("lane"),
-              })}
+              <span className="vp-hud__dot" aria-hidden="true">·</span>
+              {rival
+                ? t("{v} vs {champion}", { v: formatGold(selfGoldDiff, true), champion: rival.champion })
+                : t("{v} vs your lane opponent", { v: formatGold(selfGoldDiff, true) })}
             </span>
           )}
         </div>
 
-        <div style={styles.topRight}>
-          {isCameraSnap && (
-            <span style={styles.snapPill}>
-              <Camera size={12} />
-              {t("Camera jump")}
+        <div className="vp-hud__side">
+          {!!match.apm && (
+            <span className="vp-hud__pill">
+              <Zap size={14} className="vp-hud__icon" aria-hidden="true" />
+              <span className="u-metric">{t("{n} APM", { n: Math.round(match.apm) })}</span>
             </span>
           )}
-          {!!match.apm && (
-            <span style={{ ...styles.hud, color: "var(--cool)" }}>
-              <Sparkles size={11} />
-              <span className="u-metric">{t("{n} APM", { n: Math.round(match.apm) })}</span>
+          {isCameraSnap && (
+            <span className="vp-hud__pill">
+              <Camera size={14} className="vp-hud__icon vp-hud__icon--flag" aria-hidden="true" />
+              {t("Camera jump")}
             </span>
           )}
         </div>
       </div>
 
       {activeEvent && (
-        <div style={styles.banner}>
-          <span style={styles.bannerDot} />
+        <div className="vp-hud__pill vp-hud__banner">
+          <span className="vp-hud__bannerDot" aria-hidden="true" />
           <span>{activeEvent.description}</span>
         </div>
       )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  layer: {
-    position: "absolute",
-    inset: 0,
-    pointerEvents: "none",
-    zIndex: 6,
-    padding: "var(--space-4)",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-  },
-  topRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  topRight: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "var(--space-2)" },
-  // El HUD flota sobre el vídeo, así que aquí sí hay lámina: es de las pocas
-  // superficies del sistema que se apoyan sobre algo que no controlamos.
-  hud: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "6px var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    background: "color-mix(in srgb, var(--ground) 86%, transparent)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid var(--glass-line)",
-    fontSize: "12px",
-    fontVariantNumeric: "tabular-nums",
-  },
-  clockCell: { display: "inline-flex", alignItems: "center", gap: "5px", color: "var(--text)" },
-  pill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "4px",
-    padding: "2px var(--space-2)",
-    borderRadius: 999,
-    fontSize: "12px",
-    fontWeight: 500,
-    fontVariantNumeric: "tabular-nums",
-  },
-  snapPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    padding: "5px var(--space-3)",
-    borderRadius: "var(--radius-full)",
-    background: "color-mix(in srgb, var(--flag) 22%, transparent)",
-    border: "1px solid color-mix(in srgb, var(--flag) 45%, transparent)",
-    color: "var(--text)",
-    fontSize: "12px",
-    fontWeight: 500,
-  },
-  banner: {
-    alignSelf: "center",
-    marginBottom: "var(--space-8)",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "6px var(--space-4)",
-    borderRadius: "var(--radius-full)",
-    background: "color-mix(in srgb, var(--ground) 88%, transparent)",
-    backdropFilter: "blur(10px)",
-    border: "1px solid var(--glass-line)",
-    color: "var(--text)",
-    fontSize: "13px",
-  },
-  bannerDot: {
-    width: "6px",
-    height: "6px",
-    borderRadius: "var(--radius-full)",
-    background: "var(--cool)",
-  },
 };

@@ -171,6 +171,49 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
 }
 
 /**
+ * Marca de la línea de tiempo (Figma, Componentes · «Marca de línea de
+ * tiempo»): una forma de 8-10 px por TIPO y un tinte por trabajo. Sustituye a
+ * los retratos de 20 px, que se pisaban en cualquier pelea; el retrato sale
+ * ahora en la etiqueta al pasar por encima.
+ *
+ * - `dot`: círculo lleno, suceso de combate (kill, muerte).
+ * - `ring`: círculo hueco, asistencia: participaste sin rematar.
+ * - `diamond`: rombo, objetivo o estructura (y, en violeta, hallazgo).
+ * - `pip`: punto pequeño, lo que no es ni combate ni objetivo (definitivas).
+ *
+ * El tono sale del mismo color que `eventMeta`, para que la marca y la fila
+ * de la lista digan lo mismo.
+ */
+export type MarkTone = "win" | "loss" | "brand" | "flag" | "neutral";
+export type MarkShape = "dot" | "ring" | "diamond" | "pip";
+
+const toneOfColor = (color: string): MarkTone =>
+  color === C_ALLY || color === C_STRUCTURE
+    ? "win"
+    : color === C_ENEMY
+      ? "loss"
+      : color === C_OBJECTIVE
+        ? "brand"
+        : "neutral";
+
+export function markOf(ev: MatchEvent): { shape: MarkShape; tone: MarkTone } {
+  const meta = eventMeta(ev, 12);
+  const tone = toneOfColor(meta.color);
+  switch (meta.category) {
+    case "objectives":
+    case "structures":
+      return { shape: "diamond", tone };
+    case "assists":
+      return { shape: "ring", tone };
+    case "kills":
+    case "deaths":
+      return { shape: "dot", tone };
+    default:
+      return { shape: "pip", tone };
+  }
+}
+
+/**
  * `text` es la cadena inglesa, que es la clave de i18n: quien la pinta la pasa
  * por `t()`. Se quedo sin traducir hasta que se vio en pantalla — una columna
  * de palabras en ingles en una interfaz en espanol.

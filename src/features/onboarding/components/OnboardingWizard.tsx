@@ -21,6 +21,7 @@ import { Segmented } from "../../../components/ui/Segmented";
 import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 import type { VideoSettings } from "../../../types";
+import { Select } from "../../../components/ui/Select";
 
 /**
  * Primer arranque.
@@ -234,18 +235,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) =>
               <div style={styles.row}>
                 <label style={styles.rowLabel} htmlFor="onb-region">{t("Region")}</label>
                 <div style={styles.rowField}>
-                  <select
+                  <Select
                     id="onb-region"
-                    className="field"
+                    className="select--block"
                     value={config?.riot_platform ?? AUTO_PLATFORM}
                     disabled={config === null}
-                    onChange={(e) => guardar({ riot_platform: e.target.value })}
-                  >
-                    <option value={AUTO_PLATFORM}>{etiquetaAuto}</option>
-                    {RIOT_PLATFORMS.map((p) => (
-                      <option key={p.code} value={p.code}>{p.label}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => guardar({ riot_platform: v })}
+                    options={[
+                      { value: AUTO_PLATFORM, label: etiquetaAuto },
+                      ...RIOT_PLATFORMS.map((p) => ({ value: p.code, label: p.label })),
+                    ]}
+                  />
                   <p style={styles.hint}>
                     {t("Where you play. Auto figures it out from your recent matches the first time.")}
                   </p>

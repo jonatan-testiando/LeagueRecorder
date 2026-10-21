@@ -14,6 +14,7 @@ import { clock } from "../../../core/time";
 
 import { streamUrl } from "../../../core/media";
 import { Segmented } from "../../../components/ui/Segmented";
+import { Select } from "../../../components/ui/Select";
 
 /**
  * Las categorías de error, en el orden en que se ofrecen.
@@ -466,18 +467,16 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
                     <Clock3 size={12} /> {t("Use current time")}
                   </button>
                 </div>
-                <select
+                {/* El VALOR es el identificador en inglés, que es lo que se
+                    guarda; la etiqueta va traducida. */}
+                <Select
+                  className="select--block"
+                  style={{ marginBottom: 8 }}
                   value={noteCategory}
-                  onChange={e => setNoteCategory(e.target.value)}
-                  aria-label={t("Error category")}
-                  style={styles.select}
-                >
-                  {/* El VALOR es el identificador en inglés, que es lo que se
-                      guarda; la etiqueta va traducida. */}
-                  {ERROR_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{t(c)}</option>
-                  ))}
-                </select>
+                  onChange={setNoteCategory}
+                  label={t("Error category")}
+                  options={ERROR_CATEGORIES.map((c) => ({ value: c, label: t(c) }))}
+                />
                 <textarea
                   autoFocus
                   placeholder={t("What went wrong here? What could you have done better?")}
@@ -602,7 +601,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     boxShadow: "var(--inset-sunken)",
   },
-  select: { width: "100%", padding: "8px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", marginBottom: "8px", outline: "none", fontFamily: "var(--font-sans)", fontSize: 13 },
   textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "var(--font-sans)", fontSize: 14 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

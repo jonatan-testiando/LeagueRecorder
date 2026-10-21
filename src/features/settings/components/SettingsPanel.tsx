@@ -24,6 +24,7 @@ import { checkForUpdateNow, getPendingUpdate, installPendingUpdate, onUpdateProg
 import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 import { THEMES, useTheme, type Theme } from "../../../core/ThemeProvider";
+import { Select } from "../../../components/ui/Select";
 import "./SettingsPanel.css";
 
 // Mismos límites que aplica el backend (`storage::MIN_STORAGE_GB` y el clamp de
@@ -1067,19 +1068,17 @@ export const SettingsPanel: React.FC = () => {
         label={t("Region")}
         desc={t("Where you play. Auto figures it out from your recent matches the first time.")}
       >
-        <select
-          className="field"
+        <Select
+          label={t("Region")}
+          className="select--block"
           value={config?.riot_platform ?? "auto"}
           disabled={config === null}
-          onChange={(e) => handleSaveConfig({ riot_platform: e.target.value })}
-        >
-          <option value="auto">{etiquetaAuto}</option>
-          {RIOT_PLATFORMS.map((p) => (
-            <option key={p.code} value={p.code}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => handleSaveConfig({ riot_platform: v })}
+          options={[
+            { value: "auto", label: etiquetaAuto },
+            ...RIOT_PLATFORMS.map((p) => ({ value: p.code, label: p.label })),
+          ]}
+        />
       </Row>
 
       <Row

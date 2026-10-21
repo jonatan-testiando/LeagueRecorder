@@ -1495,6 +1495,89 @@ button.cap:not(:disabled):active { transform: none; }
   line-height: var(--lh-12);
 }
 
+/* --- Selector (Select.tsx) ------------------------------------------------
+   El botón es un campo hundido (Figma, Componentes · Selector); el menú, una
+   lámina flotante con la Elevación 1 que nace del borde del botón. */
+/* Base y variante plain con :where(), sin peso: index.css se carga después de
+   los CSS de pantalla, y la clase de quien lo usa (.lib-sort) tiene que ganar. */
+:where(.select) {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.select:not(:disabled):active { transform: none; }
+:where(.select--plain) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.select--block { width: 100%; flex: 1; }
+.select--field {
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
+  color: var(--text);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  transition: box-shadow var(--t-hover) var(--e-color);
+}
+.select--field.select--sm { height: 28px; padding: 0 8px 0 10px; font-size: var(--fs-13); line-height: var(--lh-13); }
+.select--field:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--focus), var(--inset-sunken); }
+.select__value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select__chev { flex: none; color: var(--muted); transition: transform var(--t-quick) var(--e-move); }
+.select[aria-expanded="true"] .select__chev { transform: rotate(180deg); }
+@media (hover: hover) and (pointer: fine) {
+  .select--field:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--hair-strong), var(--inset-sunken); }
+}
+.select-menu {
+  position: fixed;
+  z-index: 10000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  background: var(--overlay);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--shadow-2);
+  transform-origin: top left;
+  animation: menu-in var(--t-quick) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+.select-menu[data-up] { transform-origin: bottom left; }
+.select-menu[data-closing] { opacity: 0; pointer-events: none; }
+@keyframes menu-in {
+  from { opacity: 0; transform: scale(var(--pop-scale)); }
+  to { opacity: 1; transform: none; }
+}
+.select-menu__opt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.select-menu__opt[data-active] { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.select-menu__opt[aria-selected="true"] { font-weight: 500; }
+.select-menu__opt[aria-disabled] { color: var(--faint); cursor: default; }
+.select-menu__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.select-menu__check { flex: none; color: var(--cool); }
+
 /* --- Pestañas (Tabs.tsx) -------------------------------------------------
    Subrayado de oro de 2 px que se desliza; el contenido cambia al instante. */
 .tabs {

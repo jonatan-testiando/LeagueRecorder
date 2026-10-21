@@ -262,22 +262,6 @@
 .cg-fav[aria-pressed="true"] { color: var(--flag); }
 .cg-fav:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
 
-/* Selector de caducidad: campo hundido, en la voz de la interfaz. */
-.cg-select {
-  height: 30px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--sunken);
-  box-shadow: var(--inset-sunken), inset 0 0 0 1px var(--hair);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  cursor: pointer;
-  outline: none;
-}
-.cg-select:focus-visible { box-shadow: inset 0 0 0 1px var(--cool); }
-
 /* Enlace ya subido: la URL en un campo hundido y sus dos atajos. */
 .cg-link {
   display: flex;

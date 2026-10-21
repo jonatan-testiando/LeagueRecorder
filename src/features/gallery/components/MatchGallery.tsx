@@ -13,7 +13,6 @@ import { useAppStore, useErrorClips } from "../../../store/useAppStore";
 import {
   ArrowDownWideNarrow,
   Check,
-  ChevronDown,
   FolderOpen,
   Gamepad2,
   HardDrive,
@@ -35,6 +34,7 @@ import { MatchDetailPanel } from "./MatchDetailPanel";
 import { cap, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
 import { Segmented } from "../../../components/ui/Segmented";
 import { Chip } from "../../../components/ui/Chip";
+import { Select } from "../../../components/ui/Select";
 import "./MatchGallery.css";
 
 interface DiskSpaceInfo {
@@ -552,7 +552,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     abrir(m);
   };
 
-  const sortLabel = t(SORTS.find((s) => s.key === sort)!.label);
 
   return (
     <div ref={rootRef} className={`lib panel-enter${wide ? "" : " lib--narrow"}`}>
@@ -641,16 +640,15 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         {/* Orden. La nota es lo único de la fila que separa una partida buena de
             una mala, así que ordenar por ella es lo que convierte la lista en
             "enséñame lo peor", que es a lo que se viene. */}
-        <label className="lib-sort">
-          <ArrowDownWideNarrow size={15} aria-hidden className="lib-sort__ico" />
-          <span>{sortLabel}</span>
-          <ChevronDown size={14} aria-hidden className="lib-sort__chev" />
-          <select aria-label={t("Sort")} value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
-            {SORTS.map((s) => (
-              <option key={s.key} value={s.key}>{t(s.label)}</option>
-            ))}
-          </select>
-        </label>
+        <Select
+          variant="plain"
+          className="lib-sort"
+          label={t("Sort")}
+          value={sort}
+          onChange={setSort}
+          icon={<ArrowDownWideNarrow size={15} aria-hidden className="lib-sort__ico" />}
+          options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+        />
 
         <button
           type="button"

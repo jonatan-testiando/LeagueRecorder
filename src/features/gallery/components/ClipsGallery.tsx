@@ -24,6 +24,7 @@ import { formatDecimal } from "../../../core/benchmarkFormat";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { Skeleton } from "../../../components/ui/Skeleton";
+import { Select } from "../../../components/ui/Select";
 import "./ClipsGallery.css";
 
 /**
@@ -629,18 +630,15 @@ export const ClipsGallery: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <select
-                            className="cg-select"
+                          <Select
+                            size="sm"
                             value={exp}
                             disabled={isUploading}
-                            onChange={(e) => setExpiry(prev => ({ ...prev, [clip.path]: e.target.value }))}
-                            aria-label={t("How long the link lasts")}
+                            onChange={(v) => setExpiry(prev => ({ ...prev, [clip.path]: v }))}
+                            label={t("How long the link lasts")}
                             title={t("How long the link lasts")}
-                          >
-                            {EXPIRY_OPTIONS.map(o => (
-                              <option key={o.value} value={o.value}>{t(o.label)}</option>
-                            ))}
-                          </select>
+                            options={EXPIRY_OPTIONS.map((o) => ({ value: o.value, label: t(o.label) }))}
+                          />
                           <Button
                             variant={isSelected ? "primary" : "ghost"}
                             size="sm"

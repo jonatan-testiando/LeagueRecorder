@@ -81,6 +81,7 @@
      título, HUD del reproductor, toasts, Ctrl K). Con transparencia reducida
      pasa a opaco (ver el bloque de movimiento reducido). */
   --glass: color-mix(in srgb, var(--panel) 78%, transparent);
+  --glass-filter: blur(16px);   /* el desenfoque del vidrio: 16 px como mucho */
   /* Velo bajo un diálogo o Ctrl K. */
   --scrim: rgba(4, 7, 14, 0.62);
 
@@ -1154,6 +1155,7 @@ button.cap:not(:disabled):active { transform: none; }
   :root[data-theme="light"] {
     --glass: var(--panel);
     --glass-blur: none;
+    --glass-filter: none;
   }
 }
 
@@ -1602,7 +1604,74 @@ button.cap:not(:disabled):active { transform: none; }
   margin-top: 3px;
 }
 
-/* --- avisos (Toaster) ------------------------------------------------------ */
+/* --- avisos (Toaster) ------------------------------------------------------
+   Abajo a la derecha. Cada aviso va en una ranura absoluta que se coloca con
+   transform según lo que miden los de debajo: al irse uno, los demás se
+   deslizan a su sitio. Entra subiendo --rise-toast con fundido; sale solo con
+   fundido. Lámina de vidrio, como en Figma (Componentes · Toast). */
+.toasts {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  width: 360px;
+  max-width: calc(100vw - var(--space-8));
+  /* Por debajo del diálogo (9999): si coinciden, el aviso se colaría por
+     encima del velo del modal. */
+  z-index: 9000;
+  /* La columna vacía no se come los clics de lo que hay detrás. */
+  pointer-events: none;
+}
+.toast-slot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  transition: transform var(--t-base) var(--e-move);
+}
+.toast {
+  pointer-events: auto;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--glass);
+  backdrop-filter: var(--glass-filter);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-3);
+  animation: toast-in var(--t-base) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+.toast-slot[data-leaving] { pointer-events: none; }
+.toast-slot[data-leaving] .toast { opacity: 0; pointer-events: none; }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(var(--rise-toast)); }
+  to { opacity: 1; transform: none; }
+}
+.toast__row { display: flex; align-items: flex-start; gap: var(--space-3); padding: 12px 12px 12px 16px; }
+.toast__icon { display: flex; flex-shrink: 0; padding-top: 2px; }
+.toast__media { display: flex; flex-shrink: 0; margin: 2px; }
+.toast__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.toast__head { display: flex; align-items: center; gap: var(--space-2); min-height: 22px; }
+.toast__title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+  color: var(--text);
+}
+.toast__meta { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
+.toast__body {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  /* Una ruta larga sin espacios rompería el ancho de la tarjeta. */
+  overflow-wrap: anywhere;
+}
+.toast__actions { display: flex; align-items: center; gap: var(--space-2); margin-top: 10px; }
+.toast__line { height: 2px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+/* Con movimiento reducido la pila salta a su sitio en vez de deslizarse. */
+@media (prefers-reduced-motion: reduce) {
+  .toast-slot { transition: none; }
+}
 .toast__close {
   width: 24px;
   height: 24px;

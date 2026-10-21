@@ -26,8 +26,13 @@ import { useT } from "../../core/LanguageProvider";
  *    lleno"): esos se quedan hasta que los cierras. Un fallo que se borra solo
  *    antes de que levantes la vista es un fallo que no se ha contado. Los que
  *    se van solos llevan abajo una línea que se vacía: se ve cuánto les queda.
- *  - Entran opacándose y subiendo cuatro píxeles (`pop-in`, el mismo de los
- *    menús). Sin rebote: un aviso que salta llama más atención que su motivo.
+ *  - Entran opacándose y subiendo 8 px (--rise-toast) en 200 ms y salen solo
+ *    con fundido, en 150. Sin rebote: un aviso que salta llama más atención
+ *    que su motivo. La pila se coloca con transform: cada aviso se desplaza
+ *    lo que miden los de debajo, así que cuando uno se va los demás se
+ *    deslizan a su sitio en vez de saltar.
+ *  - Lámina de vidrio (--glass y 16 px de desenfoque): se distingue de lo que
+ *    tapa sin ser un bloque opaco encima de la pantalla.
  *
  * «Post-partida»: además del icono de tono, un aviso puede llevar su propia
  * imagen (`media`: el retrato del campeón en «Partida guardada»), un cuerpo
@@ -77,6 +82,8 @@ interface Toast extends ToastOptions {
   ms: number;
   /** Sube con cada `update`: reinicia la cuenta atrás sin repetir la entrada. */
   rev: number;
+  /** Saliendo: se funde y deja de ocupar sitio en la pila. */
+  leaving?: boolean;
 }
 
 interface ToastContextValue {
@@ -100,6 +107,9 @@ const ToastContext = createContext<ToastContextValue>({
 export const useToast = (): ToastContextValue => useContext(ToastContext);
 
 const DEFAULT_MS = 6000;
+/** Lo que dura la salida (--t-quick-exit): después se quita del árbol. */
+const EXIT_MS = 150;
+const GAP = 8;
 
 const TONE_COLOR: Record<ToastTone, string> = {
   info: "var(--cool)",
@@ -126,6 +136,34 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const live = useRef<Set<string>>(new Set());
   const t = useT();
 
+  // Alturas medidas de cada aviso, para colocar la pila con transform.
+  const heights = useRef<Map<string, number>>(new Map());
+  const [, setLayout] = useState(0);
+  const ro = useMemo(
+    () =>
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver((entries) => {
+            let changed = false;
+            for (const e of entries) {
+              const id = (e.target as HTMLElement).dataset.toastId;
+              const h = Math.round(e.contentRect.height);
+              if (id && heights.current.get(id) !== h) {
+                heights.current.set(id, h);
+                changed = true;
+              }
+            }
+            if (changed) setLayout((n) => n + 1);
+          }),
+    []
+  );
+  const measure = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (el && ro) ro.observe(el);
+    },
+    [ro]
+  );
+
   const dismiss = useCallback((id: string) => {
     const timer = timers.current.get(id);
     if (timer) {
@@ -133,7 +171,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       timers.current.delete(id);
     }
     live.current.delete(id);
-    setToasts((prev) => prev.filter((x) => x.id !== id));
+    setToasts((prev) => prev.map((x) => (x.id === id ? { ...x, leaving: true } : x)));
+    setTimeout(() => {
+      heights.current.delete(id);
+      setToasts((prev) => prev.filter((x) => x.id !== id));
+    }, EXIT_MS);
   }, []);
 
   const arm = useCallback(
@@ -185,8 +227,9 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       map.forEach((timer) => clearTimeout(timer));
       map.clear();
+      ro?.disconnect();
     };
-  }, []);
+  }, [ro]);
 
   const value = useMemo(() => ({ toast, update, dismiss }), [toast, update, dismiss]);
 
@@ -194,90 +237,104 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ToastContext.Provider value={value}>
       {children}
       {toasts.length > 0 && (
-        <div style={styles.stack} role="region" aria-label={t("Notifications")}>
-          {toasts.map((x) => {
+        <div className="toasts" role="region" aria-label={t("Notifications")}>
+          {toasts.map((x, i) => {
             const tone = x.tone ?? "info";
+            // Lo que miden los avisos más nuevos (los de debajo) que siguen en
+            // la pila: el que se va deja su hueco en cuanto empieza a fundirse.
+            let offset = 0;
+            for (const y of toasts.slice(i + 1)) {
+              if (!y.leaving) offset += (heights.current.get(y.id) ?? 0) + GAP;
+            }
             return (
               <div
                 key={x.id}
-                style={styles.toast}
-                role={tone === "danger" ? "alert" : "status"}
-                aria-live={tone === "danger" ? "assertive" : "polite"}
+                className="toast-slot"
+                style={{ transform: `translateY(${-offset}px)` }}
+                data-leaving={x.leaving ? "" : undefined}
               >
-                <div style={styles.row}>
-                  <span style={x.media ? styles.media : styles.icon}>
-                    {x.media ?? <ToneIcon tone={tone} />}
-                  </span>
-                  <div style={styles.text}>
-                    <div style={styles.head}>
-                      <span style={styles.title}>{x.title}</span>
-                      {x.meta && <span style={styles.meta}>{x.meta}</span>}
-                      <button
-                        type="button"
-                        className="toast__close"
-                        onClick={() => dismiss(x.id)}
-                        title={t("Close")}
-                        aria-label={t("Close")}
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    {x.body && <span style={styles.body}>{x.body}</span>}
-                    {x.note && <span style={styles.body}>{x.note}</span>}
-                    {(x.action || x.secondary) && (
-                      <div style={styles.actions}>
-                        {x.action && (
-                          <button
-                            type="button"
-                            className="toast__btn toast__btn--main"
-                            style={{ color: x.media ? TONE_COLOR[tone] : undefined }}
-                            onClick={() => {
-                              x.action?.onClick();
-                              dismiss(x.id);
-                            }}
-                          >
-                            {x.action.icon}
-                            {x.action.label}
-                          </button>
-                        )}
-                        {x.secondary && (
-                          <button
-                            type="button"
-                            className="toast__btn"
-                            onClick={() => {
-                              x.secondary?.onClick();
-                              dismiss(x.id);
-                            }}
-                          >
-                            {x.secondary.icon}
-                            {x.secondary.label}
-                          </button>
-                        )}
+                <div
+                  ref={measure}
+                  data-toast-id={x.id}
+                  className="toast"
+                  role={tone === "danger" ? "alert" : "status"}
+                  aria-live={tone === "danger" ? "assertive" : "polite"}
+                >
+                  <div className="toast__row">
+                    <span className={x.media ? "toast__media" : "toast__icon"}>
+                      {x.media ?? <ToneIcon tone={tone} />}
+                    </span>
+                    <div className="toast__text">
+                      <div className="toast__head">
+                        <span className="toast__title">{x.title}</span>
+                        {x.meta && <span className="toast__meta">{x.meta}</span>}
+                        <button
+                          type="button"
+                          className="toast__close"
+                          onClick={() => dismiss(x.id)}
+                          title={t("Close")}
+                          aria-label={t("Close")}
+                        >
+                          <X size={13} />
+                        </button>
                       </div>
-                    )}
+                      {x.body && <span className="toast__body">{x.body}</span>}
+                      {x.note && <span className="toast__body">{x.note}</span>}
+                      {(x.action || x.secondary) && (
+                        <div className="toast__actions">
+                          {x.action && (
+                            <button
+                              type="button"
+                              className="toast__btn toast__btn--main"
+                              style={{ color: x.media ? TONE_COLOR[tone] : undefined }}
+                              onClick={() => {
+                                x.action?.onClick();
+                                dismiss(x.id);
+                              }}
+                            >
+                              {x.action.icon}
+                              {x.action.label}
+                            </button>
+                          )}
+                          {x.secondary && (
+                            <button
+                              type="button"
+                              className="toast__btn"
+                              onClick={() => {
+                                x.secondary?.onClick();
+                                dismiss(x.id);
+                              }}
+                            >
+                              {x.secondary.icon}
+                              {x.secondary.label}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {/* Trabajo en curso: la barra recorre, no finge un porcentaje. */}
+                  {x.progress && (
+                    <div className="toast__line toast__progress" aria-hidden="true">
+                      <span />
+                    </div>
+                  )}
+                  {/* Lo que le queda al aviso. Solo en los que se van solos: los
+                      de peligro se quedan y no tienen cuenta que enseñar. La
+                      clave con `rev` la reinicia cuando el aviso cambia. */}
+                  {x.ms > 0 && !x.progress && (
+                    <div className="toast__line" aria-hidden="true">
+                      <div
+                        key={x.rev}
+                        className="toast__timer"
+                        style={{
+                          background: `color-mix(in srgb, ${TONE_COLOR[tone]} 70%, transparent)`,
+                          animationDuration: `${x.ms}ms`,
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-                {/* Trabajo en curso: la barra recorre, no finge un porcentaje. */}
-                {x.progress && (
-                  <div style={styles.timer} className="toast__progress" aria-hidden="true">
-                    <span />
-                  </div>
-                )}
-                {/* Lo que le queda al aviso. Solo en los que se van solos: los
-                    de peligro se quedan y no tienen cuenta que enseñar. La
-                    clave con `rev` la reinicia cuando el aviso cambia. */}
-                {x.ms > 0 && !x.progress && (
-                  <div style={styles.timer} aria-hidden="true">
-                    <div
-                      key={x.rev}
-                      className="toast__timer"
-                      style={{
-                        background: `color-mix(in srgb, ${TONE_COLOR[tone]} 70%, transparent)`,
-                        animationDuration: `${x.ms}ms`,
-                      }}
-                    />
-                  </div>
-                )}
               </div>
             );
           })}
@@ -285,53 +342,4 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       )}
     </ToastContext.Provider>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  stack: {
-    position: "fixed",
-    right: "var(--space-6)",
-    bottom: "var(--space-6)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-    // Por debajo del diálogo (9999): si los dos coinciden, el aviso se cuela
-    // por encima del velo del modal y se lee como un fallo de pintado.
-    zIndex: 9000,
-    // La columna es estrecha, pero el hueco vacío no debe comerse los clics de
-    // lo que hay detrás.
-    pointerEvents: "none",
-  },
-  toast: {
-    pointerEvents: "auto",
-    width: 380,
-    maxWidth: "calc(100vw - var(--space-8))",
-    overflow: "hidden",
-    background: "var(--panel)",
-    borderRadius: 14,
-    boxShadow: "inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim), var(--shadow-3)",
-    animation: "pop-in var(--t-quick) var(--e-out) both",
-  },
-  row: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: 14,
-    padding: "16px 12px 16px 16px",
-  },
-  icon: { display: "flex", paddingTop: 1, flexShrink: 0 },
-  media: { display: "flex", flexShrink: 0, margin: 2 },
-  text: { display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: 1 },
-  head: { display: "flex", alignItems: "center", gap: 8, minHeight: 24 },
-  title: { flex: 1, minWidth: 0, fontSize: 14, color: "var(--text)", fontWeight: 500, lineHeight: 1.4 },
-  meta: { fontSize: 12, color: "var(--faint)", whiteSpace: "nowrap" },
-  body: {
-    fontSize: 13,
-    color: "var(--muted)",
-    lineHeight: 1.45,
-    fontVariantNumeric: "tabular-nums",
-    // Una ruta larga sin espacios rompería el ancho de la tarjeta.
-    overflowWrap: "anywhere",
-  },
-  actions: { display: "flex", alignItems: "center", gap: 8, marginTop: 10 },
-  timer: { height: 2, background: "color-mix(in srgb, var(--text) 6%, transparent)" },
 };

@@ -24,10 +24,10 @@ use crate::riot_api::{ParticipantDto, TimelineDto};
 
 /// Anchura a cada lado del eje del carril, en unidades de mapa (SR es
 /// ~14 870 × 14 870). Fuera de esta banda estás en jungla, río o base.
-const LANE_HALF_WIDTH: f64 = 1300.0;
+pub(crate) const LANE_HALF_WIDTH: f64 = 1300.0;
 /// Las peleas se desplazan al río y a los arbustos, así que un kill cuenta como
 /// «de línea» algo más lejos del eje que una posición de fotograma.
-const KILL_LANE_WIDTH: f64 = 2100.0;
+pub(crate) const KILL_LANE_WIDTH: f64 = 2100.0;
 /// Distancia máxima al rival de esa línea para aceptar que fuiste a por él.
 const ENEMY_NEAR: f64 = 2200.0;
 /// Rival encima: sube la confianza.
@@ -79,6 +79,10 @@ pub struct Gank {
     pub x: i32,
     pub y: i32,
     pub approach: Option<Approach>,
+    /// Participante de esa línea al que fuiste a buscar: la víctima, quien te
+    /// mató o el rival de la línea más cercano en el fotograma. `None` en las
+    /// partidas sin roles, donde no se sabe quién es «de la línea».
+    pub rival: Option<i32>,
 }
 
 impl Lane {
@@ -101,8 +105,10 @@ impl Lane {
     }
 
     /// Eje del carril, de la base azul a la base roja. Los vértices son las
-    /// torres reales de Grieta del Invocador, con un punto extra en cada codo.
-    fn path(self) -> &'static [(f64, f64)] {
+    /// torres reales de Grieta del Invocador, con un punto extra en cada codo:
+    /// inhibidor, interior y exterior azules (0-2), codo o centro (3) y
+    /// exterior, interior e inhibidor rojos (4-6).
+    pub(crate) fn path(self) -> &'static [(f64, f64)] {
         match self {
             Lane::Top => &[
                 (1169.0, 4287.0),
@@ -190,7 +196,7 @@ fn point_to_segment(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> (f6
 
 /// Distancia al eje del carril y progreso normalizado a lo largo de él
 /// (0 = base azul, 1 = base roja).
-fn project(lane: Lane, x: f64, y: f64) -> (f64, f64) {
+pub(crate) fn project(lane: Lane, x: f64, y: f64) -> (f64, f64) {
     let path = lane.path();
     let total: f64 = path
         .windows(2)
@@ -411,10 +417,11 @@ fn from_kills(
                 v.extend(ev.assistingParticipantIds.iter().copied());
                 v
             };
-            let belongs = counterpart.iter().any(|pid| {
+            let de_la_linea = counterpart.iter().copied().find(|pid| {
                 role_lane.get(pid).copied().flatten() == Some(lane)
                     && team_of.get(pid).copied().unwrap_or(0) != self_team
             });
+            let belongs = de_la_linea.is_some();
             if roles_known && !belongs {
                 continue;
             }
@@ -452,6 +459,7 @@ fn from_kills(
                 x: pos.x,
                 y: pos.y,
                 approach,
+                rival: de_la_linea,
             });
         }
     }
@@ -489,7 +497,7 @@ fn from_frames(
 
         // ¿Hay alguien de esa línea a quien ganquear? Sin esto, «pasar por el
         // carril» y «ganquear» son lo mismo, que era justo el fallo anterior.
-        let mut nearest_enemy: Option<(f64, f64)> = None; // (distancia, progreso)
+        let mut nearest_enemy: Option<(f64, f64, i32)> = None; // (distancia, progreso, quién)
         for (&pid, &p) in &snap.pos {
             if team_of.get(&pid).copied().unwrap_or(0) == self_team {
                 continue;
@@ -503,11 +511,11 @@ fn from_frames(
                 continue;
             }
             let d = dist(me, p);
-            if nearest_enemy.map_or(true, |(best, _)| d < best) {
-                nearest_enemy = Some((d, project(lane, p.0, p.1).1));
+            if nearest_enemy.map_or(true, |(best, _, _)| d < best) {
+                nearest_enemy = Some((d, project(lane, p.0, p.1).1, pid));
             }
         }
-        let Some((enemy_dist, t_enemy)) = nearest_enemy else {
+        let Some((enemy_dist, t_enemy, rival)) = nearest_enemy else {
             continue;
         };
         if enemy_dist > ENEMY_NEAR {
@@ -560,6 +568,7 @@ fn from_frames(
             x: me.0 as i32,
             y: me.1 as i32,
             approach: Some(approach_from(t_self, t_enemy, blue_side)),
+            rival: roles_known.then_some(rival),
         });
     }
     out
@@ -662,10 +671,11 @@ fn merge(mut ganks: Vec<Gank>) -> Vec<Gank> {
         match hit {
             Some(i) => {
                 if rank(&g) > rank(&out[i]) {
-                    let inherited = out[i].approach;
+                    let inherited = (out[i].approach, out[i].rival);
                     let conf = out[i].confidence.max(g.confidence);
                     out[i] = g;
-                    out[i].approach = out[i].approach.or(inherited);
+                    out[i].approach = out[i].approach.or(inherited.0);
+                    out[i].rival = out[i].rival.or(inherited.1);
                     out[i].confidence = conf;
                 } else {
                     out[i].confidence = out[i].confidence.max(g.confidence);

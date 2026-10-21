@@ -115,29 +115,75 @@ fn por_carril(puntos: &[[f64; 2]], equipo: i32) -> [Vec<f64>; 3] {
 }
 
 /// El choque de un carril con lo que se ve: la punta de tu oleada (la más
-/// adelantada, sin el súbdito suelto) y, si se ve, la de la suya.
-pub fn choque(aliados: &mut [f64], rivales: &mut [f64]) -> Option<f64> {
+/// adelantada, sin el súbdito suelto) y, si se ve, la de la suya. `salida` es
+/// hasta dónde llega tu oleada recién salida sin haber chocado: tu torre
+/// exterior ([`crate::zonas::torre_exterior_propia`]).
+pub fn choque(aliados: &mut [f64], rivales: &mut [f64], salida: f64) -> Option<f64> {
     let tuya = percentil(aliados, 0.9)?;
     match percentil(rivales, 0.1) {
         // Las dos a la vista y cerca: el choque está entre ellas. Lejos, lo
         // de los suyos que se ve es otra oleada (la que acaba de salir de su
         // base, vista por un centinela) y no dice dónde está el choque.
         Some(suya) if (suya - tuya).abs() < 0.25 => Some((tuya + suya) / 2.0),
-        Some(_) => Some(tuya),
         // Sólo la tuya, y pegada a tu base: es la que acaba de salir, no
         // donde está el carril. Si la suya estuviera empujando hasta ahí se
         // vería (bajo tus torres tienes visión). Medido en una partida: a los
-        // 6 min los tres carriles daban 0,05-0,10 por esto.
-        None if tuya < SALIDA => None,
-        None => Some(tuya),
+        // 6 min los tres carriles daban 0,05-0,10 por esto. Vale también con
+        // algo suyo a la vista pero lejos: antes esta rama no miraba la
+        // salida, y con un icono suyo colado como súbdito (ver
+        // `quitar_fijos`) la mitad de las lecturas de top y bot caían detrás
+        // de tu torre exterior, junto al inhibidor.
+        //
+        // El corte estaba en 0,3 del eje, antes de tu torre exterior (0,33-0,36):
+        // la oleada nueva que pasaba entre los dos salía como choque, y era el
+        // 15 % de las lecturas de top y bot (186 por franja de 0,05 justo
+        // pasado el corte frente a 13 justo antes). Un choque de verdad ahí se
+        // vería: tus súbditos dan visión de los suyos.
+        _ if tuya < salida => None,
+        _ => Some(tuya),
     }
 }
 
-/// Hasta aquí llega una oleada recién salida antes de cruzarse con nada.
-const SALIDA: f64 = 0.3;
+/// Fotogramas clave a cada lado (~2 min) en los que se mira si un punto se mueve.
+const FIJO_VENTANA: usize = 30;
+/// Presente en esta parte de la ventana, en la misma celda: es un icono.
+const FIJO_PRESENCIA: f64 = 0.5;
+const FIJO_CELDA: f64 = 100.0;
+
+/// Un súbdito anda y un icono no. Los de torres e inhibidores rivales tienen
+/// el rojo de sus súbditos y se cuelan a 300-800 u de la estructura, fuera de
+/// [`RADIO_ESTRUCTURA`]. Medido en las 26 partidas (2026-10-20) con esta
+/// ventana: es fijo el 84 % de lo «rival» a menos de 900 u de una estructura,
+/// el 6 % de lo rival lejos de ellas, y de lo aliado el 0,0 % cerca y el 0,6 %
+/// lejos. La ventana es local porque una torre destruida deja de pintarse.
+fn quitar_fijos(frames: &mut [FrameRaw]) {
+    let celda = |p: &[f64; 2]| ((p[0] / FIJO_CELDA).round() as i32, (p[1] / FIJO_CELDA).round() as i32);
+    for rival in [false, true] {
+        let celdas: Vec<std::collections::HashSet<(i32, i32)>> = frames
+            .iter()
+            .map(|f| if rival { &f.e } else { &f.a }.iter().map(celda).collect())
+            .collect();
+        let fijas: Vec<std::collections::HashSet<(i32, i32)>> = (0..frames.len())
+            .map(|i| {
+                let (lo, hi) = (i.saturating_sub(FIJO_VENTANA), (i + FIJO_VENTANA).min(frames.len()));
+                let minimo = FIJO_PRESENCIA * (hi - lo) as f64;
+                celdas[i]
+                    .iter()
+                    .copied()
+                    .filter(|k| (lo..hi).filter(|&j| celdas[j].contains(k)).count() as f64 >= minimo)
+                    .collect()
+            })
+            .collect();
+        for (f, fijas) in frames.iter_mut().zip(fijas) {
+            let v = if rival { &mut f.e } else { &mut f.a };
+            v.retain(|p| !fijas.contains(&celda(p)));
+        }
+    }
+}
 
 pub fn instantes(raw: &str, equipo: i32, desfase: f64) -> Option<Vec<Instante>> {
-    let f: Fichero = serde_json::from_str(raw).ok()?;
+    let mut f: Fichero = serde_json::from_str(raw).ok()?;
+    quitar_fijos(&mut f.frames);
     Some(
         f.frames
             .into_iter()
@@ -145,8 +191,9 @@ pub fn instantes(raw: &str, equipo: i32, desfase: f64) -> Option<Vec<Instante>> 
                 let mut a = por_carril(&fr.a, equipo);
                 let mut e = por_carril(&fr.e, equipo);
                 let mut carril = [None; 3];
-                for i in 0..3 {
-                    carril[i] = choque(&mut a[i], &mut e[i]);
+                for lane in Lane::ALL {
+                    let i = idx(lane);
+                    carril[i] = choque(&mut a[i], &mut e[i], crate::zonas::torre_exterior_propia(lane, equipo));
                 }
                 Instante { t_game: fr.t - desfase, carril }
             })
@@ -199,6 +246,27 @@ pub struct GankCheck {
     pub setup: &'static str,
     /// "success", "neutral", "failed".
     pub outcome: &'static str,
+    /// La teoría del gank ([`crate::zonas`]), medida al EMPEZAR: cuando pisaste
+    /// la línea según tu rastro del vídeo, o `t_game` si no se te ve entrar.
+    pub t_start: f64,
+    pub start_from_video: bool,
+    /// Zona de la oleada: "own_3", "own_2", "center_1", "enemy_2", "enemy_3".
+    pub zone: Option<&'static str>,
+    /// ¿Oleada en el mejor lado (tu 2)? Sólo top y bot: en mid la teoría no lo marca.
+    pub best_side: Option<bool>,
+    /// Por dónde entraste: "own_jungle", "river", "enemy_jungle", "mid", "base".
+    pub entry: Option<&'static str>,
+    /// La región del mapa de la que venías ("q1_west", "river_bot"…).
+    pub entry_region: Option<&'static str>,
+    /// Zona del rival en el fotograma de la API más cercano (≤ 20 s).
+    pub rival_zone: Option<&'static str>,
+    /// Tu nivel menos el del rival, y el de tu compañero de su puesto menos el suyo.
+    pub level_diff: Option<i32>,
+    pub lane_level_diff: Option<i32>,
+    pub has_r: bool,
+    pub rival_has_r: Option<bool>,
+    /// Vida del rival (0..1), sólo si un fotograma de la API cae a ≤ 15 s.
+    pub rival_hp: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -253,7 +321,17 @@ fn empujes(serie: &[Instante], lanes: &[Lane], t: f64, antes: f64) -> Vec<LanePu
 
 /// `ruta` es la de [`crate::jungle_route::ruta_de_partida`], la que enseña la
 /// pestaña de la ruta: las invasiones salen de ella y no de rehacerla aquí.
-pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f64, ruta: Option<&crate::jungle_route::Route>) -> WavesReport {
+/// `pista` es tu rastro del vídeo ([`crate::minimap::Positions::follow`]):
+/// con él, cada gank se mide desde que pisaste la línea.
+pub fn analizar(
+    raw: &str,
+    tl: &TimelineDto,
+    m: &MatchDto,
+    pid: i32,
+    desfase: f64,
+    ruta: Option<&crate::jungle_route::Route>,
+    pista: Option<&[crate::minimap::Fix]>,
+) -> WavesReport {
     let Some(yo) = m.info.participants.get((pid - 1) as usize) else {
         return WavesReport { status: "no_riot".into(), ..Default::default() };
     };
@@ -317,6 +395,7 @@ pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f6
             Some(p) if p >= BAJO_SU_TORRE => "dive",
             Some(_) => "even",
         };
+        let c = crate::zonas::contexto(tl, &m.info.participants, pid, &g, Some(&serie), pista);
         r.ganks.push(GankCheck {
             t_game: g.time,
             t_video: g.time + desfase,
@@ -324,6 +403,18 @@ pub fn analizar(raw: &str, tl: &TimelineDto, m: &MatchDto, pid: i32, desfase: f6
             push,
             setup,
             outcome: g.outcome.key(),
+            t_start: c.inicio,
+            start_from_video: c.inicio_con_video,
+            zone: c.zona_oleada.map(|z| z.key()),
+            best_side: c.zona_oleada.zip(crate::zonas::mejor_lado(g.lane)).map(|(z, m)| z == m),
+            entry: c.region_entrada.map(|reg| crate::zonas::entrada(reg, equipo).key()),
+            entry_region: c.region_entrada.map(|reg| reg.key()),
+            rival_zone: c.zona_rival.map(|z| z.key()),
+            level_diff: c.nivel_rival.map(|n| c.nivel_tuyo - n),
+            lane_level_diff: c.nivel_aliado.zip(c.nivel_rival).map(|(a, n)| a - n),
+            has_r: c.r_tuya,
+            rival_has_r: c.r_rival,
+            rival_hp: c.vida_rival.map(|v| (v * 100.0).round() / 100.0),
         });
     }
 
@@ -457,7 +548,11 @@ fn de_partida(match_id: &str) -> WavesReport {
     };
     // La ruta de la pestaña de la ruta (caché incluida), no una rehecha aquí.
     let ruta = crate::jungle_route::ruta_de_partida(match_id);
-    analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref())
+    let pista = crate::minimap::Positions::load(match_id)
+        .filter(|p| p.self_participant_id == pid)
+        .map(|p| p.follow(&crate::minimap::anclas_de(&tl, pid)))
+        .filter(|p| !p.is_empty());
+    analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref(), pista.as_deref())
 }
 
 /// Oleadas y macro de una partida. Si faltan por leer y se puede, las lee
@@ -512,13 +607,36 @@ mod tests {
 
     #[test]
     fn el_choque_esta_entre_las_dos_puntas() {
+        let salida = crate::zonas::torre_exterior_propia(Lane::Bot, 100);
         let mut a = vec![0.3, 0.42, 0.45, 0.46];
         let mut e = vec![0.5, 0.52, 0.7];
-        let c = choque(&mut a, &mut e).unwrap();
+        let c = choque(&mut a, &mut e, salida).unwrap();
         assert!((c - 0.48).abs() < 0.01, "{c}");
         // Sin los suyos a la vista, la punta de la tuya.
-        assert_eq!(choque(&mut [0.6, 0.62], &mut []), Some(0.62));
-        assert_eq!(choque(&mut [], &mut [0.4]), None);
+        assert_eq!(choque(&mut [0.6, 0.62], &mut [], salida), Some(0.62));
+        assert_eq!(choque(&mut [], &mut [0.4], salida), None);
+        // Tu oleada recién salida no es el choque, se vea o no algo suyo
+        // lejos, y aunque ya haya pasado el 0,3 del eje.
+        assert_eq!(choque(&mut [0.04, 0.06], &mut [], salida), None);
+        assert_eq!(choque(&mut [0.04, 0.06], &mut [0.84], salida), None);
+        assert_eq!(choque(&mut [0.30, 0.32], &mut [], salida), None);
+        // Con la suya pegada sí hay choque, aunque sea detrás de tu torre.
+        assert!(choque(&mut [0.30, 0.32], &mut [0.34], salida).is_some());
+    }
+
+    #[test]
+    fn un_punto_que_no_se_mueve_es_un_icono() {
+        // Un rojo fijo a 500 u de la torre exterior roja de bot (fuera del
+        // radio de estructura) y un súbdito rojo que avanza por mid.
+        let frames: Vec<String> = (0..40)
+            .map(|i| {
+                let x = 5000 + 60 * i;
+                format!(r#"{{"t":{},"a":[],"e":[[13900,4000],[{x},{x}]]}}"#, 100 + 4 * i)
+            })
+            .collect();
+        let mut f: Fichero = serde_json::from_str(&format!(r#"{{"frames":[{}]}}"#, frames.join(","))).unwrap();
+        quitar_fijos(&mut f.frames);
+        assert!(f.frames.iter().all(|fr| fr.e.len() == 1 && fr.e[0][0] != 13900.0));
     }
 
     #[test]
@@ -569,13 +687,13 @@ mod tests {
             "coverage": 0.5, "agreement": 0.3
         })).unwrap();
         let raw = r#"{"frames":[{"t":300,"a":[],"e":[]}]}"#;
-        let r = analizar(raw, &tl, &m, 1, 0.0, Some(&ruta));
+        let r = analizar(raw, &tl, &m, 1, 0.0, Some(&ruta), None);
         assert_eq!(r.invades.len(), ruta.invades);
         let v: Vec<(&str, &str)> = r.invades.iter().map(|i| (i.camp.as_str(), i.verdict)).collect();
         assert_eq!(v, [("raptors", "early"), ("wolves", "unknown"), ("campamento_nuevo", "unknown")]);
         assert!(r.invades[2].lanes.is_empty());
         // Sin ruta (no es jungla, o sin rastro), ninguna.
-        assert!(analizar(raw, &tl, &m, 1, 0.0, None).invades.is_empty());
+        assert!(analizar(raw, &tl, &m, 1, 0.0, None, None).invades.is_empty());
     }
 
     /// `MIS_PARTIDAS_DIR=... cargo test --lib oleadas_en_mis_partidas -- --nocapture`
@@ -609,7 +727,7 @@ mod tests {
                     .filter(|p| crate::jungle_route::es_jungla(&m.info.participants, p.self_participant_id))
                     .and_then(|p| crate::jungle_route::build(&tl, &m.info.participants, &p))
             };
-            let r = analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref());
+            let r = analizar(&raw, &tl, &m, pid, meta.video_offset.unwrap_or(0.0), ruta.as_ref(), None);
             let visto = |i: usize| r.series.iter().filter(|s| s[i] >= 0.0).count() as f64 / r.series.len().max(1) as f64;
             println!(
                 "{id} equipo {} · carriles vistos top {:.0}% mid {:.0}% bot {:.0}%",

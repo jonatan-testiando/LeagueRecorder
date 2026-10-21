@@ -589,27 +589,39 @@ pub fn analizar(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
     let pid = meta.participants.iter().position(|p| p.is_self)? as i32 + 1;
     let m: crate::riot_api::MatchDto = serde_json::from_str(&crate::storage::load_raw_match(id)?).ok()?;
     let tl: TimelineDto = serde_json::from_str(&crate::storage::load_raw_timeline(id)?).ok()?;
-    let ps = &m.info.participants;
-    let yo = ps.get((pid - 1) as usize)?;
-    let plays = crate::winprob::plays(&tl, ps);
-    let an = Analisis::new(&tl, ps, &plays);
-
     let pista = crate::minimap::Positions::load(id)
         .filter(|p| p.self_participant_id == pid)
         .map(|p| p.follow(&crate::minimap::anclas_de(&tl, pid)))
         .filter(|p| !p.is_empty());
-    let mut jugadas = an.jugadas(pid, pista.as_deref());
-
-    let con_video_grabado = !meta.video_path.is_empty();
     let miradas = muertes::miradas(id, &meta.camera_snaps);
     let aperturas: Vec<(f64, bool, bool)> =
         crate::golpes::aperturas_de(id).iter().map(|a| (a.t_game, a.died, a.from_fog)).collect();
-    let own_rate = con_video(&mut jugadas, an.duracion, &miradas, meta.video_offset, &aperturas, |s| {
+    analizar_con(meta, pid, &m.info.participants, &tl, pista.as_deref(), &miradas, &aperturas)
+}
+
+/// `analizar` con lo del disco ya leído: tu rastro del vídeo, tus miradas al
+/// mapa (segundos de vídeo) y las peleas que te empezaron.
+fn analizar_con(
+    meta: &crate::storage::MatchMetadata,
+    pid: i32,
+    ps: &[ParticipantDto],
+    tl: &TimelineDto,
+    pista: Option<&[Fix]>,
+    miradas: &[f64],
+    aperturas: &[(f64, bool, bool)],
+) -> Option<PartidaCoach> {
+    let yo = ps.get((pid - 1) as usize)?;
+    let plays = crate::winprob::plays(tl, ps);
+    let an = Analisis::new(tl, ps, &plays);
+    let mut jugadas = an.jugadas(pid, pista);
+
+    let con_video_grabado = !meta.video_path.is_empty();
+    let own_rate = con_video(&mut jugadas, an.duracion, miradas, meta.video_offset, aperturas, |s| {
         an.vivos.alive(pid, s)
     });
 
     Some(PartidaCoach {
-        match_id: id.clone(),
+        match_id: meta.id.clone(),
         date: meta.date.clone(),
         champion: yo.championName.clone(),
         role: rol(yo).to_string(),
@@ -638,6 +650,16 @@ pub fn cuenta(meta: &crate::storage::MatchMetadata) -> bool {
 /// Las partidas del coach con su análisis, de la más reciente a la más antigua.
 pub fn tus_partidas() -> Vec<PartidaCoach> {
     crate::storage::load_all_matches().iter().filter(|m| cuenta(m)).filter_map(cacheada).collect()
+}
+
+/// Lo que el coach le cobró a una sola partida, con la misma criba y la misma
+/// caché que el resumen: si no, el reproductor diría una cosa y el Coach otra.
+/// `None` si no entra en el coach o aún no se puede analizar (sin sincronizar).
+pub fn de_la_partida(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
+    if !cuenta(meta) {
+        return None;
+    }
+    cacheada(meta)
 }
 
 pub(crate) fn cacheada(meta: &crate::storage::MatchMetadata) -> Option<PartidaCoach> {
@@ -923,6 +945,18 @@ pub fn resumen(partidas: &[PartidaCoach]) -> Resumen {
 #[tauri::command]
 pub async fn get_coach_summary() -> Resumen {
     tokio::task::spawn_blocking(|| resumen(&tus_partidas())).await.unwrap_or_else(|_| resumen(&[]))
+}
+
+/// Las jugadas del coach en una partida: «Lo que te costó esta partida» enseña
+/// con ellas los objetivos rivales que se hicieron sin ti.
+#[tauri::command]
+pub async fn get_match_coach(match_id: String) -> Result<Option<PartidaCoach>, String> {
+    tokio::task::spawn_blocking(move || {
+        let meta = crate::storage::get_match_metadata(&match_id)?;
+        Ok(de_la_partida(&meta))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -1301,6 +1335,70 @@ mod tests {
         let (a, b) = (&antes.plays[0], &despues.plays[0]);
         assert_eq!((&a.kind, &a.killer, a.charges.len(), a.expected.len()), (&b.kind, &b.killer, b.charges.len(), b.expected.len()));
         assert!(cerca(a.time, b.time) && cerca(a.lost, b.lost) && cerca(a.charges[0].1, b.charges[0].1));
+    }
+
+    /// Lo que recibe el reproductor de una partida (`get_match_coach`): sus
+    /// jugadas, con los nombres de campo que lee `CoachMatch` en
+    /// `tauri-ipc.ts`. El objetivo sin ti lleva dónde estabas y tu parte.
+    #[test]
+    fn una_partida_da_al_reproductor_sus_objetivos_sin_ti() {
+        // El medio (3) muere en el 10:00 y en el 16:40 está lejos del dragón
+        // con el top (1): el minuto ya no lo cubre su muerte y lo pagan a medias.
+        let mut tl = partida(20, vec![kill(600_000, 8, 3, &[], MID.0, MID.1), dragon(1_000_000, 200)]);
+        colocar(&mut tl, |pid, _| if pid == 3 || pid == 1 { LEJOS } else { FOSO_DRAGON });
+        let valor = valor_del_dragon(&tl);
+        let meta = crate::storage::MatchMetadata {
+            id: "m".into(),
+            video_path: "C:/m.mp4".into(),
+            video_offset: Some(30.0),
+            ..Default::default()
+        };
+        let p = analizar_con(&meta, 3, &diez(), &tl, None, &[], &[]).unwrap();
+        let v = serde_json::to_value(&p).unwrap();
+        assert_eq!((v["match_id"].as_str(), v["positions"].as_str()), (Some("m"), Some("minute")));
+        assert_eq!(v["video_offset"].as_f64(), Some(30.0));
+
+        let plays = v["plays"].as_array().unwrap();
+        assert_eq!(plays.len(), 2, "{plays:?}");
+        assert_eq!((plays[0]["kind"].as_str(), plays[0]["killer"].as_str()), (Some("death"), Some("Campeon8")));
+        let o = &plays[1];
+        assert_eq!(o["time"].as_f64(), Some(1000.0));
+        assert_eq!(
+            (o["kind"].as_str(), o["objective"].as_str(), o["state"].as_str()),
+            (Some("objective"), Some("dragon"), Some("far"))
+        );
+        let parte = o["lost"].as_f64().unwrap();
+        assert!((parte - valor / 2.0).abs() < 1e-12);
+        // Cada cargo es un par [categoría, pérdida].
+        assert_eq!(o["charges"], json!([[AUSENTE, parte]]));
+
+        // Sin vídeo no hay segundo de vídeo que abrir.
+        let sin_video = crate::storage::MatchMetadata { video_path: String::new(), ..meta };
+        let p = analizar_con(&sin_video, 3, &diez(), &tl, None, &[], &[]).unwrap();
+        assert_eq!(p.video_offset, None);
+    }
+
+    /// La partida suelta pasa la misma criba que el resumen: un VOD, un ARAM o
+    /// una sin sincronizar no tienen jugadas del coach.
+    #[test]
+    fn sin_jugadas_lo_que_el_coach_no_cuenta() {
+        let base = crate::storage::MatchMetadata {
+            id: "m".into(),
+            riot_match_id: Some("LA1_1".into()),
+            queue: Some(420),
+            ..Default::default()
+        };
+        assert!(cuenta(&base));
+        for meta in [
+            crate::storage::MatchMetadata { is_vod: true, ..base.clone() },
+            crate::storage::MatchMetadata { queue: Some(450), ..base.clone() },
+            crate::storage::MatchMetadata { riot_match_id: None, ..base.clone() },
+        ] {
+            // Antes que `de_la_partida`: con la criba rota, leería de la
+            // biblioteca de verdad.
+            assert!(!cuenta(&meta));
+            assert!(de_la_partida(&meta).is_none());
+        }
     }
 
     #[test]

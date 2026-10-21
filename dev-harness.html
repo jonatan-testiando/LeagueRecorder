@@ -544,6 +544,88 @@
   };
   const copiaPlan = () => JSON.parse(JSON.stringify(PLAN));
 
+  /* --- Lo que te costó esta partida (Impacto) --------------------------------
+     El precio de las muertes de quien grabó (participante 1, equipo 100), las
+     jugadas con su ΔWP (get_match_plays) y lo que el coach cobró en la partida
+     (get_match_coach). Las siete muertes caen donde las autopsias de
+     harnessSpells. Las cifras imitan las partidas del usuario: unos −2,5 pts
+     por muerte, la mitad con un objetivo rival detrás, y sin él dos dragones
+     (lejos y en base) y una tanda de larvas de céntimas. La de 13:30 es una
+     tirada: su equipo iba al 70 %. */
+  // [t_game, wpa_death, wpa_objective, objetivo de después, etiquetas]
+  const MUERTES_YO = [
+    [240, -0.017, 0, null, ["sin_mirar_mapa"]],
+    [430, -0.022, -0.012, "dragon", ["jungla", "sin_mirar_mapa"]],
+    [620, -0.019, 0, null, ["poco_dano_devuelto", "sin_mirar_mapa"]],
+    [810, -0.026, -0.015, "herald", ["jungla", "fuera_de_zona"]],
+    [1000, -0.015, 0, null, ["sin_mirar_mapa"]],
+    [1190, -0.031, -0.021, "baron", ["desde_niebla", "sin_mirar_mapa"]],
+    [1380, -0.024, 0, null, []],
+  ];
+  const preciosYo = () =>
+    MUERTES_YO.map(([t, d, o, objective, tags]) => ({
+      minute: t / 60, seconds_dead: 20 + t / 60, wpa: d + o, wpa_death: d, wpa_objective: o, objective, tags,
+    }));
+  // Objetivos del rival: [t_game, tipo, lo que ganó, dónde estaba él, entre
+  // cuántos de su equipo faltaban]. Sin `donde`, lo pagó una muerte suya de
+  // los 60 s anteriores y el coach no lo cobra otra vez.
+  const OBJ_RIVAL = [
+    [455, "dragon", 0.024],
+    [512, "grubs", 0.0018, "far", 3],
+    [518, "grubs", 0.0018, "far", 3],
+    [527, "grubs", 0.0018, "far", 3],
+    [835, "herald", 0.03],
+    [1095, "dragon", 0.046, "far", 2],
+    [1215, "baron", 0.042],
+    [1530, "dragon", 0.012, "base", 1],
+  ];
+  // Lo de su equipo: [t_game, tipo, lo que ganó, víctima]. Lo bastante para ir
+  // al 70 % en el 13:30.
+  const JUGADAS_100 = [
+    [150, "kill", 0.04, 6], [300, "kill", 0.05, 8], [560, "kill", 0.06, 9], [680, "tower", 0.08, null],
+    [740, "dragon", 0.05, null], [900, "kill", 0.03, 10], [1300, "kill", 0.04, 6], [1600, "tower", 0.05, null],
+  ];
+  // Una sola probabilidad que avanza jugada a jugada: cada antes es el
+  // después de la anterior, como en `winprob`, y la curva por minuto sale de
+  // ella. Con saltos sueltos la curva de Ventaja salía en dientes de sierra.
+  const jugadasDePartida = () => {
+    const crudas = [
+      ...MUERTES_YO.map(([t, d]) => ({ time: t, kind: "kill", team_id: 200, wpa: -d, shares: [[7, 1]], victim: 1 })),
+      ...OBJ_RIVAL.map(([t, kind, wpa]) => ({ time: t, kind, team_id: 200, wpa, shares: [[7, 1]], victim: null })),
+      ...JUGADAS_100.map(([t, kind, wpa, victim]) => ({ time: t, kind, team_id: 100, wpa, shares: [[1, 0.6], [2, 0.4]], victim })),
+    ].sort((a, b) => a.time - b.time);
+    let p100 = 0.5;
+    const plays = crudas.map((j) => {
+      const before = j.team_id === 100 ? p100 : 1 - p100;
+      p100 = j.team_id === 100 ? p100 + j.wpa : p100 - j.wpa;
+      return { ...j, before, after: before + j.wpa };
+    });
+    const curve = Array.from({ length: 28 }, (_, m) => {
+      const hechas = plays.filter((j) => j.time <= m * 60);
+      const ultima = hechas[hechas.length - 1];
+      return { time: m * 60, p100: ultima ? (ultima.team_id === 100 ? ultima.after : 1 - ultima.after) : 0.5 };
+    });
+    return { self_participant_id: 1, plays, curve };
+  };
+  const coachDePartida = (matchId) => {
+    const m = matches.find((x) => x.id === matchId) || matches[0];
+    return {
+      match_id: m.id, date: m.date, champion: m.champion, role: "TOP", band: m.tier_bucket ?? null,
+      duration: m.game_duration, video_offset: m.video_offset, positions: "video",
+      plays: [
+        ...MUERTES_YO.map(([t, d, o, objective, tags]) => ({
+          time: t, kind: "death", killer: "Lee Sin", objective, state: null, lost: -(d + o),
+          charges: tags.filter((c) => !["sin_mirar_mapa", "desde_niebla"].includes(c)).map((c) => [c, -(d + o)]), expected: [],
+        })),
+        ...OBJ_RIVAL.filter((o) => o[3]).map(([t, objective, wpa, state, n]) => ({
+          time: t, kind: "objective", killer: null, objective, state, lost: wpa / n, charges: [["ausente_objetivo", wpa / n]], expected: [],
+        })),
+      ].sort((a, b) => a.time - b.time),
+      wpa_tramo: [0.01, -0.02, -0.03, 0.01, 0],
+      own_rate: {},
+    };
+  };
+
   const HANDLERS = {
     "plugin:app|version": () => "1.2.11",
     // Se apunta qué callback escucha cada evento para poder dispararlos a mano
@@ -746,7 +828,8 @@
           role_percentile: yo ? 63.4 : 90 - i * 8,
           death_gold_given: 300 + i * 30,
           time_dead: 60 + i * 12,
-          deaths_detail: [{ minute: 24 + i, seconds_dead: 38 - i, gold_given: 420 }],
+          // Las de quien grabó, con su precio: «Lo que te costó» las lee.
+          deaths_detail: yo ? preciosYo() : [{ minute: 24 + i, seconds_dead: 38 - i, gold_given: 420 }],
           damage_participation: 0.6,
           mean_damage_share: 0.32,
         };
@@ -1000,6 +1083,9 @@
     // Sin este doble, `null` hacía reventar Patrones (`rutas.filter`). La app
     // real devuelve [] cuando no hay rutas.
     get_jungle_routes: () => [],
+    // --- Lo que te costó (ver MUERTES_YO arriba) ----------------------------
+    get_match_plays: () => jugadasDePartida(),
+    get_match_coach: ({ matchId }) => coachDePartida(matchId),
     // --- Coach (ver COACH arriba) ------------------------------------------
     get_coach_summary: () => {
       coachFalla();

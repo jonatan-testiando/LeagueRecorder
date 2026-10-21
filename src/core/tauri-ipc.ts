@@ -478,6 +478,52 @@ export const getCoachSummary = async (): Promise<CoachSummary> => {
   return await invoke<CoachSummary>("get_coach_summary");
 };
 
+/** Una jugada que te costó en una partida, ya en sus categorías (`coach::Jugada`). */
+export interface CoachMatchPlay {
+  /** Segundos de partida. */
+  time: number;
+  /** "death", o "objective": un objetivo rival que se hizo sin ti. */
+  kind: string;
+  killer: string | null;
+  /** En una muerte, el objetivo rival de después; en un objetivo, cuál fue
+   *  ("dragon", "baron", "herald", "grubs"). */
+  objective: string | null;
+  /** En un objetivo: "far", "base" o "dead". */
+  state: string | null;
+  /** Lo que costó, en probabilidad de victoria (0-1), ≥ 0. En un objetivo, tu
+   *  parte: se reparte entre los aliados que faltaban. */
+  lost: number;
+  /** `[categoría, lo que carga en ella]`. */
+  charges: [CoachCategory, number][];
+  /** Categorías de vídeo con la probabilidad de la condición en su tramo. */
+  expected: [CoachCategory, number][];
+}
+
+/** Lo que el coach cobró en una partida (`coach::PartidaCoach`). */
+export interface CoachMatch {
+  match_id: string;
+  date: string;
+  champion: string;
+  role: string;
+  band: string | null;
+  /** Segundos de partida. */
+  duration: number;
+  /** null si la partida no conserva su vídeo. */
+  video_offset: number | null;
+  /** De dónde sale tu posición en los objetivos: el minimapa del vídeo
+   *  ("video") o la de Riot una vez por minuto ("minute"). */
+  positions: "video" | "minute";
+  plays: CoachMatchPlay[];
+  wpa_tramo: number[];
+  own_rate: Record<string, (number | null)[]>;
+}
+
+// Las jugadas del coach de una partida, con la caché del resumen. null si la
+// partida no entra en el coach (un VOD, ARAM…) o aún no está sincronizada.
+export const getMatchCoach = async (matchId: string): Promise<CoachMatch | null> => {
+  return await invoke<CoachMatch | null>("get_match_coach", { matchId });
+};
+
 /** Una partida del plan del coach (`coach_plan.rs`), o de su «antes». */
 export interface CoachPlanGame {
   match_id: string;

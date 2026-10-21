@@ -365,6 +365,7 @@ pub fn run() {
             golpes::get_hits_taken,
             jugadas::get_match_plays,
             coach::get_coach_summary,
+            coach::get_match_coach,
             coach_plan::get_coach_plan,
             coach_plan::start_coach_plan,
             coach_plan::abandon_coach_plan,

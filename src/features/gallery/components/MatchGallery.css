@@ -456,18 +456,6 @@
 
 /* Revisión. */
 .lib-review { display: flex; align-items: center; min-width: 0; }
-.lib-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 9px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.lib-pill--done { color: var(--cool-ink); background: color-mix(in srgb, var(--win) 13%, transparent); padding-left: 7px; }
-.lib-pill--todo { color: var(--brand-ink); background: color-mix(in srgb, var(--brand) 13%, transparent); }
 .lib-prog { display: flex; align-items: center; gap: 6px; }
 .lib-prog__bar {
   display: block;

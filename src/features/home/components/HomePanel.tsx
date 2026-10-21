@@ -35,6 +35,7 @@ import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { ChampionWash } from "../../../components/ChampionWash";
 import { PositionIcon } from "../../../components/PositionIcon";
 import { Button } from "../../../components/ui/Button";
+import { Chip } from "../../../components/ui/Chip";
 import { useAppStore, useErrorClips } from "../../../store/useAppStore";
 import { Check, ChevronRight, CircleDot, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
@@ -510,10 +511,9 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                 {(progUltima.reviewed || sinScoreboard || claveMal) && (
                   <span className="home-hero__status">
                     {progUltima.reviewed && (
-                      <span className="home-pill home-pill--win">
-                        <Check size={12} />
+                      <Chip tone="win" icon={<Check size={12} />}>
                         {t("Game reviewed")}
-                      </span>
+                      </Chip>
                     )}
                     {sinScoreboard && (
                       <button type="button" className="home-link" onClick={sincronizar} disabled={sincronizando}>
@@ -772,9 +772,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
               <div className="home-card__head">
                 <span id="home-focus-lbl" className="home-card__label">{t("Your focus")}</span>
                 {focus && (
-                  <span className="home-pill home-pill--gold">
-                    {sampleLabel(confidenceOf(focus.games), focus.games, t)}
-                  </span>
+                  <Chip tone="gold">{sampleLabel(confidenceOf(focus.games), focus.games, t)}</Chip>
                 )}
               </div>
 

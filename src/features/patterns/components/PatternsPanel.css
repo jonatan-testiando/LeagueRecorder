@@ -59,43 +59,8 @@
 /* Fuentes que no se pudieron leer: en voz baja, pero en su propia línea. */
 .pp-broken { flex-basis: 100%; color: var(--signal); }
 
-/* --------------------------------------------------------------- chips */
-.pp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 30px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--muted);
-  box-shadow: inset 0 0 0 1px var(--hair);
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background-color var(--t-instant) var(--e-move),
-    color var(--t-instant) var(--e-move),
-    box-shadow var(--t-instant) var(--e-move);
-}
-.pp-chip:hover:not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 4%, transparent); }
-.pp-chip[aria-pressed="true"] {
-  background: var(--raised);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
-}
-.pp-chip:disabled { opacity: 0.45; cursor: default; }
-.pp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-
 /* El peor tramo: el violeta del hallazgo, el mismo de la barra del foco. */
 .pp-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--flag); flex: none; }
-.pp-chip--worst[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--flag) 14%, var(--raised));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 45%, transparent);
-}
 
 /* ------------------------------------------------------ selector de posición */
 .pp-posmenu { position: relative; }
@@ -195,7 +160,7 @@
 .pp-hero-title h2,
 .pp-explore-head h2 { margin: 0; font-size: 16px; font-weight: 500; line-height: 20px; color: var(--text); }
 .pp-hero-title .pp-sub { font-size: 13px; }
-.pp-phase { display: flex; gap: 6px; flex-wrap: wrap; }
+.pp-phase { display: flex; }
 
 /* ------------------------------------------------------------- el mapa */
 /* La superficie del mapa llena lo que quede de la tarjeta: si la columna de la

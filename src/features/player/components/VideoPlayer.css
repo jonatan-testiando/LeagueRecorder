@@ -736,44 +736,12 @@
 /* Partida e Impacto: la lectura de siempre, con su propio desplazamiento. */
 .vp-insp > .insp { padding: 16px; }
 
-/* --- Revisión: chips de filtro -------------------------------------------- */
+/* --- Revisión: el filtro de sucesos (Segmented) ------------------------- */
 .vp-filters {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
   padding: 12px 16px;
 }
-.vp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hair);
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-12);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: color var(--t-instant) var(--e-move), background-color var(--t-instant) var(--e-move),
-    box-shadow var(--t-instant) var(--e-move);
-}
-.vp-chip:hover { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
-.vp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.vp-chip[data-on] {
-  background: var(--raised);
-  color: var(--text);
-  font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--hair-strong);
-}
-.vp-chip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
-.vp-chip__n { font-variant-numeric: tabular-nums; color: var(--faint); font-weight: 400; }
-.vp-chip[data-on] .vp-chip__n { color: var(--muted); }
+.vp-filters__dot { width: 6px; height: 6px; border-radius: var(--radius-full); flex: none; }
 
 .vp-saveErr {
   margin: 0 16px 8px;
@@ -829,10 +797,6 @@
   gap: 8px;
   margin-top: 4px;
   flex-wrap: wrap;
-}
-.vp-badge--finding {
-  color: color-mix(in srgb, var(--flag) 60%, var(--text));
-  background: color-mix(in srgb, var(--flag) 14%, transparent);
 }
 
 /* --- Revisión: la lista ---------------------------------------------------- */
@@ -903,7 +867,6 @@
 }
 .vp-ev[data-on] .vp-ev__text { font-weight: 500; }
 .vp-ev[data-done] .vp-ev__text { color: var(--faint); }
-.vp-ev .badge { flex: none; }
 .vp-ev__done { width: 16px; flex: none; display: flex; align-items: center; }
 
 /* --- Revisión: notas -------------------------------------------------------- */

@@ -34,6 +34,7 @@ import { relativeDay } from "../../../core/time";
 import { MatchDetailPanel } from "./MatchDetailPanel";
 import { cap, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
 import { Segmented } from "../../../components/ui/Segmented";
+import { Chip } from "../../../components/ui/Chip";
 import "./MatchGallery.css";
 
 interface DiskSpaceInfo {
@@ -1049,10 +1050,9 @@ const LibraryRow: React.FC<RowProps> = ({
       {/* Revisión: hecha, a medias (barra y cuenta) o por empezar. */}
       <span className="lib-review">
         {progress?.reviewed ? (
-          <span className="lib-pill lib-pill--done">
-            <Check size={12} strokeWidth={2.4} aria-hidden />
+          <Chip tone="win" icon={<Check size={12} strokeWidth={2.4} aria-hidden />}>
             {t("Reviewed")}
-          </span>
+          </Chip>
         ) : progress && progress.done > 0 ? (
           <span className="lib-prog" title={t("{done} of {total} reviewed", { done: progress.done, total: progress.total })}>
             <span className="lib-prog__bar">
@@ -1061,7 +1061,7 @@ const LibraryRow: React.FC<RowProps> = ({
             <span className="lib-sub lib-sub--muted">{progress.done}/{progress.total}</span>
           </span>
         ) : (
-          <span className="lib-pill lib-pill--todo">{t("To review")}</span>
+          <Chip tone="gold">{t("To review")}</Chip>
         )}
       </span>
 

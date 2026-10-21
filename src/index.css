@@ -1537,6 +1537,32 @@ button.cap:not(:disabled):active { transform: none; }
   white-space: nowrap;
 }
 
+/* --- Chip de estado (Chip.tsx) ---------------------------------------------
+   22 px, píldora, Etiqueta 12/16. Fondo en el tono suave y texto en tinta. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  flex: none;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  line-height: var(--lh-12);
+  white-space: nowrap;
+  --chip-dot: var(--muted);
+}
+.chip svg { flex: none; }
+.chip__dot { width: 6px; height: 6px; flex: none; border-radius: var(--radius-full); background: var(--chip-dot); }
+.chip--neutral { background: var(--raised); color: var(--muted); }
+.chip--win { background: var(--cool-soft); color: var(--cool-ink); --chip-dot: var(--cool); }
+.chip--loss { background: var(--loss-soft); color: var(--loss-ink); --chip-dot: var(--loss); }
+.chip--finding { background: var(--flag-soft); color: var(--flag-ink); --chip-dot: var(--flag); }
+.chip--gold { background: var(--brand-soft); color: var(--brand-ink); --chip-dot: var(--brand); }
+.chip--outline { background: transparent; color: var(--muted); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+
 .metric__value {
   font-family: var(--font-sans);
   font-size: var(--fs-14);

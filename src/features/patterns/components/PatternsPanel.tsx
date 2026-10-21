@@ -263,13 +263,6 @@ const SEGUNDOS_POR_MUERTE = 16;
 const colorPuesto = (rank: number): string =>
   rank === 1 ? "var(--brand)" : rank >= 8 ? "var(--loss)" : "var(--text)";
 
-/** Un chip píldora. `aria-pressed` es el estado; el CSS lo pinta. */
-const Chip: React.FC<
-  { on: boolean } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "type">
-> = ({ on, className = "", ...rest }) => (
-  <button type="button" aria-pressed={on} className={`pp-chip ${className}`.trim()} {...rest} />
-);
-
 /** El icono de "todas las posiciones", como el de relleno del cliente. */
 const AllPositionsIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -1086,30 +1079,26 @@ export const PatternsPanel: React.FC = () => {
               </span>
             </div>
             {muertes.length > 0 && (
-              <div className="pp-phase" role="group" aria-label={t("Game phase")}>
-                {PHASES.map((p) => (
-                  <Chip
-                    key={p.key}
-                    on={fase === p.key}
-                    title={t(p.label)}
-                    onClick={() => { setFase(p.key); setHover(null); }}
-                  >
-                    {t(p.short)}
-                  </Chip>
-                ))}
-                {/* El peor tramo: el mismo del foco, para ver en el mapa las
-                    muertes de las que habla la frase de al lado. */}
-                {peak && (
-                  <Chip
-                    on={fase === "worst"}
-                    className="pp-chip--worst"
-                    title={t("Your worst window")}
-                    onClick={() => { setFase("worst"); setHover(null); }}
-                  >
-                    <span className="pp-chip-dot" aria-hidden="true" />
-                    {tramoTxt(peak)}
-                  </Chip>
-                )}
+              <div className="pp-phase">
+                {/* El último, el peor tramo: el mismo del foco, para ver en el
+                    mapa las muertes de las que habla la frase de al lado. */}
+                <Segmented
+                  size="sm"
+                  label={t("Game phase")}
+                  value={fase}
+                  onChange={(f) => { setFase(f); setHover(null); }}
+                  options={[
+                    ...PHASES.map((p) => ({ value: p.key as typeof fase, label: t(p.short), title: t(p.label) })),
+                    ...(peak
+                      ? [{
+                          value: "worst" as typeof fase,
+                          label: tramoTxt(peak),
+                          title: t("Your worst window"),
+                          icon: <span className="pp-chip-dot" aria-hidden="true" />,
+                        }]
+                      : []),
+                  ]}
+                />
               </div>
             )}
           </div>

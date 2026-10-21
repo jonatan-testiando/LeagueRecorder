@@ -19,6 +19,8 @@ import { MatchTab } from "./MatchTab";
 import { ImpactTab } from "./ImpactTab";
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Chip } from "../../../components/ui/Chip";
+import { Segmented } from "../../../components/ui/Segmented";
 import { Tabs } from "../../../components/ui/Tabs";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
@@ -1459,16 +1461,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const toneBadge = (tone: Tone) => {
     const tl = toneLabelAndIcon(tone);
     return (
-      <span className="badge" style={{ color: tl.ink, background: mix(tl.color, 13) }}>
+      <Chip tone={tone === "excellent" || tone === "good" ? "win" : tone === "mistake" || tone === "throw" ? "loss" : "neutral"}>
         {t(tl.text)}
-      </span>
+      </Chip>
     );
   };
   // Las filas neutras (definitivas, placas…) no llevan chip: un «Info» en cada
   // una era ruido que tapaba los que sí dicen algo.
   const chipFor = (r: ReviewRow) =>
     r.finding ? (
-      <span className="badge vp-badge--finding">{t("Finding")}</span>
+      <Chip tone="finding">{t("Finding")}</Chip>
     ) : r.tone === "neutral" ? null : (
       toneBadge(r.tone)
     );
@@ -1727,20 +1729,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           ];
           return (
             <>
-              <div className="vp-filters" role="group" aria-label={t("Filter moments")}>
-                {chips.map(([id, label, n, dot]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className="vp-chip"
-                    aria-pressed={eventFilter === id}
-                    data-on={eventFilter === id ? "" : undefined}
-                    onClick={() => setEventFilter(id)}
-                  >
-                    {dot && <i className="vp-chip__dot" style={{ background: dot }} />}
-                    {t(label)} <span className="vp-chip__n">{n}</span>
-                  </button>
-                ))}
+              <div className="vp-filters">
+                <Segmented
+                  size="sm"
+                  label={t("Filter moments")}
+                  value={eventFilter}
+                  onChange={setEventFilter}
+                  options={chips.map(([id, label, n, dot]) => ({
+                    value: id,
+                    label: t(label),
+                    count: n,
+                    icon: dot ? <i className="vp-filters__dot" style={{ background: dot }} aria-hidden="true" /> : undefined,
+                  }))}
+                />
               </div>
               {reviewErr && <p className="vp-saveErr">{reviewErr}</p>}
 

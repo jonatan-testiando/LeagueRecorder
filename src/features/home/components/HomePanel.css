@@ -67,20 +67,6 @@
 .home-link--warn { color: var(--signal); }
 .home-link--warn:hover:not(:disabled) { color: var(--signal); text-decoration: underline; }
 
-/* Píldora de estado. */
-.home-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.home-pill--gold { color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent); }
-.home-pill--win { color: var(--win); background: color-mix(in srgb, var(--win) 12%, transparent); }
-
 /* Botones de la pantalla: tamaño de sala, en sans. La variante (oro / fantasma)
    la pone el componente Button; aquí solo la escala. */
 .btn.home-btn {

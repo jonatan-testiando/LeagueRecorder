@@ -178,15 +178,18 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
  * El oro ya no es de ningún tono: es la acción de la pantalla. Un «Error» en
  * oro se leía como un botón; ahora lo malo es rojo y lo bueno jade, como en la
  * línea de tiempo.
+ *
+ * `ink` es el color del texto cuando va sobre su propio tono suave (el chip):
+ * en claro, el tinte tal cual no llega a AA ahí.
  */
 export function toneLabelAndIcon(tone: Tone) {
   switch (tone) {
-    case "excellent": return { text: "Excellent", color: "var(--win)", icon: <Sparkles size={12} fill="currentColor" /> };
-    case "good": return { text: "Good", color: "var(--win)", icon: <ThumbsUp size={12} fill="currentColor" /> };
-    case "inaccuracy": return { text: "Inaccuracy", color: "var(--muted)", icon: <AlertTriangle size={12} fill="currentColor" /> };
-    case "mistake": return { text: "Mistake", color: "var(--loss)", icon: <AlertTriangle size={12} fill="currentColor" /> };
-    case "throw": return { text: "Throw", color: "var(--loss)", icon: <XCircle size={12} fill="currentColor" /> };
-    default: return { text: "Info", color: "var(--faint)", icon: <div style={{width:8,height:8,borderRadius:4,background:"currentColor"}}/> };
+    case "excellent": return { text: "Excellent", color: "var(--win)", ink: "var(--cool-ink)", icon: <Sparkles size={12} fill="currentColor" /> };
+    case "good": return { text: "Good", color: "var(--win)", ink: "var(--cool-ink)", icon: <ThumbsUp size={12} fill="currentColor" /> };
+    case "inaccuracy": return { text: "Inaccuracy", color: "var(--muted)", ink: "var(--muted)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "mistake": return { text: "Mistake", color: "var(--loss)", ink: "var(--loss-ink)", icon: <AlertTriangle size={12} fill="currentColor" /> };
+    case "throw": return { text: "Throw", color: "var(--loss)", ink: "var(--loss-ink)", icon: <XCircle size={12} fill="currentColor" /> };
+    default: return { text: "Info", color: "var(--faint)", ink: "var(--faint)", icon: <div style={{width:8,height:8,borderRadius:4,background:"currentColor"}}/> };
   }
 }
 

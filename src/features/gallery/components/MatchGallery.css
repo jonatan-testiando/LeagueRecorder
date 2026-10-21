@@ -174,7 +174,7 @@
   color: var(--text);
   font: inherit;
   font-family: var(--font-sans);
-  font-size: 13.5px;
+  font-size: var(--fs-13);
 }
 .lib-search input::placeholder { color: var(--faint); }
 .lib-search:focus-within { box-shadow: inset 0 0 0 1px var(--cool); }
@@ -326,7 +326,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 0 8px 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--faint);
 }
 .lib-day__lp { white-space: nowrap; }
@@ -357,8 +357,25 @@
     var(--sunken) 63%
   );
 }
-.lib-tr[data-result="win"] { background: var(--tint-win); }
-.lib-tr[data-result="loss"] { background: var(--tint-loss); }
+/* Resultado en reposo: una barra a la izquierda (gris si aún no hay
+   resultado) y la palabra. El tinte solo al pasar por encima o con la fila
+   seleccionada: fijo, 26 filas seguidas hacían persiana en claro. */
+.lib-tr:not(.lib-skel__row)::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: var(--result-bar);
+  height: 32px;
+  margin-top: -16px;
+  border-radius: var(--radius-full);
+  background: var(--faint);
+  pointer-events: none;
+}
+.lib-tr[data-result="win"]::before { background: var(--win); }
+.lib-tr[data-result="loss"]::before { background: var(--loss); }
+.lib-tr[data-result="win"]:is(:hover, [aria-selected="true"]) { background-image: var(--tint-win); }
+.lib-tr[data-result="loss"]:is(:hover, [aria-selected="true"]) { background-image: var(--tint-loss); }
 /* Divisor inferior; se oculta junto a la fila seleccionada y al final del día. */
 .lib-tr[data-divider]::after {
   content: "";
@@ -388,7 +405,7 @@
 .lib-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .lib-cell > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lib-champ { font-size: 15px; font-weight: 500; color: var(--text); }
-.lib-sub { font-size: 12.5px; color: var(--faint); white-space: nowrap; }
+.lib-sub { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
 .lib-sub--muted { color: var(--muted); }
 .lib-big { font-size: 15px; color: var(--text); white-space: nowrap; }
 .lib-res { font-size: 14px; font-weight: 500; color: var(--muted); }
@@ -470,7 +487,7 @@
   line-height: 16px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--brand);
+  color: var(--brand-ink);
   background: color-mix(in srgb, var(--brand) 13%, transparent);
   padding: 2px 7px;
   border-radius: 999px;
@@ -488,8 +505,8 @@
   border-radius: 999px;
   white-space: nowrap;
 }
-.lib-pill--done { color: var(--win); background: color-mix(in srgb, var(--win) 13%, transparent); padding-left: 7px; }
-.lib-pill--todo { color: var(--brand); background: color-mix(in srgb, var(--brand) 13%, transparent); }
+.lib-pill--done { color: var(--cool-ink); background: color-mix(in srgb, var(--win) 13%, transparent); padding-left: 7px; }
+.lib-pill--todo { color: var(--brand-ink); background: color-mix(in srgb, var(--brand) 13%, transparent); }
 .lib-prog { display: flex; align-items: center; gap: 6px; }
 .lib-prog__bar {
   display: block;
@@ -530,7 +547,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--faint);
 }
 .lib-link {
@@ -539,7 +556,7 @@
   background: transparent;
   color: var(--cool);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   cursor: pointer;
 }
 .lib-link:hover { color: var(--cool-hover); }
@@ -553,13 +570,13 @@
   align-items: center;
   gap: 18px;
   padding: 0 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--faint);
   white-space: nowrap;
   overflow: hidden;
 }
 .lib-keys > span { display: inline-flex; align-items: center; gap: 6px; }
-.lib-kbd { font-size: 11.5px; }
+.lib-kbd { font-size: var(--fs-kbd); }
 .lib-kbd + .lib-kbd { margin-left: -2px; }
 
 .lib-batch {

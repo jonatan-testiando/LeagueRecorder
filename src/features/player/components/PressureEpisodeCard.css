@@ -24,7 +24,7 @@
 /* El veredicto con el neto: pequeño, a la derecha. Es la conclusión de la
    cuenta plegada, no el titular. */
 .pe__verdict {
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 500;
   padding: 2px 9px;
   border-radius: 999px;
@@ -60,13 +60,13 @@
 .pe__details summary:hover { color: var(--text); }
 .pe__details summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 4px; }
 .pe__detailsBody { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.pe__details h4 { margin: 4px 0 0; font-size: 12.5px; font-weight: 500; color: var(--faint); }
+.pe__details h4 { margin: 4px 0 0; font-size: var(--fs-12); font-weight: 500; color: var(--faint); }
 .pe__details ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 
-.pe__tie-list { display: block; margin-top: 2px; font-size: 12.5px; color: var(--faint); }
+.pe__tie-list { display: block; margin-top: 2px; font-size: var(--fs-12); color: var(--faint); }
 
 .pe__rows { margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.pe__rows > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+.pe__rows > div { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-13); }
 .pe__rows dt { color: var(--muted); }
 .pe__rows dd { margin: 0; color: var(--text); }
 .pe__rows dd.pos { color: var(--win); }
@@ -75,7 +75,7 @@
 .pe__rows .pe__total dt { color: var(--text); }
 
 .pe__note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
-.pe__source { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+.pe__source { margin: 0; font-size: var(--fs-12); line-height: 1.5; color: var(--faint); }
 
 .pe-ev {
   width: 100%;

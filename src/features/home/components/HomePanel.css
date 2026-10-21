@@ -182,15 +182,15 @@
   color: var(--tone);
 }
 .home-hero__lp {
-  font-size: 15px;
+  font-size: var(--fs-16);
   font-weight: 500;
   color: var(--muted);
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   padding: 3px 10px;
   border-radius: 999px;
 }
-.home-hero__lp.is-win { color: var(--win); background: color-mix(in srgb, var(--win) 14%, transparent); }
-.home-hero__lp.is-loss { color: var(--loss); background: color-mix(in srgb, var(--loss) 14%, transparent); }
+.home-hero__lp.is-win { color: var(--cool-ink); background: color-mix(in srgb, var(--win) 14%, transparent); }
+.home-hero__lp.is-loss { color: var(--loss-ink); background: color-mix(in srgb, var(--loss) 14%, transparent); }
 .home-hero__line { font-size: 16px; color: var(--text); }
 .home-hero__faint { color: var(--faint); }
 .home-hero__faint svg { vertical-align: -2px; }
@@ -211,7 +211,7 @@
 .home-rank__crest { width: 56px; height: 56px; object-fit: contain; }
 .home-rank__txt { display: flex; flex-direction: column; gap: 6px; width: 156px; }
 .home-rank__row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.home-rank__name { font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.home-rank__name { font-size: var(--fs-16); font-weight: 500; color: var(--text); white-space: nowrap; }
 .home-rank__lp { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .home-rank__track {
   height: 6px;
@@ -236,7 +236,7 @@
 .home-stat--wide { min-width: 176px; }
 .home-stat__k { font-size: 13px; color: var(--faint); }
 .home-stat__v { font-size: 26px; line-height: 1.15; font-weight: 500; letter-spacing: -0.01em; color: var(--text); white-space: nowrap; }
-.home-stat__v small { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.home-stat__v small { font-size: var(--fs-14); font-weight: 400; color: var(--muted); letter-spacing: 0; }
 .home-stat__s { font-size: 13px; color: var(--muted); }
 .home-hero__actions { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 

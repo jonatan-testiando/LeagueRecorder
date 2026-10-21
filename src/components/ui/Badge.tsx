@@ -19,6 +19,16 @@ const TONE_VAR: Record<BadgeTone, string> = {
   neutral: "var(--muted)",
 };
 
+/** El texto sobre el fondo tintado de `solid` va en tinta: en claro, el tinte
+ *  sobre su propio 14 % no llega a AA. */
+const TONE_INK: Record<BadgeTone, string> = {
+  win: "var(--cool-ink)",
+  loss: "var(--loss-ink)",
+  objective: "var(--brand-ink)",
+  flag: "var(--flag-ink)",
+  neutral: "var(--muted)",
+};
+
 export interface BadgeProps {
   tone?: BadgeTone;
   /** `quiet` sin fondo, solo texto tintado. Es el que debería usarse por defecto. */
@@ -41,7 +51,7 @@ export const Badge: React.FC<BadgeProps> = ({
       style={
         emphasis === "solid"
           ? {
-              color: c,
+              color: TONE_INK[tone],
               background: `color-mix(in srgb, ${c} 14%, transparent)`,
               border: `1px solid color-mix(in srgb, ${c} 32%, transparent)`,
             }

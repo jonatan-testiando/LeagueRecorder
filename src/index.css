@@ -15,7 +15,7 @@
          luz de canto de 1 px arriba (--rim), nunca una línea opaca.
        - Pesos medios: títulos a 500. La jerarquía la llevan el tamaño y el
          color, no la negrita.
-       - Dos radios y una píldora: 12 tarjetas, 6 controles, 999 chips.
+       - Pocos radios: 12 tarjetas, 8 controles, 4 marcas, 999 chips.
        - "Un degradado, un trabajo": aureola en el héroe de cada pantalla,
          tinte de resultado en las filas, brillo de hallazgo, botón de acción.
 
@@ -50,14 +50,39 @@
          iconos de posición), no la tipografía.
        - Barra de título de 44 px con buscador (Ctrl K) y el estado de captura
          siempre visible; el rail acaba en la tarjeta de perfil con el rango.
+
+     Rediseño «Ritmo», fase 1 (2026-10-20). La piel no cambia; cambian el
+     contraste, la escala y la consistencia. Los valores salen de la página
+     Fundamentos del Figma (hSOlqgyKswyLO9jtn3yo8c) y de la auditoría de
+     docs/rediseno-2026-10:
+       - Texto principal a 10-11:1 sobre el fondo y el panel en los dos temas
+         (el oscuro llegaba a 12,7) y --faint en AA en todas partes.
+       - Campos a medio camino entre el fondo y el panel, no casi negros.
+       - Seis tamaños de texto y dos de cifra, sin medios puntos (--fs-*).
+       - Cuatro radios (4/8/12/999) y dos anchos máximos (1360/960).
+       - Movimiento con las duraciones de movimiento.md; con movimiento
+         reducido se quitan desplazamientos, escalas y bucles, no los fundidos.
      ========================================================================= */
 
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
-     escalón, no la sombra ni el color. */
+     escalón, no la sombra ni el color. Lo que flota (menú, popover, selector)
+     tiene su escalón propio, --overlay, un punto por encima de --raised. */
   --ground: #080D16;     /* fondo de ventana: el marino de la piel Rift */
   --panel: #0F1622;      /* rail, barras, tarjetas, inspector */
-  --raised: #1E2735;     /* elemento activo, hover, botón */
-  --sunken: #04070E;     /* campos y pistas hundidas */
+  --raised: #18212E;     /* elemento activo, hover, botón */
+  --overlay: #1E2735;    /* menú, popover, selector: lo que flota encima */
+  --sunken: #0B111B;     /* campos y pistas: entre el fondo y el panel. El
+                            #04070E de antes quedaba por debajo de la ventana
+                            y los campos se leían como agujeros */
+  /* Escenario del vídeo: marino en los DOS temas. Es lo único oscuro del tema
+     claro, y es a propósito: un marco gris claro apaga el vídeo. */
+  --stage: #080D16;
+  /* Vidrio: panel translúcido para las superficies estructurales (barra de
+     título, HUD del reproductor, toasts, Ctrl K). Con transparencia reducida
+     pasa a opaco (ver el bloque de movimiento reducido). */
+  --glass: color-mix(in srgb, var(--panel) 78%, transparent);
+  /* Velo bajo un diálogo o Ctrl K. */
+  --scrim: rgba(4, 7, 14, 0.62);
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
   --hair: rgba(219, 215, 208, 0.09);        /* filo de tarjeta y división */
@@ -67,10 +92,11 @@
   --line-soft: var(--hair);
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
-  /* Texto */
-  --text: #D4D0CA;       /* hueso, no blanco: ~12:1 sobre el panel, no 16 */
-  --muted: #ADAAA5;      /* ~7,5 */
-  --faint: #82878C;      /* etiquetas y metadatos: ~4,8 */
+  /* Texto. Medido con herramientas/contrast.mjs. Si vuelve a deslumbrar, se
+     toca el texto y no el fondo (memoria «contraste-suave»). */
+  --text: #C6C2BC;       /* hueso: 10,97 sobre el fondo, 10,23 sobre el panel */
+  --muted: #A6A39E;      /* 7,2 sobre el panel */
+  --faint: #8E9398;      /* etiquetas y metadatos: 4,85 aun sobre --overlay */
 
   /* Tintes */
   --brand: #C8AA6E;      /* oro hextech: acción y marca */
@@ -85,6 +111,24 @@
   /* "gold" es el nombre heredado del oro hextech; hoy apunta al color de
      marca, sea el que sea. */
   --gold: var(--brand);
+
+  /* Tintes suaves: fondo de chip, de aviso o de resaltado. En claro llevan
+     menos porcentaje: el mismo 16 % pesa el doble sobre papel. */
+  --brand-soft: color-mix(in srgb, var(--brand) 16%, transparent);
+  --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+  --loss-soft: color-mix(in srgb, var(--loss) 14%, transparent);
+  --flag-soft: color-mix(in srgb, var(--flag) 16%, transparent);
+  /* Tinta: el tinte cuando es TEXTO sobre su propio tono suave (chip,
+     contador, «+23 LP»). En oscuro es el tinte tal cual; en claro el tinte
+     sobre su suave se quedaba en 4,1-4,5 y se oscurece con un 15 % de --text
+     (medido: 4,5-4,9 aun sobre el fondo de la ventana). */
+  --brand-ink: var(--brand);
+  --cool-ink: var(--cool);
+  --loss-ink: var(--loss);
+  --flag-ink: var(--flag);
+
+  /* Anillo de foco: jade, 2 px, visible en los dos temas (auditoría A5). */
+  --focus: var(--cool);
 
   /* Relleno de acción: UNA por pantalla. Texto oscuro encima (contraste 7,9). */
   --action: var(--brand);
@@ -130,7 +174,11 @@
     color-mix(in srgb, var(--flag) 22%, var(--panel)) 100%
   );
 
-  /* 3. Tinte de resultado: filas de partida, de izquierda a derecha. */
+  /* 3. Tinte de resultado: filas de partida, de izquierda a derecha. Solo al
+     pasar por encima o con la fila seleccionada: en reposo, 26 filas tintadas
+     seguidas hacían persiana en claro (auditoría V4). En reposo el resultado
+     lo dicen una barra de --result-bar y la palabra «Victoria»/«Derrota». */
+  --result-bar: 3px;
   --tint-win: linear-gradient(90deg, color-mix(in srgb, var(--win) 16%, transparent) 0%, color-mix(in srgb, var(--win) 4%, transparent) 28%, transparent 55%);
   --tint-loss: linear-gradient(90deg, color-mix(in srgb, var(--loss) 14%, transparent) 0%, color-mix(in srgb, var(--loss) 3.5%, transparent) 28%, transparent 55%);
 
@@ -150,7 +198,7 @@
   --bg-hover: var(--raised);
   --border-subtle: var(--line-soft);
   --border-strong: var(--line);
-  --border-focus: var(--cool);
+  --border-focus: var(--focus);
 
   --text-primary: var(--text);
   --text-secondary: var(--muted);
@@ -158,11 +206,11 @@
 
   --accent-violet: var(--cool);          /* acento general de interacción */
   --accent-violet-hover: var(--cool-hover);
-  --accent-violet-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+  --accent-violet-soft: var(--cool-soft);
   --accent-gold: var(--gold);
   --accent-blue: var(--cool);
   --accent-teal: var(--cool);
-  --danger-soft: color-mix(in srgb, var(--loss) 14%, transparent);
+  --danger-soft: var(--loss-soft);
 
   --color-victory: var(--win);
   --color-defeat: var(--loss);
@@ -186,7 +234,21 @@
   --font-sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-  /* Espaciado */
+  /* Escala tipográfica: seis tamaños de texto y dos de cifra, cada uno con su
+     interlínea (los estilos de texto de Figma, en .t-*). Sin medios puntos:
+     el censo dio diez tamaños a la vez en Hoy (12, 12,5, 13, 13,5…). */
+  --fs-12: 12px;        --lh-12: 16px;     /* etiqueta, chip, cabecera: el mínimo */
+  --fs-13: 13px;        --lh-13: 20px;     /* metadatos, celdas secundarias, ayudas */
+  --fs-14: 14px;        --lh-14: 22px;     /* cuerpo: la base de la app */
+  --fs-16: 16px;        --lh-16: 24px;     /* título de tarjeta, fila protagonista */
+  --fs-20: 20px;        --lh-20: 28px;     /* héroe y títulos de sección */
+  --fs-28: 28px;        --lh-28: 36px;     /* título de pantalla (h1), uno por pantalla */
+  --fs-metric: 22px;    --lh-metric: 28px; /* cifra KPI: KDA, CS, impacto */
+  --fs-hero: 40px;      --lh-hero: 44px;   /* cifra héroe: una por pantalla */
+  --fs-kbd: 11px;       /* la única excepción por debajo de 12: la tecla, en su caja */
+
+  /* Espaciado: rejilla de 4. Ritmos fijos: 12 dentro de una tarjeta, 20 de
+     padding de tarjeta y 32 entre secciones. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -194,15 +256,21 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
 
-  /* Radios */
-  /* Radios más afilados (estilo template) */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
+  /* Radios: cuatro y ninguno más (el censo contó trece). */
+  --radius-sm: 4px;      /* kbd y marcas */
+  --radius-md: 8px;      /* controles: botón, campo, selector, menú */
+  --radius-lg: 12px;     /* tarjetas y paneles */
+  --radius-full: 999px;  /* chips y píldoras */
+  --radius-xl: var(--radius-lg); /* alias heredado (era 16) */
+
+  /* Anchos máximos: dos y nada más. A 1920 nada tenía tope y cada pantalla se
+     cortaba en un ancho distinto (Training a 820-1068, Ajustes a 770). */
+  --content-max: 1360px; /* paneles de datos: Hoy, Biblioteca, Patrones, Coach */
+  --form-max: 960px;     /* formularios: Ajustes, Training, asistente */
 
   /* Altura de la barra de título personalizada. 44 y no 36: ahora lleva el
      buscador y el estado de captura, no solo la marca. */
@@ -215,28 +283,42 @@
   --kbd-edge: rgba(0, 0, 0, 0.4);
 
   /* =========================================================================
-     Movimiento — cuatro duraciones, tres curvas, ningún rebote.
+     Movimiento (docs/rediseno-2026-10/movimiento.md). Ninguna curva con
+     rebote ni sobreimpulso, y nunca `transition: all`.
      Regla: si el movimiento lo causa la mano del usuario (arrastrar el scrub,
      mover el cursor de reproducción), latencia cero y sin transición. Si lo
-     causa el sistema, una de estas curvas.
+     causa el sistema, una de estas curvas. Lo que se hace cien veces al día
+     (navegar, filtrar, cambiar de pestaña) lleva un fundido corto o nada.
      ========================================================================= */
-  --t-instant: 80ms;   /* feedback de estado: hover, pulsación, foco */
-  --t-quick: 140ms;    /* aparece o desaparece algo pequeño */
-  --t-base: 220ms;     /* cambio de panel o pestaña, salto temporal */
-  --t-slow: 320ms;     /* superficies grandes: modal, panel lateral */
+  --t-press: 100ms;       /* pulsar: scale(var(--pop-scale)) */
+  --t-hover: 120ms;       /* hover de color y fondo */
+  --t-quick: 160ms;       /* tooltip, popover, menú, selector: entrada */
+  --t-quick-exit: 100ms;  /* ...y su salida */
+  --t-base: 200ms;        /* indicador de pestaña o segmentado, acordeón, toast */
+  --t-slow: 260ms;        /* diálogo, panel lateral, plegar el rail */
+  --t-slow-exit: 160ms;
+  --t-nav: 120ms;         /* fundido al cambiar de sección */
+  --t-stagger: 30ms;      /* escalonado, seis elementos como mucho */
 
-  --e-out: cubic-bezier(0.16, 1, 0.3, 1);   /* algo entra: rápido y se posa */
-  --e-in: cubic-bezier(0.4, 0, 1, 1);       /* algo sale: acelera y se va */
-  --e-move: cubic-bezier(0.2, 0, 0, 1);     /* algo que ya existe va de A a B */
+  --e-out: cubic-bezier(0.16, 1, 0.3, 1);   /* entrar: rápido y se posa */
+  --e-move: cubic-bezier(0.2, 0, 0, 1);     /* lo que ya existe va de A a B */
+  --e-color: ease;                          /* color, fondo, borde */
 
-  /* Tipografía */
-  --font-xs: 12px;
-  --font-sm: 14px;
-  --font-md: 16px;
-  --font-lg: 18px;
-  --font-xl: 20px;
-  --font-2xl: 26px;
-  --font-3xl: 34px;
+  /* Distancias: el movimiento reducido las pone a cero. */
+  --rise: 4px;            /* asentarse: tarjetas, primera visita */
+  --rise-toast: 8px;
+  --pop-scale: 0.97;      /* popover, menú, pulsar */
+
+  /* Alias heredados: se borran cuando acabe la migración (fase 5). */
+  --t-instant: var(--t-hover);
+  --e-in: var(--e-out);   /* nunca ease-in: las salidas usan --e-out, más cortas */
+  --font-xs: var(--fs-12);
+  --font-sm: var(--fs-14);
+  --font-md: var(--fs-16);
+  --font-lg: var(--fs-20);
+  --font-xl: var(--fs-20);
+  --font-2xl: var(--fs-28);
+  --font-3xl: var(--fs-28);
 
   color-scheme: dark;
   background-color: var(--bg-app);
@@ -254,26 +336,38 @@
 
 /* =========================================================================
    Tema claro. Solo tokens: los componentes no se enteran. Los tintes bajan
-   a L 0,52-0,56 para leerse como texto sobre blanco (todos ≥ 4,5); el relleno
-   de acción se queda naranja pleno con texto oscuro, que contrasta 7,9.
+   a L 0,52-0,56 para leerse como texto sobre papel (todos ≥ 4,5); el relleno
+   de acción se queda en oro pleno con texto oscuro, que contrasta 7,9.
+   Es el tema que usa el usuario: cualquier cambio se mira primero aquí.
    ========================================================================= */
 :root[data-theme="light"] {
   color-scheme: light;
   --ground: #E3E6EB;
   --panel: #ECEFF2;
   --raised: #F5F7F9;
-  --sunken: #D9DCE2;
+  --overlay: #F5F7F9;
+  --sunken: #DCE0E6;
+  --glass: color-mix(in srgb, var(--panel) 80%, transparent);
+  --scrim: rgba(45, 51, 61, 0.35);
   --hair: rgba(23, 27, 38, 0.10);
   --hair-strong: rgba(23, 27, 38, 0.18);
   --rim: rgba(255, 255, 255, 0.85);
-  --text: #2D333D;
-  --muted: #50565E;
-  --faint: #666C75;
+  --text: #2D333D;       /* 11,0 sobre el panel, 10,2 sobre el fondo */
+  --muted: #474D56;      /* 7,4 sobre el panel */
+  --faint: #5A6069;      /* 5,1 sobre el fondo: el #666C75 de antes suspendía AA */
   --brand: #7F5D08;
   --signal: #B61537;
   --flag: #6C4AB3;
   --cool: #006F47;
   --cool-hover: color-mix(in srgb, #006F47 80%, black);
+  --brand-soft: color-mix(in srgb, var(--brand) 12%, transparent);
+  --cool-soft: color-mix(in srgb, var(--cool) 11%, transparent);
+  --loss-soft: color-mix(in srgb, var(--loss) 10%, transparent);
+  --flag-soft: color-mix(in srgb, var(--flag) 11%, transparent);
+  --brand-ink: color-mix(in srgb, var(--brand) 85%, var(--text));
+  --cool-ink: color-mix(in srgb, var(--cool) 85%, var(--text));
+  --loss-ink: color-mix(in srgb, var(--loss) 85%, var(--text));
+  --flag-ink: color-mix(in srgb, var(--flag) 85%, var(--text));
   --action: #C8AA6E;
   --action-hover: #D9BE85;
   --on-action: #0A1420;
@@ -300,7 +394,7 @@ body {
   /* Densidad de producto de datos: el censo dio 159 elementos heredando los
      16px por defecto y casi nada entre 12 y 16. Base 14 llena ese escalón de
      golpe; lo que declara su tamaño (títulos, métricas) no se mueve. */
-  font-size: 14px;
+  font-size: var(--fs-14);
   width: 100vw;
   height: 100vh;
   overflow: hidden;
@@ -366,8 +460,8 @@ h1 {
 .u-label {
   font-family: var(--font-sans);
   font-weight: 500;
-  font-size: 12.5px;
-  line-height: 1.35;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
   letter-spacing: 0;
   text-transform: none;
   color: var(--faint);
@@ -380,8 +474,8 @@ h1 {
 }
 .u-meta {
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;
   color: var(--faint);
 }
@@ -389,7 +483,7 @@ h1 {
    compara dígito a dígito con el reloj del reproductor. */
 .u-time {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   white-space: nowrap;
@@ -403,19 +497,75 @@ h1 {
   justify-content: center;
   min-width: 20px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-kbd);
   font-weight: 400;
   line-height: 1.4;
   letter-spacing: 0;
   text-transform: none;
   color: var(--muted);
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--raised);
   box-shadow: inset 0 -1px 0 var(--kbd-edge);
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* =========================================================================
+   Estilos de texto (Figma, página Fundamentos), uno por clase. Solo ponen la
+   letra: el color lo decide quien los usa. Las pantallas los adoptan en la
+   fase 3; mientras, conviven con los .u-* de arriba.
+
+   .t-page          28/36  título de pantalla (h1), uno por pantalla
+   .t-section       20/28  héroe y títulos de sección
+   .t-card          16/24  título de tarjeta, fila protagonista
+   .t-body          14/22  cuerpo: la base de la app
+   .t-body-strong   14/22  botones, nombres en filas, énfasis
+   .t-small         13/20  metadatos, celdas secundarias, ayudas
+   .t-small-strong  13/20  botones pequeños, chips de filtro con texto
+   .t-label         12/16  etiquetas, chips, cabeceras de tabla: el mínimo
+   .t-metric        22/28  cifra KPI (tabular)
+   .t-hero          40/44  cifra héroe, una por pantalla (tabular)
+   .t-time          12/16  marca de tiempo del vídeo, en mono
+   ========================================================================= */
+.t-page,
+.t-section,
+.t-card,
+.t-body,
+.t-body-strong,
+.t-small,
+.t-small-strong,
+.t-label,
+.t-metric,
+.t-hero {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.t-page { font-size: var(--fs-28); line-height: var(--lh-28); letter-spacing: -0.005em; }
+.t-section { font-size: var(--fs-20); line-height: var(--lh-20); letter-spacing: -0.0025em; }
+.t-card { font-size: var(--fs-16); line-height: var(--lh-16); }
+.t-body,
+.t-body-strong { font-size: var(--fs-14); line-height: var(--lh-14); }
+.t-small,
+.t-small-strong { font-size: var(--fs-13); line-height: var(--lh-13); }
+.t-body,
+.t-small { font-weight: 400; }
+.t-label { font-size: var(--fs-12); line-height: var(--lh-12); letter-spacing: 0.0025em; }
+.t-metric,
+.t-hero { font-variant-numeric: tabular-nums; }
+.t-metric { font-size: var(--fs-metric); line-height: var(--lh-metric); letter-spacing: -0.0025em; }
+.t-hero { font-size: var(--fs-hero); line-height: var(--lh-hero); letter-spacing: -0.01em; }
+.t-time {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 /* El peso lleva la jerarquía. El censo dio 175 elementos a peso 400 y diez
    repartidos entre el resto: toda la jerarquía la cargaba el color, que es lo
    que dejaba la interfaz hablando a un solo volumen. */
@@ -534,7 +684,7 @@ a:focus:not(:focus-visible) {
 }
 .titlebar__title {
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--text);
@@ -556,12 +706,12 @@ a:focus:not(:focus-visible) {
   gap: 10px;
   padding: 0 8px 0 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--text) 3%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--faint);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 400;
   text-align: left;
   cursor: pointer;
@@ -580,7 +730,7 @@ a:focus:not(:focus-visible) {
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -632,11 +782,11 @@ a:focus:not(:focus-visible) {
   height: 28px;
   padding: 0 11px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--text) 3%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair);
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 400;
   color: var(--muted);
   white-space: nowrap;
@@ -660,13 +810,13 @@ button.cap:not(:disabled):active { transform: none; }
 .cap__dot--ready { background: var(--cool); box-shadow: 0 0 0 3px color-mix(in srgb, var(--cool) 18%, transparent); }
 .cap__dot--rec { background: var(--signal); animation: rec-beat 2s ease-out infinite; }
 .cap__sep { width: 1px; height: 14px; flex-shrink: 0; background: var(--hair-strong); }
-.cap__hint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--faint); }
+.cap__hint { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-12); color: var(--faint); }
 .cap__pct { color: var(--brand); font-variant-numeric: tabular-nums; }
 .cap__bar {
   width: 40px;
   height: 4px;
   flex-shrink: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--sunken);
   box-shadow: var(--inset-sunken);
   overflow: hidden;
@@ -674,7 +824,7 @@ button.cap:not(:disabled):active { transform: none; }
 .cap__bar > span {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: linear-gradient(90deg, var(--brand), var(--action-hover));
   transition: width var(--t-base) var(--e-move);
 }
@@ -691,12 +841,12 @@ button.cap:not(:disabled):active { transform: none; }
   height: 22px;
   padding: 0 10px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--raised);
   box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   cursor: pointer;
 }
@@ -741,11 +891,11 @@ button.cap:not(:disabled):active { transform: none; }
   flex-shrink: 0;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0 11px;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 400;
   line-height: 1.2;
   color: var(--muted);
@@ -782,19 +932,19 @@ button.cap:not(:disabled):active { transform: none; }
 /* Partidas por revisar, junto a «Biblioteca»: oro suave, como un aviso que
    no grita. */
 .nav-btn__count {
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--brand);
-  background: color-mix(in srgb, var(--brand) 12%, transparent);
+  color: var(--brand-ink);
+  background: var(--brand-soft);
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   transition: opacity var(--t-quick) var(--e-move);
 }
 /* Grupo del rail: tipo oración, 12 px, --faint. */
 .nav-grp {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   color: var(--faint);
   padding: 18px 11px 6px;
@@ -838,7 +988,7 @@ button.cap:not(:disabled):active { transform: none; }
   gap: 12px;
   margin-top: 12px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--text) 2%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
   min-width: 0;
@@ -869,14 +1019,14 @@ button.cap:not(:disabled):active { transform: none; }
   transition: opacity var(--t-quick) var(--e-move);
 }
 .rail-profile__rank {
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .rail-profile__meta {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -890,7 +1040,7 @@ button.cap:not(:disabled):active { transform: none; }
 .rail--collapsed .rail-profile__emblem { width: 32px; height: 32px; }
 .rail--collapsed .rail-profile__text { opacity: 0; }
 .rail-version {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   text-align: center;
@@ -957,17 +1107,52 @@ button.cap:not(:disabled):active { transform: none; }
    elemento: 4px para una tarjeta, no 10. A más distancia, el ojo lo lee como
    algo que llega de fuera de la pantalla en vez de como algo que se asienta. */
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(var(--rise)); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Accesibilidad: respetar "reducir movimiento". */
+/* Movimiento reducido: menos movimiento, no ninguno. Antes todo iba a
+   0,01 ms: los spinners se congelaban (la app parecía colgada) y se perdían
+   también los fundidos, que no marean a nadie. Ahora se quedan los fundidos
+   cortos y los cambios de color, y se van los desplazamientos, las escalas y
+   los bucles. Las distancias de las animaciones salen de --rise y
+   --pop-scale, así que basta con ponerlas a cero aquí. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  :root {
+    --rise: 0px;
+    --rise-toast: 0px;
+    --pop-scale: 1;
+    --t-base: 150ms;
+    --t-slow: 150ms;
+  }
+  /* Bucles parados: el punto de grabación queda fijo y el esqueleto quieto. */
+  .rec-dot,
+  .rec-dot::after,
+  .cap__dot--rec,
+  .updpill__dot,
+  .skeleton { animation: none; }
+  .skeleton { opacity: 0.7; }
+  /* El latido de progreso conserva el pulso de opacidad, sin la escala. */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  /* El spinner del botón se sustituye por un texto de progreso (Button, fase 2). */
+  .btn[data-loading] .btn__spinner { display: none; }
+  .btn[data-loading] .btn__label::after { content: "…"; }
+  /* Plegar el rail: sin recorte ni ancho animados. */
+  .rail,
+  .rail-profile,
+  .rail-profile__emblem { transition: none; }
+}
+
+/* Transparencia reducida: el vidrio pasa a lámina opaca. Lleva también el
+   selector del tema claro, que define su propio --glass con más peso. */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  :root[data-theme="light"] {
+    --glass: var(--panel);
+    --glass-blur: none;
   }
 }
 
@@ -1110,7 +1295,7 @@ button.cap:not(:disabled):active { transform: none; }
    ========================================================================= */
 :root {
   --cool-fill: color-mix(in srgb, var(--cool) 55%, var(--panel));
-  --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+  /* --cool-soft vive arriba, con los demás tintes suaves. */
 }
 
 /* =========================================================================
@@ -1124,11 +1309,11 @@ button.cap:not(:disabled):active { transform: none; }
   justify-content: center;
   gap: var(--space-2);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 500;
   line-height: 1.25;
   letter-spacing: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   box-shadow: none;
   border: 1px solid transparent;
@@ -1138,7 +1323,7 @@ button.cap:not(:disabled):active { transform: none; }
     color var(--t-instant) var(--e-move);
 }
 .btn--md { padding: 8px var(--space-4); }
-.btn--sm { padding: 5px var(--space-3); font-size: 13px; }
+.btn--sm { padding: 5px var(--space-3); font-size: var(--fs-13); }
 
 /* El botón es la superficie más pequeña de la app y por eso es donde más se
    nota que hay volumen: filo iluminado arriba, cuerpo, y base un punto más
@@ -1190,25 +1375,25 @@ button.cap:not(:disabled):active { transform: none; }
   align-items: center;
   gap: 4px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   line-height: 1.35;
   letter-spacing: 0;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
 }
 
 .metric__value {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
 }
 .metric__label {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 400;
   color: var(--faint);
   margin-top: 3px;
@@ -1223,7 +1408,7 @@ button.cap:not(:disabled):active { transform: none; }
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--faint);
   cursor: pointer;
@@ -1236,11 +1421,11 @@ button.cap:not(:disabled):active { transform: none; }
   gap: 8px;
   padding: 0 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 500;
   cursor: pointer;
 }
@@ -1305,12 +1490,12 @@ button.cap:not(:disabled):active { transform: none; }
   top: -6px;
   transform: translateX(-50%);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--ground);
   background: var(--cool);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
   white-space: nowrap;
 }
@@ -1318,7 +1503,7 @@ button.cap:not(:disabled):active { transform: none; }
   display: flex;
   justify-content: space-between;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--faint);
   margin-top: 2px;
@@ -1331,7 +1516,7 @@ button.cap:not(:disabled):active { transform: none; }
    ========================================================================= */
 .panel-enter { animation: panel-in var(--t-base) var(--e-out) both; }
 @keyframes panel-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(calc(1.5 * var(--rise))); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1379,11 +1564,11 @@ button.cap:not(:disabled):active { transform: none; }
 .rq-item[data-sel] { background: var(--surface-2); }
 .rq-item:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
 
-.rq-sev { align-self: stretch; border-radius: 1px; }
+.rq-sev { align-self: stretch; border-radius: var(--radius-full); }
 
 .rq-time {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   padding-top: 1px;
@@ -1392,7 +1577,7 @@ button.cap:not(:disabled):active { transform: none; }
 
 .rq-title {
   display: block;
-  font-size: 13px;
+  font-size: var(--fs-13);
   line-height: 1.4;
   color: var(--muted);
   overflow: hidden;
@@ -1404,7 +1589,7 @@ button.cap:not(:disabled):active { transform: none; }
 .rq-note {
   display: block;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   margin-top: 3px;
 }
@@ -1412,7 +1597,7 @@ button.cap:not(:disabled):active { transform: none; }
 .rq-done {
   width: 14px;
   height: 14px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   display: grid;
   place-items: center;
@@ -1478,7 +1663,7 @@ button.cap:not(:disabled):active { transform: none; }
 
 .tp-tc {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1504,7 +1689,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .tp-seg button {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 500;
   padding: 4px 10px;
   background: transparent;
@@ -1567,7 +1752,7 @@ button.cap:not(:disabled):active { transform: none; }
   animation: pop-in var(--t-quick) var(--e-out) both;
 }
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(var(--rise)); }
   to { opacity: 1; transform: translateY(0); }
 }
 .tp-pop__row {
@@ -1587,7 +1772,7 @@ button.cap:not(:disabled):active { transform: none; }
 .tp-pop__row em {
   display: block;
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   margin-top: 3px;
   line-height: 1.45;
@@ -1596,7 +1781,7 @@ button.cap:not(:disabled):active { transform: none; }
 .tp-pop__sync input[type="range"] { flex: 1; }
 .tp-pop__val {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   width: 40px;
@@ -1608,7 +1793,7 @@ button.cap:not(:disabled):active { transform: none; }
    y 307. Pintarlas al mismo tamano era darles la misma importancia cuando una
    orienta y la otra no. */
 .metric__value--lead {
-  font-size: 16px;
+  font-size: var(--fs-16);
   font-weight: 500;
   letter-spacing: -0.01em;
 }
@@ -1628,7 +1813,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .day-sep__label {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 500;
   color: var(--faint);
   white-space: nowrap;
@@ -1640,7 +1825,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .day-sep__count {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -1679,7 +1864,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .insp__verdict {
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 500;
 }
 
@@ -1699,11 +1884,11 @@ button.cap:not(:disabled):active { transform: none; }
   padding: 5px 0;
   border-bottom: 1px solid var(--line-soft);
 }
-.drow span { font-size: 13px; color: var(--muted); }
-.drow b { font-size: 13.5px; font-weight: 500; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.drow span { font-size: var(--fs-13); color: var(--muted); }
+.drow b { font-size: var(--fs-13); font-weight: 500; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drow__note {
   font-style: normal;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   margin-left: 6px;
 }
@@ -1713,7 +1898,7 @@ button.cap:not(:disabled):active { transform: none; }
 
 .note {
   margin: var(--space-2) 0 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.5;
   color: var(--faint);
 }
@@ -1729,7 +1914,7 @@ button.cap:not(:disabled):active { transform: none; }
   display: flex;
   justify-content: space-between;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 500;
   padding: var(--space-2) 0 var(--space-1);
 }
@@ -1743,15 +1928,15 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .insp__player--self { background: var(--surface-2); }
 .insp__playerName {
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .insp__player--self .insp__playerName { color: var(--text); font-weight: 500; }
-.insp__playerKda { font-size: 12.5px; color: var(--text); }
-.insp__playerNum { font-size: 12px; color: var(--faint); text-align: right; }
+.insp__playerKda { font-size: var(--fs-13); color: var(--text); }
+.insp__playerNum { font-size: var(--fs-12); color: var(--faint); text-align: right; }
 /* Mismas columnas que la fila de jugador, mas la del icono, o la cabecera no
    cae encima de sus cifras. */
 .insp__legend {
@@ -1783,7 +1968,7 @@ button.cap:not(:disabled):active { transform: none; }
   list-style: none;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 500;
   color: var(--faint);
   display: flex;
@@ -1791,7 +1976,7 @@ button.cap:not(:disabled):active { transform: none; }
   gap: var(--space-2);
 }
 .insp__more summary::-webkit-details-marker { display: none; }
-.insp__more summary::after { content: "+"; margin-left: auto; font-size: 13px; }
+.insp__more summary::after { content: "+"; margin-left: auto; font-size: var(--fs-13); }
 .insp__more[open] summary::after { content: "−"; }
 .insp__more summary:hover { color: var(--text); }
 .insp__moreBody {
@@ -1819,13 +2004,13 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .evrow:hover { background: var(--surface-2); }
 .evrow[data-on] { background: var(--surface-2); }
-.evrow__sev { align-self: stretch; border-radius: 1px; }
-.evrow__time { font-family: var(--font-mono); font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.evrow__sev { align-self: stretch; border-radius: var(--radius-full); }
+.evrow__time { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--faint); font-variant-numeric: tabular-nums; }
 .evrow[data-on] .evrow__time { color: var(--cool); }
 .evrow__icon { display: flex; align-items: center; justify-content: center; }
-.evrow__label { font-size: 13px; color: var(--text); white-space: nowrap; }
+.evrow__label { font-size: var(--fs-13); color: var(--text); white-space: nowrap; }
 .evrow__desc {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1834,7 +2019,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .evrow__tone {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
 }
 
@@ -1853,7 +2038,7 @@ button.cap:not(:disabled):active { transform: none; }
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   padding: 2px 7px;
   cursor: pointer;
@@ -1870,14 +2055,14 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .evfeat__desc {
   margin: var(--space-2) 0 0;
-  font-size: 13px;
+  font-size: var(--fs-13);
   line-height: 1.5;
   color: var(--muted);
 }
 
 /* Cabecera de las dos columnas de objetivos: arriba, como el marcador. */
 .insp__objLegend { border-bottom-color: transparent; padding-bottom: 0; }
-.insp__objLegend span { font-size: 12px; }
+.insp__objLegend span { font-size: var(--fs-12); }
 
 /* =========================================================================
    Ajustes.
@@ -1931,12 +2116,12 @@ button.cap:not(:disabled):active { transform: none; }
 .status__dot[data-tone="warn"] { background: var(--gold); }
 .status__label {
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-weight: 500;
   color: var(--faint);
 }
 .status__value {
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--text);
   max-width: 34ch;
   overflow: hidden;
@@ -1953,11 +2138,11 @@ button.cap:not(:disabled):active { transform: none; }
   padding: var(--space-3) 0;
 }
 .drow--set > div:first-child { min-width: 0; }
-.drow__label { display: block; font-size: 14px; color: var(--text); }
+.drow__label { display: block; font-size: var(--fs-14); color: var(--text); }
 .drow__desc {
   display: block;
-  font-size: 12.5px;
-  line-height: 1.45;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--faint);
   margin-top: 2px;
   max-width: 58ch;
@@ -1980,7 +2165,7 @@ button.cap:not(:disabled):active { transform: none; }
   box-shadow: var(--inset-sunken);
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   padding: 6px var(--space-3);
   outline: none;
   min-width: 0;
@@ -2021,14 +2206,14 @@ button.cap:not(:disabled):active { transform: none; }
 .updpill__track {
   margin-top: 6px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-full);
   background: var(--sunken);
   overflow: hidden;
 }
 .updpill__fill {
   height: 100%;
   background: var(--action);
-  border-radius: 2px;
+  border-radius: var(--radius-full);
   transition: width var(--t-base) var(--e-move);
 }
 .upd-veil {
@@ -2055,7 +2240,7 @@ button.cap:not(:disabled):active { transform: none; }
   gap: 0;
   padding: 8px 11px;
   font-family: var(--font-sans);
-  font-size: 12.5px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--muted);
   background: var(--panel);
@@ -2108,7 +2293,7 @@ button.cap:not(:disabled):active { transform: none; }
   box-shadow: var(--shadow-3);
 }
 .updv__title { font-weight: 500; color: var(--text); }
-.updv__note { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+.updv__note { font-size: var(--fs-12); color: var(--text-muted); line-height: 1.5; }
 
 /* --- plegables ---------------------------------------------------------- */
 .fold { border-top: 1px solid var(--line-soft); padding-top: var(--space-3); }
@@ -2116,7 +2301,7 @@ button.cap:not(:disabled):active { transform: none; }
   list-style: none;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 500;
   color: var(--faint);
   display: flex;
@@ -2124,14 +2309,14 @@ button.cap:not(:disabled):active { transform: none; }
   gap: var(--space-2);
 }
 .fold summary::-webkit-details-marker { display: none; }
-.fold summary::after { content: "+"; margin-left: auto; font-size: 13px; }
+.fold summary::after { content: "+"; margin-left: auto; font-size: var(--fs-13); }
 .fold[open] summary::after { content: "−"; }
 .fold summary:hover { color: var(--text); }
 .fold--warn summary { color: var(--gold); }
 .fold__list {
   margin: var(--space-3) 0 0;
   padding-left: var(--space-4);
-  font-size: 13px;
+  font-size: var(--fs-13);
   line-height: 1.6;
   color: var(--muted);
 }
@@ -2151,12 +2336,12 @@ button.cap:not(:disabled):active { transform: none; }
 .imp__rank {
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
-  font-size: 26px;
+  font-size: var(--fs-metric);
   font-weight: 500;
   line-height: 1;
   color: var(--text);
 }
-.imp__pct { font-size: 15px; margin-left: auto; }
+.imp__pct { font-size: var(--fs-16); margin-left: auto; }
 .imp__row {
   display: grid;
   grid-template-columns: 74px 1fr 56px;
@@ -2164,13 +2349,13 @@ button.cap:not(:disabled):active { transform: none; }
   gap: var(--space-2);
   padding: 3px 0;
 }
-.imp__rowName { font-size: 12px; color: var(--muted); }
+.imp__rowName { font-size: var(--fs-12); color: var(--muted); }
 /* El carril lleva el cero en el centro: a la izquierda lo que restó, a la
    derecha lo que sumó. Sin el eje, un −0,04 y un +0,04 se dibujan igual. */
 .imp__track {
   position: relative;
   height: 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
 .imp__track::before {
@@ -2186,9 +2371,9 @@ button.cap:not(:disabled):active { transform: none; }
   position: absolute;
   top: 0;
   bottom: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
-.imp__rowNum { font-size: 12px; text-align: right; }
+.imp__rowNum { font-size: var(--fs-12); text-align: right; }
 .imp__total {
   display: flex;
   justify-content: space-between;
@@ -2196,13 +2381,13 @@ button.cap:not(:disabled):active { transform: none; }
   margin-top: var(--space-2);
   padding-top: var(--space-2);
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 /* --- Procesado del vídeo (posiciones del minimapa) --------------------- */
 .mm__bar {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-full);
   background: var(--surface-2);
   overflow: hidden;
   margin: var(--space-2) 0;
@@ -2210,7 +2395,7 @@ button.cap:not(:disabled):active { transform: none; }
 .mm__fill {
   height: 100%;
   background: var(--action);
-  border-radius: 3px;
+  border-radius: var(--radius-full);
   transition: width var(--t-base) var(--e-move);
 }
 .mm__row { display: flex; align-items: center; gap: var(--space-3); }
@@ -2233,8 +2418,8 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .insp__press:hover { background: var(--surface-2); }
 .insp__press + .insp__press { border-top: 1px solid var(--line); }
-.insp__pressWhat { font-size: 13px; color: var(--text); }
-.insp__pressGain { font-size: 12px; color: var(--muted); text-align: right; }
+.insp__pressWhat { font-size: var(--fs-13); color: var(--text); }
+.insp__pressGain { font-size: var(--fs-12); color: var(--muted); text-align: right; }
 
 /* =========================================================================
    Paleta de comandos (Ctrl K). Velo sobre la app y una caja de 640 px arriba
@@ -2248,7 +2433,7 @@ button.cap:not(:disabled):active { transform: none; }
   justify-content: center;
   align-items: flex-start;
   padding: 110px 16px 24px;
-  background: color-mix(in srgb, var(--sunken) 62%, transparent);
+  background: var(--scrim);
   backdrop-filter: blur(2px);
   animation: updv-in var(--t-quick) var(--e-out) both;
 }
@@ -2258,7 +2443,7 @@ button.cap:not(:disabled):active { transform: none; }
   max-height: calc(100vh - 134px);
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 3%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-3);
@@ -2287,7 +2472,7 @@ button.cap:not(:disabled):active { transform: none; }
   color: var(--text);
   caret-color: var(--brand);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: var(--fs-16);
   font-weight: 400;
   user-select: text;
 }
@@ -2303,7 +2488,7 @@ button.cap:not(:disabled):active { transform: none; }
   padding: 4px 8px 10px;
 }
 .cmdk__group {
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   color: var(--faint);
   padding: 14px 10px 6px;
@@ -2315,9 +2500,9 @@ button.cap:not(:disabled):active { transform: none; }
   align-items: center;
   gap: 12px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text);
-  font-size: 14px;
+  font-size: var(--fs-14);
   cursor: pointer;
   transition: background-color var(--t-instant) var(--e-move);
 }
@@ -2338,7 +2523,7 @@ button.cap:not(:disabled):active { transform: none; }
 .cmdk__num { font-variant-numeric: tabular-nums; color: var(--muted); }
 .cmdk__meta {
   flex-shrink: 0;
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2346,12 +2531,12 @@ button.cap:not(:disabled):active { transform: none; }
 .cmdk__time {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--text);
   background: var(--sunken);
   padding: 2px 7px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   box-shadow: inset 0 0 0 1px var(--hair);
 }
 .cmdk__slot {
@@ -2360,7 +2545,7 @@ button.cap:not(:disabled):active { transform: none; }
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   background: color-mix(in srgb, var(--text) 5%, transparent);
   box-shadow: inset 0 0 0 1px var(--hair);
@@ -2371,20 +2556,22 @@ button.cap:not(:disabled):active { transform: none; }
 .cmdk__slot--good { background: color-mix(in srgb, var(--cool) 12%, transparent); box-shadow: none; }
 .cmdk__slot--good .cmdk__mark { background: var(--cool); }
 .cmdk__slot--finding { background: color-mix(in srgb, var(--flag) 14%, transparent); box-shadow: none; }
-.cmdk__slot--finding .cmdk__mark { background: var(--flag); border-radius: 2px; transform: rotate(45deg); }
+.cmdk__slot--finding .cmdk__mark { background: var(--flag); border-radius: var(--radius-full); transform: rotate(45deg); }
 .cmdk__slot--neutral { box-shadow: none; }
 .cmdk__enter { color: var(--text); background: color-mix(in srgb, var(--text) 3%, var(--panel)); box-shadow: inset 0 0 0 1px var(--hair); }
+/* La coincidencia va en --text: heredando el --faint de un metadato, sobre
+   el oro al 22 % se quedaba en 3,6:1. */
 .cmdk__hl {
   background: color-mix(in srgb, var(--brand) 22%, transparent);
-  color: inherit;
-  border-radius: 3px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
   padding: 0 1px;
 }
 .cmdk__empty {
   margin: 0;
   padding: 28px 12px;
   text-align: center;
-  font-size: 14px;
+  font-size: var(--fs-14);
   color: var(--faint);
 }
 .cmdk__foot {
@@ -2396,7 +2583,7 @@ button.cap:not(:disabled):active { transform: none; }
   padding: 0 16px;
   background: var(--panel);
   box-shadow: inset 0 1px 0 var(--hair);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--faint);
 }
 .cmdk__keys { display: inline-flex; align-items: center; gap: 6px; }

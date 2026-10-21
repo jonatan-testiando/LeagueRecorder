@@ -1458,7 +1458,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   const toneBadge = (tone: Tone) => {
     const tl = toneLabelAndIcon(tone);
     return (
-      <span className="badge" style={{ color: tl.color, background: mix(tl.color, 13) }}>
+      <span className="badge" style={{ color: tl.ink, background: mix(tl.color, 13) }}>
         {t(tl.text)}
       </span>
     );

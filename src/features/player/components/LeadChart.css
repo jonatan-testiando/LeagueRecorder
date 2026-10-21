@@ -198,7 +198,7 @@
 
 /* ------------------------------------------- la lectura */
 .lc-foot { min-height: 20px; }
-.lc-read { font-size: 12.5px; line-height: 1.5; color: var(--faint); font-variant-numeric: tabular-nums; }
+.lc-read { font-size: var(--fs-13); line-height: 1.5; color: var(--faint); font-variant-numeric: tabular-nums; }
 .lc-read b { font-weight: 600; color: var(--text); }
 .lc-read__parts { margin-left: 8px; }
 .lc-read--all { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }

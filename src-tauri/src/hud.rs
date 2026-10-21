@@ -29,6 +29,50 @@ pub fn ruta(match_id: &str) -> PathBuf {
 /// de media partida muerto. Ver la cabecera de `hud_vida.py`.
 pub const LEGIBLE: f64 = 0.5;
 
+/// Cuánto más grande que en la máquina de desarrollo es el HUD de abajo (la
+/// barra de vida y la fila de efectos) con `HUD.GlobalScale` = `global_scale`.
+///
+/// `hud_vida.py` se midió con GlobalScale = 0, el mínimo del deslizador, que
+/// es el de esta máquina: con cualquier otro la barra no está donde se la
+/// busca y el HUD sale ilegible. El modelo es el de iTero Coach para su
+/// overlay de la barra de habilidades (`docs/analisis-itero-coach-2026-10.md`
+/// §4): cada medida es `base + pendiente·GlobalScale`, con la pendiente la
+/// mitad de la base, anclado abajo en el centro. GlobalScale va de 0 a 1;
+/// fuera de ahí sólo sale de editar el fichero a mano y se acota.
+///
+/// Medido agrandando ×1,5 el HUD de dos clips reales (1080p y 1440p) desde
+/// ese ancla: leído a escala 1, la barra sale en el 0-1 % de las lecturas;
+/// con 1,5, en el 100 % y con la misma vida que el clip original (±20
+/// milésimas en el 99 %). Que el juego lo agrande así NO está comprobado con
+/// una grabación: no hay ninguna con otro GlobalScale.
+pub fn escala_hud(global_scale: f64) -> f64 {
+    let g = if global_scale.is_finite() { global_scale.clamp(0.0, 1.0) } else { 0.0 };
+    1.0 + g / 2.0
+}
+
+/// La escala del HUD de una partida. Sin ajustes guardados (partidas de antes
+/// de leerlos), la de siempre.
+pub fn escala_de(meta: &crate::storage::MatchMetadata) -> f64 {
+    meta.hud_settings.as_ref().and_then(|h| h.global_scale).map(escala_hud).unwrap_or(1.0)
+}
+
+/// La escala con la que se leyó un `hud_vida.json`, de su cabecera. Sin
+/// `hud_scale` es de antes de esto, leído a escala 1.
+fn escala_leida(cabecera: &str) -> Option<f64> {
+    let Some(i) = cabecera.find("\"hud_scale\":") else { return Some(1.0) };
+    let resto = &cabecera[i + "\"hud_scale\":".len()..];
+    let fin = resto.find([',', '}']).unwrap_or(resto.len());
+    resto[..fin].trim().parse().ok()
+}
+
+/// ¿Está leído, y con la escala de HUD de la partida? Uno leído con otra miró
+/// la barra en otro sitio: lo normal es que saliera ilegible.
+pub fn al_dia(match_id: &str) -> bool {
+    let Some(cab) = crate::minimap::cabecera(&ruta(match_id)) else { return false };
+    let Some(meta) = crate::storage::metadata_ligera(match_id) else { return true };
+    escala_leida(&cab).is_some_and(|e| (e - escala_de(&meta)).abs() < 1e-9)
+}
+
 #[derive(serde::Deserialize)]
 struct Vida {
     fps: f64,
@@ -63,7 +107,7 @@ fn script(app: &tauri::AppHandle) -> Option<PathBuf> {
 
 /// ¿Se puede leer el HUD de esta partida y aún no se ha hecho?
 pub fn falta(app: &tauri::AppHandle, match_id: &str) -> bool {
-    if ruta(match_id).exists() || script(app).is_none() {
+    if al_dia(match_id) || script(app).is_none() {
         return false;
     }
     let Ok(meta) = crate::storage::get_match_metadata(match_id) else { return false };
@@ -177,9 +221,12 @@ pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
     use std::io::{BufRead, BufReader};
     use tauri::Emitter;
 
-    if ruta(match_id).exists() {
+    if al_dia(match_id) {
         return Ok(());
     }
+    // Uno leído con otra escala se sustituye; las barras salieron de sus
+    // peleas (ver `crate::barras::falta`) y se vuelven a leer detrás.
+    let rehacer = ruta(match_id).exists();
     let script = script(app).ok_or("Esta instalación no trae el lector del HUD.")?;
     let meta = crate::storage::get_match_metadata(match_id).map_err(|_| "No se encuentra la partida.")?;
     if !Path::new(&meta.video_path).exists() {
@@ -223,6 +270,8 @@ pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
         .arg(format!("{}x{}", w as i64, h as i64))
         .arg("--duracion")
         .arg(format!("{duracion:.2}"))
+        .arg("--escala-hud")
+        .arg(escala_de(&meta).to_string())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     if !con_iconos.is_empty() {
@@ -267,6 +316,9 @@ pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
     }
     if ok {
         log::info!("hud: {match_id} leída");
+        if rehacer {
+            let _ = std::fs::remove_file(crate::barras::ruta(match_id));
+        }
         Ok(())
     } else {
         let detalle = salida
@@ -328,4 +380,30 @@ pub async fn read_match_hud(app: tauri::AppHandle, match_id: String) -> Result<(
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// GlobalScale 0 (el de esta máquina) deja la geometría tal cual; el
+    /// máximo la hace un 50 % más grande, como en iTero.
+    #[test]
+    fn la_escala_del_hud_sale_de_global_scale() {
+        assert_eq!(escala_hud(0.0), 1.0);
+        assert_eq!(escala_hud(0.5), 1.25);
+        assert_eq!(escala_hud(1.0), 1.5);
+        assert_eq!(escala_hud(7.0), 1.5);
+        assert_eq!(escala_hud(-1.0), 1.0);
+        assert_eq!(escala_hud(f64::NAN), 1.0);
+    }
+
+    /// Los ficheros de antes no traen la escala: se leyeron a 1.
+    #[test]
+    fn la_escala_leida_sale_de_la_cabecera() {
+        assert_eq!(escala_leida(r#"{"v":1,"fps":8.0,"width":2560,"height":1440,"hud_ok":0.93,"hp":[1"#), Some(1.0));
+        assert_eq!(escala_leida(r#"{"v":1,"fps":8.0,"width":2560,"height":1440,"hud_scale":1.25,"hud_ok":0.9"#), Some(1.25));
+        assert_eq!(escala_leida(r#"{"hud_scale":1.5}"#), Some(1.5));
+        assert_eq!(escala_leida(r#"{"hud_scale":"x","hud_ok":0.9"#), None);
+    }
 }

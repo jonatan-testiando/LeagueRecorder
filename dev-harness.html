@@ -810,13 +810,19 @@
     // arnés, para que rail, Hoy y Patrones coincidan.
     get_current_rank: () => ({ tier: "EMERALD", division: "II", lp: 64 }),
     // Lote de minimapas: 12 pendientes como en la biblioteca real del usuario.
-    // `?lote` lo pinta en marcha (3 de 12) para ver la barra.
-    get_minimap_batch: () => ({
-      pending: 12,
-      batch: new URLSearchParams(location.search).has("lote")
-        ? { total: 12, hechas: 3, fallidas: 0, actual: "m3", activo: true }
-        : null,
-    }),
+    // `?lote` lo pinta en marcha (3 de 12) para ver la barra. `?recorte` y
+    // `?detector`: nada pendiente y 3 por volver a medir, por el recorte del
+    // minimapa o por el detector anterior, para ver cada aviso.
+    get_minimap_batch: () => {
+      const q = new URLSearchParams(location.search);
+      const rehacer = q.has("recorte") || q.has("detector");
+      return {
+        pending: rehacer ? 0 : 12,
+        outdated: rehacer ? 3 : 0,
+        other_crop: q.has("recorte") ? 3 : 0,
+        batch: q.has("lote") ? { total: 12, hechas: 3, fallidas: 0, actual: "m3", activo: true } : null,
+      };
+    },
     process_missing_minimaps: () => ({ total: 12, hechas: 0, fallidas: 0, actual: "m0", activo: true }),
     cancel_missing_minimaps: () => null,
     get_pressure_summary: () => ({

@@ -481,9 +481,12 @@ pub async fn get_minimap_status(
 #[derive(serde::Serialize)]
 pub struct MinimapBatchStatus {
     pub pending: usize,
-    /// Medidas con el detector anterior (sin el recuadro de la cámara): el
-    /// lote también las vuelve a medir.
+    /// Medidas con el detector anterior (sin el recuadro de la cámara) o con
+    /// otro recorte del minimapa: el lote también las vuelve a medir.
     pub outdated: usize,
+    /// De esas, las que sólo están mal por el recorte (los ajustes del juego,
+    /// o la escala forzada en Ajustes, lo ponen en otro sitio).
+    pub other_crop: usize,
     /// Con el minimapa al día pero sin el HUD (vida y efectos, para "Golpes
     /// que te comes") o sin las oleadas leídas: el lote también las lee.
     pub hud_pending: usize,
@@ -492,9 +495,11 @@ pub struct MinimapBatchStatus {
 
 #[tauri::command]
 pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStatus, String> {
+    let desactualizadas = crate::minimap::desactualizadas(&app);
     Ok(MinimapBatchStatus {
         pending: crate::minimap::pendientes(&app).len(),
-        outdated: crate::minimap::desactualizadas(&app).len(),
+        outdated: desactualizadas.len(),
+        other_crop: desactualizadas.iter().filter(|id| crate::minimap::con_camara(id)).count(),
         hud_pending: {
             let mut ids = crate::hud::pendientes(&app);
             for id in crate::oleadas::pendientes(&app).into_iter().chain(crate::barras::pendientes(&app)) {

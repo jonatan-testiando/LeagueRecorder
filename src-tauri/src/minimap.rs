@@ -98,6 +98,69 @@ pub fn rect_de(meta: &crate::storage::MatchMetadata) -> Rect {
     crate::camera_input::Calibracion::actual().rect(meta)
 }
 
+/// El principio de un fichero de análisis: lo que los scripts escriben antes
+/// que las muestras (`minimap_positions.json`, `oleadas.json`). Basta un KB y
+/// no hace falta leer varios megas para saber cómo se midió.
+pub fn cabecera(ruta: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(ruta).ok()?;
+    let mut buf = [0u8; 1024];
+    let n = f.read(&mut buf).ok()?;
+    Some(String::from_utf8_lossy(&buf[..n]).into_owned())
+}
+
+/// El recorte con el que se midió un fichero, leído de su cabecera.
+///
+/// Sin `rect` es de antes del 2026-10-19 y se midió con [`RECT_FIJO`]. `None`
+/// si lo trae y no se entiende: no se sabe de dónde salen sus coordenadas.
+/// Sólo se mira lo que va antes de las muestras, que no traen esa clave.
+pub fn rect_medido(cabecera: &str) -> Option<Rect> {
+    let fin = ["\"samples\"", "\"frames\""].iter().filter_map(|k| cabecera.find(k)).min();
+    let cab = &cabecera[..fin.unwrap_or(cabecera.len())];
+    let Some(i) = cab.find("\"rect\"") else { return Some(RECT_FIJO) };
+    let resto = &cab[i..];
+    let (a, b) = (resto.find('[')?, resto.find(']')?);
+    let v: Vec<f64> = resto
+        .get(a + 1..b)?
+        .split(',')
+        .map(|s| s.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .ok()?;
+    let r = match v[..] {
+        [x0, x1, y0, y1] => (x0, x1, y0, y1),
+        _ => return None,
+    };
+    rect_valido(r).then_some(r)
+}
+
+/// ¿Se midió este fichero con el recorte que toca hoy a la partida?
+///
+/// Uno medido con otro recorte no está mal escrito: sus coordenadas son de
+/// otro trozo del vídeo. Pasa con las partidas de un cliente que se midieron
+/// antes de leer sus ajustes del juego, o al cambiar la escala forzada en
+/// Ajustes. A escala 3 (la de las partidas de siempre) el recorte nuevo es
+/// [`RECT_FIJO`] salvo el último bit, y [`crate::camera_input::mismo_rect`]
+/// no los separa: esas partidas no se vuelven a medir.
+pub fn mismo_recorte(cabecera: &str, rect: Rect) -> bool {
+    // Un recorte que no vale no llega a los scripts (`pasar_rect`) y miden con
+    // el fijo: compararlo tal cual pediría volver a medir en cada pasada.
+    let rect = if rect_valido(rect) { rect } else { RECT_FIJO };
+    rect_medido(cabecera).is_some_and(|r| crate::camera_input::mismo_rect(r, rect))
+}
+
+/// [`mismo_recorte`] de un fichero contra el recorte de su partida. Sin la
+/// partida no hay con qué comparar y se da por bueno: volver a medir un vídeo
+/// que no se puede situar no arregla nada.
+pub fn medido_con_su_recorte(ruta: &Path, match_id: &str) -> bool {
+    let Some(cab) = cabecera(ruta) else { return false };
+    // Ligera: el estado del lote lo pregunta para toda la biblioteca, y la
+    // estela del ratón son varios megas por partida que aquí no hacen falta.
+    match crate::storage::metadata_ligera(match_id) {
+        Some(meta) => mismo_recorte(&cab, rect_de(&meta)),
+        None => true,
+    }
+}
+
 /// Pasa el recorte a un script de Python en [`RECT_ENV`]. Es el único sitio
 /// que la fija: así todos los scripts de una partida miran el mismo trozo.
 pub fn pasar_rect(cmd: &mut std::process::Command, r: Rect) {
@@ -635,19 +698,22 @@ pub fn ruta(match_id: &str) -> std::path::PathBuf {
     crate::storage::get_match_dir(match_id).join("minimap_positions.json")
 }
 
-/// ¿Se midió con el detector actual (el que guarda el recuadro de la cámara)?
+/// ¿Se midió con el detector actual (el que guarda el recuadro de la cámara) y
+/// con el recorte que toca a la partida?
 ///
-/// Los ficheros de antes del 2026-10-07 no lo traen, y sin él el rastro cae en
-/// otro icono ~40 % de las veces frente a ~3 % (ver `PESO_CAMARA`). Siguen
-/// valiendo —todo funciona con ellos—, pero el lote los vuelve a medir. La
-/// cabecera va al principio del JSON (el script la escribe antes que las
-/// muestras): basta leer un trozo, no varios megas.
+/// Los ficheros de antes del 2026-10-07 no traen la cámara, y sin ella el
+/// rastro cae en otro icono ~40 % de las veces frente a ~3 % (ver
+/// `PESO_CAMARA`). Siguen valiendo —todo funciona con ellos—, pero el lote los
+/// vuelve a medir. Uno medido con otro recorte (ver [`mismo_recorte`]) tiene
+/// las coordenadas de otro trozo del vídeo, y también se vuelve a medir.
 pub fn es_actual(match_id: &str) -> bool {
-    use std::io::Read;
-    let Ok(mut f) = std::fs::File::open(ruta(match_id)) else { return false };
-    let mut buf = [0u8; 1024];
-    let n = f.read(&mut buf).unwrap_or(0);
-    String::from_utf8_lossy(&buf[..n]).contains("\"camera\"")
+    con_camara(match_id) && medido_con_su_recorte(&ruta(match_id), match_id)
+}
+
+/// ¿Se midió ya con el detector que lee el recuadro de la cámara? Una
+/// desactualizada que lo tiene lo está sólo por el recorte.
+pub fn con_camara(match_id: &str) -> bool {
+    cabecera(&ruta(match_id)).is_some_and(|c| c.contains("\"camera\""))
 }
 
 /// Ruta del volcado a medias, que es lo que permite reanudar.
@@ -764,7 +830,8 @@ pub fn pendientes(app: &tauri::AppHandle) -> Vec<String> {
 }
 
 /// Partidas ya medidas con el detector anterior (sin el recuadro de la
-/// cámara) que se pueden volver a medir, de la más nueva a la más vieja.
+/// cámara) o con otro recorte, que se pueden volver a medir, de la más nueva a
+/// la más vieja.
 pub fn desactualizadas(app: &tauri::AppHandle) -> Vec<String> {
     if recursos(app).is_none() {
         return Vec::new();
@@ -1180,6 +1247,161 @@ mod tests {
     fn fichero_nuevo_no_se_toca() {
         let p = Positions::from_json(&fichero(200, r#","team_from":"ally_ring""#)).unwrap();
         assert_eq!(equipos(&p), vec![Some(100), Some(200), None]);
+    }
+
+    fn con_rect(r: Rect) -> String {
+        format!(r#"{{"fps": 2.0, "camera": 1, "rect": [{}, {}, {}, {}], "samples": [{{"t": 0.0"#, r.0, r.1, r.2, r.3)
+    }
+
+    /// Las cabeceras de los dos scripts: la de `minimap_positions.py`
+    /// (`json.dump` con espacios) y la de `oleadas.py` (compacta).
+    #[test]
+    fn el_recorte_se_lee_de_la_cabecera() {
+        let uno = crate::camera_input::minimapa_rect(2560.0, 1440.0, 1.0, false);
+        assert_eq!(rect_medido(&con_rect(uno)), Some(uno));
+        let oleadas = r#"{"v":1,"width":2560,"height":1440,"rect":[0.787,0.995,0.622,0.972],"frames":[{"a":[[1,2]]"#;
+        assert_eq!(rect_medido(oleadas), Some(RECT_FIJO));
+        // Sin `rect`: de antes del 2026-10-19, medido con el fijo.
+        assert_eq!(rect_medido(r#"{"fps": 2.0, "camera": 1, "samples": [{"t": 0.0, "icons": []"#), Some(RECT_FIJO));
+        // Roto: no se sabe de dónde salen las coordenadas.
+        assert_eq!(rect_medido(r#"{"rect": [0.7, 0.9], "samples": []"#), None);
+        assert_eq!(rect_medido(r#"{"rect": [0.9, 0.8, 0.6, 0.9], "samples": []"#), None);
+        // Sólo cuenta la cabecera, no lo que haya en las muestras.
+        assert_eq!(rect_medido(r#"{"samples": [{"rect": [0.1, 0.2, 0.3, 0.4]"#), Some(RECT_FIJO));
+    }
+
+    /// Lo que decide si se vuelve a medir: a escala 3 nada (el recorte nuevo
+    /// es el fijo salvo el último bit); a otra escala, o volteado, sí.
+    #[test]
+    fn solo_se_vuelve_a_medir_con_otro_recorte() {
+        use crate::camera_input::{minimapa_rect, rect_heredado};
+        let viejo = r#"{"fps": 2.0, "camera": 1, "samples": []"#;
+        assert!(mismo_recorte(viejo, minimapa_rect(2560.0, 1440.0, 3.0, false)));
+        assert!(mismo_recorte(viejo, rect_heredado(1.0)));
+        assert!(!mismo_recorte(viejo, minimapa_rect(2560.0, 1440.0, 1.0, false)));
+        assert!(!mismo_recorte(viejo, minimapa_rect(2560.0, 1440.0, 2.0, false)));
+        assert!(!mismo_recorte(viejo, minimapa_rect(2560.0, 1440.0, 3.0, true)));
+        // Ya medido con el suyo: al día.
+        let r = minimapa_rect(1920.0, 1080.0, 1.0, true);
+        assert!(mismo_recorte(&con_rect(r), r));
+        // Con un recorte que no vale el script usó el fijo: no hay que repetir.
+        assert!(mismo_recorte(viejo, (0.9, 0.8, 0.6, 0.9)));
+        assert!(!mismo_recorte(r#"{"rect": [1, 2], "samples": []"#, RECT_FIJO));
+    }
+
+    /// Sobre la biblioteca de verdad de esta máquina. Se activa con `LR_REAL=1`
+    /// y sólo lee.
+    ///
+    /// - Las partidas a escala 3 (todas las de hoy) no se vuelven a medir: ni
+    ///   el minimapa, ni las oleadas, ni el HUD.
+    /// - Las de otro cliente (ajustes leídos con otra escala, o el minimapa
+    ///   volteado) son lo primero que hay que mirar cuando exista una: los
+    ///   clics dentro de su recorte frente a los de la franja de 120 px junto
+    ///   a su borde interior (aquí, 365 frente a 0), el equipo y la cámara por
+    ///   muestra (aquí, 97-100 % y 89-98 % en las 26), el rastro propio contra
+    ///   tus muertes y si el HUD se pudo leer. Aún no hay ninguna.
+    ///
+    /// `LR_REAL=1 cargo test --lib minimap::tests::geometria_en_partidas_reales -- --nocapture`
+    #[test]
+    fn geometria_en_partidas_reales() {
+        if std::env::var("LR_REAL").is_err() {
+            return;
+        }
+        let cal = crate::camera_input::Calibracion::actual();
+        let (mut de_siempre, mut de_otro) = (0, 0);
+        for ligera in crate::storage::load_all_matches() {
+            if ligera.is_vod {
+                continue;
+            }
+            let id = ligera.id.clone();
+            let rect = cal.rect(&ligera);
+            let escala = ligera.hud_settings.as_ref().map(|h| (h.minimap_scale, h.flip_minimap, h.global_scale));
+            let pos = cabecera(&ruta(&id));
+            let ole = cabecera(&crate::oleadas::ruta(&id));
+            let hud = std::fs::read_to_string(crate::hud::ruta(&id)).ok();
+            if pos.is_none() && ole.is_none() && hud.is_none() {
+                continue;
+            }
+
+            if crate::camera_input::mismo_rect(rect, RECT_FIJO) {
+                // Lo de siempre: con el mismo recorte, nada se repite.
+                for (que, cab) in [("el minimapa", &pos), ("las oleadas", &ole)] {
+                    if let Some(c) = cab {
+                        assert!(mismo_recorte(c, rect), "{id}: {que} se volvería a medir");
+                    }
+                }
+                if pos.is_some() {
+                    assert!(es_actual(&id), "{id}: el lote la volvería a medir");
+                }
+                if hud.is_some() {
+                    assert!(crate::hud::al_dia(&id), "{id}: el HUD se volvería a leer");
+                }
+                de_siempre += 1;
+                continue;
+            }
+
+            de_otro += 1;
+            println!("{id}: ajustes {escala:?}, recorte {rect:?}");
+            if let Some(m) = crate::storage::load_match_by_id(&id) {
+                let (w, h) = (m.mouse_space_w as f64, m.mouse_space_h as f64);
+                let (x0, x1, y0, y1) = (rect.0 * w, rect.1 * w, rect.2 * h, rect.3 * h);
+                let volteado = escala.is_some_and(|e| e.1);
+                let izq: Vec<_> = m.mouse_events.iter().filter(|e| e.evt == "left_click" && e.y >= y0 && e.y <= y1).collect();
+                let dentro = izq.iter().filter(|e| e.x >= x0 && e.x <= x1).count();
+                // El borde que da al campo de batalla: el izquierdo, o el
+                // derecho con el minimapa volteado.
+                let franja = izq
+                    .iter()
+                    .filter(|e| if volteado { e.x > x1 && e.x <= x1 + 120.0 } else { e.x >= x0 - 120.0 && e.x < x0 })
+                    .count();
+                println!("   clics: {dentro} dentro, {franja} en la franja");
+                assert!(franja * 100 <= dentro.max(100), "{id}: el recorte no cae donde se hace clic");
+            }
+            if let (Some(c), Ok(raw)) = (&pos, std::fs::read_to_string(ruta(&id))) {
+                let Some(p) = Positions::from_json(&raw) else { continue };
+                if !mismo_recorte(c, rect) {
+                    println!("   minimapa medido con otro recorte {:?}: hay que volver a medirlo", rect_medido(c));
+                } else {
+                    let iconos: Vec<&Icon> = p.samples.iter().flat_map(|s| s.icons.iter()).collect();
+                    let con_equipo = iconos.iter().filter(|i| i.team.is_some()).count() as f64 / iconos.len().max(1) as f64;
+                    let con_camara = p.samples.iter().filter(|s| s.cam.is_some()).count() as f64 / p.samples.len().max(1) as f64;
+                    println!("   minimapa: {} muestras, equipo {:.1} %, cámara {:.1} %", p.samples.len(), 100.0 * con_equipo, 100.0 * con_camara);
+                    assert!(con_equipo >= 0.95, "{id}: el aro no se lee");
+                    assert!(con_camara >= 0.85, "{id}: el recuadro de la cámara no se encuentra");
+                    let tl = crate::storage::load_raw_timeline(&id)
+                        .and_then(|r| serde_json::from_str::<crate::riot_api::TimelineDto>(&r).ok());
+                    if let Some(tl) = tl {
+                        let rastro = p.follow(&anclas_de(&tl, p.self_participant_id));
+                        let mut errores: Vec<f64> = tl
+                            .info
+                            .frames
+                            .iter()
+                            .flat_map(|f| f.events.iter())
+                            .filter(|e| e.event_type == "CHAMPION_KILL" && e.victimId == p.self_participant_id)
+                            .filter_map(|e| {
+                                let pos = e.position.as_ref()?;
+                                let t = e.timestamp as f64 / 1000.0 - 1.0;
+                                let f = rastro.iter().filter(|f| f.sec <= t + 0.6 && f.sec >= t - 2.0).last()?;
+                                Some((f.x - pos.x as f64).hypot(f.y - pos.y as f64))
+                            })
+                            .collect();
+                        errores.sort_by(|a, b| a.total_cmp(b));
+                        if let Some(mediana) = errores.get(errores.len() / 2) {
+                            println!("   rastro propio en tus {} muertes: mediana {mediana:.0} u", errores.len());
+                            assert!(*mediana < 1000.0, "{id}: el rastro no te sigue");
+                        }
+                    }
+                }
+            }
+            if let Some(raw) = &hud {
+                let ok = serde_json::from_str::<serde_json::Value>(raw).ok().and_then(|v| v.get("hud_ok")?.as_f64());
+                println!("   HUD: al día {}, barra en el {:.0} %", crate::hud::al_dia(&id), 100.0 * ok.unwrap_or(0.0));
+                if crate::hud::al_dia(&id) {
+                    assert!(ok.unwrap_or(0.0) >= crate::hud::LEGIBLE, "{id}: el HUD no se encuentra con su GlobalScale");
+                }
+            }
+        }
+        println!("{de_siempre} partidas con el minimapa de siempre, al día; {de_otro} de otro cliente");
     }
 
     /// ¿Sigue el rastro a la persona correcta? La verdad son los minutos

@@ -367,9 +367,17 @@ fn leyendo() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
     M.get_or_init(Default::default)
 }
 
+/// ¿Están leídas, y con el recorte del minimapa que toca a la partida? Unas
+/// leídas con otro recorte tienen los puntos en otro sitio del mapa (ver
+/// `minimap::mismo_recorte`); volver a leerlas son segundos.
+fn al_dia(match_id: &str) -> bool {
+    let r = ruta(match_id);
+    r.exists() && crate::minimap::medido_con_su_recorte(&r, match_id)
+}
+
 /// ¿Se pueden leer las oleadas de esta partida y aún no se ha hecho?
 pub fn falta(app: &tauri::AppHandle, match_id: &str) -> bool {
-    if ruta(match_id).exists() || script(app).is_none() {
+    if al_dia(match_id) || script(app).is_none() {
         return false;
     }
     let Ok(meta) = crate::storage::get_match_metadata(match_id) else { return false };
@@ -382,7 +390,7 @@ pub fn falta(app: &tauri::AppHandle, match_id: &str) -> bool {
 /// Lee las oleadas de una partida. Bloquea, pero son segundos: sólo se
 /// descodifican los fotogramas clave.
 pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
-    if ruta(match_id).exists() {
+    if al_dia(match_id) {
         return Ok(());
     }
     let script = script(app).ok_or("Esta instalación no trae el lector de oleadas.")?;

@@ -87,6 +87,20 @@ x0   = FlipMiniMap ? 0 : W - lado;   y0 = H - lado
   - Ese cliente tampoco tiene forma de saber qué valor poner en Ajustes › Avanzado.
 - **Corrección:** el modelo actual (`minimapa_rect`) escala de forma proporcional desde el ancla. El de iTero es afín: base + paso·escala. Es otro caso del patrón «funciona en la máquina de desarrollo y falla en una instalación limpia».
 
+**`GlobalScale` y el HUD de abajo** (añadido 2026-10-21, leído del overlay `skill-level-up-tracker` del mismo asar). Todo es `base + pendiente·GlobalScale`, con GlobalScale de 0 a 1 y anclado abajo en el centro:
+
+```
+ancho del panel   = round(H/2.2)  + ceil(round(H/4.32)·g)
+fila de 4 hab.    = round(round(H/6.6) + round(H/12.9)·g)
+lado de una hab.  = round(round(H/32)  + round(H/64)·g)
+alto              = round(H/8.85) + ceil(round(H/17.1)·g) + lado
+left = round(W/2 − ancho/2);  top = H − alto
+```
+
+- La pendiente es siempre la mitad de la base (0,50-0,52): el HUD entero mide `1 + g/2` veces lo que mide a GlobalScale = 0.
+- `hud_vida.py` se calibró a GlobalScale = 0, el mínimo, que es el de esta máquina. Ahora recibe `--escala-hud` de `hud::escala_hud`.
+- No hay overlay de iTero sobre las barras de vida de los campeones, así que esto no dice si `GlobalScale` las agranda (`barras.py`).
+
 ## 5. Post-partida y estadísticas
 
 - **Coach de macro:** no hay LLM. Unas 121 estadísticas base por tramo (`7_`, `14_`, `21_`, `28_`, `99_`) llegan a «casi 500 métricas».

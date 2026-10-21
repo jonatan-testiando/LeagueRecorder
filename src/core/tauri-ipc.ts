@@ -739,8 +739,10 @@ export interface MinimapBatch {
 export interface MinimapBatchStatus {
   /** Partidas propias sincronizadas que se pueden medir y aún no lo están. */
   pending: number;
-  /** Medidas con el detector anterior (sin el recuadro de la cámara). */
+  /** Medidas con el detector anterior (sin el recuadro de la cámara) o con otro recorte del minimapa. */
   outdated?: number;
+  /** De `outdated`, las que sólo están mal por el recorte (otra escala de minimapa). */
+  other_crop?: number;
   /** Sin el HUD leído (vida y efectos, para "Golpes que te comes"). */
   hud_pending?: number;
   batch: MinimapBatch | null;

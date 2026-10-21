@@ -567,7 +567,8 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
                 <span className="u-time">{mmss(focus.t)}{focus.until != null && focus.until > focus.t ? `–${mmss(focus.until)}` : ""}</span>
                 <strong>{focus.title}</strong>
               </div>
-              {focus.detail && <p>{focus.detail}</p>}
+              {/* Va recortado a dos líneas: entera al pasar por encima. */}
+              {focus.detail && <p title={focus.detail}>{focus.detail}</p>}
             </div>
             <button
               type="button"

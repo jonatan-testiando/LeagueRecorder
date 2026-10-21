@@ -4,6 +4,8 @@ import {
   getJungleRoutes,
   getWaves,
   JUNGLE_AGREEMENT_MIN,
+  type GankWaves,
+  type GankZone,
   type JungleRoute,
   type LanePush,
   type WavesReport,
@@ -65,6 +67,19 @@ export interface GankMove {
   precision: number;
   x: number | null;
   y: number | null;
+  /**
+   * La teoría del gank (`zonas.rs`), medida al empezar. Zona de la oleada:
+   * 3 | 2 | 1 | 2 | 3 de tu torre exterior a la suya. null si no se vio.
+   */
+  zone: GankZone | null;
+  /** Oleada en tu 2 en top o bot: el mejor lado de la teoría. */
+  bestSide: boolean | null;
+  /** Por dónde pisaste la línea, según tu rastro del vídeo. */
+  entry: GankWaves["entry"];
+  /** Tu nivel menos el del rival al empezar. */
+  levelDiff: number | null;
+  /** Cuándo pisaste la línea (partida), si tu rastro lo vio. */
+  start: number | null;
 }
 
 export type Move = InvadeMove | GankMove;
@@ -202,6 +217,13 @@ export function buildMoves(
 
   // ---- ganks
   const wG = w?.ganks ?? [];
+  const teoria = (g: GankWaves | null) => ({
+    zone: g?.zone ?? null,
+    bestSide: g?.best_side ?? null,
+    entry: g?.entry ?? null,
+    levelDiff: g?.level_diff ?? null,
+    start: g?.start_from_video ? g.t_start : null,
+  });
   const marcas = (markers ?? []).filter((m) => m.event_type === "gank_attempt" && !!m.lane);
   if (marcas.length > 0) {
     const usados = new Set<number>();
@@ -224,13 +246,14 @@ export function buildMoves(
         precision: m.time_precision ?? 0,
         x: m.position_x ?? null,
         y: m.position_y ?? null,
+        ...teoria(de),
       });
     }
   } else {
     for (const g of wG) {
       out.push({
         kind: "gank", t: g.t_game, lane: g.lane, push: g.push, setup: g.setup, outcome: g.outcome,
-        approach: null, confidence: null, precision: 0, x: null, y: null,
+        approach: null, confidence: null, precision: 0, x: null, y: null, ...teoria(g),
       });
     }
   }
@@ -309,22 +332,50 @@ export function invadeText(m: InvadeMove, t: T): MoveText {
   return { title, facts, verdict, tone };
 }
 
+/** Por dónde pisaste la línea (región justo antes, `zonas.rs`). */
+const ENTRADA: Record<NonNullable<GankMove["entry"]>, string> = {
+  own_jungle: "in through your jungle",
+  river: "in through the river",
+  enemy_jungle: "in through their jungle",
+  mid: "in from mid",
+  base: "straight from base",
+};
+
+/** La zona de la teoría del gank: 3 | 2 | 1 | 2 | 3 de tu torre a la suya. */
+const ZONA: Record<GankZone, string> = {
+  own_3: "wave in your 3",
+  own_2: "wave in your 2",
+  center_1: "wave in the 1",
+  enemy_2: "wave in their 2",
+  enemy_3: "wave in their 3",
+};
+
+/** «Un nivel por debajo de tu rival». Es contexto: en el corpus, el kill
+ *  frente a tu muerte va del 60 % con dos niveles menos al 85 % con dos más. */
+function nivelWord(d: number, t: T): string {
+  if (d === 0) return t("same level as your rival");
+  const n = Math.abs(d);
+  if (d < 0) return n === 1 ? t("one level below your rival") : t("{n} levels below your rival", { n });
+  return n === 1 ? t("one level above your rival") : t("{n} levels above your rival", { n });
+}
+
 export function gankText(m: GankMove, t: T): MoveText {
   const title = t("Gank {lane}", { lane: lane(m.lane, t) });
-  const entrada = m.approach === "flank" ? t("cutting their retreat") : m.approach === "front" ? t("straight down the lane") : "";
-  // La oleada en tu mitad = su laner lejos de su torre: el gank bueno. Bajo
-  // su torre es un diveo (umbrales en oleadas.rs).
-  const oleada =
-    m.setup === "good" ? t("enemy far from their tower")
-      : m.setup === "dive" ? t("under their tower")
-      : m.setup === "even" ? t("wave in the middle")
-      : m.setup === "unknown" ? t("wave not seen")
-      : "";
+  // Tu rastro del vídeo dice por dónde entraste; sin él queda el ángulo que
+  // se saca de los fotogramas de minuto de la API.
+  const entrada = m.entry
+    ? t(ENTRADA[m.entry])
+    : m.approach === "flank" ? t("cutting their retreat") : m.approach === "front" ? t("straight down the lane") : "";
+  // `setup` sólo existe si se leyeron las oleadas: sin zona es que no se vio.
+  const oleada = m.zone
+    ? m.bestSide ? t("wave in your 2, the best side") : t(ZONA[m.zone])
+    : m.setup != null ? t("wave not seen") : "";
+  const nivel = m.levelDiff != null ? nivelWord(m.levelDiff, t) : "";
   const verdict = m.outcome === "success" ? t("it worked") : m.outcome === "failed" ? t("you died") : t("no result");
   const tone: MapTone = m.outcome === "success" ? "good" : m.outcome === "failed" ? "bad" : "neutral";
   return {
     title,
-    facts: cap([entrada, oleada].filter(Boolean).join(", ")),
+    facts: cap([entrada, oleada, nivel].filter(Boolean).join(", ")),
     verdict,
     tone,
     note: m.confidence != null && m.confidence > 0 && m.confidence < CONFIANZA_FIRME ? t("unsure detection") : undefined,
@@ -381,8 +432,9 @@ export function moveFocus(m: Move, t: T, enemyTeam: number): MapFocus {
     kind: "gank",
     t: m.t,
     // Interesa la entrada, no el desenlace (el widget de ganks saltaba 5 s
-    // antes y oleadas 8; aquí se ve llegar).
-    lead: 8,
+    // antes y oleadas 8; aquí se ve llegar). Si tu rastro te vio pisar la
+    // línea, desde un poco antes de eso: el kill llega ~10 s después (p90 22).
+    lead: m.start != null ? Math.max(8, Math.ceil(m.t - m.start) + 3) : 8,
     title: txt.title,
     detail,
     tone: txt.tone,

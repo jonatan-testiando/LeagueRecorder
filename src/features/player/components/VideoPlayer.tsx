@@ -6,19 +6,20 @@ import { outcome, queueKey, lpDeltas } from "../../../core/matchStats";
 import {
   ArrowLeft, Eye, EyeOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, Flag, Check, RotateCcw,
-  Trash2, FileText,
+  Trash2, FileText, ChevronDown,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
-  Map as MapIcon, Video as VideoIcon
 } from "lucide-react";
 import { getAllErrorClips, getCameraLooks, getMatchDetails, saveMatchComments, setErrorClipReviewed, setEventReviewed, syncMatchNow, type CameraLook, type ErrorClipMetadata } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock, relativeDay } from "../../../core/time";
+import { formatDecimal } from "../../../core/benchmarkFormat";
 import { RouteReplay } from "./RouteReplay";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
 import { MatchTab } from "./MatchTab";
 import { ImpactTab } from "./ImpactTab";
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Button } from "../../../components/ui/Button";
 import { Chip } from "../../../components/ui/Chip";
 import { Segmented } from "../../../components/ui/Segmented";
 import { Tabs } from "../../../components/ui/Tabs";
@@ -28,7 +29,7 @@ import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
 import { useClipExporter } from "../hooks/useClipExporter";
 import {
-  eventMeta, toneLabelAndIcon, ChampFace, IconFinding, type Tone,
+  eventMeta, markOf, toneLabelAndIcon, ChampFace, IconFinding, type Tone, type MarkTone,
 } from "./eventMeta";
 import { buildQueue, analyzerFindings, type Moment, type Finding } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
@@ -38,7 +39,6 @@ import { useLang } from "../../../core/LanguageProvider";
 import { useMatches } from "../../../store/useAppStore";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
-import { mix } from "../../../core/color";
 import {
   DDRAGON_VER,
   streamUrl,
@@ -47,30 +47,26 @@ import {
   CLIP_AFTER,
 } from "./videoPlayerUtils";
 
-// Geometría de los marcadores de la línea de tiempo. Dos filas: con una sola,
-// cualquier pelea de equipo obligaba a desplazar media docena de marcas.
-//
-// Las medidas están atadas al alto real del carril (56 px): las dos filas
-// apiladas lo llenan justo, sin invadir la cabecera ni la tira de saltos de
-// cámara del pie. Si el carril crece, esto se puede ensanchar.
-const MARK_SIZE = 21;        // diámetro del marcador, en px
-const MARK_PITCH = 23;       // separación mínima entre centros de una misma fila
-// Con dos marcas en la misma vertical (lo normal en una pelea), las filas
-// pegadas se leían como una sola mancha. 2 px de aire las separan sin salirse
-// del carril: 12+21 = 33, y la de arriba ocupa de 35 a 56.
-const MARK_ROWS = [12, 35];
-
-// El resto de la línea de tiempo, de arriba abajo: la regla de minutos, la
-// barra de progreso (lo reproducido, en oro), la curva de APM y el carril de
-// los sucesos. El carril sigue midiendo 56 px —las dos filas de arriba lo
-// llenan— y la curva de APM sale de detrás de las marcas a su propia fila: en
-// la misma, las marcas tapaban justo los picos de una pelea.
-const RULER_H = 16;
-const BAR_TOP = RULER_H + 6;
-const BAR_H = 4;
-const APM_H = 32;
-const LANE_H = 56;
-const ROW_GAP = 8;
+// Marcas de la línea de tiempo (Figma, «Marca de línea de tiempo»). El dibujo
+// mide 10 px (el racimo, 26; con dos cifras, 33) y el botón 24 (auditoría
+// A6). Dos marcas se funden en un racimo con número cuando sus dibujos
+// quedarían a menos de 8 px, y nunca a menos de 20 entre centros: así los
+// botones se pisan 4 px como mucho y cada uno conserva 20 propios. Con 24
+// enteros, en una partida normal casi todo acababa en racimos. Las alturas de
+// las filas viven en VideoPlayer.css (--tl-*): aquí solo hace falta el ancho.
+const MARK_W = 10;
+const CLUSTER_W = 26;
+const CLUSTER_W2 = 33;
+const MARK_AIR = 8;
+const MIN_PITCH = 20;
+/** Medio botón de un racimo (30 px), para no salirse de la pista. */
+const CLUSTER_HALF = 15;
+const HIT_HALF = 12;
+/** Cuántos sucesos de un racimo se listan en su etiqueta. */
+const CLUSTER_LIST = 5;
+/** El tinte de un racimo: el que más pesa, y a igualdad, el que más importa
+ *  revisar (una muerte antes que un objetivo). */
+const TONE_ORDER: MarkTone[] = ["loss", "flag", "win", "brand", "neutral"];
 
 /** Un elemento de la línea de tiempo: un suceso de la partida o un hallazgo. */
 interface TimelineItem {
@@ -79,6 +75,166 @@ interface TimelineItem {
   ev?: MatchEvent;
   finding?: Finding;
 }
+
+/** Una marca dibujada: un suceso suelto o un racimo de los que se tocan. */
+interface MarkGroup {
+  items: TimelineItem[];
+  /** Centro, en px desde el borde izquierdo de la pista. */
+  x: number;
+  tone: MarkTone;
+}
+
+const toneOfItem = (it: TimelineItem): MarkTone => (it.finding ? "flag" : markOf(it.ev as MatchEvent).tone);
+
+/**
+ * Menú de velocidad del transporte: un botón «1× velocidad» y la lista encima.
+ * Sustituye al segmentado de cinco botones, que ocupaba 230 px y recortaba la
+ * cabecera y el transporte a 1280 (auditoría I7).
+ *
+ * Es propio y no el `Select`: el menú del Select va en un portal a `body`, y en
+ * pantalla completa solo se ve lo que cuelga del nodo que la ocupa. Este se
+ * abre dentro del propio transporte, con la Elevación 1 de los menús.
+ *
+ * Teclado: ↑ ↓ Intro o Espacio lo abren sobre la velocidad actual; dentro, ↑ ↓
+ * Inicio Fin mueven, Intro o Espacio eligen y Esc cierra. Las teclas que usa
+ * no siguen hasta los atajos del reproductor (el espacio no pausa el vídeo).
+ */
+const SpeedMenu: React.FC<{ rate: number; onChange: (r: number) => void; format: (r: number) => string }> = ({
+  rate,
+  onChange,
+  format,
+}) => {
+  const { t } = useLang();
+  const menuId = `vp-speed-${React.useId().replace(/:/g, "")}`;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const focusOnOpen = useRef<number | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+
+  const close = useCallback((refocus = false) => {
+    setClosing(true);
+    window.clearTimeout(timer.current);
+    // La salida es un fundido de 100 ms (--t-quick-exit): se desmonta después.
+    timer.current = window.setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, 100);
+    if (refocus) btnRef.current?.focus();
+  }, []);
+
+  const openMenu = (focusIdx: number | null) => {
+    window.clearTimeout(timer.current);
+    focusOnOpen.current = focusIdx;
+    setClosing(false);
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open || closing || focusOnOpen.current === null) return;
+    itemRefs.current[focusOnOpen.current]?.focus();
+    focusOnOpen.current = null;
+  }, [open, closing]);
+
+  // Fuera de él, se cierra.
+  useEffect(() => {
+    if (!open || closing) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) close();
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open, closing, close]);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const current = Math.max(0, SPEEDS.indexOf(rate));
+  const choose = (r: number) => {
+    onChange(r);
+    close(true);
+  };
+
+  const onButtonKey = (e: React.KeyboardEvent) => {
+    const isOpen = open && !closing;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      e.stopPropagation();
+      // Abierto con el ratón, el foco sigue en el botón: las flechas lo bajan.
+      if (isOpen) itemRefs.current[current]?.focus();
+      else openMenu(current);
+    } else if (e.key === "Escape" && isOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    }
+  };
+
+  const onItemKey = (e: React.KeyboardEvent, i: number) => {
+    const n = SPEEDS.length;
+    const go = (j: number) => itemRefs.current[(j + n) % n]?.focus();
+    switch (e.key) {
+      case "ArrowDown": go(i + 1); break;
+      case "ArrowUp": go(i - 1); break;
+      case "Home": go(0); break;
+      case "End": go(n - 1); break;
+      case "Enter":
+      case " ": choose(SPEEDS[i]); break;
+      case "Escape": close(true); break;
+      case "Tab": close(); return;
+      default: return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  return (
+    <div className="vp-speed" ref={wrapRef}>
+      <button
+        ref={btnRef}
+        type="button"
+        className="vp-speed__btn"
+        aria-haspopup="menu"
+        aria-expanded={open && !closing}
+        aria-controls={open ? menuId : undefined}
+        title={t("Playback speed")}
+        onClick={() => (open && !closing ? close() : openMenu(null))}
+        onKeyDown={onButtonKey}
+      >
+        <ChevronDown size={16} className="vp-speed__chev" aria-hidden="true" />
+        <span className="vp-speed__val">{format(rate)}</span>
+        <span className="vp-speed__label">{t("speed")}</span>
+      </button>
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          aria-label={t("Playback speed")}
+          className="vp-speed__menu"
+          data-closing={closing || undefined}
+        >
+          {SPEEDS.map((r, i) => (
+            <button
+              key={r}
+              ref={(el) => { itemRefs.current[i] = el; }}
+              type="button"
+              role="menuitemradio"
+              aria-checked={r === rate}
+              tabIndex={-1}
+              className="vp-speed__opt"
+              onClick={() => choose(r)}
+              onKeyDown={(e) => onItemKey(e, i)}
+            >
+              <span>{format(r)}</span>
+              {r === rate && <Check size={14} className="vp-speed__check" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 type Bucket = "good" | "neutral" | "bad";
 
@@ -137,7 +293,7 @@ const SHORTCUTS: [string, string][] = [
   ["Esc", "Leave fullscreen"],
 ];
 
-/** Velocidades del segmentado del transporte. */
+/** Velocidades del menú del transporte. */
 const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
 
 interface VideoPlayerProps {
@@ -174,7 +330,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     activeEventTime,
     setActiveEventTime,
     isFullscreen,
-    isSeeking,
     seekTo,
     jumpToClip: jumpToClipAt,
     handlePlayPause,
@@ -204,7 +359,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     dragThumbTo,
     doExport,
   } = useClipExporter(match);
-  const [hoverClientX, setHoverClientX] = useState<number | null>(null);
+  /** La marca o el racimo bajo el ratón (o con el foco): su etiqueta enseña
+   *  los sucesos con el retrato, en vez del instante suelto. */
+  const [hoverGroup, setHoverGroup] = useState<number | null>(null);
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
   const { t, lang } = useLang();
@@ -408,8 +565,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const pct = x / rect.width;
       setHoverPct(pct);
-      setHoverClientX(e.clientX);
-      
+
       if (clipDragThumb) {
         dragThumbTo(pct * duration);
       } else if (isDragging) {
@@ -847,18 +1003,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     });
     apmLinePath = smoothLinePath(pts);
   }
-  // Cerramos la línea hasta el borde inferior para rellenar el área bajo la curva de APM.
-  const apmAreaPath = apmLinePath ? `${apmLinePath} L 100 100 L 0 100 Z` : "";
 
-  // Una marca por suceso: se acabaron los grupos con contador. Un doble asesinato
-  // son dos kills, no una marca con un "2" encima, y lo mismo cada asistencia.
-  //
-  // Para que no se pisen: la segunda de dos marcas juntas sube a la fila de
-  // arriba, y solo cuando ni así caben se desplaza lo justo — con una guía que la
-  // ata a su instante real, porque el marcador puede mentir de sitio pero no de
-  // cuándo.
-  // La colocación de marcadores se hace en píxeles: el solapamiento es un hecho
-  // de pantalla, no de porcentaje, y depende de lo ancha que esté la ventana.
+  // Marcas de la línea de tiempo: una forma pequeña por suceso y, cuando dos se
+  // tocarían, un racimo con el número. Antes eran retratos de 20 px en dos
+  // filas que se pisaban en cada pelea, con guías cruzadas hasta su instante
+  // (auditoría V6); el retrato sale ahora en la etiqueta al pasar por encima.
+  // La colocación se hace en píxeles: el solapamiento es un hecho de pantalla,
+  // no de porcentaje, y depende de lo ancha que esté la ventana.
   const [trackSize, setTrackSize] = useState({ w: 0, h: 0 });
   useEffect(() => {
     const el = progressBarRef.current;
@@ -875,65 +1026,48 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     // descuadre que veía el usuario al volver del fullscreen.
   }, [isFullscreen]);
 
-  const eventMarks = React.useMemo(() => {
+  const markGroups = React.useMemo<MarkGroup[]>(() => {
     if (!isFinite(duration) || duration <= 0) return [];
     const w = trackSize.w || 1000;
-    const half = MARK_SIZE / 2;
-    const sitio = (t: number) => Math.min(w - half, Math.max(half, (t / duration) * w));
-    const marcas = timelineItems.map((it) => ({ it, exactX: sitio(it.time) }));
+    const drawn = (n: number) => (n === 1 ? MARK_W : n < 10 ? CLUSTER_W : CLUSTER_W2);
+    const half = (n: number) => (n === 1 ? HIT_HALF : CLUSTER_HALF);
+    // Centro de un grupo: la media de sus instantes reales, dentro de la pista.
+    const centro = (g: { n: number; sum: number }) =>
+      Math.min(w - half(g.n), Math.max(half(g.n), g.sum / g.n));
 
-    // Racimos: sucesos cuyos INSTANTES REALES caen tan juntos que sus marcas se
-    // pisarían. Se encadena por vecindad de tiempo, nunca por dónde acabó la
-    // marca anterior — que era el fallo de la versión anterior: al empujar cada
-    // marca a la derecha, la siguiente medía contra la posición ya empujada y
-    // heredaba el desplazamiento. En una partida de 57 sucesos eso arrastraba
-    // TODAS las marcas (hasta 128 px, casi tres minutos de partida) y subía a la
-    // fila de arriba marcas que no tenían a nadie al lado.
-    const racimos: { it: TimelineItem; exactX: number }[][] = [];
-    for (const m of marcas) {
-      const ult = racimos[racimos.length - 1];
-      if (ult && m.exactX - ult[ult.length - 1].exactX < MARK_PITCH) ult.push(m);
-      else racimos.push([m]);
-    }
-
-    // Cada racimo se dibuja en columnas de dos —las dos filas se tocan sin
-    // solaparse, así que caben dos marcas en la misma vertical— y se centra en
-    // su propio instante. Centrar en vez de empujar reparte el error a los dos
-    // lados y deja el racimo encima del momento en que pasó.
-    const ancho = (n: number) => (Math.ceil(n / 2) - 1) * MARK_PITCH;
-    const centro = (g: typeof marcas) => (g[0].exactX + g[g.length - 1].exactX) / 2;
-
-    // Dos racimos ya centrados pueden pisarse entre ellos. En vez de fundirlos
-    // —que engorda el bloque, y el bloque gordo se come al siguiente hasta
-    // formar un bloque de media partida— se separan repartiendo el solape a
-    // partes iguales entre los dos. Así el ajuste se queda entre vecinos y cada
-    // racimo sigue encima de su momento.
-    const anchos = racimos.map((g) => ancho(g.length));
-    const inicios = racimos.map((g, i) => centro(g) - anchos[i] / 2);
-    const limitar = (x: number, i: number) =>
-      Math.max(half, Math.min(w - half - anchos[i], x));
-    for (let vuelta = 0; vuelta < 12; vuelta++) {
-      let movido = false;
-      for (let i = 0; i < racimos.length - 1; i++) {
-        const solape = inicios[i] + anchos[i] + MARK_PITCH - inicios[i + 1];
-        if (solape > 0.5) {
-          inicios[i] = limitar(inicios[i] - solape / 2, i);
-          inicios[i + 1] = limitar(inicios[i + 1] + solape / 2, i + 1);
-          movido = true;
-        }
+    // Se funden los vecinos que se tocarían. Fundir corre el centro hacia la
+    // media, que puede tocar al de detrás: por eso se vuelve un paso atrás
+    // tras cada fusión. Cada vuelta quita un grupo, así que acaba. A
+    // diferencia del empuje de antes, ninguna marca se aparta de su instante:
+    // o está en su sitio o está dentro del racimo de su momento.
+    const gs = timelineItems.map((it) => ({ items: [it], n: 1, sum: (it.time / duration) * w }));
+    let i = 0;
+    while (i < gs.length - 1) {
+      const a = gs[i];
+      const b = gs[i + 1];
+      const pitch = Math.max(MIN_PITCH, (drawn(a.n) + drawn(b.n)) / 2 + MARK_AIR);
+      if (centro(b) - centro(a) < pitch) {
+        gs.splice(i, 2, { items: [...a.items, ...b.items], n: a.n + b.n, sum: a.sum + b.sum });
+        i = Math.max(0, i - 1);
+      } else {
+        i++;
       }
-      if (!movido) break;
     }
 
-    return racimos.flatMap((g, gi) =>
-      g.map((m, i) => ({
-        it: m.it,
-        exactX: m.exactX,
-        x: limitar(inicios[gi], gi) + (i >> 1) * MARK_PITCH,
-        bottom: MARK_ROWS[i & 1],
-      }))
-    );
+    return gs.map((g) => {
+      const counts = new Map<MarkTone, number>();
+      for (const it of g.items) {
+        const tone = toneOfItem(it);
+        counts.set(tone, (counts.get(tone) ?? 0) + 1);
+      }
+      const tone = TONE_ORDER.reduce((best, x) => ((counts.get(x) ?? 0) > (counts.get(best) ?? 0) ? x : best));
+      return { items: g.items, x: centro(g), tone };
+    });
   }, [timelineItems, duration, trackSize.w]);
+
+  // Si cambia la colocación (otra ventana, otra partida), la etiqueta abierta
+  // ya no señala al mismo racimo.
+  useEffect(() => setHoverGroup(null), [markGroups]);
 
   const result = outcome(match.result);
   const isWin = result === "victory";
@@ -947,251 +1081,213 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   // que fue lo que señaló el usuario). Allí va compacta, sin la curva de APM,
   // que taparía media imagen.
   //
-  // Regla, barra, curva y carril son UNA superficie de búsqueda con un solo
-  // ancho —el que mide `progressBarRef` para colocar los racimos—, así que
-  // pinchar en cualquiera de las cuatro busca ese instante.
-  const laneTop = (compact: boolean) => BAR_TOP + BAR_H + ROW_GAP + (compact ? 0 : APM_H + ROW_GAP);
-  /** Aro del retrato: a quién matas en jade, quién te mata en rojo, la asistencia en jade tenue. */
-  const markRing = (ev: MatchEvent): string =>
-    ev.subtype === "death"
-      ? "var(--loss)"
-      : ev.subtype === "assist"
-        ? "color-mix(in srgb, var(--win) 45%, transparent)"
-        : "var(--win)";
+  // Regla, curva y carriles son UNA superficie de búsqueda con un solo ancho
+  // —el que mide `progressBarRef` para colocar las marcas—, así que pinchar en
+  // cualquiera busca ese instante. Las alturas de las filas son de
+  // VideoPlayer.css (--tl-*), que las comparte con los nombres de la izquierda.
   const hasLookStrip = duration > 0 && (cameraLooks.some((l) => l.lane) || cameraSnaps.length > 0);
+  const pct = (secs: number) => `${(secs / duration) * 100}%`;
+
+  /** Una fila de la etiqueta: la cara del campeón (o el glifo), la frase y la hora. */
+  const tipRow = (it: TimelineItem) => {
+    if (it.finding) {
+      return (
+        <div key={it.key} className="vp-tip__ev">
+          <span className="vp-tip__glyph" style={{ color: "var(--flag)" }}>
+            <IconFinding size={14} />
+          </span>
+          <span className="vp-tip__text">{it.finding.title}</span>
+          <span className="t-time vp-tip__at">{gclock(it.time)}</span>
+        </div>
+      );
+    }
+    const ev = it.ev as MatchEvent;
+    const meta = eventMeta(ev, 14);
+    const champ = eventChampion(ev, participants);
+    const desc = describeEvent(withChampionNames(ev, participants), t);
+    const glyph = (
+      <span className="vp-tip__glyph" style={{ color: meta.color }}>
+        {meta.icon}
+      </span>
+    );
+    return (
+      <div key={it.key} className="vp-tip__ev">
+        {champ ? <ChampFace champion={champ} size={20} className="vp-tip__face" fallback={glyph} /> : glyph}
+        <span className="vp-tip__text">{desc || t(meta.label)}</span>
+        <span className="t-time vp-tip__at">{gclock(ev.time)}</span>
+      </div>
+    );
+  };
+
+  /** Lo que dice una marca a un lector de pantalla. */
+  const itemLabel = (it: TimelineItem) => {
+    if (it.finding) return `${gclock(it.finding.time)} · ${it.finding.title}`;
+    const ev = it.ev as MatchEvent;
+    const desc = describeEvent(withChampionNames(ev, participants), t);
+    return [`${gclock(ev.time)} · ${t(eventMeta(ev, 12).label)}`, desc].filter(Boolean).join(" – ");
+  };
 
   const renderTrack = (compact: boolean) => {
-    const top = laneTop(compact);
-    const move = isSeeking ? "var(--t-base) var(--e-move)" : "0s";
+    const w = trackSize.w || 1000;
+    const group = hoverGroup !== null ? markGroups[hoverGroup] : undefined;
+    // La etiqueta: la del racimo bajo el ratón (o con el foco) o, si no, la
+    // del instante bajo el ratón. Pegada a un borde no cabe centrada: se ancla
+    // por el lado que tiene sitio.
+    const tipX = group ? group.x : hoverPct !== null ? hoverPct * w : null;
+    const tipAlign = tipX === null || (tipX >= 120 && tipX <= w - 120) ? undefined : tipX < 120 ? "start" : "end";
     return (
       <div
-        className="vp-track"
+        className={compact ? "vp-track vp-track--compact" : "vp-track"}
+        data-looks={hasLookStrip || undefined}
         ref={progressBarRef}
-        style={{ height: top + LANE_H }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerLeave={handlePointerLeave}
       >
-        {/* Regla de minutos, generada según la duración real. El último rótulo
-            es la duración, pegado a la derecha; el que lo pisaría se calla. */}
-        <div className="vp-track__ruler" style={{ height: RULER_H }}>
+        {/* Regla de minutos, en tiempo de partida y en mono de 12. El último
+            rótulo es la duración, pegado a la derecha; el que lo pisaría se
+            calla. */}
+        <div className="vp-track__ruler">
           {axisMarks
-            .filter((m) => ((duration - m) / duration) * (trackSize.w || 1000) >= 68)
-            .map((m) => {
-              // El 00:00 del juego cae a unos segundos del borde (la pantalla
-              // de carga): si no cabe centrado, se pega a la izquierda.
-              const pegado = (m / duration) * (trackSize.w || 1000) < 24;
-              return (
-                <span
-                  key={m}
-                  className="u-time"
-                  style={{ left: `${(m / duration) * 100}%`, transform: pegado ? "none" : "translateX(-50%)" }}
-                >
-                  {gclock(m)}
-                </span>
-              );
-            })}
+            .filter((m) => ((duration - m) / duration) * w >= 68)
+            .map((m) => (
+              <span
+                key={m}
+                className="t-time"
+                // El 00:00 del juego cae a unos segundos del borde (la pantalla
+                // de carga): si no cabe centrado, se pega a la izquierda.
+                data-edge={(m / duration) * w < 24 ? "start" : undefined}
+                style={{ left: pct(m) }}
+              >
+                {gclock(m)}
+              </span>
+            ))}
           {duration > 0 && (
-            <span className="u-time" style={{ left: "100%", transform: "translateX(-100%)" }}>
+            <span className="t-time" data-edge="end" style={{ left: "100%" }}>
               {gclock(duration)}
             </span>
           )}
         </div>
 
-        {/* Rejilla: una línea tenue por rótulo, de la barra al pie. */}
-        {duration > 0 &&
-          axisMarks.slice(1).map((m) => (
-            <i key={m} className="vp-track__grid" style={{ left: `${(m / duration) * 100}%`, top: BAR_TOP }} />
-          ))}
-
-        {/* Progreso: lo reproducido, en oro. */}
-        <div className="vp-track__bar" style={{ top: BAR_TOP, height: BAR_H }}>
-          <div className="vp-track__played" style={{ width: `${progressPct}%`, transition: `width ${move}` }} />
-        </div>
-
-        {/* Curva de APM (línea + área). */}
+        {/* Curva de APM: ambiental, una línea sin tinte. */}
         {!compact && apmSeries.length >= 2 && (
-          <svg
-            className="vp-track__apm"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            style={{ top: BAR_TOP + BAR_H + ROW_GAP, height: APM_H }}
-            aria-hidden="true"
-          >
-            <path d={apmAreaPath} fill="var(--apm-fill)" stroke="none" />
+          <svg className="vp-track__apm" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
             <path d={apmLinePath} fill="none" stroke="var(--apm-line)" strokeWidth={1.25} vectorEffect="non-scaling-stroke" />
           </svg>
         )}
 
-        {/* El carril de los sucesos: dos filas de marcas y, al pie, las miradas
-            al mapa. */}
-        <div className="vp-track__lane" style={{ top, height: LANE_H }}>
-          {/* Miradas al mapa. Los huecos anchos son exactamente los minutos en
-              que no miraste.
-
-              Tres carriles en vez de uno: con 250 miradas por partida una sola
-              fila era un peine ilegible, y partirla por carril baja la densidad
-              Y dice de qué lado tienes el punto ciego — el hueco se ve en su
-              fila. De arriba abajo, top / mid / bot, como en el mapa. Las
-              miradas que no caen en ningún carril (jungla profunda, base, o las
-              teclas de cámara, que no saben adónde) no se pintan aquí. */}
-          {duration > 0 && cameraLooks.some((l) => l.lane) ? (
-            <div style={styles.snapStrip}>
-              {(["top", "mid", "bot"] as const).map((carril, fila) => (
-                <div key={carril} style={{ ...styles.snapLane, top: `${fila * 4}px` }}>
-                  {cameraLooks
-                    .filter((l) => l.lane === carril)
-                    .map((l, i) => (
-                      <div
-                        key={i}
-                        style={{ ...styles.snapTick, left: `${(l.t / duration) * 100}%` }}
-                        title={`${carril} · ${gclock(l.t)}`}
-                      />
-                    ))}
-                </div>
-              ))}
-            </div>
-          ) : duration > 0 && cameraSnaps.length > 0 ? (
-            <div style={styles.snapStrip}>
-              {cameraSnaps.map((s, i) => (
-                <div key={i} style={{ ...styles.snapTick, left: `${(s / duration) * 100}%` }} />
-              ))}
-            </div>
-          ) : null}
-
-          {/* Guías: solo las dibuja el marcador que ha tenido que apartarse,
-              y van de su instante real al pie del propio marcador. */}
-          {duration > 0 && trackSize.w > 0 && (
-            <svg className="vp-track__guides" viewBox={`0 0 ${trackSize.w} ${LANE_H}`} aria-hidden="true">
-              {eventMarks
-                .filter((m) => Math.abs(m.x - m.exactX) > 1.5)
-                .map((m, i) => (
-                  <line
-                    key={i}
-                    x1={m.exactX}
-                    y1={LANE_H - 1}
-                    x2={m.x}
-                    y2={LANE_H - m.bottom}
-                    stroke={mix(m.it.ev ? eventMeta(m.it.ev).color : "var(--flag)", 40)}
-                    strokeWidth={1}
-                  />
-                ))}
-            </svg>
-          )}
-
-          {/* Marcas: una por suceso. Kills, muertes y asistencias llevan la cara
-              del campeón del otro lado cuando se sabe; objetivos en oro; los
-              hallazgos del analizador, rombo violeta. */}
+        {/* Sucesos: una marca por suceso o, si se tocarían, un racimo con su
+            número. El dibujo mide 8-10 px y el botón 24 (A6). */}
+        <div className="vp-track__lane">
           {duration > 0 &&
-            eventMarks.map((m, i) => {
-              const { it } = m;
-              const isActive = it.time === activeEventTime;
-              const place: React.CSSProperties = {
-                left: `${m.x}px`,
-                bottom: `${m.bottom}px`,
-                width: `${MARK_SIZE}px`,
-                height: `${MARK_SIZE}px`,
-                zIndex: isActive ? 10 : 5,
+            markGroups.map((g, gi) => {
+              const first = g.items[0];
+              const common = {
+                type: "button" as const,
+                "data-tone": g.tone,
+                "data-on": g.items.some((it) => it.time === activeEventTime) || undefined,
+                style: { left: `${g.x}px` },
+                onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
+                onPointerEnter: () => setHoverGroup(gi),
+                onPointerLeave: () => setHoverGroup((h) => (h === gi ? null : h)),
+                onFocus: () => setHoverGroup(gi),
+                onBlur: () => setHoverGroup((h) => (h === gi ? null : h)),
+                // Un racimo salta a su primer suceso: desde ahí, N recorre el resto.
+                onClick: (e: React.MouseEvent) => {
+                  e.stopPropagation();
+                  jumpToClip(first.time);
+                },
               };
-              if (it.finding) {
-                const f = it.finding;
-                const label = `${gclock(f.time)} · ${f.title}`;
+              if (g.items.length > 1) {
                 return (
                   <button
-                    key={`${it.key}:${i}`}
-                    type="button"
-                    className="vp-mark vp-mark--finding"
-                    data-on={isActive || undefined}
-                    style={place}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => { e.stopPropagation(); jumpToClip(f.time); }}
-                    aria-label={label}
-                    title={`${label} – ${f.detail}`}
+                    key={first.key}
+                    {...common}
+                    className="vp-mark vp-mark--cluster"
+                    aria-label={`${t("{n} moments", { n: g.items.length })}: ${g.items.map(itemLabel).join("; ")}`}
                   >
-                    <span className="vp-mark__diamond" />
+                    <span className="vp-mark__cluster">
+                      <i aria-hidden="true" />
+                      {g.items.length}
+                    </span>
                   </button>
                 );
               }
-              const ev = it.ev as MatchEvent;
-              const meta = eventMeta(ev, 12);
-              const champ = eventChampion(ev, participants);
-              const desc = describeEvent(withChampionNames(ev, participants), t);
-              const label = [`${gclock(ev.time)} · ${t(meta.label)}`, desc].filter(Boolean).join(" – ");
-              const glyph = <span className="vp-mark__glyph">{meta.icon}</span>;
               return (
                 <button
-                  key={`${it.key}:${i}`}
-                  type="button"
+                  key={first.key}
+                  {...common}
                   className="vp-mark"
-                  data-on={isActive || undefined}
-                  style={{ ...place, "--mark": meta.color, "--ring": champ ? markRing(ev) : meta.color } as React.CSSProperties}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => { e.stopPropagation(); jumpToClip(ev.time); }}
-                  aria-label={label}
-                  title={label}
+                  data-shape={first.finding ? "diamond" : markOf(first.ev as MatchEvent).shape}
+                  aria-label={itemLabel(first)}
                 >
-                  {champ ? (
-                    <ChampFace champion={champ} size={MARK_SIZE} className="vp-mark__face" fallback={glyph} />
-                  ) : (
-                    glyph
-                  )}
+                  <i className="vp-mark__shape" aria-hidden="true" />
                 </button>
               );
             })}
         </div>
 
-        {/* Cabezal: línea y asa, en oro. Durante la reproducción va pegado al
-            vídeo (sin transición); cuando el salto lo provoca un suceso o una
-            nota, recorre la distancia en --t-base para que se vea hacia qué
-            lado y cuánto te has movido dentro de la partida. */}
-        <div className="vp-track__head" style={{ left: `${progressPct}%`, top: BAR_TOP - 3, transition: `left ${move}` }} />
-        <div
-          className="vp-track__knob"
-          style={{ left: `${progressPct}%`, top: BAR_TOP + BAR_H / 2 - 6, transition: `left ${move}` }}
-        />
+        {/* Miradas al mapa. Los huecos anchos son exactamente los minutos en
+            que no miraste.
 
-        {hoverPct !== null && (
-          <div className="vp-track__hover" style={{ left: `${hoverPct * 100}%`, top: BAR_TOP - 3 }} />
+            Tres carriles en vez de uno: con 250 miradas por partida una sola
+            fila era un peine ilegible, y partirla por carril baja la densidad
+            Y dice de qué lado tienes el punto ciego — el hueco se ve en su
+            fila. De arriba abajo, top / mid / bot, como en el mapa. Las
+            miradas que no caen en ningún carril (jungla profunda, base, o las
+            teclas de cámara, que no saben adónde) no se pintan aquí. */}
+        {hasLookStrip && (
+          <div className="vp-track__looks" aria-hidden="true">
+            {cameraLooks.some((l) => l.lane) ? (
+              (["top", "mid", "bot"] as const).map((carril) => (
+                <div key={carril} className="vp-track__looksRow">
+                  {cameraLooks
+                    .filter((l) => l.lane === carril)
+                    .map((l, i) => (
+                      <i key={i} style={{ left: pct(l.t) }} />
+                    ))}
+                </div>
+              ))
+            ) : (
+              <div className="vp-track__looksRow">
+                {cameraSnaps.map((s, i) => (
+                  <i key={i} style={{ left: pct(s) }} />
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Etiqueta al pasar por encima. Cuelga de la propia tira, que es a lo
-            que se refiere: en `position: fixed` con una altura a fuego flotaba
-            en mitad del vídeo en pantalla completa. */}
-        {hoverPct !== null && hoverClientX !== null && (
-          <div className="vp-tip" style={{ left: `${hoverPct * 100}%` }}>
-            <div className="vp-tip__head">
-              <span className="u-time">{gclock(hoverPct * duration)}</span>
-              {apmSeries.length > 0 && (
-                <span className="u-metric vp-tip__apm">
-                  {t("{n} APM", {
-                    n: Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor(hoverPct * apmSeries.length))]),
-                  })}
-                </span>
-              )}
-            </div>
-            {timelineItems
-              .filter((it) => Math.abs(it.time - hoverPct * duration) < duration * 0.01)
-              .slice(0, 1)
-              .map((it) => {
-                if (it.finding) {
-                  return (
-                    <div key={it.key} className="vp-tip__ev" style={{ color: "var(--flag)" }}>
-                      <IconFinding size={12} />
-                      <span>{it.finding.title}</span>
-                    </div>
-                  );
-                }
-                const ev = it.ev as MatchEvent;
-                const meta = eventMeta(ev, 12);
-                const desc = describeEvent(withChampionNames(ev, participants), t);
-                return (
-                  <div key={it.key} className="vp-tip__ev" style={{ color: meta.color }}>
-                    {meta.icon}
-                    <span>{desc || t(meta.label)}</span>
-                  </div>
-                );
-              })}
+        {/* Cursor de reproducción, en oro. Lo mueven la mano o el vídeo: va
+            sin transición, también en los saltos (latencia cero). */}
+        <div className="vp-track__head" style={{ left: `${progressPct}%` }} />
+        {hoverPct !== null && <div className="vp-track__hover" style={{ left: `${hoverPct * 100}%` }} />}
+
+        {/* Etiqueta. Cuelga de la propia tira, que es a lo que se refiere: en
+            `position: fixed` con una altura a fuego flotaba en mitad del vídeo
+            en pantalla completa. */}
+        {tipX !== null && (
+          <div className="vp-tip" data-align={tipAlign} style={{ left: `${tipX}px` }}>
+            {group ? (
+              <>
+                {group.items.slice(0, CLUSTER_LIST).map(tipRow)}
+                {group.items.length > CLUSTER_LIST && (
+                  <span className="vp-tip__more">{t("+{n} more", { n: group.items.length - CLUSTER_LIST })}</span>
+                )}
+              </>
+            ) : (
+              <div className="vp-tip__head">
+                <span className="t-time">{gclock((hoverPct ?? 0) * duration)}</span>
+                {apmSeries.length > 0 && (
+                  <span className="vp-tip__apm">
+                    {t("{n} APM", {
+                      n: Math.round(apmSeries[Math.min(apmSeries.length - 1, Math.floor((hoverPct ?? 0) * apmSeries.length))]),
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1200,21 +1296,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         {isClippingMode && duration > 0 && (
           <div
             className="vp-track__clip"
-            style={{
-              top: BAR_TOP - 3,
-              left: `${(clipStart / duration) * 100}%`,
-              width: `${((clipEnd - clipStart) / duration) * 100}%`,
-              "--clip": exportType === "clip" ? "var(--cool)" : "var(--loss)",
-            } as React.CSSProperties}
+            data-kind={exportType}
+            style={{ left: pct(clipStart), width: pct(clipEnd - clipStart) }}
           >
-            <div
-              onPointerDown={(e) => handleThumbPointerDown(e, "start")}
-              style={{ position: "absolute", left: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }}
-            />
-            <div
-              onPointerDown={(e) => handleThumbPointerDown(e, "end")}
-              style={{ position: "absolute", right: -6, top: 0, bottom: 0, width: 12, cursor: "ew-resize", zIndex: 11 }}
-            />
+            <div className="vp-track__clipThumb" data-side="start" onPointerDown={(e) => handleThumbPointerDown(e, "start")} />
+            <div className="vp-track__clipThumb" data-side="end" onPointerDown={(e) => handleThumbPointerDown(e, "end")} />
           </div>
         )}
       </div>
@@ -1237,22 +1323,22 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       className="vp-looks"
       title={t("How often you moved the camera off yourself: minimap clicks and ally camera keys, counted from what you actually pressed. 'Blind' is the longest stretch without a single look.")}
     >
-      <Eye size={14} />
-      <span className="u-metric">{snapSummary.per_minute.toFixed(1)}/min</span>
+      <Eye size={16} aria-hidden="true" />
+      <span className="u-metric">{formatDecimal(snapSummary.per_minute)}/min</span>
       <span aria-hidden="true">·</span>
-      <span className="u-metric" style={{ color: snapSummary.longest_gap_secs > 120 ? "var(--loss)" : "var(--win)" }}>
+      <span className="u-metric vp-looks__gap" data-long={snapSummary.longest_gap_secs > 120 || undefined}>
         {clock(snapSummary.longest_gap_secs)} {t("blind")}
       </span>
     </span>
   ) : (
     <button
       type="button"
-      className="vp-tbtn vp-tbtn--text"
+      className="vp-tbtn"
       onClick={runSnapAnalysis}
       disabled={snapBusy}
       title={t("Scan the video for camera moves. Only needed for imported VODs: a game recorded here already knows this from your clicks and keys.")}
     >
-      <Eye size={14} />
+      <Eye size={16} aria-hidden="true" />
       <span className="vp-tbtn__label">
         {snapBusy ? t("Scanning {pct}%", { pct: snapPct.toFixed(0) }) : t("Camera moves")}
       </span>
@@ -1273,32 +1359,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       </button>
       <button
         type="button"
-        className="vp-tbtn"
+        className="vp-tbtn vp-tbtn--skip"
         onClick={() => goToAdjacentEvent(-1)}
         title={t("Previous moment")}
         aria-label={t("Previous moment")}
         aria-keyshortcuts="P"
       >
-        <SkipBack size={16} />
+        <SkipBack size={18} />
         <kbd className="u-kbd">P</kbd>
       </button>
       <button
         type="button"
-        className="vp-tbtn"
+        className="vp-tbtn vp-tbtn--skip"
         onClick={() => goToAdjacentEvent(1)}
         title={t("Next moment")}
         aria-label={t("Next moment")}
         aria-keyshortcuts="N"
       >
-        <SkipForward size={16} />
+        <SkipForward size={18} />
         <kbd className="u-kbd">N</kbd>
       </button>
 
       {/* Centésimas: en una herramienta de revisión hace falta señalar un
-          instante, no un minuto. */}
-      <span className="u-time vp-clock">
-        <b>{gclock(currentTime)}.{String(Math.floor((Math.abs(currentTime - gameOffset) % 1) * 100)).padStart(2, "0")}</b>
-        <span> / {duration > 0 ? gclock(duration) : clock(0)}</span>
+          instante, no un minuto (las flechas , y . avanzan de fotograma). */}
+      <span className="t-time vp-clock">
+        {gclock(currentTime)}
+        <span className="vp-clock__cs">
+          .{String(Math.floor((Math.abs(currentTime - gameOffset) % 1) * 100)).padStart(2, "0")}
+        </span>
+        <span className="vp-clock__total"> / {duration > 0 ? gclock(duration) : clock(0)}</span>
       </span>
 
       <span className="vp-transport__fill" />
@@ -1306,21 +1395,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       {/* Lo primero que cede si no cabe: se queda en el icono. */}
       {!isFullscreen && <span className="vp-transport__aux">{lookStats}</span>}
 
-      {/* Segmentado y no desplegable: durante una revisión la velocidad se
-          cambia constantemente y un desplegable son dos clics cada vez. */}
-      <span className="vp-speeds" role="group" aria-label={t("Playback speed")}>
-        {SPEEDS.map((r) => (
-          <button
-            key={r}
-            type="button"
-            onClick={() => setPlaybackRate(r)}
-            aria-pressed={playbackRate === r}
-            data-on={playbackRate === r ? "" : undefined}
-          >
-            {speedLabel(r)}
-          </button>
-        ))}
-      </span>
+      {/* Un botón «1× velocidad» con su menú: el segmentado de cinco botones
+          ocupaba 230 px y era lo que recortaba el transporte a 1280. */}
+      <SpeedMenu rate={playbackRate} onChange={setPlaybackRate} format={speedLabel} />
 
       <div className="tp-vol vp-vol">
         <button
@@ -1331,7 +1408,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           aria-label={t(muted ? "Unmute" : "Mute")}
           aria-keyshortcuts="M"
         >
-          {muted || volume === 0 ? <VolumeX size={17} /> : volume < 0.5 ? <Volume1 size={17} /> : <Volume2 size={17} />}
+          {muted || volume === 0 ? <VolumeX size={18} /> : volume < 0.5 ? <Volume1 size={18} /> : <Volume2 size={18} />}
         </button>
         <input
           type="range" min="0" max="1" step="0.05"
@@ -1344,7 +1421,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
       <details className="tp-more vp-more">
         <summary title={t("Playback settings")} aria-label={t("Playback settings")}>
-          <MoreHorizontal size={17} />
+          <MoreHorizontal size={18} />
         </summary>
         <div className="tp-pop">
           <label className="tp-pop__row">
@@ -1367,7 +1444,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 aria-label={t("Mouse trail sync")}
                 onChange={(e) => updateMouseSync(parseFloat(e.target.value))}
               />
-              <span className="tp-pop__val">{mouseSync > 0 ? `+${mouseSync.toFixed(1)}` : mouseSync.toFixed(1)}s</span>
+              <span className="tp-pop__val">{mouseSync > 0 ? `+${formatDecimal(mouseSync)}` : formatDecimal(mouseSync)} s</span>
             </div>
           </div>
           {/* Los atajos existían y no los sabía nadie: no estaban escritos en
@@ -1394,7 +1471,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         aria-label={t("Fullscreen")}
         aria-keyshortcuts="F"
       >
-        <Maximize size={17} />
+        <Maximize size={18} />
       </button>
     </div>
   );
@@ -1410,31 +1487,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           total: participants.length || 10,
         })
       : null;
+  const day = relativeDay(match.date, t);
   const when = (() => {
-    const day = relativeDay(match.date, t);
     const d = new Date(match.date.replace(" ", "T"));
     if (Number.isNaN(d.getTime())) return day;
     return `${day} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   })();
-  const metaLine = [
-    match.is_vod ? null : t(queueKey(match.queue)),
-    // La duración de la PARTIDA, no la del vídeo (que suma la pantalla de carga).
-    // `game_duration` guarda lo que duró la GRABACIÓN (30:40 con 58 s de
-    // pantalla de carga): con el vídeo cargado manda la misma cuenta que el
-    // transporte, para que no digan dos duraciones distintas.
-    duration > 0 ? gclock(duration) : clock(match.game_duration),
-    when,
-    rankText,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const resultTone = match.is_vod
-    ? "var(--cool)"
-    : result === "victory"
-      ? "var(--win)"
-      : result === "defeat"
-        ? "var(--loss)"
-        : "var(--hair-strong)";
+  const queueText = match.is_vod ? null : t(queueKey(match.queue));
+  // La duración de la PARTIDA, no la del vídeo (que suma la pantalla de carga).
+  // `game_duration` guarda lo que duró la GRABACIÓN (30:40 con 58 s de
+  // pantalla de carga): con el vídeo cargado manda la misma cuenta que el
+  // transporte, para que no digan dos duraciones distintas.
+  const durationText = duration > 0 ? gclock(duration) : clock(match.game_duration);
+  // La línea se queda en cola, duración y día, que caben a 1280 sin cortarse
+  // (auditoría I7: «7.º de 10 por…» se perdía). La hora y el puesto por
+  // impacto van en la etiqueta al pasar por encima.
+  const metaLine = [queueText, durationText, day].filter(Boolean).join(" · ");
+  const metaDetail = [queueText, `${durationText} · ${when}`, rankText].filter(Boolean) as string[];
+  const resultState = match.is_vod ? "vod" : result === "victory" ? "win" : result === "defeat" ? "loss" : undefined;
   const doneCount = moments.filter((m) => m.reviewed).length;
 
   // El aviso del analizador. Sobre el vídeo, abajo a la izquierda; en pantalla
@@ -1480,32 +1550,43 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       <header className="vp-top">
         {onBack && (
           <button type="button" className="vp-iconbtn" onClick={onBack} title={t("Back")} aria-label={t("Back")}>
-            <ArrowLeft size={16} />
+            <ArrowLeft size={18} />
           </button>
         )}
-        <span className="vp-top__face" style={{ boxShadow: `0 0 0 2px ${resultTone}` }}>
-          <ChampionAvatar champion={match.champion} size={36} />
+        <span className="vp-top__face">
+          <ChampionAvatar champion={match.champion} size={32} />
         </span>
         <div className="vp-top__block">
           <div className="vp-top__title">
             <h2>{match.champion}</h2>
-            {(match.is_vod || result !== "unknown") && (
-              <span className="vp-top__result" style={{ color: resultTone }}>
+            {resultState && (
+              <span className="vp-top__result" data-result={resultState}>
                 {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
               </span>
             )}
             {lpDelta != null && lpDelta !== 0 && (
-              <span className="vp-top__lp" data-down={lpDelta < 0 || undefined}>
+              <Chip tone={lpDelta > 0 ? "win" : "loss"} className="vp-top__lp">
                 {lpDelta > 0 ? "+" : "−"}{Math.abs(lpDelta)} LP
-              </span>
+              </Chip>
             )}
           </div>
-          <span className="vp-top__meta">{metaLine}</span>
+          {/* El detalle (hora, puesto por impacto) en una etiqueta: aparece
+              tras 400 ms en reposo, o con el foco del teclado. */}
+          <span className="vp-top__meta" tabIndex={0} aria-describedby="vp-top-detail">
+            {metaLine}
+          </span>
+          <span className="vp-hint" id="vp-top-detail" role="tooltip">
+            {metaDetail.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </span>
         </div>
         <span className="vp-top__fill" />
         {moments.length > 0 && (
           <div className="vp-top__progress">
-            <span>{t("{done} of {total} moments reviewed", { done: doneCount, total: moments.length })}</span>
+            <span className="vp-top__progressText">
+              {t("{done} of {total} reviewed", { done: doneCount, total: moments.length })}
+            </span>
             <div
               className="vp-meter"
               role="progressbar"
@@ -1513,8 +1594,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               aria-valuemin={0}
               aria-valuemax={moments.length}
               aria-valuenow={doneCount}
+              style={{ "--p": doneCount / moments.length } as React.CSSProperties}
             >
-              <div style={{ width: `${(doneCount / moments.length) * 100}%` }} />
+              <div />
             </div>
           </div>
         )}
@@ -1523,54 +1605,45 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             {/* Vídeo o Mapa, a la vista y no escondido en la barra de
                 transporte: el Mapa es donde viven las estadísticas de mapa
                 (cada fila de Partida e Impacto lo abre en su momento). */}
-            <div className="vp-stage" role="group" aria-label={t("View")}>
-              <button
-                type="button"
-                className="vp-stage__btn"
-                aria-pressed={stage === "video"}
-                onClick={() => setStage("video")}
-                title={t("The video on its own")}
-              >
-                <VideoIcon size={15} />
-                {t("Video")}
-              </button>
-              <button
-                type="button"
-                className="vp-stage__btn"
-                aria-pressed={stage === "route"}
-                aria-keyshortcuts="R"
-                onClick={() => setStage("route")}
-                title={t("Your video next to your recording's minimap, with your trail and the waves")}
-              >
-                <MapIcon size={15} />
-                {t("Map")}
-                <kbd className="u-kbd">R</kbd>
-              </button>
-            </div>
-            <span className="vp-top__sep" aria-hidden="true" />
-            <button
-              type="button"
-              className="vp-sbtn"
+            <Segmented
+              label={t("View")}
+              value={stage}
+              onChange={(v) => setStage(v)}
+              options={[
+                { value: "video", label: t("Video"), title: t("The video on its own") },
+                {
+                  value: "route",
+                  label: (
+                    <>
+                      {t("Map")} <kbd className="u-kbd">R</kbd>
+                    </>
+                  ),
+                  title: t("Your video next to your recording's minimap, with your trail and the waves"),
+                },
+              ]}
+            />
+            <Button
+              className="vp-hbtn"
+              icon={<Scissors size={16} aria-hidden="true" />}
               aria-pressed={isClippingMode && exportType === "clip"}
               aria-keyshortcuts="C"
               onClick={() => toggleClipMode("clip", currentTime, duration)}
               title={`${t("Export video clip")} ([ / ])`}
             >
-              <Scissors size={15} color="var(--muted)" />
-              {t("Create clip")}
+              <span className="vp-hbtn__text">{t("Create clip")}</span>
               <kbd className="u-kbd">C</kbd>
-            </button>
-            <button
-              type="button"
-              className="vp-sbtn"
+            </Button>
+            <Button
+              className="vp-hbtn"
+              icon={<Flag size={16} aria-hidden="true" />}
               aria-pressed={isClippingMode && exportType === "error"}
               aria-keyshortcuts="E"
               onClick={() => toggleClipMode("error", currentTime, duration)}
+              title={t("Mark error")}
             >
-              <Flag size={15} color="var(--loss)" />
-              {t("Mark error")}
+              <span className="vp-hbtn__text">{t("Mark error")}</span>
               <kbd className="u-kbd">E</kbd>
-            </button>
+            </Button>
           </div>
         )}
       </header>
@@ -1583,7 +1656,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         style={{ gridTemplateColumns: isFullscreen ? "minmax(0, 1fr)" : `minmax(0, 1fr) ${sidebarWidth}px` }}
       >
         <div className="vp-left">
-          <div className={hasVideo && stage === "route" ? "vp-video vp-video--route" : "vp-video"}>
+          {/* El escenario: marino en los dos temas (auditoría V3) y con los
+              tokens del tema oscuro dentro (`.stage-dark`), porque todo lo que
+              va encima —HUD, avisos, el Mapa— se lee sobre el vídeo. */}
+          <div className={hasVideo && stage === "route" ? "vp-video stage-dark vp-video--route" : "vp-video stage-dark"}>
             {/* Sin vídeo no se monta el elemento: un `<video src="">` dispara un
                 error de carga y acabaríamos enseñando "el fichero está dañado"
                 para una partida que nunca llegó a grabarse. Son dos cosas
@@ -1592,7 +1668,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               <video
                 ref={videoRef}
                 src={videoSrc}
-                style={styles.video}
+                className="vp-media"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
                 onClick={handlePlayPause}
@@ -1604,7 +1680,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 preload="auto"
               />
             ) : (
-              <div style={styles.centerOverlay}>
+              <div className="vp-veil">
                 <EmptyState
                   icon={<VideoOff size={30} color="var(--faint)" />}
                   title={t("This game was tracked but not recorded")}
@@ -1616,24 +1692,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 />
               </div>
             )}
-            {hasVideo && loadState === "loading" && <div style={styles.centerOverlay}><div className="spinner" /></div>}
+            {hasVideo && loadState === "loading" && <div className="vp-veil"><div className="spinner" /></div>}
             {hasVideo && loadState === "error" && (
-              <div style={styles.centerOverlay}>
+              <div className="vp-veil">
                 <EmptyState
                   icon={<AlertTriangle size={30} color="var(--loss)" />}
                   title={t("The video file is missing or damaged")}
                   text={t("It was moved, deleted or written incomplete. Everything else about this game still works.")}
                   action={
-                    <button className="btn btn--ghost btn--sm" onClick={revealVideo}>
-                      <FolderOpen size={13} /> {t("Reveal in folder")}
-                    </button>
+                    <Button size="sm" icon={<FolderOpen size={14} aria-hidden="true" />} onClick={revealVideo}>
+                      {t("Reveal in folder")}
+                    </Button>
                   }
                 />
               </div>
             )}
             {/* La estela del ratón va pegada al vídeo a pantalla completa: en el
                 Recorrido el vídeo es una celda y no cuadraría. */}
-            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 5, opacity: showTracker && stage !== "route" ? 1 : 0, display: stage === "route" ? "none" : undefined, transition: "opacity var(--t-quick) var(--e-move)" }} />
+            <canvas
+              ref={canvasRef}
+              className="vp-trail"
+              data-hidden={!showTracker || undefined}
+              data-off={stage === "route" || undefined}
+            />
 
             {/* Overlay eSports Broadcast (HUD flotante sobre el vídeo) */}
             <EsportsPlayerOverlay
@@ -1657,9 +1738,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             {!isFullscreen && stage !== "route" && noticeEl}
 
             {isFullscreen && (
-              <div style={styles.fsBottom}>
+              <div className="vp-fs">
                 {noticeEl}
-                <div style={styles.fsTimeline}>{renderTrack(true)}</div>
+                <div className="vp-fs__track">{renderTrack(true)}</div>
                 {transportBar}
               </div>
             )}
@@ -1670,18 +1751,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
               de cada fila. */}
           {!isFullscreen && hasVideo && (
             <>
-              <section className="vp-tl" aria-label={t("Game timeline")}>
+              <section className="vp-tl" data-looks={hasLookStrip || undefined} aria-label={t("Game timeline")}>
+                {/* El nombre de cada fila, a la altura de la suya (--tl-*). */}
                 <div className="vp-tl__gutter" aria-hidden="true">
-                  <span style={{ height: BAR_TOP + BAR_H + ROW_GAP }} />
-                  <span className="vp-tl__g" style={{ height: APM_H }} title={t("Average APM")}>
-                    <span>{t("APM")}</span>
-                    {!!match.apm && <b className="u-metric">{Math.round(match.apm)}</b>}
-                  </span>
-                  <span style={{ height: ROW_GAP }} />
-                  <span className="vp-tl__g vp-tl__g--lane" style={{ height: LANE_H }}>
-                    <span>{t("Events")}</span>
-                    {hasLookStrip && <span className="vp-tl__looks">{t("Looks")}</span>}
-                  </span>
+                  <span className="vp-tl__g" data-row="apm">{t("APM")}</span>
+                  <span className="vp-tl__g" data-row="lane">{t("Events")}</span>
+                  {hasLookStrip && <span className="vp-tl__g" data-row="looks">{t("Looks")}</span>}
                 </div>
                 {renderTrack(false)}
               </section>
@@ -1695,7 +1770,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             son lectura. */}
         {!isFullscreen && (
         <aside ref={asideRef} className="vp-insp" aria-label={t("Game review")}>
-          <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
+          <div className="vp-resize" onPointerDown={startResize} title={t("Drag to resize")} />
           <Tabs
             className="vp-tabs"
             label={t("Game panels")}
@@ -1730,8 +1805,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           return (
             <>
               <div className="vp-filters">
+                {/* El de 34 px (Figma): el pequeño dejaba las opciones en 22 de
+                    alto, por debajo del área de clic de 24 (A6). */}
                 <Segmented
-                  size="sm"
                   label={t("Filter moments")}
                   value={eventFilter}
                   onChange={setEventFilter}
@@ -1977,19 +2053,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           (un `color: "white"`, un radio de 5px que no es ningún radio del
           sistema, una sombra propia). Ahora son tokens y los botones de verdad. */}
       {isClippingMode && (
-        <div style={styles.clipBar}>
-          <span style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+        <div className="vp-clipbar" data-kind={exportType}>
+          <span className="vp-clipbar__what">
             {exportType === "clip" ? (
-              <Scissors size={18} color="var(--cool)" />
+              <Scissors size={18} className="vp-clipbar__icon" aria-hidden="true" />
             ) : (
-              <AlertTriangle size={18} color="var(--loss)" />
+              <AlertTriangle size={18} className="vp-clipbar__icon" aria-hidden="true" />
             )}
             <span>
-              <span style={styles.clipTitle}>
+              <span className="vp-clipbar__title">
                 {t(exportType === "clip" ? "Export video clip" : "Mark error")}
               </span>
-              <span className="u-time" style={styles.clipRange}>
-                {gclock(clipStart)} – {gclock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))}s)
+              <span className="t-time vp-clipbar__range">
+                {gclock(clipStart)} – {gclock(clipEnd)} ({Math.round(Math.max(0.1, clipEnd - clipStart))} s)
               </span>
             </span>
           </span>
@@ -1997,27 +2073,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           {exportType === "error" && (
             <input
               type="text"
+              className="vp-clipbar__note"
               placeholder={t("Write a note about this mistake…")}
               value={errorNote}
               onChange={(e) => setErrorNote(e.target.value)}
               onKeyDown={(e) => e.stopPropagation()}
-              style={styles.clipNote}
+              aria-label={t("Write a note about this mistake…")}
             />
           )}
 
-          <button
-            className={exportType === "clip" ? "btn btn--primary btn--sm" : "btn btn--danger btn--sm"}
+          <Button
+            size="sm"
+            variant={exportType === "clip" ? "primary" : "danger"}
+            className="vp-clipbar__go"
             onClick={doExport}
-            disabled={isExporting}
-            style={{ marginLeft: "auto" }}
+            loading={isExporting}
+            loadingLabel={t("Exporting…")}
           >
-            {isExporting
-              ? t("Exporting…")
-              : t(exportType === "clip" ? "Export clip" : "Export error")}
-          </button>
-          <button className="btn btn--ghost btn--sm" onClick={() => setIsClippingMode(false)}>
+            {t(exportType === "clip" ? "Export clip" : "Export error")}
+          </Button>
+          <Button size="sm" onClick={() => setIsClippingMode(false)}>
             {t("Cancel")}
-          </button>
+          </Button>
         </div>
       )}
       </div>

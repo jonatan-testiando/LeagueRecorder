@@ -1,49 +1,340 @@
 /* =========================================================================
    Reproductor de una partida — cromo de la pantalla.
 
-   Sigue la maqueta «Revisión» (rediseño Post-partida): cabecera de 56 px con
-   la partida y las dos acciones, cuerpo en rejilla (vídeo, línea de tiempo y
-   transporte a la izquierda; inspector de tres pestañas a la derecha). Solo
-   tokens de index.css: el tema claro llega aquí sin que este fichero se entere.
+   Sigue el Figma del rediseño «Ritmo» (Pantallas · Reproductor · Revisión):
+   cabecera de una línea con la partida y las dos acciones, cuerpo en rejilla
+   (escenario, línea de tiempo y transporte a la izquierda; inspector de tres
+   pestañas a la derecha). Solo tokens de index.css.
 
-   Tipografía: todo en sans con cifras tabulares. La mono queda para lo que se
-   lee como código de máquina —los instantes del vídeo (`.u-time`) y los atajos
-   (`.u-kbd`)—, las dos utilidades globales de index.css.
+   El escenario es la excepción al tema: marino en los dos (auditoría V3), y
+   todo lo que va encima lee los tokens del tema OSCURO por el ámbito
+   `.stage-dark` de abajo.
+
+   Tipografía: sans con cifras tabulares. La mono queda para lo que se lee
+   como código de máquina —los instantes del vídeo (`.t-time`, 12 px) y los
+   atajos (`.u-kbd`)—.
 
    Vive junto al componente y no en index.css porque son clases de una sola
-   pantalla; lo compartido (.btn, .badge, .insp, .drow, .tp-more) sigue allí.
+   pantalla; lo compartido (.btn, .seg, .chip, .insp, .drow, .tp-more) sigue
+   allí. index.css se carga DESPUÉS de este fichero: para ajustar un primitivo
+   aquí hace falta un escalón más de especificidad (`.vp-top .vp-hbtn`).
    ========================================================================= */
 
 .vp {
+  /* Las alturas de las filas de la línea de tiempo (Figma: regla 16, APM 28,
+     sucesos 20, miradas 16, con 6 entre medias). Viven en .vp y no en la
+     tarjeta porque en pantalla completa la tira cuelga del escenario. */
+  --tl-ruler: 16px;
+  --tl-gap: 6px;
+  --tl-apm: 28px;
+  --tl-lane: 20px;
+  --tl-looks: 16px;
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   width: 100%;
   position: relative;
+  /* La cabecera se adapta al ancho de la PANTALLA, no al de la ventana: con
+     el rail desplegado son 150 px menos. */
+  container: vp / inline-size;
 }
 
-/* --- botones de la pantalla ---------------------------------------------- */
-/* Icono solo, con filo: volver. */
+/* --- ámbito oscuro del escenario ------------------------------------------ */
+/* Los tokens del tema oscuro, tal cual los define la cabecera de index.css,
+   para lo que se pinta SOBRE el vídeo (HUD, avisos, el Mapa, la tira y el
+   transporte de pantalla completa). Un `data-theme` anidado no basta: los
+   tokens cuelgan de :root y los derivados (--win, --cool-soft, --*-ink, los
+   alias) se calculan allí, así que hay que redeclararlos aquí también.
+   Pendiente de subir a index.css como ámbito reutilizable. */
+.stage-dark {
+  color-scheme: dark;
+  --ground: #080D16;
+  --panel: #0F1622;
+  --raised: #18212E;
+  --overlay: #1E2735;
+  --sunken: #0B111B;
+  --glass: color-mix(in srgb, var(--panel) 78%, transparent);
+  --scrim: rgba(4, 7, 14, 0.62);
+  --hair: rgba(219, 215, 208, 0.09);
+  --hair-strong: rgba(219, 215, 208, 0.17);
+  --rim: rgba(255, 255, 255, 0.07);
+  --line: var(--hair-strong);
+  --line-soft: var(--hair);
+  --text: #C6C2BC;
+  --muted: #A6A39E;
+  --faint: #8E9398;
+  --brand: #C8AA6E;
+  --signal: #F26073;
+  --flag: #A589F1;
+  --cool: #3CB787;
+  --cool-hover: #4FC08F;
+  --win: var(--cool);
+  --loss: var(--signal);
+  --gold: var(--brand);
+  --brand-soft: color-mix(in srgb, var(--brand) 16%, transparent);
+  --cool-soft: color-mix(in srgb, var(--cool) 16%, transparent);
+  --loss-soft: color-mix(in srgb, var(--loss) 14%, transparent);
+  --flag-soft: color-mix(in srgb, var(--flag) 16%, transparent);
+  --brand-ink: var(--brand);
+  --cool-ink: var(--cool);
+  --loss-ink: var(--loss);
+  --flag-ink: var(--flag);
+  --focus: var(--cool);
+  --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
+  --apm-line: color-mix(in srgb, var(--muted) 34%, transparent);
+  --surface-1: var(--panel);
+  --surface-2: var(--raised);
+  --glass-line: var(--hair-strong);
+  --glass-line-soft: var(--hair);
+  --media-sheen: linear-gradient(
+    90deg,
+    var(--panel) 0%,
+    color-mix(in srgb, var(--flag) 9%, var(--panel)) 55%,
+    color-mix(in srgb, var(--flag) 22%, var(--panel)) 100%
+  );
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.22), 0 6px 16px -12px rgba(0, 0, 0, 0.6);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.26), 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+  --shadow-3: 0 28px 64px -24px rgba(0, 0, 0, 0.8);
+  --inset-sunken: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  --kbd-edge: rgba(0, 0, 0, 0.4);
+  /* Alias heredados que aún usan el spinner, el estado vacío y el retrato. */
+  --bg-app: var(--ground);
+  --bg-card: var(--panel);
+  --bg-elevated: var(--raised);
+  --bg-hover: var(--raised);
+  --border-subtle: var(--line-soft);
+  --border-strong: var(--line);
+  --border-focus: var(--focus);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-muted: var(--faint);
+  --accent-violet: var(--cool);
+  --accent-violet-soft: var(--cool-soft);
+  --danger-soft: var(--loss-soft);
+  color: var(--text);
+}
+/* Transparencia reducida: el vidrio del escenario también pasa a opaco (el
+   de :root no llega aquí, este ámbito lo redefine). */
+@media (prefers-reduced-transparency: reduce) {
+  .stage-dark {
+    --glass: var(--panel);
+    --glass-filter: none;
+  }
+}
+
+/* --- cabecera de la partida ---------------------------------------------- */
+/* Una línea: volver, retrato, quién y cómo acabó, cuánto llevas revisado,
+   Vídeo | Mapa y las dos acciones. El detalle (hora, puesto por impacto) va
+   en una etiqueta: a 1280 la línea de metadatos se cortaba (auditoría I7). */
+.vp-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  min-width: 0;
+}
+/* Botón de icono de 32 px con el dibujo a 18. */
 .vp-iconbtn {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex: none;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hair-strong);
   color: var(--muted);
   cursor: pointer;
 }
-.vp-iconbtn:hover { background: var(--raised); color: var(--text); }
-.vp-iconbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.vp-iconbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.vp-top__face {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--hair-strong);
+}
+.vp-top__block {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.vp-top__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  white-space: nowrap;
+}
+.vp-top__title h2 {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text);
+}
+.vp-top__result {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: 500;
+  color: var(--muted);
+}
+.vp-top__result[data-result="win"] { color: var(--win); }
+.vp-top__result[data-result="loss"] { color: var(--loss); }
+.vp-top__result[data-result="vod"] { color: var(--cool); }
+.vp-top__lp { font-variant-numeric: tabular-nums; }
+.vp-top__meta {
+  align-self: flex-start;
+  max-width: 100%;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+.vp-top__meta:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-/* Botón de superficie: lámina elevada con filo. El oro es de UNA acción por
-   pantalla (guardar la nota); crear clip y marcar error van en superficie. */
+/* Etiqueta (Figma, Componentes · Tooltip): lámina flotante con la Elevación 1.
+   Sale tras 400 ms en reposo, con opacidad y escala desde el disparador; con
+   el foco del teclado, al instante. Se va en 100 ms. */
+.vp-hint {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--overlay);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--shadow-2);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(var(--pop-scale));
+  transform-origin: top left;
+  transition: opacity var(--t-quick-exit) var(--e-out), transform var(--t-quick-exit) var(--e-out),
+    visibility 0s linear var(--t-quick-exit);
+}
+.vp-hint > :first-child { color: var(--text); }
+.vp-top__meta:hover + .vp-hint,
+.vp-top__meta:focus-visible + .vp-hint {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity var(--t-hover) var(--e-out) 400ms, transform var(--t-hover) var(--e-out) 400ms,
+    visibility 0s linear 400ms;
+}
+.vp-top__meta:focus-visible + .vp-hint { transition-delay: 0s; }
+
+.vp-top__fill { flex: 1; min-width: var(--space-2); }
+.vp-top__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* Barra de progreso: el relleno avanza con scaleX, no con el ancho. */
+.vp-meter {
+  width: 96px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  /* Con el filo: en oscuro, el hundido sobre el fondo no se distinguía. */
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
+  overflow: hidden;
+}
+.vp-meter > div {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--cool);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--t-base) var(--e-move);
+}
+.vp-top__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+/* Crear clip y Marcar error: el Button fantasma sobre lámina elevada (Figma).
+   El oro es de UNA acción por pantalla (guardar la nota). */
+.vp-top .vp-hbtn {
+  height: 36px;
+  padding-block: 0;
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim);
+}
+.vp-top .vp-hbtn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--text) 8%, var(--raised));
+  border-color: var(--hair-strong);
+}
+.vp-hbtn .btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow: visible;
+}
+/* La tecla (Figma, Tecla): mono 11 en caja hundida, el único texto por debajo
+   de 12 px. */
+.vp-top .u-kbd,
+.vp-transport .u-kbd {
+  height: 20px;
+  padding: 0 6px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  font-weight: 500;
+  line-height: 16px;
+}
+.vp-top .seg__opt .u-kbd { margin-left: var(--space-1); }
+
+@media (hover: hover) and (pointer: fine) {
+  .vp-iconbtn:hover { background: var(--raised); color: var(--text); }
+  .vp-top .vp-hbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 6%, var(--raised)); }
+}
+
+/* Lo que cede primero cuando la pantalla estrecha (el rail desplegado): el
+   texto de «revisados» y, después, el de los dos botones, que se quedan en
+   icono y tecla. El nombre sigue ahí para los lectores de pantalla. */
+@container vp (max-width: 1120px) {
+  .vp-top__progressText { display: none; }
+}
+@container vp (max-width: 980px) {
+  .vp-hbtn__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* --- botones de superficie (inspector) ------------------------------------ */
+/* Lámina elevada con filo, para las acciones del momento actual. */
 .vp-sbtn {
   height: 34px;
   display: inline-flex;
@@ -61,7 +352,6 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.vp-sbtn:has(> .u-kbd:last-child) { padding-right: 8px; }
 .vp-sbtn:hover { background: color-mix(in srgb, var(--text) 6%, var(--raised)); }
 .vp-sbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
 .vp-sbtn[aria-pressed="true"] {
@@ -72,144 +362,6 @@
 .vp-sbtn--sm { height: 32px; font-size: 13px; }
 .vp-sbtn--icon { width: 32px; padding: 0; justify-content: center; }
 
-/* --- cabecera de la partida ---------------------------------------------- */
-.vp-top {
-  height: 56px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 16px;
-  min-width: 0;
-}
-/* Retrato con el aro del resultado y un filo del color del fondo entre los
-   dos, como el marco de un icono de invocador. */
-.vp-top__face {
-  width: 40px;
-  height: 40px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ground);
-}
-.vp-top__block {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.vp-top__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  white-space: nowrap;
-}
-.vp-top__title h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.vp-top__result { font-size: 14px; font-weight: 500; }
-.vp-top__lp {
-  font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--cool-ink);
-  background: color-mix(in srgb, var(--win) 14%, transparent);
-  padding: 1px 8px;
-  border-radius: 999px;
-}
-.vp-top__lp[data-down] {
-  color: var(--loss-ink);
-  background: color-mix(in srgb, var(--loss) 14%, transparent);
-}
-.vp-top__meta {
-  font-size: var(--fs-12);
-  font-variant-numeric: tabular-nums;
-  color: var(--faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.vp-top__fill { flex: 1; min-width: 8px; }
-.vp-top__progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.vp-meter {
-  width: 72px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--sunken);
-  box-shadow: var(--inset-sunken);
-  overflow: hidden;
-}
-.vp-meter > div {
-  height: 100%;
-  border-radius: 999px;
-  background: var(--cool);
-  transition: width var(--t-base) var(--e-move);
-}
-.vp-top__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-/* Vídeo | Mapa: dos botones pegados, el activo en relieve. */
-.vp-stage {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border-radius: 10px;
-  background: var(--sunken, var(--panel));
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.vp-stage__btn {
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--fs-13);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
-}
-.vp-stage__btn:has(> .u-kbd:last-child) { padding-right: 7px; }
-.vp-stage__btn:hover { color: var(--text); }
-.vp-stage__btn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-.vp-stage__btn[aria-pressed="true"] {
-  background: var(--raised);
-  color: var(--text);
-  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong);
-}
-.vp-stage__btn[aria-pressed="true"] svg { color: var(--brand); }
-.vp-stage__btn .u-kbd { background: var(--panel); }
-
-.vp-top__sep {
-  width: 1px;
-  height: 24px;
-  margin: 0 4px;
-  background: var(--hair);
-}
-
 /* --- cuerpo --------------------------------------------------------------- */
 .vp-body {
   flex: 1;
@@ -219,8 +371,8 @@
      lista larga tienen que caber, no empujar. Las columnas las pone el
      componente (la derecha es redimensionable). */
   grid-template-rows: minmax(0, 1fr);
-  gap: 16px;
-  padding: 0 16px 16px;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
   /* La barra del recortador se ancla aquí: así también sale en pantalla
      completa, que es este mismo nodo. */
   position: relative;
@@ -230,52 +382,173 @@
 .vp-left {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
   min-width: 0;
   min-height: 0;
+  /* El transporte se adapta al ancho de ESTA columna, que cambia al
+     redimensionar el inspector. */
+  container: vp-left / inline-size;
 }
 
+/* Asa para redimensionar el inspector desde su borde izquierdo. */
+.vp-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 30;
+}
+
+/* --- escenario ------------------------------------------------------------ */
+/* Marino en los dos temas: es lo único oscuro del tema claro, y es a
+   propósito, porque un marco gris claro apagaba el vídeo. Sin filo: el vídeo
+   se recorta solo. */
 .vp-video {
   flex: 1;
   min-height: 160px;
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
-  background: var(--sunken);
+  isolation: isolate;
+  border-radius: var(--radius-lg);
+  background: var(--stage);
   display: flex;
   flex-direction: column;
 }
-/* El filo va ENCIMA del vídeo: como sombra interior del marco quedaba debajo
-   de la imagen y no se veía. */
-.vp-video::after {
+/* Resplandor de jade muy tenue en el centro, para que sin vídeo (cargando, sin
+   fichero) el escenario no sea un agujero plano. Va en una capa por debajo del
+   vídeo y no en el fondo: así lo de encima se mide contra el marino real. */
+.vp-video::before {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--hair);
+  z-index: -1;
   pointer-events: none;
-  z-index: 7;
+  background: radial-gradient(
+    57% 50% at 50% 50%,
+    color-mix(in srgb, var(--cool) 12%, transparent) 0%,
+    color-mix(in srgb, var(--cool) 5%, transparent) 50%,
+    transparent 100%
+  );
 }
 .vp-body--fs .vp-video { border-radius: 0; }
-.vp-body--fs .vp-video::after { display: none; }
+.vp-media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+/* Velo para el spinner y los estados vacíos, del mismo marino. */
+.vp-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--stage) 72%, transparent);
+}
+/* La estela del ratón, pegada al vídeo. En el Mapa no se monta (allí el
+   vídeo es una celda y no cuadraría). */
+.vp-trail {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  transition: opacity var(--t-quick) var(--e-move);
+}
+.vp-trail[data-hidden] { opacity: 0; }
+.vp-trail[data-off] { display: none; }
+
+/* --- HUD sobre el vídeo (EsportsPlayerOverlay) ---------------------------- */
+/* Láminas de vidrio con el desenfoque del sistema (16 px como mucho): reloj y
+   oro arriba a la izquierda, APM a la derecha. Texto en los tokens oscuros del
+   escenario: las píldoras teñidas del claro suspendían AA sobre el vídeo. */
+.vp-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.vp-hud__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.vp-hud__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.vp-hud__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.vp-hud__clock { color: var(--text); }
+.vp-hud__gold { color: var(--win); }
+.vp-hud__gold[data-down] { color: var(--loss); }
+.vp-hud__rival {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.vp-hud__dot,
+.vp-hud__soft { color: var(--faint); }
+.vp-hud__icon { flex: none; color: var(--muted); }
+.vp-hud__icon--flag { color: var(--flag); }
+.vp-hud__banner {
+  align-self: center;
+  margin-bottom: var(--space-8);
+}
+.vp-hud__bannerDot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--cool);
+}
 
 /* --- aviso del analizador sobre el vídeo --------------------------------- */
 .vp-notice {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
+  left: var(--space-4);
+  bottom: var(--space-4);
   z-index: 8;
   max-width: min(560px, calc(100% - 32px));
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 14px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--flag) 16%, color-mix(in srgb, var(--ground) 78%, transparent));
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--flag) 16%, var(--glass));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 32%, transparent);
-  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
   color: var(--text);
-  animation: vp-notice-in var(--t-quick) var(--e-move) both;
+  animation: vp-notice-in var(--t-quick) var(--e-out) both;
 }
 .vp-notice--fs {
   position: static;
@@ -287,121 +560,258 @@
   to { opacity: 1; transform: none; }
 }
 .vp-notice__icon { flex: none; color: var(--flag); }
-.vp-notice__text { font-size: var(--fs-13); line-height: 1.4; }
+.vp-notice__text { font-size: var(--fs-13); line-height: var(--lh-13); }
 .vp-notice__text b {
   font-weight: 500;
   color: color-mix(in srgb, var(--flag) 55%, var(--text));
 }
 .vp-notice__x {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 .vp-notice__x:hover { color: var(--text); background: color-mix(in srgb, var(--flag) 18%, transparent); }
-.vp-notice__x:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.vp-notice__x:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* --- pantalla completa ----------------------------------------------------- */
+/* No hay baraja: aviso, tira y transporte flotan juntos sobre el vídeo, con un
+   degradado del marino del escenario por debajo. */
+.vp-fs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4) var(--space-3);
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--stage) 92%, transparent),
+    color-mix(in srgb, var(--stage) 55%, transparent) 70%,
+    transparent
+  );
+}
+/* La tira compacta pone su propio alto. En bloque y no en columna flex: ahí
+   su `flex: 1` se comía la altura y el transporte se le montaba encima. */
+.vp-fs__track { position: relative; display: block; }
 
 /* --- línea de tiempo ------------------------------------------------------ */
-/* Tarjeta con el nombre de cada fila a la izquierda y la pista a la derecha.
-   Las alturas de las filas las ponen las constantes de VideoPlayer.tsx
-   (RULER_H, BAR_H, APM_H, LANE_H): la pista y el canal de nombres las
-   comparten. Sin overflow: la etiqueta de posición sube por encima. */
+/* Tarjeta con el nombre de cada fila a la izquierda (56 px) y la pista a la
+   derecha. Las dos columnas comparten las alturas --tl-*. Sin overflow: la
+   etiqueta sube por encima, sobre el escenario. */
 .vp-tl {
   flex: none;
   position: relative;
-  display: flex;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
 .vp-tl__gutter {
-  width: 48px;
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  font-size: 12px;
-  line-height: 1.2;
-  color: var(--faint);
-}
-.vp-tl__gutter > span { flex: none; }
-.vp-tl__g {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-}
-.vp-tl__g b {
-  font-size: 13px;
+  display: grid;
+  grid-template-rows: var(--tl-ruler) var(--tl-apm) var(--tl-lane) var(--tl-looks);
+  row-gap: var(--tl-gap);
+  align-items: center;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
   font-weight: 500;
-  color: var(--muted);
+  color: var(--faint);
+  white-space: nowrap;
 }
-.vp-tl__g--lane { justify-content: space-between; padding-top: 4px; }
-.vp-tl__looks { line-height: 12px; }
+.vp-tl:not([data-looks]) .vp-tl__gutter {
+  grid-template-rows: var(--tl-ruler) var(--tl-apm) var(--tl-lane);
+}
+.vp-tl__g[data-row="apm"] { grid-row: 2; }
+.vp-tl__g[data-row="lane"] { grid-row: 3; }
+.vp-tl__g[data-row="looks"] { grid-row: 4; }
 
+/* La pista: regla, curva de APM, sucesos y miradas, de arriba abajo. Sin la
+   curva (pantalla completa) o sin miradas, las filas de debajo suben. */
 .vp-track {
+  --tl-apm-row: calc(var(--tl-apm) + var(--tl-gap));
+  --tl-looks-row: 0px;
+  --tl-lane-top: calc(var(--tl-ruler) + var(--tl-gap) + var(--tl-apm-row));
   position: relative;
-  flex: 1;
   min-width: 0;
+  height: calc(var(--tl-lane-top) + var(--tl-lane) + var(--tl-looks-row));
   cursor: pointer;
   touch-action: none;
   user-select: none;
 }
-.vp-track__ruler { position: relative; }
-.vp-track__ruler .u-time {
-  position: absolute;
-  top: 0;
-  line-height: 16px;
-  color: var(--faint);
-}
-.vp-track__grid {
-  position: absolute;
-  bottom: 0;
-  width: 1px;
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  pointer-events: none;
-}
-.vp-track__bar {
+.vp-track[data-looks] { --tl-looks-row: calc(var(--tl-gap) + var(--tl-looks)); }
+.vp-track--compact { --tl-apm-row: 0px; }
+
+/* Regla: mono de 12 (A3: estaba a 11). */
+.vp-track__ruler {
   position: absolute;
   left: 0;
   right: 0;
-  border-radius: 999px;
-  background: var(--sunken);
-  overflow: hidden;
+  top: 0;
+  height: var(--tl-ruler);
 }
-.vp-track__played {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--brand) 78%, var(--ground)), var(--brand));
+.vp-track__ruler .t-time {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--faint);
 }
+.vp-track__ruler .t-time[data-edge="start"] { transform: none; }
+.vp-track__ruler .t-time[data-edge="end"] { transform: translateX(-100%); }
+
 .vp-track__apm {
   position: absolute;
   left: 0;
+  top: calc(var(--tl-ruler) + var(--tl-gap));
   width: 100%;
-  pointer-events: none;
-}
-.vp-track__lane { position: absolute; left: 0; right: 0; }
-.vp-track__guides {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+  height: var(--tl-apm);
   overflow: visible;
   pointer-events: none;
-  z-index: 4;
 }
-/* Cabezal en oro: la línea atraviesa barra, curva y carril; el asa va sobre
-   la barra. */
+
+.vp-track__lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--tl-lane-top);
+  height: var(--tl-lane);
+}
+
+/* Marca de suceso (Figma, Componentes · Marca de línea de tiempo). El botón
+   mide 24 px (A6) y el dibujo 10: círculo lleno para el combate, hueco para
+   la asistencia, rombo para objetivos y hallazgos y un punto pequeño para el
+   resto. El tono lo pone `data-tone`. */
+.vp-mark {
+  --mark: var(--muted);
+  --mark-soft: var(--raised);
+  --mark-ink: var(--muted);
+  position: absolute;
+  top: 50%;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  min-width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.vp-mark[data-tone="win"] { --mark: var(--win); --mark-soft: var(--cool-soft); --mark-ink: var(--cool-ink); }
+.vp-mark[data-tone="loss"] { --mark: var(--loss); --mark-soft: var(--loss-soft); --mark-ink: var(--loss-ink); }
+.vp-mark[data-tone="brand"] { --mark: var(--brand); --mark-soft: var(--brand-soft); --mark-ink: var(--brand-ink); }
+.vp-mark[data-tone="flag"] { --mark: var(--flag); --mark-soft: var(--flag-soft); --mark-ink: var(--flag-ink); }
+.vp-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.vp-mark__shape {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--mark);
+}
+.vp-mark[data-shape="ring"] .vp-mark__shape {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--mark);
+}
+.vp-mark[data-shape="pip"] .vp-mark__shape { width: 6px; height: 6px; }
+.vp-mark[data-shape="diamond"] .vp-mark__shape {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+/* Racimo: las marcas que se tocarían, con el número y el tono que más pesa. */
+.vp-mark--cluster { min-width: 30px; }
+.vp-mark__cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+  min-width: 26px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--mark-soft);
+  box-shadow: inset 0 0 0 1px var(--mark);
+  font-size: var(--fs-12);
+  line-height: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--mark-ink);
+}
+.vp-mark__cluster > i {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--mark);
+}
+/* El suceso elegido: aro de oro separado por el color de la tarjeta. */
+.vp-mark[data-on] .vp-mark__shape {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
+}
+.vp-mark[data-on][data-shape="ring"] .vp-mark__shape {
+  box-shadow: inset 0 0 0 2px var(--mark), 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
+}
+.vp-mark[data-on] .vp-mark__cluster {
+  box-shadow: inset 0 0 0 1px var(--mark), 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
+}
+@media (hover: hover) and (pointer: fine) {
+  .vp-mark:hover .vp-mark__shape {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 30%, transparent);
+  }
+  .vp-mark[data-shape="ring"]:hover .vp-mark__shape {
+    box-shadow: inset 0 0 0 2px var(--mark), 0 0 0 3px color-mix(in srgb, var(--mark) 30%, transparent);
+  }
+  .vp-mark--cluster:hover .vp-mark__cluster {
+    background: color-mix(in srgb, var(--mark) 26%, var(--panel));
+  }
+}
+
+/* Miradas al mapa: tres filas de 3 px (top, mid, bot) o una sola de 8 si
+   solo hay saltos de cámara sin carril. */
+.vp-track__looks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--tl-lane-top) + var(--tl-lane) + var(--tl-gap));
+  height: var(--tl-looks);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  pointer-events: none;
+}
+.vp-track__looksRow { position: relative; height: 3px; }
+.vp-track__looksRow:only-child { height: 8px; }
+.vp-track__looksRow > i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--cool);
+  opacity: 0.55;
+}
+
+/* Cursor de reproducción en oro, de la regla al pie. Sin transición: lo
+   mueven la mano o el vídeo, con latencia cero. */
 .vp-track__head {
   position: absolute;
+  top: var(--tl-ruler);
   bottom: 0;
   width: 2px;
   margin-left: -1px;
@@ -410,135 +820,121 @@
   pointer-events: none;
   z-index: 20;
 }
-.vp-track__knob {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--brand) 82%, var(--text));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent), 0 2px 6px rgba(0, 0, 0, 0.45);
-  pointer-events: none;
-  z-index: 21;
-}
 .vp-track__hover {
   position: absolute;
+  top: var(--tl-ruler);
   bottom: 0;
   width: 1px;
   background: color-mix(in srgb, var(--text) 40%, transparent);
   pointer-events: none;
   z-index: 15;
 }
+/* Rango del recortador. No intercepta: se sigue buscando a través de él, y
+   solo sus asas (24 px) se cogen. */
 .vp-track__clip {
+  --clip: var(--cool);
   position: absolute;
+  top: var(--tl-ruler);
   bottom: 0;
   background: color-mix(in srgb, var(--clip) 22%, transparent);
   border-left: 2px solid var(--clip);
   border-right: 2px solid var(--clip);
+  pointer-events: none;
   z-index: 12;
 }
-
-/* Marca de suceso. Círculo teñido del color de su trabajo con el glifo
-   dentro; si se sabe el campeón del otro lado, su retrato encima con el aro
-   del resultado. El filo del color del carril las recorta cuando se pisan. */
-.vp-mark {
+.vp-track__clip[data-kind="error"] { --clip: var(--loss); }
+.vp-track__clipThumb {
   position: absolute;
-  transform: translateX(-50%);
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  color: var(--mark);
-  background: color-mix(in srgb, var(--mark) 16%, var(--panel));
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--mark) 70%, transparent), 0 0 0 2px var(--panel);
-  cursor: pointer;
-  transition: background-color var(--t-instant) var(--e-move), color var(--t-instant) var(--e-move);
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  cursor: ew-resize;
+  pointer-events: auto;
 }
-.vp-mark:hover { background: color-mix(in srgb, var(--mark) 28%, var(--panel)); }
-.vp-mark:focus-visible { outline: 2px solid var(--cool); outline-offset: 3px; }
-.vp-mark[data-on] { background: var(--mark); color: var(--panel); }
-.vp-mark__glyph { display: flex; }
-.vp-mark__face {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--sunken);
-  box-shadow: 0 0 0 1.5px var(--ring), 0 0 0 3.5px var(--panel);
-}
-.vp-mark:hover .vp-mark__face { filter: brightness(1.12); }
-.vp-mark[data-on] .vp-mark__face {
-  box-shadow: 0 0 0 2px var(--brand), 0 0 0 4px var(--panel);
-}
-/* Hallazgo: rombo violeta. Es la única marca que no es un círculo. */
-.vp-mark--finding,
-.vp-mark--finding:hover,
-.vp-mark--finding[data-on] { background: transparent; box-shadow: none; }
-.vp-mark__diamond {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  transform: rotate(45deg);
-  background: color-mix(in srgb, var(--flag) 32%, var(--panel));
-  box-shadow: inset 0 0 0 1.5px var(--flag), 0 0 0 2.5px var(--panel),
-    0 0 14px color-mix(in srgb, var(--flag) 50%, transparent);
-}
-.vp-mark--finding:hover .vp-mark__diamond { background: color-mix(in srgb, var(--flag) 48%, var(--panel)); }
-.vp-mark--finding[data-on] .vp-mark__diamond { background: var(--flag); }
+.vp-track__clipThumb[data-side="start"] { left: -13px; }
+.vp-track__clipThumb[data-side="end"] { right: -13px; }
 
-/* Etiqueta al pasar por encima de la pista. */
+/* Etiqueta de la pista (Figma, Tooltip): el instante y el APM bajo el ratón
+   o, sobre una marca, sus sucesos con el retrato del campeón. Sigue al ratón
+   sin retraso: es una lectura de posición, no una ayuda. */
 .vp-tip {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-4));
   transform: translateX(-50%);
   z-index: 100;
   min-width: 120px;
-  max-width: 260px;
+  max-width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--panel);
-  border: 1px solid var(--hair-strong);
-  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--overlay);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--shadow-2);
   pointer-events: none;
 }
+.vp-tip[data-align="start"] { transform: translateX(-12px); }
+.vp-tip[data-align="end"] { transform: translateX(calc(-100% + 12px)); }
 .vp-tip__head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  font-size: var(--fs-12);
+  align-items: baseline;
+  gap: var(--space-3);
   color: var(--text);
 }
-.vp-tip__apm { color: var(--muted); }
+.vp-tip__apm,
+.vp-tip__ev {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-variant-numeric: tabular-nums;
+}
+.vp-tip__apm { color: var(--muted); white-space: nowrap; }
 .vp-tip__ev {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: var(--fs-12);
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text);
+  white-space: nowrap;
 }
-.vp-tip__ev span { color: var(--text); }
+.vp-tip__face {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  background: var(--sunken);
+}
+.vp-tip__glyph {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.vp-tip__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vp-tip__at { flex: none; color: var(--faint); }
+.vp-tip__more { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
 
 /* --- transporte ----------------------------------------------------------- */
+/* 36 px: reproducir, momento anterior y siguiente con su tecla, el reloj y, a
+   la derecha, las miradas, la velocidad, el volumen, los ajustes y la
+   pantalla completa. Todo objetivo de clic mide 24 px como mínimo (A6). */
 .vp-transport {
-  height: 44px;
+  height: 36px;
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .vp-transport--fs { height: auto; }
-.vp-transport__fill { flex: 1; min-width: 8px; }
+.vp-transport__fill { flex: 1; min-width: var(--space-2); }
 /* Las miradas al mapa (o el botón que las busca) ceden primero cuando la
-   columna estrecha: se recortan hasta quedarse en el icono, y los controles de
-   la derecha (velocidad, volumen, ajustes, pantalla completa) no se salen. */
+   columna estrecha: se recortan hasta quedarse en el icono. */
 .vp-transport__aux {
   flex: 0 1 auto;
-  min-width: 36px;
+  min-width: 32px;
   display: flex;
   overflow: hidden;
 }
@@ -547,57 +943,51 @@
 .vp-looks > .u-metric { overflow: hidden; text-overflow: ellipsis; }
 
 .vp-play {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex: none;
-  margin-right: 6px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--raised);
   box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong);
   color: var(--text);
   cursor: pointer;
 }
-.vp-play:hover { background: color-mix(in srgb, var(--text) 8%, var(--raised)); }
-.vp-play:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.vp-play:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .vp-tbtn {
-  height: 36px;
+  height: 32px;
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-13);
+  font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
 }
 .vp-tbtn svg { flex: none; }
-.vp-tbtn:hover:not(:disabled) { background: var(--raised); color: var(--text); }
-.vp-tbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+.vp-tbtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .vp-tbtn:disabled { opacity: 0.6; cursor: default; }
-.vp-tbtn .u-kbd {
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair), inset 0 -1px 0 var(--kbd-edge);
-}
-.vp-tbtn--icon { width: 36px; padding: 0; justify-content: center; }
+.vp-tbtn--skip { padding: 0 var(--space-1) 0 var(--space-2); }
+.vp-tbtn--icon { width: 32px; padding: 0; justify-content: center; }
 
 .vp-clock {
-  margin-left: 8px;
+  margin-left: var(--space-1);
   flex: none;
-  font-size: 13px;
   color: var(--text);
 }
-.vp-clock b { font-weight: 500; }
-.vp-clock span { color: var(--faint); }
+.vp-clock__cs,
+.vp-clock__total { color: var(--muted); }
 
 .vp-looks {
   display: inline-flex;
@@ -605,53 +995,115 @@
   gap: 6px;
   min-width: 0;
   overflow: hidden;
-  margin-right: 6px;
-  font-size: 13px;
+  margin-right: var(--space-1);
+  font-size: var(--fs-13);
   color: var(--muted);
   white-space: nowrap;
 }
 .vp-looks svg { flex: none; }
+.vp-looks__gap { color: var(--win); }
+.vp-looks__gap[data-long] { color: var(--loss); }
 
-.vp-speeds {
+/* Velocidad: un botón «1× velocidad» con su menú encima (Elevación 1). */
+.vp-speed { position: relative; flex: none; }
+.vp-speed__btn {
+  height: 28px;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex: none;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--sunken);
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.vp-speeds button {
-  height: 28px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 0 var(--space-3);
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--faint);
+  color: var(--muted);
   font: inherit;
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
 }
-.vp-speeds button:hover { color: var(--text); }
-.vp-speeds button:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.vp-speeds button[data-on] {
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hair-strong);
+.vp-speed__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.vp-speed__btn[aria-expanded="true"] { background: var(--raised); color: var(--text); }
+.vp-speed__chev { flex: none; transition: transform var(--t-quick) var(--e-move); }
+.vp-speed__btn[aria-expanded="true"] .vp-speed__chev { transform: rotate(180deg); }
+.vp-speed__menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-1));
+  z-index: 40;
+  min-width: 112px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--overlay);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--shadow-2);
+  transform-origin: bottom right;
+  animation: menu-in var(--t-quick) var(--e-out) backwards;
+  transition: opacity var(--t-quick-exit) var(--e-out);
+}
+.vp-speed__menu[data-closing] { opacity: 0; pointer-events: none; }
+.vp-speed__opt {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text);
-  font-weight: 500;
+  font: inherit;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+.vp-speed__opt:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.vp-speed__opt[aria-checked="true"] { font-weight: 500; }
+.vp-speed__check { flex: none; color: var(--cool); }
+
+@media (hover: hover) and (pointer: fine) {
+  .vp-play:hover { background: color-mix(in srgb, var(--text) 8%, var(--raised)); }
+  .vp-tbtn:hover:not(:disabled),
+  .vp-speed__btn:hover { background: var(--raised); color: var(--text); }
+  .vp-speed__opt:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
 }
 
-.vp-vol { margin-left: 4px; }
+/* Columna estrecha (ventana pequeña o inspector ancho): la palabra
+   «velocidad» se va primero, y después las centésimas y las miradas. Los
+   botones no se salen de la columna. */
+@container vp-left (max-width: 640px) {
+  .vp-speed__label { display: none; }
+}
+@container vp-left (max-width: 520px) {
+  .vp-clock__cs,
+  .vp-transport__aux { display: none; }
+}
+
+.vp-transport .vp-more summary {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+}
 
 /* Deslizadores del reproductor: pista hundida y asa de hueso. Con
    `appearance: none` y sin asa propia, el asa desaparecía. */
 .vp-range {
   -webkit-appearance: none;
   appearance: none;
+  margin: 0;
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--sunken);
   box-shadow: var(--inset-sunken);
   cursor: pointer;
@@ -665,43 +1117,88 @@
   background: var(--text);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
-.vp-range:focus-visible { outline: 2px solid var(--cool); outline-offset: 4px; }
+.vp-range:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
 .vp-range--wide { flex: 1; }
 
-.vp-more summary {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  color: var(--muted);
-}
-.vp-keys { margin-top: 8px; display: grid; gap: 4px; }
+.vp-keys { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .vp-keys__row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-4);
 }
-.vp-keys__row span { font-size: 12px; color: var(--faint); }
+.vp-keys__row span { font-size: var(--fs-12); color: var(--faint); }
 
-/* Casilla propia: la nativa salía como un cuadrado claro sobre el panel. */
+/* --- barra del recortador --------------------------------------------------- */
+/* Lámina flotante sobre el escenario, con los botones de verdad. */
+.vp-clipbar {
+  position: absolute;
+  bottom: var(--space-12);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  max-width: min(760px, calc(100% - var(--space-8)));
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--overlay);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-2);
+}
+.vp-clipbar__what { display: flex; align-items: center; gap: var(--space-3); }
+.vp-clipbar__icon { flex: none; color: var(--cool); }
+.vp-clipbar[data-kind="error"] .vp-clipbar__icon { color: var(--loss); }
+.vp-clipbar__title {
+  display: block;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+}
+.vp-clipbar__range { display: block; color: var(--faint); }
+.vp-clipbar__note {
+  flex: 1;
+  min-width: 160px;
+  height: 32px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  outline: none;
+}
+.vp-clipbar__note::placeholder { color: var(--faint); }
+.vp-clipbar__note:focus-visible { box-shadow: inset 0 0 0 2px var(--focus), var(--inset-sunken); }
+.vp-clipbar__go { margin-left: auto; }
+
+/* Casilla propia: la nativa salía como un cuadrado claro sobre el panel.
+   Se dibuja a 16 px pero se pulsa en 24 (A6): un borde transparente de 4 px
+   alrededor, con el fondo y el filo recortados por dentro de él. */
 .vp-check {
   -webkit-appearance: none;
   appearance: none;
   position: relative;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 4px;
+  border: 4px solid transparent;
+  border-radius: var(--radius-md);
   background: var(--sunken);
+  background-clip: padding-box;
   box-shadow: inset 0 0 0 1.5px var(--hair-strong);
   cursor: pointer;
   transition: background-color var(--t-instant) var(--e-move), box-shadow var(--t-instant) var(--e-move);
 }
 .vp-check:hover { box-shadow: inset 0 0 0 1.5px var(--faint); }
-.vp-check:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
+.vp-check:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
 .vp-check:checked { background: var(--cool); box-shadow: none; }
 .vp-check:checked::after {
   content: "";
@@ -823,7 +1320,9 @@
   flex: none;
   display: flex;
   align-items: center;
-  padding-right: 10px;
+  /* 6 y no 10: la casilla mide 24 de área y 16 de dibujo, y así el cuadrado
+     queda donde estaba. */
+  padding-right: 6px;
   border-radius: 8px;
   transition: background-color var(--t-instant) var(--e-move);
 }
@@ -867,7 +1366,7 @@
 }
 .vp-ev[data-on] .vp-ev__text { font-weight: 500; }
 .vp-ev[data-done] .vp-ev__text { color: var(--faint); }
-.vp-ev__done { width: 16px; flex: none; display: flex; align-items: center; }
+.vp-ev__done { width: 24px; flex: none; display: flex; align-items: center; }
 
 /* --- Revisión: notas -------------------------------------------------------- */
 .vp-notes {
@@ -945,6 +1444,7 @@
 .vp-note__icon { flex: none; color: var(--faint); }
 .vp-note__time {
   flex: none;
+  min-height: 24px;
   padding: 0;
   border: 0;
   background: transparent;

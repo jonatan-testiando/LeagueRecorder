@@ -402,7 +402,7 @@ export interface MatchPlays {
 }
 
 // Jugadas y curva de probabilidad de una partida ya sincronizada. Sólo lee lo
-// que hay en disco y lo cachea en `plays_v1.json`.
+// que hay en disco y lo cachea en `plays_v2.json`.
 export const getMatchPlays = async (matchId: string): Promise<MatchPlays> => {
   return await invoke<MatchPlays>("get_match_plays", { matchId });
 };
@@ -473,7 +473,7 @@ export interface CoachSummary {
 }
 
 // Categorías, baremos y foco de todas tus partidas. Cachea por partida en
-// `coach_v1.json`.
+// `coach_v2.json`.
 export const getCoachSummary = async (): Promise<CoachSummary> => {
   return await invoke<CoachSummary>("get_coach_summary");
 };
@@ -522,6 +522,79 @@ export interface CoachMatch {
 // partida no entra en el coach (un VOD, ARAM…) o aún no está sincronizada.
 export const getMatchCoach = async (matchId: string): Promise<CoachMatch | null> => {
   return await invoke<CoachMatch | null>("get_match_coach", { matchId });
+};
+
+/** Cómo saliste de la fase de líneas: el oro con tu rival al 14 frente a los
+ *  terciles del corpus para tu rol (`estado_partida.rs`). */
+export type LaneState = "ahead" | "even" | "behind";
+
+/** Por dónde fue la probabilidad de victoria de tu equipo (0-1). */
+export interface GameCourse {
+  max: number;
+  /** Segundos de partida. */
+  max_time: number;
+  min: number;
+  min_time: number;
+  /** Llegó al 65 %, y lo perdió. */
+  had_lead: boolean;
+  thrown: boolean;
+  /** Cayó al 35 %, y lo ganó. */
+  was_behind: boolean;
+  comeback: boolean;
+}
+
+export interface GameState {
+  match_id: string;
+  role: string;
+  win: boolean;
+  gold_diff_14: number | null;
+  state: LaneState | null;
+  /** null sin jugadas guardadas o en una partida de menos de 15 minutos. */
+  course: GameCourse | null;
+}
+
+/** Las líneas del corpus con las que se comparan tus partidas. */
+export interface GameStateCorpus {
+  /** Rol → [corte bajo, corte alto] del oro al 14. */
+  cuts: Record<string, [number, number]>;
+  /** Rol → victorias (0-1) por delante, igualado y por detrás. */
+  win_by_state: Record<string, [number, number, number]>;
+  /** Franja ("" = corpus entero) → de las partidas con un equipo al 65 %,
+   *  cuántas acaban del otro lado. Es la tasa de tiradas y la de remontadas. */
+  flip: Record<string, number>;
+  /** Victorias por tramo de nota: 0-20 … 80-100. */
+  win_by_score: number[];
+  /** Victorias del MVP de la partida. */
+  mvp_win: number;
+}
+
+export interface GameStates {
+  games: GameState[];
+  corpus: GameStateCorpus;
+}
+
+// Estado al 14 y rumbo de todas tus partidas del coach, con las líneas del
+// corpus. Lee las jugadas cacheadas de cada partida (`plays_v2.json`).
+export const getGameStates = async (): Promise<GameStates> => {
+  return await invoke<GameStates>("get_game_states");
+};
+
+/** El título de un jugador en el marcador (`titulos.rs`). Sin `metric`, no
+ *  tuvo ningún extremo. */
+export interface PlayerTitle {
+  participant_id: number;
+  role: string;
+  metric: string | null;
+  side: "high" | "low" | null;
+  value: number | null;
+  /** 0-100, entre los de su puesto y su franja. */
+  percentile: number | null;
+}
+
+// Un título por jugador de una partida sincronizada. Vacío en las de menos de
+// 15 minutos.
+export const getMatchTitles = async (matchId: string): Promise<PlayerTitle[]> => {
+  return await invoke<PlayerTitle[]>("get_match_titles", { matchId });
 };
 
 /** Una partida del plan del coach (`coach_plan.rs`), o de su «antes». */

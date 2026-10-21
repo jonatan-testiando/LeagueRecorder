@@ -14,6 +14,8 @@ mod coach_plan;
 mod commands;
 mod curvas;
 mod cv_analyzer;
+mod estado_baremos;
+mod estado_partida;
 mod app_update;
 mod dataset_generator;
 mod gank;
@@ -41,6 +43,8 @@ pub mod riot_api;
 mod storage;
 mod ddragon_cache;
 mod streamer;
+mod titulos;
+mod titulos_baremos;
 mod training;
 mod ultimate;
 mod winprob;
@@ -367,6 +371,8 @@ pub fn run() {
             jugadas::get_match_plays,
             coach::get_coach_summary,
             coach::get_match_coach,
+            estado_partida::get_game_states,
+            titulos::get_match_titles,
             coach_plan::get_coach_plan,
             coach_plan::start_coach_plan,
             coach_plan::abandon_coach_plan,

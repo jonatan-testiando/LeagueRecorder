@@ -63,7 +63,8 @@ pub struct Comment {
 }
 
 /// Un jugador de la partida (scoreboard, de la API Match-V5 de Riot).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// `Default`, como `MatchMetadata`, para los jugadores de mentira de los tests.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Participant {
     pub champion: String,
     pub name: String,

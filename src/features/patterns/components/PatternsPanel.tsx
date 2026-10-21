@@ -42,6 +42,7 @@ import { mmss } from "../../../core/time";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import {
+  Award,
   BarChart3,
   ChevronRight,
   Clock,
@@ -55,6 +56,7 @@ import {
   Play,
   Route as RouteIcon,
   Crosshair,
+  Scale,
   Swords,
   TrendingUp,
   Users,
@@ -92,6 +94,9 @@ import { useCoachSummary } from "../../../core/useCoachSummary";
 import { useCoachPlan } from "../../../core/useCoachPlan";
 import { tramoWindow } from "../../../core/coach";
 import { CoachFocusCard, coachFocusTramo, coachFocusView } from "./CoachFocusCard";
+import { LANE_STATES, courseRates, scoreCalibration, stateRows, useGameStates } from "../../../core/gameStates";
+import type { LaneState } from "../../../core/tauri-ipc";
+import { STATE_LABEL, ScoreCalibrationCard, StateSplitCard } from "./GameStateCards";
 import "./PatternsPanel.css";
 
 /**
@@ -389,6 +394,8 @@ const PatternsBody: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [rol, setRol] = useState<RoleFilter>("all");
   const [rango, setRango] = useState<Range>("all");
+  /** Cómo saliste de líneas (oro con tu rival al 14): el tercer filtro. */
+  const [estado, setEstado] = useState<LaneState | "all">("all");
   const [fase, setFase] = useState<Phase>("all");
   const [hover, setHover] = useState<{ d: DeathPoint; left: number; top: number } | null>(null);
   /** Fichas de "Explorar" abiertas. Varias a la vez: plegar una para abrir
@@ -400,6 +407,9 @@ const PatternsBody: React.FC = () => {
   // foco que propone. Mismos hooks que Hoy: se recargan con la biblioteca.
   const coach = useCoachSummary();
   const { plan: coachPlan } = useCoachPlan();
+  // El estado al 14 y el rumbo de cada partida (`estado_partida.rs`).
+  const estados = useGameStates();
+  const estadoDe = useMemo(() => new Map((estados?.games ?? []).map((g) => [g.match_id, g])), [estados]);
   const vistaCoach = useMemo(() => coachFocusView(coach, coachPlan), [coach, coachPlan]);
 
   // Las fichas de mano, hechizos, golpes y oleadas montan su widget al
@@ -484,9 +494,48 @@ const PatternsBody: React.FC = () => {
   }, [own]);
   // El filtro de rol se aplica ANTES de agregar: mezclar el reloj de muertes de
   // support con el de jungla es exactamente el ruido que esta pantalla evita.
-  const propias = useMemo(
+  const sinEstado = useMemo(
     () => inRange(filterByRole(own, rol), rango, parcheActual),
     [own, rol, rango, parcheActual]
+  );
+  // Y el estado al 14 parte en tres todo lo de abajo: una partida que ibas
+  // ganando y una que ibas perdiendo no se juegan igual, y la media de las dos
+  // no describe ninguna. La ficha «Por delante, igualada o por detrás» no lo
+  // aplica: es la que pone las tres al lado.
+  const propias = useMemo(
+    () => (estado === "all" ? sinEstado : sinEstado.filter((m) => estadoDe.get(m.id)?.state === estado)),
+    [sinEstado, estado, estadoDe]
+  );
+  const porEstado = useMemo(() => {
+    const n: Record<LaneState, number> = { ahead: 0, even: 0, behind: 0 };
+    for (const m of sinEstado) {
+      const s = estadoDe.get(m.id)?.state;
+      if (s) n[s] += 1;
+    }
+    return n;
+  }, [sinEstado, estadoDe]);
+  const matchesById = useMemo(() => new Map(matches.map((m) => [m.id, m])), [matches]);
+  const filasEstado = useMemo(
+    () => (estados ? stateRows(sinEstado, estadoDe, estados.corpus) : null),
+    [sinEstado, estadoDe, estados]
+  );
+  const rumbos = useMemo(
+    () => (estados ? courseRates(sinEstado, estadoDe, estados.corpus) : null),
+    [sinEstado, estadoDe, estados]
+  );
+  // Los cortes de oro se pueden decir en cifras sólo si todas las partidas con
+  // estado son del mismo rol: cada rol tiene los suyos.
+  const cortesEstado = useMemo(() => {
+    const roles = new Set(sinEstado.flatMap((m) => {
+      const g = estadoDe.get(m.id);
+      return g?.state ? [g.role] : [];
+    }));
+    const [unico] = [...roles];
+    return roles.size === 1 && estados ? estados.corpus.cuts[unico] ?? null : null;
+  }, [sinEstado, estadoDe, estados]);
+  const calibracion = useMemo(
+    () => (estados ? scoreCalibration(propias, estadoDe, estados.corpus) : null),
+    [propias, estadoDe, estados]
   );
   /** Tu partida más reciente de la ventana (para las tendencias por campeón). */
   const ultima = useMemo(
@@ -862,7 +911,7 @@ const PatternsBody: React.FC = () => {
   // El estado vacío global solo cuando de verdad no hay nada que agregar. Con
   // un rol filtrado a cero, la página sigue en pie (y el filtro, a la vista)
   // para poder volver a "Todos".
-  if (rol === "all" && rango === "all" && clock.total === 0) {
+  if (rol === "all" && rango === "all" && estado === "all" && clock.total === 0) {
     return (
       <>
         <header className="pp-head">
@@ -1098,6 +1147,48 @@ const PatternsBody: React.FC = () => {
     t("No deaths in this window.")
   );
 
+  // Por delante / por detrás: cuánto ganas en los dos extremos y, si hay curva,
+  // cuántas tiraste.
+  const conEstado = filasEstado ? filasEstado.reduce((a, f) => a + f.games, 0) : 0;
+  const wrDe = (s: LaneState) => {
+    const f = filasEstado?.find((x) => x.state === s);
+    return f && f.games > 0 ? withPercent(Math.round((f.wins / f.games) * 100)) : "—";
+  };
+  const valorEstado: React.ReactNode =
+    estados === undefined ? (
+      <Skeleton width={180} className="pp-skel-inline" />
+    ) : estados === null ? (
+      t("Couldn't load: {what}", { what: t("Lane state") })
+    ) : conEstado === 0 ? (
+      suave(t("needs games synced with Riot that reach minute 15"))
+    ) : (
+      <>
+        <span className="pp-ex-strong">{t("Ahead you win {a} · behind {b}", { a: wrDe("ahead"), b: wrDe("behind") })}</span>
+        {rumbos && rumbos.withLead > 0 && (
+          <span className="pp-ex-soft">
+            {" · "}{t("{k} thrown of {n} ahead", { k: rumbos.thrown.length, n: rumbos.withLead })}
+          </span>
+        )}
+      </>
+    );
+  const valorNota: React.ReactNode =
+    estados === undefined ? (
+      <Skeleton width={160} className="pp-skel-inline" />
+    ) : !calibracion || calibracion.games === 0 ? (
+      suave(t("your win rate by impact score, against the corpus"))
+    ) : calibracion.mvpGames > 0 ? (
+      <>
+        <span className="pp-ex-strong">
+          {t("When you're MVP you win {p}%", { p: Math.round((calibracion.mvpWins / calibracion.mvpGames) * 100) })}
+        </span>
+        <span className="pp-ex-soft">
+          {" · "}{t(calibracion.mvpGames === 1 ? "1 game" : "{n} games", { n: calibracion.mvpGames })}
+        </span>
+      </>
+    ) : (
+      suave(t("No MVP yet in these {n} games", { n: calibracion.games }))
+    );
+
   const minutosFoco = Math.max(1, Math.round((listaFoco.length * SEGUNDOS_POR_MUERTE) / 60));
   const hot = calientes[0] ?? null;
   // El tramo del foco, con las palabras de la leyenda. Solo se nombra si hay
@@ -1136,6 +1227,21 @@ const PatternsBody: React.FC = () => {
             }))}
           />
           <PositionMenu value={rol} onChange={(r) => { setRol(r); setHover(null); }} />
+          <Segmented
+            label={t("Lane at 14:00")}
+            value={estado}
+            onChange={(e) => { setEstado(e); setHover(null); }}
+            options={[
+              { value: "all" as const, label: t("Any lane"), title: t("Every game, however the lane went") },
+              ...LANE_STATES.map((s) => ({
+                value: s,
+                label: t(STATE_LABEL[s]),
+                count: estados ? porEstado[s] : undefined,
+                disabled: !estados,
+                title: t("Gold vs your lane opponent at 14:00, in thirds of your role"),
+              })),
+            ]}
+          />
         </div>
         {/* En voz baja, pero dicho: un panel que se queda vacío por un fallo de
             lectura es indistinguible de uno que se queda vacío por falta de
@@ -1451,6 +1557,43 @@ const PatternsBody: React.FC = () => {
                 </div>
               </div>
             )}
+          </Ficha>
+
+          {/* ------------------------- por delante, igualada o por detrás (3.3).
+              Las tres filas a la vez, así que no sigue el filtro de estado de
+              la cabecera: marca su fila. Debajo, tiradas y remontadas. */}
+          <Ficha
+            id="estado"
+            icon={<Scale size={14} aria-hidden="true" />}
+            label={t("Ahead, even or behind")}
+            value={valorEstado}
+            open={abiertas.has("estado")}
+            onToggle={() => toggle("estado")}
+            disabled={!filasEstado || conEstado === 0}
+          >
+            {filasEstado && rumbos && (
+              <StateSplitCard
+                rows={filasEstado}
+                rates={rumbos}
+                selected={estado}
+                cuts={cortesEstado}
+                matchesById={matchesById}
+                onOpen={abrirPartida}
+              />
+            )}
+          </Ficha>
+
+          {/* ---------------------------------- tu nota frente al resultado (3.4) */}
+          <Ficha
+            id="nota"
+            icon={<Award size={14} aria-hidden="true" />}
+            label={t("Your score vs. the result")}
+            value={valorNota}
+            open={abiertas.has("nota")}
+            onToggle={() => toggle("nota")}
+            disabled={!calibracion || calibracion.games === 0}
+          >
+            {calibracion && <ScoreCalibrationCard cal={calibracion} />}
           </Ficha>
 
           {/* --------------------------------------- el punto ciego, por partida */}

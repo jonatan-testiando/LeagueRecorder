@@ -420,7 +420,7 @@ pub fn analizar(
 
     // 3. Objetivos: la prioridad se mira en el minuto previo, cuando se monta.
     for ev in tl.info.frames.iter().flat_map(|f| f.events.iter()) {
-        if ev.event_type != "ELITE_MONSTER_KILL" {
+        if ev.event_type != "ELITE_MONSTER_KILL" || ev.desaparecio() {
             continue;
         }
         let Some(kind) = ev.monsterType.clone() else { continue };

@@ -350,6 +350,12 @@ pub fn plays_and_curve(tl: &TimelineDto, participants: &[ParticipantDto]) -> (Ve
                     (eq, "plate", crate::attribution::PESO_PLACA / 1000.0, st.clone())
                 }
                 "ELITE_MONSTER_KILL" => {
+                    // Antes el 300 caía en «todo lo que no es el 100» y se le
+                    // regalaba al 200 un heraldo o unas larvas que no mató
+                    // nadie: en el 7,6 % de las partidas del corpus.
+                    if ev.desaparecio() {
+                        continue;
+                    }
                     let eq = if ev.killerTeamId != 0 {
                         ev.killerTeamId
                     } else {
@@ -675,6 +681,77 @@ mod tests {
         let v = plays(&tl, &ps);
         assert_eq!(v.iter().map(|p| p.kind.as_str()).collect::<Vec<_>>(), vec!["herald"]);
         assert!(v[0].wpa > 0.0);
+    }
+
+    /// El heraldo que desaparece a las 19:45 llega como `ELITE_MONSTER_KILL` del
+    /// equipo 300 (el neutral), a veces con quienes le pegaban de asistentes.
+    /// No es de nadie: ni jugada ni salto en la curva. Antes se le daba al 200.
+    #[test]
+    fn un_monstruo_que_desaparece_no_es_de_nadie() {
+        let ps = diez();
+        let desaparece = |ts: i64, tipo: &str| {
+            serde_json::json!({
+                "type": "ELITE_MONSTER_KILL", "timestamp": ts, "killerTeamId": 300, "killerId": 0,
+                "assistingParticipantIds": [1, 7], "bounty": 0, "monsterType": tipo,
+                "position": { "x": 4938, "y": 10383 },
+            })
+        };
+        let con = partida(25, vec![desaparece(885_000, "HORDE"), desaparece(1_185_000, "RIFTHERALD")]);
+        let (jugadas, curva) = plays_and_curve(&con, &ps);
+        assert!(jugadas.is_empty(), "{jugadas:?}");
+        let (_, sin) = plays_and_curve(&partida(25, vec![]), &ps);
+        assert_eq!(
+            curva.iter().map(|p| p.p100).collect::<Vec<_>>(),
+            sin.iter().map(|p| p.p100).collect::<Vec<_>>(),
+        );
+    }
+
+    /// Lo mismo en el corpus, por la identidad que lo destapó: si cada equipo lee
+    /// las jugadas desde su óptica, la tirada de uno (llegó al 65 % y perdió) es
+    /// la remontada del otro (cayó al 35 % y ganó). Con las jugadas del 300
+    /// fallaba en 26 de 18.000. Una de cada diez partidas.
+    ///
+    /// `CORPUS_DIR=D:/lol-corpus cargo test --release --lib winprob::tests::tirada_de_uno_es_remontada_del_otro_en_el_corpus -- --nocapture`
+    #[test]
+    fn tirada_de_uno_es_remontada_del_otro_en_el_corpus() {
+        use std::io::Read;
+        let Ok(corpus) = std::env::var("CORPUS_DIR") else { return };
+        let mut ficheros: Vec<std::path::PathBuf> = std::fs::read_dir(format!("{corpus}/partidas"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .flat_map(|d| std::fs::read_dir(d.path()).into_iter().flatten().flatten().map(|f| f.path()))
+            .collect();
+        ficheros.sort();
+        let (mut partidas, mut tiradas, mut rotas) = (0usize, 0usize, Vec::new());
+        for f in ficheros.iter().step_by(10) {
+            let mut texto = String::new();
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            if flate2::read::GzDecoder::new(&bytes[..]).read_to_string(&mut texto).is_err() {
+                continue;
+            }
+            let Ok(mut d) = serde_json::from_str::<serde_json::Value>(&texto) else { continue };
+            let Ok(ps) = serde_json::from_value::<Vec<ParticipantDto>>(d["match"]["info"]["participants"].take()) else { continue };
+            let Ok(tl) = serde_json::from_value::<TimelineDto>(d["timeline"].take()) else { continue };
+            let jugadas = plays(&tl, &ps);
+            assert!(jugadas.iter().all(|j| matches!(j.team_id, 100 | 200)), "{}", f.display());
+            let gano = |t: i32| ps.iter().any(|p| p.teamId == t && p.win);
+            let rumbo = |t: i32| {
+                let wp = jugadas.iter().map(|j| if j.team_id == t { j.after } else { 1.0 - j.after });
+                wp.fold((0.5f64, 0.5f64), |(lo, hi), p| (lo.min(p), hi.max(p)))
+            };
+            let ((lo100, hi100), (lo200, hi200)) = (rumbo(100), rumbo(200));
+            let tiro = |hi: f64, t: i32| hi >= 0.65 && !gano(t);
+            let remonto = |lo: f64, t: i32| lo <= 0.35 && gano(t);
+            if tiro(hi100, 100) != remonto(lo200, 200) || tiro(hi200, 200) != remonto(lo100, 100) {
+                rotas.push(f.display().to_string());
+            }
+            tiradas += tiro(hi100, 100) as usize + tiro(hi200, 200) as usize;
+            partidas += 1;
+        }
+        println!("{partidas} partidas · {tiradas} tiradas · {} sin cuadrar", rotas.len());
+        assert!(partidas > 0);
+        assert!(rotas.is_empty(), "{rotas:?}");
     }
 
     /// Un punto por fotograma, cada uno después de los eventos que Riot metió en

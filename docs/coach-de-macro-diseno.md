@@ -38,7 +38,7 @@ Parte de la ingeniería inversa de iTero Coach (`docs/analisis-itero-coach-2026-
 - **Jugadas con ΔWP:** exponer la lista de jugadas de `winprob.rs::plays()` (261-384), que hoy se calcula y se tira.
   - Comando nuevo `get_match_plays(match_id)`.
   - Por jugada: `time`, `kind`, `team_id`, WP antes y después, `wpa`, `shares` y `victim`.
-  - Cacheado en `<id>/plays_v1.json`.
+  - Cacheado en `<id>/plays_v2.json`.
 - **Curva de probabilidad de victoria por minuto:** sale gratis de `State` en cada frame.
 - **Huecos del modelo** que hay que tapar antes de usarlo para coaching:
   - Las muertes ejecutadas (killerId 0) hoy cuestan 0 (`winprob.rs:284`). Hay que valorarlas como kill enemiga sin bounty, porque el tiempo muerto sí cuenta.

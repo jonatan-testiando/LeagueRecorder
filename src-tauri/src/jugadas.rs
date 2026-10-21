@@ -16,7 +16,7 @@ use crate::winprob::{Play, WpPoint};
 /// Caché en la carpeta de la partida. Cualquier cambio en el modelo de
 /// victoria o en este formato exige subir el número: un fichero viejo no se
 /// distingue de uno bueno.
-pub const FICHERO: &str = "plays_v1.json";
+pub const FICHERO: &str = "plays_v2.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchPlays {
@@ -40,6 +40,14 @@ fn cargar_o_calcular(match_id: &str) -> Result<MatchPlays, String> {
     // El metadata primero: sin él la partida no existe, y `get_match_dir`
     // crearía una carpeta vacía con ese nombre.
     let meta = crate::storage::get_match_metadata(match_id)?;
+    de_partida(&meta)
+}
+
+/// Lo mismo con el metadata ya leído. Quien recorre la biblioteca entera
+/// (`estado_partida`) lo tiene de `load_all_matches`, sin la estela del ratón:
+/// volver a leerlo con `get_match_metadata` multiplicaba el tiempo por diez.
+pub(crate) fn de_partida(meta: &crate::storage::MatchMetadata) -> Result<MatchPlays, String> {
+    let match_id = meta.id.as_str();
     let cache = crate::storage::get_match_dir(match_id).join(FICHERO);
     if fresca(&cache, &crate::storage::get_timeline_path(match_id)) {
         if let Some(v) = std::fs::read_to_string(&cache).ok().and_then(|r| serde_json::from_str(&r).ok()) {

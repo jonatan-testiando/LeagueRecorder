@@ -563,7 +563,7 @@ pub struct PartidaCoach {
 
 /// Caché en la carpeta de la partida. Cualquier cambio en las reglas exige
 /// subir el número.
-pub const FICHERO: &str = "coach_v1.json";
+pub const FICHERO: &str = "coach_v2.json";
 
 /// Los ficheros de los que sale el análisis. Si alguno es más nuevo que la
 /// caché, se rehace.
@@ -1586,7 +1586,7 @@ mod tests {
             let pista = pos.follow(&anclas);
             let mi_equipo = m.info.participants[(yo - 1) as usize].teamId;
             for ev in tl.info.frames.iter().flat_map(|f| f.events.iter()) {
-                let (true, Some(p)) = (ev.event_type == "ELITE_MONSTER_KILL", ev.position.as_ref()) else { continue };
+                let (true, Some(p)) = (ev.event_type == "ELITE_MONSTER_KILL" && !ev.desaparecio(), ev.position.as_ref()) else { continue };
                 let sec = ev.timestamp as f64 / 1000.0;
                 let estuvo = ev.killerId == yo || ev.assistingParticipantIds.contains(&yo);
                 let d = |(x, y): (f64, f64)| (x - p.x as f64).hypot(y - p.y as f64);
@@ -1638,7 +1638,7 @@ mod tests {
             let pista = pos.follow(&anclas);
             let vivos = Vivos::build(&tl);
             for ev in tl.info.frames.iter().flat_map(|f| f.events.iter()) {
-                let (true, Some(p)) = (ev.event_type == "ELITE_MONSTER_KILL", ev.position.as_ref()) else { continue };
+                let (true, Some(p)) = (ev.event_type == "ELITE_MONSTER_KILL" && !ev.desaparecio(), ev.position.as_ref()) else { continue };
                 let sec = ev.timestamp as f64 / 1000.0;
                 if !vivos.alive(yo, sec) {
                     continue;

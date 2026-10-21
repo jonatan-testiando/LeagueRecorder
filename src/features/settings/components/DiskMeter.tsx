@@ -32,61 +32,41 @@ export const DiskMeter: React.FC<{ disk: DiskSpaceInfo | null }> = ({ disk }) =>
   const libresGb = disk.free_bytes / GB;
   const apretado = hayDisco && libresGb < DISK_LOW_GB;
 
+  // Los estilos viven en SettingsPanel.css (`.stg-disk*`): aquí solo queda lo
+  // que depende del dato, el ancho de la barra.
   return (
-    <div style={styles.wrap}>
-      <div style={styles.line}>
-        <span style={styles.label}>
+    <div className="stg-disk">
+      <div className="stg-disk__line">
+        <span className="stg-disk__label">
           {t("{used} GB of {total} GB quota used", {
             used: gb(disk.used_bytes),
             total: gb(disk.total_bytes, 0),
           })}
         </span>
-        <span className="u-metric" style={{ fontSize: 13, color: "var(--faint)" }}>
-          {pct}%
-        </span>
+        <span className="stg-disk__label">{pct}%</span>
       </div>
 
-      {/* `flex: none` a mano: la clase viene de la barra de descarga, que vive en
-          una fila; aquí la columna le dejaba la altura en cero y no se veía. */}
-      <span className="upd__track" style={{ flex: "none", height: 4, width: "100%" }}>
+      {/* La pista es la de la barra de descarga; `.stg-disk__track` le quita el
+          `flex: 1`, que en esta columna la dejaba con la altura en cero. */}
+      <span className="upd__track stg-disk__track">
         <span
           className="upd__fill"
-          style={{ width: `${pct}%`, background: pct >= 90 ? "var(--brand)" : "var(--cool)" }}
+          {...(pct >= 90 ? { "data-tone": "full" } : {})}
+          style={{ width: `${pct}%` }}
         />
       </span>
 
       {hayDisco && (
-        <div style={{ ...styles.line, justifyContent: "flex-start", gap: "var(--space-2)" }}>
-          <span style={{ ...styles.label, color: apretado ? "var(--loss)" : "var(--faint)" }}>
+        <div className="stg-disk__line stg-disk__line--start" {...(apretado ? { "data-tone": "bad" } : {})}>
+          <span className="stg-disk__label">
             {t("Drive: {free} GB free of {total} GB", {
               free: gb(disk.free_bytes),
               total: gb(disk.drive_total_bytes, 0),
             })}
           </span>
-          {apretado && (
-            <span className="u-meta" style={{ color: "var(--loss)" }}>
-              · {t("Recording stops below 1 GB free")}
-            </span>
-          )}
+          {apretado && <span className="stg-disk__label">· {t("Recording stops below 1 GB free")}</span>}
         </div>
       )}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  wrap: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-    padding: "var(--space-3) 0 var(--space-2)",
-  },
-  line: {
-    display: "flex",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: "var(--space-3)",
-    flexWrap: "wrap",
-  },
-  label: { fontSize: 13, color: "var(--faint)", lineHeight: 1.45, fontVariantNumeric: "tabular-nums" },
 };

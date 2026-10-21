@@ -6,7 +6,7 @@ import { queueKey } from "../../../core/matchStats";
 // La lista de regiones se comparte con el asistente de primer arranque.
 import { RIOT_PLATFORMS, platformLabel } from "../../../core/riotRegions";
 import { AudioStatus, VideoSettings } from "../../../types";
-import { Archive, Download, Eye, EyeOff, FolderOpen, RefreshCw, RotateCcw, Upload, Wand2, X } from "lucide-react";
+import { Archive, CircleAlert, CircleCheck, CircleDashed, Download, Eye, EyeOff, FolderOpen, Play, RefreshCw, RotateCcw, Upload, Wand2, X } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { RIOT_DEV_PORTAL } from "../../../components/RiotKeyBanner";
@@ -73,11 +73,13 @@ const parseMinimapOverride = (raw: string): number | null => {
 };
 
 /* -------------------------------------------------------------- categorías
-   Cinco. La activa vive en estado y se recuerda en localStorage; además se
+   Seis. La activa vive en estado y se recuerda en localStorage; además se
    puede pedir por la URL con `?cat=account` (HashRouter: `#/settings?cat=account`),
    que es como debería llegar quien viene a "arreglar la clave" desde el rail o
-   desde Hoy. Los alias existen para que el enlace no dependa del nombre interno. */
-type Category = "recording" | "storage" | "account" | "advanced" | "diagnostics";
+   desde Hoy. Los alias existen para que el enlace no dependa del nombre interno.
+   «Apariencia» (tema e idioma) se separó de «Cuenta y Riot»: no tienen nada
+   que ver con Riot y quien los buscaba no los encontraba ahí. */
+type Category = "recording" | "storage" | "account" | "appearance" | "advanced" | "diagnostics";
 
 const CATEGORIES: { key: Category; label: string }[] = [
   // "Recording" ya está traducida como "Grabando" (estado del grabador), así que
@@ -85,6 +87,7 @@ const CATEGORIES: { key: Category; label: string }[] = [
   { key: "recording", label: "Capture" },
   { key: "storage", label: "Storage" },
   { key: "account", label: "Account and Riot" },
+  { key: "appearance", label: "Appearance" },
   { key: "advanced", label: "Advanced" },
   { key: "diagnostics", label: "Diagnostics" },
 ];
@@ -98,12 +101,18 @@ const CATEGORY_ALIASES: Record<string, Category> = {
   account: "account",
   riot: "account",
   key: "account",
-  appearance: "account",
+  appearance: "appearance",
+  theme: "appearance",
+  language: "appearance",
+  lang: "appearance",
   advanced: "advanced",
   updates: "advanced",
   diagnostics: "diagnostics",
   tools: "diagnostics",
 };
+
+/** El tema en el orden de Figma: el claro primero, que es el que se usa. */
+const THEME_ORDER: Theme[] = ["light", "dark", "system"];
 
 const CATEGORY_STORAGE_KEY = "settingsCategory";
 
@@ -158,12 +167,58 @@ const Row: React.FC<{
   children: React.ReactNode;
 }> = ({ label, desc, wrap, children }) => (
   <div className={wrap ? "stg-row stg-row--wrap" : "stg-row"}>
-    <div>
+    <div className="stg-row__txt">
       <h2 className="stg-row__title">{label}</h2>
       {desc && <p className="stg-row__help">{desc}</p>}
     </div>
     <div className="stg-row__ctl">{children}</div>
   </div>
+);
+
+/**
+ * Estado de una pieza de la cadena de captura. Bien y mal llevan icono (no
+ * solo color: con un punto verde o rojo, el daltónico no distinguía uno de
+ * otro); «apagado» no es un fallo (el cliente de League cerrado) y va en
+ * --faint; «grabando» es el punto rojo que late, como en toda la app.
+ */
+type DiagTone = "ok" | "bad" | "off" | "rec";
+
+const DiagIcon: React.FC<{ tone: DiagTone }> = ({ tone }) =>
+  tone === "rec" ? (
+    <span className="stg-dot" aria-hidden="true" />
+  ) : tone === "ok" ? (
+    <CircleCheck size={16} className="stg-ico" data-tone="ok" aria-hidden="true" />
+  ) : tone === "bad" ? (
+    <CircleAlert size={16} className="stg-ico" data-tone="bad" aria-hidden="true" />
+  ) : (
+    <CircleDashed size={16} className="stg-ico" aria-hidden="true" />
+  );
+
+/**
+ * Tira de diagnóstico: lo primero de Grabación y de Diagnóstico. El estado no
+ * se ajusta, se comprueba, así que va arriba y con la ÚNICA acción oro de la
+ * pantalla (la prueba de 10 segundos). La nota de debajo dice qué está
+ * haciendo la prueba o el mantenimiento de la biblioteca.
+ */
+const DiagStrip: React.FC<{
+  label: string;
+  cells: { label: string; tone: DiagTone; value: React.ReactNode; title?: string }[];
+  action: React.ReactNode;
+  note?: React.ReactNode;
+}> = ({ label, cells, action, note }) => (
+  <section className="card stg-diag" aria-label={label}>
+    {cells.map((c) => (
+      <div className="stg-diag__c" key={c.label}>
+        <span className="u-label">{c.label}</span>
+        <span className="stg-diag__v" title={c.title}>
+          <DiagIcon tone={c.tone} />
+          <span>{c.value}</span>
+        </span>
+      </div>
+    ))}
+    <div className="stg-diag__act">{action}</div>
+    {note && <p className="u-meta stg-diag__note" role="status">{note}</p>}
+  </section>
 );
 
 export const SettingsPanel: React.FC = () => {
@@ -186,6 +241,13 @@ export const SettingsPanel: React.FC = () => {
     if (c) setCategory(c);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
+  // La página entera hace scroll (la sub-navegación se queda pegada arriba):
+  // al cambiar de categoría se vuelve al principio, o la nueva empezaría a
+  // media altura.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [category]);
 
   const [isRecording, setIsRecording] = useState<boolean>(false);
   // null hasta que el backend contesta al menos una vez: la celda del grabador
@@ -626,11 +688,10 @@ export const SettingsPanel: React.FC = () => {
     if (isRecording || isProcessing || testLeft !== null) return;
     const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
     if (!(await startManual(`test-${stamp}`))) return;
+    // La cuenta atrás va en el propio botón; la nota de la tira se queda con
+    // «Grabación en curso», que no la repite.
     for (let s = QUICK_TEST_SECONDS; s > 0; s--) {
-      if (alive.current) {
-        setTestLeft(s);
-        setStatusMsg(t("Testing… {n} s left", { n: s }));
-      }
+      if (alive.current) setTestLeft(s);
       await sleep(1000);
     }
     if (alive.current) setTestLeft(null);
@@ -702,53 +763,58 @@ export const SettingsPanel: React.FC = () => {
   const diskBad = (diskPct !== null && diskPct > 90) || discoApretado;
   const testBusy = isProcessing || testLeft !== null;
 
+  // Tema actual dicho con su nombre, para el lado de «Apariencia» en la nav.
+  const themeLabel = THEMES.find((th) => th.code === theme)?.label;
+
+  /**
+   * La prueba de 10 segundos: la acción oro de Grabación y de Diagnóstico.
+   * Mientras corre, el spinner y la cuenta atrás viven en el propio botón.
+   * Deshabilitada mientras graba otra cosa (una partida o una prueba manual):
+   * el «parar» vive en Diagnóstico, para no cortar una partida real por un
+   * botón que decía «prueba».
+   */
+  const quickTestButton = (
+    <Button
+      variant="primary"
+      icon={<Play size={16} />}
+      onClick={handleQuickTest}
+      loading={testLeft !== null}
+      loadingLabel={testLeft !== null ? t("Testing… {n} s left", { n: testLeft }) : undefined}
+      disabled={testLeft === null && (isProcessing || isRecording)}
+      title={t("Records your screen for 10 seconds and saves it to the Library, so you can check video and sound before a real match.")}
+    >
+      {t("10-second test")}
+    </Button>
+  );
+
+  const maintText = maint
+    ? t("Updating library: {phase} {done}/{total}", {
+        phase: t(maint.phase),
+        done: maint.done,
+        total: maint.total,
+      })
+    : "";
+
   /* ------------------------------------------------------------- Grabación */
   const recordingView = (
     <>
-      {/* Tira de diagnóstico: el estado no se ajusta, se comprueba. Es la
-          superficie héroe de la pantalla y lleva el único botón primario. */}
-      <section className="surface-hero stg-diag" aria-label={t("Diagnostics")}>
-        {/* El grabador (grabando / en espera) y el disco libre ya se ven
-            siempre en la barra de título: aquí solo lo que comprueba la
-            cadena de captura y no está en ningún otro sitio. */}
-        <div className="stg-diag__c">
-          <span className="u-label">{t("Encoder")}</span>
-          <span className="stg-diag__v">
-            <span className="stg-dot" data-tone={recorderKnown ? "ok" : "bad"} />
-            <span>{ENCODER_LABEL}</span>
-          </span>
-        </div>
-        <div className="stg-diag__c">
-          <span className="u-label">{t("Game sound")}</span>
-          <span className="stg-diag__v" title={audio?.system_audio_device ?? undefined}>
-            <span className="stg-dot" data-tone={audioReady ? "ok" : "bad"} />
-            <span>{audioLabel}</span>
-          </span>
-        </div>
-        {/* Deshabilitado mientras graba (una partida o una prueba manual): el
-            "parar" vive en Diagnóstico, para no cortar una partida real por
-            un botón que decía "prueba". */}
-        <button
-          onClick={handleQuickTest}
-          disabled={testBusy || isRecording}
-          className="btn btn--primary btn--md"
-          title={t("Records your screen for 10 seconds and saves it to the Library, so you can check video and sound before a real match.")}
-        >
-          {testLeft !== null ? t("Testing… {n} s left", { n: testLeft }) : t("10-second test")}
-        </button>
-        {(statusMsg || maint) && (
-          <p className="u-meta stg-diag__note" role="status">
-            {statusMsg}
-            {statusMsg && maint && " · "}
-            {maint &&
-              t("Updating library: {phase} {done}/{total}", {
-                phase: t(maint.phase),
-                done: maint.done,
-                total: maint.total,
-              })}
-          </p>
-        )}
-      </section>
+      {/* El grabador (grabando / en espera) y el disco libre ya se ven siempre
+          en la barra de título: aquí solo lo que comprueba la cadena de
+          captura y no está en ningún otro sitio. */}
+      <DiagStrip
+        label={t("Diagnostics")}
+        cells={[
+          { label: t("Encoder"), tone: recorderKnown ? "ok" : "bad", value: ENCODER_LABEL },
+          {
+            label: t("Game sound"),
+            tone: audioReady ? "ok" : "bad",
+            value: audioLabel,
+            title: audio?.system_audio_device ?? undefined,
+          },
+        ]}
+        action={quickTestButton}
+        note={(statusMsg || maint) && [statusMsg, maintText].filter(Boolean).join(" · ")}
+      />
 
       {/* La receta para arreglar el audio solo aparece cuando hace falta. */}
       {!audioReady && (
@@ -989,9 +1055,27 @@ export const SettingsPanel: React.FC = () => {
     </>
   );
 
-  /* ----------------------------------------------------------- Cuenta y Riot */
-  const accountView = (
+  /* -------------------------------------------------------------- Apariencia */
+  // Los dos se aplican al momento y se guardan en la config del backend; los
+  // proveedores escriben además la pista de arranque (`lr-boot`) para que el
+  // próximo arranque salga ya con este tema y este idioma, sin fogonazo.
+  const appearanceView = (
     <section className="card stg-card">
+      <Row
+        label={t("Theme")}
+        desc={t("System follows Windows. Neither theme uses pure black or pure white.")}
+      >
+        <Segmented
+          label={t("Theme")}
+          value={theme}
+          onChange={(th) => setTheme(th)}
+          options={THEME_ORDER.map((code) => ({
+            value: code,
+            label: t(THEMES.find((th) => th.code === code)?.label ?? code),
+          }))}
+        />
+      </Row>
+
       <Row label={t("Language")} desc={t("Interface language. Saved with your settings.")}>
         <Segmented
           label={t("Language")}
@@ -1000,16 +1084,12 @@ export const SettingsPanel: React.FC = () => {
           options={LANGUAGES.map((l) => ({ value: l.code as Language, label: l.label }))}
         />
       </Row>
+    </section>
+  );
 
-      <Row label={t("Appearance")} desc={t("Follows Windows. Saved with your settings.")}>
-        <Segmented
-          label={t("Appearance")}
-          value={theme}
-          onChange={(th) => setTheme(th)}
-          options={THEMES.map((th) => ({ value: th.code as Theme, label: t(th.label) }))}
-        />
-      </Row>
-
+  /* ----------------------------------------------------------- Cuenta y Riot */
+  const accountView = (
+    <section className="card stg-card">
       <Row
         label={t("Riot API key")}
         wrap
@@ -1042,13 +1122,7 @@ export const SettingsPanel: React.FC = () => {
           {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
         </button>
         {keyState !== null && (
-          <span
-            className="u-meta"
-            style={{
-              color:
-                keyState === "ok" ? "var(--win)" : keyState === "bad" ? "var(--loss)" : undefined,
-            }}
-          >
+          <span className="u-meta stg-keystate" data-tone={keyState}>
             {keyState === "saving" && t("Checking…")}
             {keyState === "ok" && t("Key saved and working")}
             {keyState === "bad" && (keyMsg || t("The key is not valid"))}
@@ -1153,11 +1227,17 @@ export const SettingsPanel: React.FC = () => {
       </Row>
 
       <Row label={t("AI dataset generator")} desc={t("Extracts frames at the moment of each click to train the detector. Off unless you are working on the model.")}>
-        <input
-          type="checkbox"
-          className="check"
-          checked={config?.auto_dataset_generator ?? false}
-          onChange={(e) => handleSaveConfig({ auto_dataset_generator: e.target.checked })}
+        {/* Apagado/Activado con el mismo segmentado que el resto del
+            formulario: la casilla nativa de 16 px era la única pieza del
+            navegador que quedaba en Ajustes, y un objetivo demasiado pequeño. */}
+        <Segmented
+          label={t("AI dataset generator")}
+          value={config ? (config.auto_dataset_generator ? "on" : "off") : null}
+          onChange={(on) => handleSaveConfig({ auto_dataset_generator: on === "on" }).catch(() => {})}
+          options={[
+            { value: "off" as const, label: t("Off") },
+            { value: "on" as const, label: t("On") },
+          ].map((o) => ({ ...o, disabled: config === null }))}
         />
       </Row>
 
@@ -1177,7 +1257,7 @@ export const SettingsPanel: React.FC = () => {
         {isDownloading ? (
           <div className="upd">
             <span className="upd__track"><span className="upd__fill" style={{ width: `${downloadProgress}%` }} /></span>
-            <span className="u-metric" style={{ fontSize: 12 }}>{downloadProgress}%</span>
+            <span className="u-metric stg-upd-pct">{downloadProgress}%</span>
           </div>
         ) : pending ? (
           <button onClick={installUpdate} className="btn btn--ghost btn--sm">
@@ -1193,11 +1273,49 @@ export const SettingsPanel: React.FC = () => {
   );
 
   /* ------------------------------------------------------------- Diagnóstico */
+  // El cliente de League en una línea: fase, cola e id de la partida.
+  const lcuText = !lcu
+    ? "—"
+    : !lcu.connected
+      ? t("Not detected")
+      : [
+          lcu.phase ? (LCU_PHASES[lcu.phase] ? t(LCU_PHASES[lcu.phase]) : lcu.phase) : null,
+          lcu.queue_id != null ? t(queueKey(lcu.queue_id)) : null,
+          // En partida, el id de Match-V5 tal cual ("LA1_…"); fuera, la
+          // plataforma sola, que es lo que hará falta para formarlo.
+          lcu.game_id != null
+            ? `${lcu.platform_id ? `${lcu.platform_id}_` : ""}${lcu.game_id}`
+            : lcu.platform_id,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
   const diagnosticsView = (
     <>
+      {/* Arriba, el estado de lo que graba y lo que lee, con la prueba como
+          única acción oro; debajo, las herramientas a mano. */}
+      <DiagStrip
+        label={t("Diagnostics")}
+        cells={[
+          {
+            label: t("Recorder"),
+            tone: isRecording ? "rec" : recorderKnown ? "ok" : "bad",
+            value: isRecording ? t("Recording") : recorderKnown ? t("Idle") : "—",
+          },
+          {
+            label: t("League client"),
+            tone: lcu?.connected ? "ok" : "off",
+            value: lcuText,
+            title: t("Read-only. Gives the queue and the exact game ID, so the Riot sync doesn't have to guess by duration."),
+          },
+        ]}
+        action={quickTestButton}
+        note={(statusMsg || maint) && [statusMsg, maintText].filter(Boolean).join(" · ")}
+      />
+
       <section className="card stg-card">
         {/* Grabar a mano no es un ajuste: es algo que se ejecuta. La prueba de
-            10 segundos de Grabación es esta misma con nombre automático. */}
+            10 segundos de arriba es esta misma con nombre automático. */}
         <Row label={t("Manual test recording")} desc={t("Checks that capture and GPU encoding work before trusting a real match.")}>
           {isRecording ? (
             <button onClick={handleStopManual} disabled={testBusy} className="btn btn--ghost btn--sm">
@@ -1207,9 +1325,9 @@ export const SettingsPanel: React.FC = () => {
             <>
               <input
                 type="text"
-                className="field field--num"
-                style={{ width: 120 }}
+                className="field stg-name"
                 placeholder={t("name")}
+                aria-label={t("name")}
                 value={manualId}
                 onChange={(e) => setManualId(e.target.value)}
                 disabled={testBusy}
@@ -1220,49 +1338,6 @@ export const SettingsPanel: React.FC = () => {
             </>
           )}
         </Row>
-        {statusMsg && <p className="note" role="status">{statusMsg}</p>}
-
-        <Row label={t("Recorder")}>
-          <span className="stg-diag__v">
-            <span className="stg-dot" data-tone={isRecording ? "rec" : recorderKnown ? "ok" : "bad"} />
-            <span>{isRecording ? t("Recording") : recorderKnown ? t("Idle") : "—"}</span>
-          </span>
-        </Row>
-
-        <Row label={t("League client")} desc={t("Read-only. Gives the queue and the exact game ID, so the Riot sync doesn't have to guess by duration.")}>
-          <span className="stg-diag__v">
-            <span className="stg-dot" data-tone={lcu?.connected ? undefined : "off"} />
-            <span>
-              {!lcu
-                ? "—"
-                : !lcu.connected
-                  ? t("Not detected")
-                  : [
-                      lcu.phase ? (LCU_PHASES[lcu.phase] ? t(LCU_PHASES[lcu.phase]) : lcu.phase) : null,
-                      lcu.queue_id != null ? t(queueKey(lcu.queue_id)) : null,
-                      // En partida, el id de Match-V5 tal cual ("LA1_…"); fuera, la
-                      // plataforma sola, que es lo que hará falta para formarlo.
-                      lcu.game_id != null
-                        ? `${lcu.platform_id ? `${lcu.platform_id}_` : ""}${lcu.game_id}`
-                        : lcu.platform_id,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-            </span>
-          </span>
-        </Row>
-
-        {maint && (
-          <Row label={t("Library")}>
-            <span className="u-meta">
-              {t("Updating library: {phase} {done}/{total}", {
-                phase: t(maint.phase),
-                done: maint.done,
-                total: maint.total,
-              })}
-            </span>
-          </Row>
-        )}
       </section>
 
       <div className="stg-grp">
@@ -1283,7 +1358,7 @@ export const SettingsPanel: React.FC = () => {
         </Row>
         <div className="stg-row">
           {audio && audio.all_devices.length > 0 ? (
-            <ul className="stg-list" style={{ gridColumn: "1 / -1" }}>
+            <ul className="stg-list stg-row__full">
               {audio.all_devices.map((d) => (
                 <li key={d} {...(d === audio.system_audio_device ? { "data-used": true } : {})}>
                   {d}{d === audio.system_audio_device ? ` ← ${t("used for the game")}` : ""}
@@ -1291,7 +1366,7 @@ export const SettingsPanel: React.FC = () => {
               ))}
             </ul>
           ) : (
-            <p className="stg-row__help" style={{ gridColumn: "1 / -1", maxWidth: "none" }}>
+            <p className="stg-row__help stg-row__full">
               {t("No device list: the recorder captures the loopback of the default Windows output device.")}
             </p>
           )}
@@ -1304,16 +1379,17 @@ export const SettingsPanel: React.FC = () => {
     recording: recordingView,
     storage: storageView,
     account: accountView,
+    appearance: appearanceView,
     advanced: advancedView,
     diagnostics: diagnosticsView,
   };
 
   return (
-    <div className="stg panel-enter">
+    <div className="stg panel-enter" ref={scrollRef}>
       {isInstalling && (
         <div className="updv" role="status" aria-live="polite">
           <div className="updv__card">
-            <RefreshCw size={22} color="var(--cool)" style={{ margin: "0 auto", animation: "spin 1s linear infinite" }} />
+            <RefreshCw size={22} className="stg-updv-spin" />
             <span className="updv__title">{t("Installing update…")}</span>
             <span className="updv__note">
               {t("The app will close and reopen by itself when it finishes. Do not close it.")}
@@ -1322,54 +1398,58 @@ export const SettingsPanel: React.FC = () => {
         </div>
       )}
 
-      <header className="stg__head">
-        <h1>{t("Settings")}</h1>
-        <p className="stg__sub">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
-      </header>
+      <div className="stg__wrap">
+        <header className="stg__head">
+          <h1>{t("Settings")}</h1>
+          <p className="stg__sub">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
+        </header>
 
-      <div className="stg__body">
-        <nav className="stg-nav" aria-label={t("Settings categories")}>
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.key}
-              type="button"
-              className="stg-nav__btn"
-              onClick={() => setCategory(c.key)}
-              {...(category === c.key ? { "aria-current": "page" as const } : {})}
-            >
-              {t(c.label)}
-              {c.key === "storage" && diskPct !== null && (
-                // El aviso de disco que antes llevaba la tira de estado: el
-                // hueco libre ya está en la barra de título, pero que la cuota
-                // o el disco van justos se señala donde se arregla.
-                <span className="u-meta stg-nav__meta" {...(diskBad ? { "data-tone": "bad" } : {})}>{diskPct} %</span>
+        <div className="stg__body">
+          <nav className="stg-nav" aria-label={t("Settings categories")}>
+            {CATEGORIES.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className="stg-nav__btn"
+                onClick={() => setCategory(c.key)}
+                {...(category === c.key ? { "aria-current": "page" as const } : {})}
+              >
+                <span className="stg-nav__label">{t(c.label)}</span>
+                {c.key === "storage" && diskPct !== null && (
+                  // El aviso de disco que antes llevaba la tira de estado: el
+                  // hueco libre ya está en la barra de título, pero que la cuota
+                  // o el disco van justos se señala donde se arregla.
+                  <span className="stg-nav__meta" {...(diskBad ? { "data-tone": "bad" } : {})}>{diskPct} %</span>
+                )}
+                {/* El tema que hay puesto, para no tener que entrar a mirarlo. */}
+                {c.key === "appearance" && themeLabel && (
+                  <span className="stg-nav__meta">{t(themeLabel)}</span>
+                )}
+              </button>
+            ))}
+            <div className="stg-nav__foot">
+              <span className="u-meta">
+                {/* "Al día" solo tras una comprobación de verdad en esta sesión. */}
+                {appVersion
+                  ? pending
+                    ? t("Version {v} · update ready", { v: appVersion })
+                    : upToDate
+                      ? t("Version {v} · up to date", { v: appVersion })
+                      : t("Version {v}", { v: appVersion })
+                  : "—"}
+              </span>
+              {pending ? (
+                <button type="button" className="stg-nav__link" onClick={installUpdate}>
+                  {t("Restart and install")}
+                </button>
+              ) : (
+                <button type="button" className="stg-nav__link" onClick={checkForUpdates} disabled={isUpdating || isDownloading}>
+                  {isUpdating ? t("Checking…") : t("Check for updates")}
+                </button>
               )}
-            </button>
-          ))}
-          <div className="stg-nav__foot">
-            <span className="u-meta">
-              {/* "Al día" solo tras una comprobación de verdad en esta sesión. */}
-              {appVersion
-                ? pending
-                  ? t("Version {v} · update ready", { v: appVersion })
-                  : upToDate
-                    ? t("Version {v} · up to date", { v: appVersion })
-                    : t("Version {v}", { v: appVersion })
-                : "—"}
-            </span>
-            {pending ? (
-              <button type="button" className="stg-nav__link" onClick={installUpdate}>
-                {t("Restart and install")}
-              </button>
-            ) : (
-              <button type="button" className="stg-nav__link" onClick={checkForUpdates} disabled={isUpdating || isDownloading}>
-                {isUpdating ? t("Checking…") : t("Check for updates")}
-              </button>
-            )}
-          </div>
-        </nav>
+            </div>
+          </nav>
 
-        <div className="stg__content">
           <div className="stg__col" key={category}>
             {views[category]}
             <p className="u-meta stg-foot">{t("Changes are saved as you make them or when you leave a field.")}</p>

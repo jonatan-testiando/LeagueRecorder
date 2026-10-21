@@ -370,6 +370,22 @@ pub struct TimelineEvent {
     pub position: Option<PositionDto>,
 }
 
+impl TimelineEvent {
+    /// Un monstruo épico que desapareció sin que nadie lo matara: Riot lo
+    /// apunta como `ELITE_MONSTER_KILL` con `killerTeamId` 300 (el equipo
+    /// neutral) y `killerId` 0.
+    ///
+    /// Medido en el corpus (12.974 partidas, parches 16.13-16.16): 873 heraldos
+    /// a las 19:45, cuando sale el barón, y 255 larvas a las 14:45, cuando sale
+    /// el heraldo; los que llegan hasta diez segundos tarde estaban en combate.
+    /// El resumen de la partida no se los cuenta a ningún equipo en ninguno de
+    /// los casos. Los `assistingParticipantIds` que traen a veces (139) son
+    /// quienes le pegaban, de cualquiera de los dos equipos.
+    pub fn desaparecio(&self) -> bool {
+        self.event_type == "ELITE_MONSTER_KILL" && self.killerTeamId == 300
+    }
+}
+
 /// Una instancia de daño dentro de un `CHAMPION_KILL`.
 ///
 /// Dos trampas comprobadas contra respuestas reales de la API:
@@ -1501,7 +1517,9 @@ pub struct PressureEpisode {
 // v8 (2026-10-17): cada suceso del episodio (gains/losses/context) lleva dónde
 // pasó (x, y de la timeline), para pintar en el mapa lo que hizo tu equipo
 // mientras te sujetaban. Las cachés viejas no lo traen: se rehacen.
-const PRESSURE_CACHE_V: u32 = 8;
+// v9 (2026-10-21): el heraldo y las larvas que desaparecen ya no son jugadas
+// del equipo 200 (`TimelineEvent::desaparecio`), y entraban en `wpa_elsewhere`.
+const PRESSURE_CACHE_V: u32 = 9;
 
 /// Lo que aporta UNA partida al resumen de presión, ya reducido.
 ///
@@ -1911,8 +1929,9 @@ fn process_timeline_full(
                     }
                 }
                 "ELITE_MONSTER_KILL" => {
-                    if ev.killerId == self_participant_id
-                        || ev.assistingParticipantIds.contains(&self_participant_id)
+                    if !ev.desaparecio()
+                        && (ev.killerId == self_participant_id
+                            || ev.assistingParticipantIds.contains(&self_participant_id))
                     {
                         let pos_x = ev.position.as_ref().map(|p| p.x);
                         let pos_y = ev.position.as_ref().map(|p| p.y);

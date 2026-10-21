@@ -22,6 +22,8 @@ import { MatchSummary, type BlockId } from "./MatchSummary";
 import type { OpenMap } from "../mapFocus";
 import { formatGold } from "./pressureFormat";
 import { formatThousands } from "../../../core/benchmarkFormat";
+import { Chip } from "../../../components/ui/Chip";
+import { titleView, useMatchTitles } from "../../../core/titles";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -152,6 +154,9 @@ export const MatchTab: React.FC<MatchTabProps> = ({
 
   // La puntería se pide al abrirla, no al montar la pestaña.
   const [aimOpen, setAimOpen] = useState(false);
+
+  // Los títulos del marcador leen la partida entera de Riot: sólo con él a la vista.
+  const titulos = useMatchTitles(match.id, synced && abierto === "match-scoreboard");
 
   const hasCurve = !!match.minute_frames && match.minute_frames.length > 1;
   const has15 = match.gold_diff_15 != null || match.xp_diff_15 != null || match.jungle_cs_diff_15 != null;
@@ -349,7 +354,9 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         {/* --------------------------------------------- el marcador.
             Un bloque por equipo: su nombre y resultado hacen de cabecera de
             las columnas. La cara del campeón y el icono de su posición dicen
-            quién era cada uno antes que el nick. */}
+            quién era cada uno antes que el nick. Debajo, su título: la métrica
+            en la que más se salió de lo normal para su puesto y su rango
+            (`titulos.rs`), con la cifra al pasar por encima. */}
         {seccion(
           "match-scoreboard",
           [100, 200].map((teamId) => {
@@ -371,6 +378,8 @@ export const MatchTab: React.FC<MatchTabProps> = ({
                 </div>
                 {team.map((p, i) => {
                   const pos = normalizePosition(p.role);
+                  const titulo = titulos?.get(participants.indexOf(p) + 1);
+                  const tv = titulo ? titleView(titulo) : null;
                   return (
                     <div key={i} className="vp-sb__row" data-self={p.is_self || undefined}>
                       <ChampFace
@@ -387,6 +396,24 @@ export const MatchTab: React.FC<MatchTabProps> = ({
                           )}
                           {champLabel(p.champion)}
                         </span>
+                        {tv && (
+                          <Chip
+                            className="vp-sb__title"
+                            tone={tv.tone === "good" ? "win" : tv.tone === "bad" ? "loss" : "outline"}
+                            title={
+                              tv.metric && tv.value != null && tv.percentile != null
+                                ? t("{metric}: {value} · percentile {p} among {role} players", {
+                                    metric: t(tv.metric),
+                                    value: tv.value,
+                                    p: tv.percentile,
+                                    role: pos ? t(POSITION_LABEL[pos]) : "",
+                                  })
+                                : t("No stat in the top or bottom 10% for this role and rank")
+                            }
+                          >
+                            {t(tv.title)}
+                          </Chip>
+                        )}
                       </span>
                       <span className="u-metric vp-sb__kda">{p.kills}/{p.deaths}/{p.assists}</span>
                       <span className="u-metric vp-sb__num">{p.cs}</span>

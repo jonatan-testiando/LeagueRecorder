@@ -1476,6 +1476,8 @@
   white-space: nowrap;
   overflow: hidden;
 }
+/* El título del jugador: una píldora bajo el campeón, a su ancho. */
+.vp-sb__title { align-self: flex-start; max-width: 100%; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; }
 .vp-sb__kda { font-size: 13px; text-align: right; }
 .vp-sb__num { font-size: var(--fs-12); color: var(--muted); text-align: right; }
 

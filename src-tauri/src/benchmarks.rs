@@ -606,6 +606,111 @@ pub(crate) fn interpolar(cortes: &[f64; 9], v: f64) -> f64 {
     10.0 * (i as f64 + (v - cortes[i - 1]) / hueco)
 }
 
+/// Las 17 métricas de cada jugador con puesto, con su índice en
+/// `participants`. `d` es una partida como las del corpus: `{match, timeline}`.
+///
+/// Calca `metricas_de_partida` de `fit_benchmarks.py`, valor por valor y en
+/// el mismo orden que `METRICAS`: si se toca uno hay que tocar el otro. Vive
+/// fuera de las pruebas porque los títulos del marcador (`crate::titulos`) la
+/// usan sobre las partidas del usuario.
+pub(crate) fn metricas_de_partida(d: &serde_json::Value) -> Vec<(usize, String, [Option<f64>; 17])> {
+    let info = &d["match"]["info"];
+    let dur = info["gameDuration"].as_f64().unwrap_or(0.0);
+    if dur < 900.0 {
+        return Vec::new();
+    }
+    let minutos = dur / 60.0;
+    let Some(ps) = info["participants"].as_array() else { return Vec::new() };
+    if ps.len() != 10 {
+        return Vec::new();
+    }
+
+    let num = |p: &serde_json::Value, k: &str| p[k].as_f64().unwrap_or(0.0);
+    let equipo = |p: &serde_json::Value| p["teamId"].as_i64().unwrap_or(100);
+
+    let mut dano_equipo = std::collections::HashMap::<i64, f64>::new();
+    for p in ps {
+        *dano_equipo.entry(equipo(p)).or_default() += num(p, "totalDamageDealtToChampions");
+    }
+
+    // El frame de minuto 15 se elige por marca de tiempo, igual que en
+    // `riot_api::analizar_timeline`: la timeline puede tener huecos.
+    let frames = d["timeline"]["info"]["frames"].as_array();
+    let fr = frames.and_then(|fs| {
+        fs.iter()
+            .find(|f| {
+                let t = f["timestamp"].as_f64().unwrap_or(-1.0);
+                (870_000.0..=930_000.0).contains(&t)
+            })
+            .or_else(|| if fs.len() > 15 { fs.get(15) } else { None })
+    });
+
+    let mut out = Vec::new();
+    for (i, p) in ps.iter().enumerate() {
+        let rol = p["teamPosition"].as_str().unwrap_or("").to_string();
+        if !ROLES.contains(&rol.as_str()) {
+            continue;
+        }
+        let eq = equipo(p);
+        // Rival de línea: mismo puesto en el otro equipo, y sólo si el
+        // emparejamiento es 1 a 1.
+        let rivales: Vec<usize> = ps
+            .iter()
+            .enumerate()
+            .filter(|(_, q)| {
+                q["teamPosition"].as_str().unwrap_or("") == rol && equipo(q) != eq
+            })
+            .map(|(j, _)| j)
+            .collect();
+
+        let (mut gd, mut xd, mut cd) = (None, None, None);
+        if let (1, Some(fr)) = (rivales.len(), fr) {
+            let a = &fr["participantFrames"][(i + 1).to_string()];
+            let b = &fr["participantFrames"][(rivales[0] + 1).to_string()];
+            if a.is_object() && b.is_object() {
+                gd = Some(num(a, "totalGold") - num(b, "totalGold"));
+                xd = Some(num(a, "xp") - num(b, "xp"));
+                cd = Some(
+                    (num(a, "minionsKilled") + num(a, "jungleMinionsKilled"))
+                        - (num(b, "minionsKilled") + num(b, "jungleMinionsKilled")),
+                );
+            }
+        }
+
+        let ch = &p["challenges"];
+        let cs = num(p, "totalMinionsKilled") + num(p, "neutralMinionsKilled");
+        let muertes = num(p, "deaths");
+        let dano = num(p, "totalDamageDealtToChampions");
+        let total_eq = dano_equipo.get(&eq).copied().unwrap_or(0.0);
+        let kp = ch["killParticipation"].as_f64().filter(|x| !x.is_nan());
+
+        out.push((
+            i,
+            rol,
+            [
+                Some(cs / minutos),
+                kp,
+                Some(muertes),
+                Some((num(p, "kills") + num(p, "assists")) / muertes.max(1.0)),
+                Some(num(p, "goldEarned") / minutos),
+                Some(dano / minutos),
+                if total_eq <= 0.0 { None } else { Some(dano / total_eq) },
+                Some(num(p, "visionScore") / minutos),
+                Some(num(p, "wardsPlaced") / minutos),
+                Some(num(ch, "controlWardsPlaced")),
+                gd,
+                xd,
+                cd,
+                Some(num(ch, "soloKills")),
+                Some(num(p, "damageDealtToTurrets") / minutos),
+                Some(num(p, "kills")),
+                Some(num(p, "assists")),
+            ],
+        ));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -800,7 +905,7 @@ mod tests {
             }
             n += 1;
             let tramo = tramos.get(id).filter(|t| t.as_str() != "sin");
-            for (rol, vals) in filas {
+            for (_, rol, vals) in filas {
                 for (m, v) in METRICAS.iter().zip(vals.iter()) {
                     let Some(v) = v else { continue };
                     acc.entry((String::new(), rol.clone(), m.to_string())).or_default().push(*v);
@@ -811,105 +916,6 @@ mod tests {
             }
         }
         n
-    }
-
-    /// Calca `metricas_de_partida` de `fit_benchmarks.py`, valor por valor y en
-    /// el mismo orden que `METRICAS`.
-    fn metricas_de_partida(d: &serde_json::Value) -> Vec<(String, [Option<f64>; 17])> {
-        let info = &d["match"]["info"];
-        let dur = info["gameDuration"].as_f64().unwrap_or(0.0);
-        if dur < 900.0 {
-            return Vec::new();
-        }
-        let minutos = dur / 60.0;
-        let Some(ps) = info["participants"].as_array() else { return Vec::new() };
-        if ps.len() != 10 {
-            return Vec::new();
-        }
-
-        let num = |p: &serde_json::Value, k: &str| p[k].as_f64().unwrap_or(0.0);
-        let equipo = |p: &serde_json::Value| p["teamId"].as_i64().unwrap_or(100);
-
-        let mut dano_equipo = std::collections::HashMap::<i64, f64>::new();
-        for p in ps {
-            *dano_equipo.entry(equipo(p)).or_default() += num(p, "totalDamageDealtToChampions");
-        }
-
-        // El frame de minuto 15 se elige por marca de tiempo, igual que en
-        // `riot_api::analizar_timeline`: la timeline puede tener huecos.
-        let frames = d["timeline"]["info"]["frames"].as_array();
-        let fr = frames.and_then(|fs| {
-            fs.iter()
-                .find(|f| {
-                    let t = f["timestamp"].as_f64().unwrap_or(-1.0);
-                    (870_000.0..=930_000.0).contains(&t)
-                })
-                .or_else(|| if fs.len() > 15 { fs.get(15) } else { None })
-        });
-
-        let mut out = Vec::new();
-        for (i, p) in ps.iter().enumerate() {
-            let rol = p["teamPosition"].as_str().unwrap_or("").to_string();
-            if !ROLES.contains(&rol.as_str()) {
-                continue;
-            }
-            let eq = equipo(p);
-            // Rival de línea: mismo puesto en el otro equipo, y sólo si el
-            // emparejamiento es 1 a 1.
-            let rivales: Vec<usize> = ps
-                .iter()
-                .enumerate()
-                .filter(|(_, q)| {
-                    q["teamPosition"].as_str().unwrap_or("") == rol && equipo(q) != eq
-                })
-                .map(|(j, _)| j)
-                .collect();
-
-            let (mut gd, mut xd, mut cd) = (None, None, None);
-            if let (1, Some(fr)) = (rivales.len(), fr) {
-                let a = &fr["participantFrames"][(i + 1).to_string()];
-                let b = &fr["participantFrames"][(rivales[0] + 1).to_string()];
-                if a.is_object() && b.is_object() {
-                    gd = Some(num(a, "totalGold") - num(b, "totalGold"));
-                    xd = Some(num(a, "xp") - num(b, "xp"));
-                    cd = Some(
-                        (num(a, "minionsKilled") + num(a, "jungleMinionsKilled"))
-                            - (num(b, "minionsKilled") + num(b, "jungleMinionsKilled")),
-                    );
-                }
-            }
-
-            let ch = &p["challenges"];
-            let cs = num(p, "totalMinionsKilled") + num(p, "neutralMinionsKilled");
-            let muertes = num(p, "deaths");
-            let dano = num(p, "totalDamageDealtToChampions");
-            let total_eq = dano_equipo.get(&eq).copied().unwrap_or(0.0);
-            let kp = ch["killParticipation"].as_f64().filter(|x| !x.is_nan());
-
-            out.push((
-                rol,
-                [
-                    Some(cs / minutos),
-                    kp,
-                    Some(muertes),
-                    Some((num(p, "kills") + num(p, "assists")) / muertes.max(1.0)),
-                    Some(num(p, "goldEarned") / minutos),
-                    Some(dano / minutos),
-                    if total_eq <= 0.0 { None } else { Some(dano / total_eq) },
-                    Some(num(p, "visionScore") / minutos),
-                    Some(num(p, "wardsPlaced") / minutos),
-                    Some(num(ch, "controlWardsPlaced")),
-                    gd,
-                    xd,
-                    cd,
-                    Some(num(ch, "soloKills")),
-                    Some(num(p, "damageDealtToTurrets") / minutos),
-                    Some(num(p, "kills")),
-                    Some(num(p, "assists")),
-                ],
-            ));
-        }
-        out
     }
 
     // ---- pruebas rápidas, sin corpus ----------------------------------------

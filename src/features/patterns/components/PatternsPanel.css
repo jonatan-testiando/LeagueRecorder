@@ -606,3 +606,81 @@
 
 /* Widgets que vienen del reproductor y no deben estirarse. */
 .pp-narrow { max-width: 560px; }
+
+/* ------------------------------------- por delante / detrás y la nota (3.3-3.4)
+   Una tabla por filas: etiqueta, partidas, carril de winrate con la raya del
+   corpus, tu cifra, la del corpus y (en la de estado) muertes por partida. */
+.pp-gs-table { display: flex; flex-direction: column; }
+.pp-gs-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) 56px minmax(120px, 2fr) 56px 64px 96px;
+  gap: 0 var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-13);
+}
+.pp-gs-row--score { grid-template-columns: minmax(96px, 1fr) 56px minmax(120px, 2fr) 56px 64px; }
+.pp-gs-row--head { padding-top: 0; padding-bottom: var(--space-1); }
+/* La fila del estado elegido en la cabecera. */
+.pp-gs-row[data-selected] { background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair); }
+.pp-gs-label { display: flex; flex-direction: column; min-width: 0; }
+.pp-gs-state { font-size: var(--fs-14); font-weight: 500; color: var(--text); }
+.pp-gs-you { font-weight: 500; color: var(--text); }
+/* Una cifra de menos de cinco partidas: se ve, pero en voz baja. */
+.pp-gs-you.pp-gs-few { font-weight: 400; color: var(--muted); }
+/* El carril: tu winrate relleno y una raya donde gana el corpus. Sin
+   overflow oculto, para que la raya asome por encima y por debajo. */
+.pp-gs-track {
+  position: relative;
+  display: block;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.pp-gs-fill { position: absolute; inset: 0 auto 0 0; border-radius: var(--radius-full); background: var(--cool); }
+.pp-gs-tick {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.55;
+}
+/* Tiradas y remontadas. */
+.pp-gs-rate { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.pp-gs-rate-line { display: flex; align-items: baseline; gap: var(--space-2); }
+.pp-gs-rate-big { font-size: var(--fs-metric); line-height: var(--lh-metric); font-weight: 500; color: var(--text); }
+.pp-gs-games { display: flex; flex-direction: column; }
+.pp-gs-game {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto 12px;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-align: left;
+  cursor: pointer;
+}
+.pp-gs-game-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-gs-game-at { color: var(--muted); }
+.pp-gs-game-play { color: var(--faint); }
+@media (hover: hover) and (pointer: fine) {
+  .pp-gs-game:hover { background: var(--bg-hover); }
+  .pp-gs-game:hover .pp-gs-game-play { color: var(--text); }
+}
+.pp-gs-game:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@media (max-width: 720px) {
+  .pp-gs-row { grid-template-columns: minmax(0, 1fr) 40px minmax(64px, 1fr) 48px; }
+  .pp-gs-row > :nth-child(n + 5) { display: none; }
+}

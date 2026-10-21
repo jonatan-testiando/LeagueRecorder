@@ -263,6 +263,9 @@ fn valores(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<Valor> {
                     v.placa = 1;
                 }
                 "ELITE_MONSTER_KILL" => {
+                    if ev.desaparecio() {
+                        continue;
+                    }
                     v.team = if ev.killerTeamId != 0 {
                         ev.killerTeamId
                     } else {

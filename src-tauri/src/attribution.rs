@@ -324,6 +324,8 @@ pub fn analyze(tl: &TimelineDto, participants: &[ParticipantDto]) -> Vec<PlayerC
                     (_, Some("NEXUS_TURRET")) => peso::TORRE_NEXO,
                     _ => continue,
                 },
+                // Si desapareció, quienes «asistieron» sólo le pegaban.
+                "ELITE_MONSTER_KILL" if ev.desaparecio() => continue,
                 "ELITE_MONSTER_KILL" => match ev.monsterType.as_deref() {
                     Some("DRAGON") => peso::DRAGON,
                     Some("BARON_NASHOR") => peso::BARON,

@@ -1431,6 +1431,9 @@ button.cap:not(:disabled):active { transform: none; }
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  /* Mide lo que sus opciones: en una columna flex no se estira a lo ancho. */
+  width: max-content;
+  max-width: 100%;
   padding: 2px;
   border-radius: var(--radius-full);
   background: var(--sunken);

@@ -1,29 +1,34 @@
 import React from "react";
-import { ArrowRight, Crosshair, EyeOff, Flag, Magnet, Play, Skull, Swords } from "lucide-react";
-import { ChampionAvatar } from "../../../components/ChampionAvatar";
-import { champIcon } from "../../../core/ddragon";
+import { CircleCheck, Crosshair, EyeOff, Flag, Magnet, Play, Skull, Swords } from "lucide-react";
 import { clock } from "../../../core/time";
-import { useT } from "../../../core/LanguageProvider";
+import { useLang } from "../../../core/LanguageProvider";
+import { Chip } from "../../../components/ui/Chip";
 import { eventMeta } from "../../player/components/eventMeta";
-import type { TeachMoment, MomentVerdict } from "../moments";
+import { wpDeltaNumber, type TeachMoment, type MomentVerdict } from "../moments";
 
 /**
- * Una tarjeta de «los 3 momentos»: cabecera tipo miniatura (sin vídeo: el
- * retrato del rival desenfocado, o un degradado según el tipo), el duelo o el
- * glifo del suceso, la hora del vídeo, título en frase, valoración y una línea
- * de explicación cuando la hay. Toda la tarjeta abre la partida en ese instante.
+ * Una tarjeta de «los 3 momentos»: arriba, una vista previa en escenario
+ * (marino en los dos temas, como el vídeo que abre) con el tipo de momento, la
+ * hora del vídeo y el botón de reproducir; abajo, el título en frase, lo que
+ * movió la probabilidad de victoria («−6 %») y una línea de explicación cuando
+ * la hay. Toda la tarjeta abre la partida en ese instante.
+ *
+ * El ΔWP solo se pinta si la jugada existe en el modelo (`momentWp`): un
+ * momento que no es una jugada (un error marcado, un episodio de presión) va
+ * sin cifra, no con una inventada.
  */
 
-const TONE: Record<TeachMoment["kind"], string> = {
-  error: "var(--loss)",
-  finding: "var(--flag)",
-  best: "var(--win)",
-};
+const CHIP_TONE = { error: "loss", finding: "finding", best: "win" } as const;
 
-export const MomentCard: React.FC<{ moment: TeachMoment; onPlay: () => void }> = ({ moment: m, onPlay }) => {
-  const t = useT();
-  const tone = TONE[m.kind];
-  const duel = !!m.you && !!m.other;
+export const MomentCard: React.FC<{
+  moment: TeachMoment;
+  /** ΔWP del momento desde tu equipo (−1…1), o null si no se conoce. */
+  wp: number | null;
+  onPlay: () => void;
+  /** Posición en la entrada escalonada de la primera visita. */
+  index?: number;
+}> = ({ moment: m, wp, onPlay, index }) => {
+  const { t, lang } = useLang();
 
   const verdict = (v: MomentVerdict) => {
     switch (v) {
@@ -43,64 +48,54 @@ export const MomentCard: React.FC<{ moment: TeachMoment; onPlay: () => void }> =
       case "pressure": return <Magnet size={16} />;
       case "death": return <Skull size={16} />;
       case "kill": return <Swords size={16} />;
-      default: return null;
     }
+    // Duelo (te mata / matas a alguien con retrato): el glifo del tipo.
+    return m.kind === "error" ? <Skull size={16} /> : m.kind === "best" ? <CircleCheck size={16} /> : <EyeOff size={16} />;
   })();
+
+  // Qué clase de momento es, dicho en la vista previa; quién te mató o a quién
+  // mataste ya lo dice el título.
+  const tipo =
+    m.caption ??
+    (m.kind === "error"
+      ? t("A mistake that cost you")
+      : m.kind === "best"
+        ? t("A play that paid off")
+        : t("Detected by the analyzer"));
+
+  const delta = wp != null ? wpDeltaNumber(wp, lang) : null;
 
   return (
     <button
       type="button"
       className={`home-mo home-mo--${m.kind}`}
       onClick={onPlay}
-      aria-label={`${clock(m.time)} · ${m.title} · ${verdict(m.verdict)}`}
+      style={index != null ? ({ "--i": index } as React.CSSProperties) : undefined}
+      aria-label={[clock(m.time), m.title, delta ? t("{n}% win chance", { n: delta }) : verdict(m.verdict)].join(" · ")}
     >
       <span className="home-mo__thumb" aria-hidden="true">
-        {m.other ? (
-          <img
-            className="home-mo__blur"
-            src={champIcon(m.other)}
-            alt=""
-            onError={(e) => ((e.currentTarget.style.display = "none"))}
-          />
-        ) : m.kind === "finding" ? (
-          <svg className="home-mo__strokes" viewBox="0 0 300 118" preserveAspectRatio="none">
-            <path d="M-10 118 L120 -10" strokeWidth="26" />
-            <path d="M150 130 L310 20" strokeWidth="18" />
-          </svg>
-        ) : null}
-        <span className="home-mo__veil" />
-
-        <span className="home-mo__who">
-          {duel ? (
-            <>
-              <ChampionAvatar champion={m.you!} size={34} ring={tone} />
-              <ArrowRight size={16} style={{ color: tone }} />
-              <ChampionAvatar champion={m.other!} size={34} ring="var(--hair-strong)" />
-            </>
-          ) : (
-            <>
-              {glyph && (
-                <span className="home-mo__glyph" style={{ color: tone }}>
-                  {glyph}
-                </span>
-              )}
-              {m.caption && <span className="home-mo__caption">{m.caption}</span>}
-            </>
-          )}
+        <span className="home-mo__kind">
+          {glyph}
+          <span className="t-label home-mo__caption">{tipo}</span>
         </span>
-
-        <span className="u-time home-mo__time">{clock(m.time)}</span>
-        <span className="home-mo__play">
-          <Play size={12} fill="currentColor" />
+        <span className="home-mo__foot">
+          <span className="u-time home-mo__time">{clock(m.time)}</span>
+          <span className="home-mo__play">
+            <Play size={14} fill="currentColor" />
+          </span>
         </span>
       </span>
 
       <span className="home-mo__body">
         <span className="home-mo__head">
-          <span className="home-mo__title">{m.title}</span>
-          <span className="home-mo__chip">{verdict(m.verdict)}</span>
+          <span className="t-body-strong home-mo__title">{m.title}</span>
+          {delta && (
+            <Chip tone={CHIP_TONE[m.kind]} title={t("What this moment moved your win chance")}>
+              {t("{n}%", { n: delta })}
+            </Chip>
+          )}
         </span>
-        {m.why && <span className="home-mo__why">{m.why}</span>}
+        {m.why && <span className="t-small home-mo__why">{m.why}</span>}
       </span>
     </button>
   );

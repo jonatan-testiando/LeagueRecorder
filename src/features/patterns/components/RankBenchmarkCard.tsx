@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { BarChart3, TrendingUp } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { MatchMetadata } from "../../../types";
 import { getMatchBenchmarks, type MetricComparison } from "../../../core/tauri-ipc";
 import {
@@ -16,15 +16,16 @@ import {
 import { matchRole, ROLE_FILTERS, type RoleFilter, type RoleKey } from "../../../core/patterns";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Button } from "../../../components/ui/Button";
-import { PositionIcon } from "../../../components/PositionIcon";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import { useT } from "../../../core/LanguageProvider";
 
 /**
  * "¿Esto es bueno para alguien como yo?", en dos escalas.
  *
  *  - La TARJETA (fila principal de Patrones) enseña tu última partida contra
- *    tu rango y tu puesto: cuatro filas que se leen de un vistazo y una frase
- *    con la palanca que más rinde. Es la que contesta "¿y ahora qué hago?".
+ *    tu rango y tu puesto: cuatro filas que se leen de un vistazo, cada una
+ *    con su carril (peor, mediana, mejor). Lo que hay que trabajar ya no lo
+ *    dice ella: lo dice el foco del Coach, encima.
  *  - La TABLA (ficha "Frente a tu rango" de Explorar) promedia el percentil de
  *    las últimas veinte, que es la escala a la que la comparación empieza a ser
  *    una propiedad tuya y no del lobby que te tocó. Una partida sola no es una
@@ -120,22 +121,6 @@ export type RankBench =
  */
 const etiquetaPuesto = (r: RoleKey): string =>
   ROLE_FILTERS.find((f) => f.key === r)?.label ?? r;
-
-/** Verde arriba, rojo abajo, gris en la mitad de en medio. Sin colorines. */
-const tono = (p: number | null): string =>
-  p == null ? "var(--faint)" : p >= 70 ? "var(--cool)" : p < 30 ? "var(--signal)" : "var(--muted)";
-
-/**
- * El mismo tono, pero para el relleno de la barra.
- *
- * El gris neutro a pleno es casi blanco, y quince barras neutras a pleno son lo
- * más brillante de la pantalla para decir justo lo que no importa: que estás en
- * la media. Se atenúa para que sólo destaquen las que sí dicen algo.
- */
-const tonoBarra = (p: number | null): string =>
-  p == null || (p < 70 && p >= 30)
-    ? "color-mix(in srgb, var(--muted) 45%, transparent)"
-    : tono(p);
 
 /** ¿Es una partida de la que el backend puede sacar baremos? */
 const usable = (m: MatchMetadata): boolean =>
@@ -331,33 +316,21 @@ export function useRankBenchmarks(matches: MatchMetadata[], roleFilter: RoleFilt
 
 // ======================================================================
 // La barra de percentil: peor a la izquierda, mediana en medio, mejor a la
-// derecha. Es la misma en la tarjeta y en la tabla.
+// derecha. Un carril de 3 px que se ve en los dos temas (la pista hundida de
+// antes se perdía sobre el panel claro), la muesca de la mediana y tu punto.
 // ======================================================================
+
+/** La clase del tono: la barra y la cifra de su fila hablan igual. */
+const claseTono = (p: number | null): string =>
+  p == null ? "" : p >= 70 ? " is-good" : p < 30 ? " is-bad" : "";
 
 const BarraPercentil: React.FC<{ pct: number; label: string }> = ({ pct, label }) => {
   const p = Math.max(1, Math.min(99, pct));
-  const color = tono(pct);
   return (
-    <div className="pp-pbar" role="img" aria-label={label}>
-      <div className="pp-pbar-track" />
-      {/* El tramo entre la mediana y tú: lo que te separa de "lo normal". */}
-      <div
-        className="pp-pbar-gap"
-        style={{
-          left: `${Math.min(50, p)}%`,
-          width: `${Math.abs(p - 50)}%`,
-          background: `color-mix(in srgb, ${color} 30%, transparent)`,
-        }}
-      />
-      <div className="pp-pbar-median" />
-      <div
-        className="pp-pbar-dot"
-        style={{
-          left: `${p}%`,
-          background: color,
-          boxShadow: `0 0 0 2px var(--panel), 0 0 0 5px color-mix(in srgb, ${color} 18%, transparent)`,
-        }}
-      />
+    <div className={`pp-pbar${claseTono(pct)}`} role="img" aria-label={label}>
+      <span className="pp-pbar-track" />
+      <span className="pp-pbar-median" />
+      <span className="pp-pbar-dot" style={{ left: `${p}%` }} />
     </div>
   );
 };
@@ -368,12 +341,12 @@ const BarraPercentil: React.FC<{ pct: number; label: string }> = ({ pct, label }
 
 export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => {
   const t = useT();
-
-  const titulo = <h2 className="pp-cardtitle">{t("Your last game vs your rank")}</h2>;
+  const nombre = t("Your last game vs your rank");
+  const titulo = <h2 className="pp-label">{nombre}</h2>;
 
   if (bench.kind === "needs") {
     return (
-      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+      <section className="card pp-card pp-rank" aria-label={nombre}>
         <div className="pp-cardhead">{titulo}</div>
         <EmptyState
           icon={<BarChart3 size={26} color="var(--faint)" />}
@@ -392,22 +365,20 @@ export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => 
   // evita que la página dé un salto cuando llegan los datos.
   if (bench.kind === "loading") {
     return (
-      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")} aria-busy="true">
+      <section className="card pp-card pp-rank" aria-label={nombre} aria-busy="true">
         <div className="pp-cardhead">
           {titulo}
-          <span className="skeleton" style={{ display: "inline-block", width: 120, height: 10 }} />
+          <Skeleton width={96} />
         </div>
-        <div className="pp-rank-rows">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div key={i} className="pp-rank-row">
-              <div className="pp-rank-line">
-                <span className="skeleton" style={{ height: 12, width: 120 }} />
-                <span className="skeleton" style={{ height: 12, width: 90 }} />
-              </div>
-              <span className="skeleton" style={{ height: 6, width: "100%" }} />
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="pp-rank-row">
+            <div className="pp-rank-line">
+              <Skeleton width={120} />
+              <Skeleton width={90} />
             </div>
-          ))}
-        </div>
+            <Skeleton width="100%" height={3} />
+          </div>
+        ))}
       </section>
     );
   }
@@ -415,7 +386,7 @@ export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => 
   if (bench.kind === "error" || !bench.data.ultima) {
     const msg = bench.kind === "error" ? bench.msg : null;
     return (
-      <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+      <section className="card pp-card pp-rank" aria-label={nombre}>
         <div className="pp-cardhead">{titulo}</div>
         <p className="pp-prose">
           {t("Couldn't load the benchmarks: {msg}", { msg: msg ?? t("no benchmarks came back") })}
@@ -434,10 +405,11 @@ export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => 
   const u = bench.data.ultima;
   const porMetrica = new Map(u.filas.map((f) => [f.metric, f]));
 
-  // La palanca: de las ocho métricas que más pesan en tu puesto, la que peor
-  // sale. Sólo si de verdad sale mal: por encima de 40 no hay palanca que
-  // proponer, y decir "tu punto débil" de algo que está en la media es
-  // inventarse un problema.
+  // La métrica que más flojea de las ocho que más pesan en tu puesto. Sólo si
+  // de verdad sale mal (por debajo de 40) y tiene palanca: decir "tu punto
+  // débil" de algo que está en la media es inventarse un problema. Ya no se
+  // dice en una frase (lo que hay que trabajar lo dice ahora el foco del
+  // Coach, encima), pero sigue ganándose un sitio entre las filas.
   const relevantes = metricOrder(u.role).slice(0, 8);
   const palanca =
     relevantes
@@ -445,9 +417,9 @@ export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => 
       .filter((f): f is FilaUltima => !!f && f.pct < PALANCA_BAJO && metricLever(f.metric) != null)
       .sort((a, b) => a.pct - b.pct)[0] ?? null;
 
-  // Las filas: las cuatro de cabecera del puesto. Si la palanca no está entre
+  // Las filas: las cuatro de cabecera del puesto. Si la más floja no está entre
   // ellas, ocupa el sitio del KDA (el menos accionable: mezcla lo que otras
-  // filas ya dicen) — la frase de abajo tiene que poder verse en una barra.
+  // filas ya dicen).
   const cabecera = headlineMetrics(u.role).filter((m) => porMetrica.has(m));
   if (palanca && !cabecera.includes(palanca.metric)) {
     const i = cabecera.indexOf("kda");
@@ -457,68 +429,31 @@ export const RankBenchmarkCard: React.FC<{ bench: RankBench }> = ({ bench }) => 
   const filas = cabecera.map((m) => porMetrica.get(m) as FilaUltima);
 
   return (
-    <section className="card pp-card pp-rank" aria-label={t("Your last game vs your rank")}>
+    <section className="card pp-card pp-rank" aria-label={nombre}>
       <div className="pp-cardhead">
         {titulo}
-        <span className="pp-meta pp-rank-scope">
-          {u.band && <span>{t(u.band)}</span>}
-          {u.band && u.role && <span aria-hidden="true">·</span>}
-          {u.role && (
-            <span className="pp-inline-icon">
-              <PositionIcon position={u.role} size={14} />
-              {t(etiquetaPuesto(u.role))}
-            </span>
-          )}
+        <span className="pp-label pp-rank-scope">
+          {[u.band ? t(u.band) : null, u.role ? t(etiquetaPuesto(u.role)) : null].filter(Boolean).join(" · ")}
         </span>
       </div>
 
-      <div className="pp-rank-rows">
-        {filas.map((f) => (
-          <div key={f.metric} className="pp-rank-row">
-            <div className="pp-rank-line">
-              <span className="pp-rank-name">{t(metricLabel(f.metric))}</span>
-              <span className="pp-meta pp-num">
-                <span className="pp-rank-value" style={{ color: tono(f.pct) }}>
-                  {formatMetricValue(f.metric, f.value)}
-                </span>
-                {f.median != null && (
-                  <> · {t("the median is {v}", { v: formatMetricValue(f.metric, f.median) })}</>
-                )}
-              </span>
-            </div>
-            <BarraPercentil
-              pct={f.pct}
-              label={t("Percentile {p} in your rank", { p: Math.round(f.pct) })}
-            />
+      {filas.map((f) => (
+        <div key={f.metric} className="pp-rank-row">
+          <div className="pp-rank-line">
+            <span className="pp-rank-name">{t(metricLabel(f.metric))}</span>
+            <span className="pp-rank-figures">
+              <span className={`pp-rank-value${claseTono(f.pct)}`}>{formatMetricValue(f.metric, f.value)}</span>
+              {f.median != null && (
+                <> · {t("the median is {v}", { v: formatMetricValue(f.metric, f.median) })}</>
+              )}
+            </span>
           </div>
-        ))}
-        <div className="pp-pbar-axis" aria-hidden="true">
-          <span>{t("Worse")}</span>
-          <span>{t("Your rank's median")}</span>
-          <span>{t("Better")}</span>
+          <BarraPercentil
+            pct={f.pct}
+            label={t("Percentile {p} in your rank", { p: Math.round(f.pct) })}
+          />
         </div>
-      </div>
-
-      <div className="pp-lever">
-        <TrendingUp size={16} aria-hidden="true" className="pp-lever-icon" />
-        {palanca ? (
-          <p className="pp-prose">
-            <span className="pp-lever-strong">
-              {t("Where you gain most: {lever}.", { lever: t(metricLever(palanca.metric) as string) })}
-            </span>{" "}
-            {palanca.median != null
-              ? t("You were at {v}; your rank's median is {m}.", {
-                  v: formatMetricValue(palanca.metric, palanca.value),
-                  m: formatMetricValue(palanca.metric, palanca.median),
-                })
-              : t("You were at {v}.", { v: formatMetricValue(palanca.metric, palanca.value) })}
-          </p>
-        ) : (
-          <p className="pp-prose">
-            {t("Nothing in this game falls clearly below your rank's median.")}
-          </p>
-        )}
-      </div>
+      ))}
     </section>
   );
 };
@@ -534,7 +469,7 @@ export function benchmarkSummaryText(
   t: (key: string, vars?: Record<string, string | number>) => string
 ): React.ReactNode {
   if (bench.kind === "loading") {
-    return <span className="skeleton" style={{ display: "inline-block", width: 160, height: 10 }} />;
+    return <Skeleton width={160} className="pp-skel-inline" />;
   }
   if (bench.kind === "needs") {
     return bench.n === 1
@@ -582,7 +517,7 @@ export const RankBenchmarkTable: React.FC<{ bench: RankBench }> = ({ bench }) =>
       <div className="pp-avg-rows">
         {datos.filas.map((f) => {
           const p = f.pct;
-          const color = tono(p);
+          const tonoFila = claseTono(p);
           return (
             <div key={f.metric} className="pp-avg-row">
               <span className="pp-avg-name">{t(metricLabel(f.metric))}</span>
@@ -593,16 +528,18 @@ export const RankBenchmarkTable: React.FC<{ bench: RankBench }> = ({ bench }) =>
                 className="pp-avg-track"
                 title={f.median != null ? t("median {v}", { v: formatMetricValue(f.metric, f.median) }) : undefined}
               >
+                {/* La neutra va atenuada: quince barras a pleno diciendo «estás
+                    en la media» eran lo más brillante de la pantalla. */}
                 <div
-                  className="pp-avg-fill"
-                  style={{ width: `${Math.max(1, Math.min(100, p ?? 0))}%`, background: tonoBarra(p) }}
+                  className={`pp-avg-fill${tonoFila}`}
+                  style={{ width: `${Math.max(1, Math.min(100, p ?? 0))}%` }}
                 />
                 <div className="pp-avg-median" title={t("rank median")} />
               </div>
-              <span className="pp-num pp-avg-pct" style={{ color }}>
+              <span className={`pp-num pp-avg-pct${tonoFila}`}>
                 {p == null ? "—" : Math.round(p)}
               </span>
-              <Chispa valores={f.chispa} color={color} />
+              <Chispa valores={f.chispa} tono={tonoFila} />
             </div>
           );
         })}
@@ -628,22 +565,22 @@ export const RankBenchmarkTable: React.FC<{ bench: RankBench }> = ({ bench }) =>
  * píxeles no se leen uno a uno: lo que se lee es si la línea sube o baja, que
  * es justo lo que la media de al lado no puede decir.
  */
-const Chispa: React.FC<{ valores: (number | null)[]; color: string }> = ({ valores, color }) => {
+const Chispa: React.FC<{ valores: (number | null)[]; tono: string }> = ({ valores, tono }) => {
   const W = 60;
   const H = 16;
   const puntos = valores
     .map((v, i) => ({ v, i }))
     .filter((p): p is { v: number; i: number } => p.v != null);
-  if (puntos.length < 2) return <span style={{ width: W, height: H, display: "inline-block", flex: "none" }} />;
+  if (puntos.length < 2) return <span className="pp-chispa" />;
   const n = Math.max(1, valores.length - 1);
   const d = puntos
     .map((p) => `${((p.i / n) * W).toFixed(1)},${(H - 1 - (p.v / 100) * (H - 2)).toFixed(1)}`)
     .join(" ");
   return (
-    <svg width={W} height={H} style={{ display: "block", flex: "0 0 auto" }} aria-hidden="true">
+    <svg width={W} height={H} className={`pp-chispa${tono}`} aria-hidden="true">
       {/* La mediana de la población, para saber de qué lado va la línea. */}
       <line x1={0} y1={H / 2} x2={W} y2={H / 2} stroke="var(--hair)" strokeWidth="1" />
-      <polyline points={d} fill="none" stroke={color} strokeWidth="1.25" opacity={0.9} />
+      <polyline points={d} fill="none" stroke="currentColor" strokeWidth="1.25" opacity={0.9} />
     </svg>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { usePressureSummary } from "../../player/usePressureSummary";
 import { useNavigate } from "react-router-dom";
 import { MatchEvent, MatchMetadata } from "../../../types";
@@ -33,9 +33,8 @@ import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import {
   BarChart3,
-  Check,
-  ChevronDown,
   ChevronRight,
+  Clock,
   EyeOff,
   Flag,
   Gauge,
@@ -73,8 +72,15 @@ import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { Segmented } from "../../../components/ui/Segmented";
+import { Select } from "../../../components/ui/Select";
+import { Chip } from "../../../components/ui/Chip";
+import { ErrorBoundary } from "../../../components/ui/ErrorBoundary";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { Skeleton } from "../../../components/ui/Skeleton";
+import { useCoachSummary } from "../../../core/useCoachSummary";
+import { useCoachPlan } from "../../../core/useCoachPlan";
+import { tramoWindow } from "../../../core/coach";
+import { CoachFocusCard, coachFocusTramo, coachFocusView } from "./CoachFocusCard";
 import "./PatternsPanel.css";
 
 /**
@@ -87,12 +93,16 @@ import "./PatternsPanel.css";
  * quince partidas, dos muertes de diferencia entre tramos no son un hallazgo, y
  * presentarlas como tal sería mentir con gráficas.
  *
- * Estructura (rediseño «Post-partida», 2026-09): de datos a UNA acción.
- *  - Héroe: dónde mueres, sobre la Grieta, con el peor tramo como filtro.
- *  - Derecha: tu foco (el peor tramo en una frase y la acción oro: ver esas
- *    muertes seguidas, partida tras partida) y tu última partida frente a tu
- *    rango, con la palanca que más rinde.
+ * Estructura (rediseño «Ritmo», fase 3d, 2026-10):
+ *  - Héroe: dónde mueres, sobre la Grieta. Las muertes del tramo de tu foco
+ *    van en oro, para VER en el mapa aquello de lo que habla la tarjeta de al
+ *    lado.
+ *  - Derecha: tu foco, que ahora elige el Coach (resumen del plan de 10
+ *    partidas con su antes y después, y el enlace a la pantalla Coach), y tu
+ *    última partida frente a tu rango, con el carril de cada métrica.
  *  - Explorar: el resto, en fichas de una línea que se abren enteras debajo.
+ *    «Cuándo mueres» (el reloj de muertes en tramos de cinco minutos, que
+ *    antes era el foco) vive ahora aquí, con su lista de reproducción.
  *
  * Los textos de cautela ("indicio", "comparaciones, no causas", "apunta, no
  * promete", "asociaciones, no mérito") se dicen UNA vez por tarjeta, en su
@@ -126,23 +136,20 @@ const CATEGORY_COLOR: Record<string, string> = {
 };
 
 /**
- * Tramos de partida para el mapa. `worst` es el peor tramo de cinco minutos
- * del histograma: el mismo que nombra la tarjeta del foco, para poder VER en
- * el mapa las muertes de las que habla.
+ * Fases de partida para el mapa. Los cortes son los de los tramos del Coach
+ * (0-7-14-21-28) tomados de dos en dos: así el tramo del foco cae siempre
+ * dentro de una sola fase y el filtro no lo parte.
  */
-type Phase = "all" | "early" | "mid" | "late" | "worst";
-/** `short` es lo que cabe en el chip; `label` (con el rango) va en el title. */
-const PHASES: { key: Exclude<Phase, "worst">; short: string; label: string }[] = [
-  { key: "all", short: "All", label: "All" },
-  { key: "early", short: "Early", label: "Early (<14m)" },
-  { key: "mid", short: "Mid", label: "Mid (14–25m)" },
-  { key: "late", short: "Late", label: "Late (>25m)" },
+type Phase = "all" | "early" | "mid" | "late";
+const PHASES: { key: Phase; from: number; to: number | null }[] = [
+  { key: "all", from: 0, to: null },
+  { key: "early", from: 0, to: 14 },
+  { key: "mid", from: 14, to: 28 },
+  { key: "late", from: 28, to: null },
 ];
-const inPhase = (gameMin: number, fase: Exclude<Phase, "worst">): boolean => {
-  if (fase === "all") return true;
-  if (fase === "early") return gameMin < 14;
-  if (fase === "mid") return gameMin >= 14 && gameMin <= 25;
-  return gameMin > 25;
+const inPhase = (gameMin: number, fase: Phase): boolean => {
+  const p = PHASES.find((x) => x.key === fase) ?? PHASES[0];
+  return gameMin >= p.from && (p.to === null || gameMin < p.to);
 };
 
 /**
@@ -261,14 +268,14 @@ const ladoDe = (m: MatchMetadata): Side => {
 /** Segundos de vídeo que cuesta ver una muerte de la lista (antes y después). */
 const SEGUNDOS_POR_MUERTE = 16;
 
-/** El color de un puesto en la partida: MVP en marca, los últimos en derrota. */
-const colorPuesto = (rank: number): string =>
-  rank === 1 ? "var(--brand)" : rank >= 8 ? "var(--loss)" : "var(--text)";
+/** El tono de un puesto en la partida: MVP en marca, los últimos en derrota. */
+const clasePuesto = (rank: number): string =>
+  rank === 1 ? "pp-mvp" : rank >= 8 ? "pp-down" : "";
 
 /** El icono de "todas las posiciones", como el de relleno del cliente. */
 const AllPositionsIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="pp-pos-icon">
     <rect x="3" y="3" width="18" height="18" rx="2" />
     <path d="M3 15 15 3" />
     <path d="M9 21 21 9" />
@@ -276,87 +283,33 @@ const AllPositionsIcon: React.FC<{ size?: number }> = ({ size = 16 }) => (
 );
 
 /**
- * El selector de posición: un botón con el icono de la calle y un menú.
+ * El selector de posición, con el `Select` común (campo hundido y menú propio).
  *
  * Seis píldoras en fila ocupaban media cabecera para una decisión que se toma
- * una vez; el menú deja la cabecera en una sola fila con el periodo.
+ * una vez; el menú deja la cabecera en una sola fila con el periodo. Cada
+ * opción lleva el icono de su calle, como en el cliente.
  */
 const PositionMenu: React.FC<{ value: RoleFilter; onChange: (r: RoleFilter) => void }> = ({ value, onChange }) => {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  const boton = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
   const etiqueta = (k: RoleFilter) =>
     k === "all" ? t("All roles") : t(ROLE_FILTERS.find((r) => r.key === k)?.label ?? k);
-
-  useEffect(() => {
-    if (!open) return;
-    // Al abrir, el foco va a la opción elegida: es la que se quiere cambiar.
-    const sel = menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
-    sel?.focus();
-    const fuera = (e: MouseEvent) => {
-      const n = e.target as Node;
-      if (!menu.current?.contains(n) && !boton.current?.contains(n)) setOpen(false);
-    };
-    document.addEventListener("mousedown", fuera);
-    return () => document.removeEventListener("mousedown", fuera);
-  }, [open]);
-
-  const elegir = (k: RoleFilter) => {
-    onChange(k);
-    setOpen(false);
-    boton.current?.focus();
-  };
-
-  const onMenuKey = (e: React.KeyboardEvent) => {
-    const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? []);
-    const i = items.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
-    else if (e.key === "Home") { e.preventDefault(); items[0]?.focus(); }
-    else if (e.key === "End") { e.preventDefault(); items[items.length - 1]?.focus(); }
-    else if (e.key === "Escape") { e.preventDefault(); setOpen(false); boton.current?.focus(); }
-    else if (e.key === "Tab") setOpen(false);
-  };
-
   return (
-    <div className="pp-posmenu">
-      <button
-        ref={boton}
-        type="button"
-        className="pp-posbtn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`${t("Position")}: ${etiqueta(value)}`}
-        onClick={() => setOpen((o) => !o)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" && !open) { e.preventDefault(); setOpen(true); }
-        }}
-      >
-        {value === "all" ? <AllPositionsIcon /> : <PositionIcon position={value} size={16} />}
-        <span>{etiqueta(value)}</span>
-        <ChevronDown size={14} className="pp-posbtn-chev" aria-hidden="true" />
-      </button>
-      {open && (
-        <div ref={menu} className="pp-posmenu-list" role="menu" aria-label={t("Position")} onKeyDown={onMenuKey}>
-          {ROLE_FILTERS.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              role="menuitemradio"
-              aria-checked={value === r.key}
-              tabIndex={-1}
-              className="pp-posmenu-item"
-              onClick={() => elegir(r.key)}
-            >
-              {r.key === "all" ? <AllPositionsIcon /> : <PositionIcon position={r.key} size={16} />}
-              <span>{etiqueta(r.key)}</span>
-              {value === r.key && <Check size={14} className="pp-posmenu-check" aria-hidden="true" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <Select
+      className="pp-pos"
+      label={t("Position")}
+      value={value}
+      onChange={onChange}
+      options={ROLE_FILTERS.map((r) => ({
+        value: r.key,
+        text: etiqueta(r.key),
+        label: (
+          <span className="pp-pos-opt">
+            {r.key === "all" ? <AllPositionsIcon /> : <PositionIcon position={r.key} size={16} />}
+            {etiqueta(r.key)}
+          </span>
+        ),
+      }))}
+    />
   );
 };
 
@@ -409,7 +362,7 @@ const Ficha: React.FC<FichaProps> = ({ id, icon, label, value, open, onToggle, d
   );
 };
 
-export const PatternsPanel: React.FC = () => {
+const PatternsBody: React.FC = () => {
   // La biblioteca sale del store compartido: si la galería ya la cargó, aquí
   // no hay segunda lectura de disco.
   const { matches, loaded: matchesLoaded } = useMatches();
@@ -432,6 +385,12 @@ export const PatternsPanel: React.FC = () => {
   const [abiertas, setAbiertas] = useState<Set<string>>(() => new Set());
   const t = useT();
   const navigate = useNavigate();
+  // El foco del Coach: el plan en curso (o el último cerrado) y, sin plan, el
+  // foco que propone. Mismos hooks que Hoy: se recargan con la biblioteca.
+  const coach = useCoachSummary();
+  const { plan: coachPlan } = useCoachPlan();
+  const vistaCoach = useMemo(() => coachFocusView(coach, coachPlan), [coach, coachPlan]);
+  const tramoFoco = coachFocusTramo(vistaCoach);
   const setSelectedMatch = useAppStore((s) => s.setSelectedMatch);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
   const startPlaylist = useAppStore((s) => s.startPlaylist);
@@ -460,7 +419,9 @@ export const PatternsPanel: React.FC = () => {
       .finally(() => alive && setLoading(false));
     // Las rutas tampoco esperan a nadie: la primera vez se calculan (~1 s).
     getJungleRoutes()
-      .then((r) => alive && setRutas(r))
+      // Un `null` (un doble que falta, un comando que no contesta) es "sin
+      // rutas", no un motivo para tumbar la pantalla.
+      .then((r) => alive && setRutas(r ?? []))
       .catch((e) => console.error("Jungle routes", e));
     // La forma de temporada va aparte: puede tardar (hasta 20 detalles de la
     // API la primera vez) y la página no tiene por qué esperarla.
@@ -559,18 +520,18 @@ export const PatternsPanel: React.FC = () => {
 
   // El tramo de la fase elegida. "Todas" no resalta nada: es el mapa entero.
   const peak = histo.peak;
-  const enFase = (d: DeathPoint): boolean =>
-    fase === "worst" ? (peak ? enTramo(d.gameSec / 60, peak) : true) : inPhase(d.gameSec / 60, fase);
+  const enFase = (d: DeathPoint): boolean => inPhase(d.gameSec / 60, fase);
+  // Las muertes del tramo del foco del Coach: van en oro sobre el mapa.
+  const ventanaFoco = tramoFoco != null ? tramoWindow(tramoFoco) : null;
+  const enFoco = (d: DeathPoint): boolean =>
+    ventanaFoco != null &&
+    d.gameSec / 60 >= ventanaFoco.from &&
+    (ventanaFoco.to === null || d.gameSec / 60 < ventanaFoco.to);
   const resaltadas = useMemo(
     () => muertes.filter((d) => enFase(d)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [muertes, fase, peak]
+    [muertes, fase]
   );
-  // Si el filtro de periodo o de puesto deja sin peor tramo, la fase vuelve a
-  // "todas" en vez de quedarse apuntando a un tramo que ya no existe.
-  useEffect(() => {
-    if (fase === "worst" && !peak) setFase("all");
-  }, [fase, peak]);
   const calientes = useMemo(() => hotSpots(resaltadas), [resaltadas]);
   const partidasConMapa = useMemo(() => new Set(muertes.map((d) => d.matchId)).size, [muertes]);
 
@@ -837,18 +798,23 @@ export const PatternsPanel: React.FC = () => {
   const cargandoTodo = loading || !matchesLoaded;
   const esqueleto = useDelayedLoading(cargandoTodo);
   if (cargandoTodo || esqueleto) {
+    // El título no espera a nadie: es lo único que ya se sabe, y con él en su
+    // sitio la pantalla no salta cuando llegan los datos.
     return (
-      <div className="pp panel-enter">
+      <>
+        <header className="pp-head">
+          <h1 className="pp-h1">{t("Patterns")}</h1>
+        </header>
         {esqueleto && (
-          <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
-            <Skeleton width={180} height={28} />
-            <div className="page-skel__cols">
-              <Skeleton shape="block" height={460} />
-              <Skeleton shape="block" height={300} />
+          <div className="pp-main" role="status" aria-busy="true" aria-label={t("Loading…")}>
+            <Skeleton shape="block" height={560} />
+            <div className="pp-side">
+              <Skeleton shape="block" height={220} />
+              <Skeleton shape="block" height={250} />
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 
@@ -857,16 +823,16 @@ export const PatternsPanel: React.FC = () => {
   // para poder volver a "Todos".
   if (rol === "all" && rango === "all" && clock.total === 0) {
     return (
-      <div className="pp panel-enter">
+      <>
         <header className="pp-head">
-          <h1>{t("Patterns")}</h1>
+          <h1 className="pp-h1">{t("Patterns")}</h1>
         </header>
         <EmptyState
           icon={<BarChart3 size={30} color="var(--faint)" />}
           title={t("Not enough games yet")}
           text={t("Once a few games are recorded, this screen starts showing what they have in common.")}
         />
-      </div>
+      </>
     );
   }
 
@@ -984,7 +950,7 @@ export const PatternsPanel: React.FC = () => {
         {prediccion && (
           <>
             {" · "}
-            <span style={{ color: prediccion.netPerGame >= 0 ? "var(--win)" : "var(--loss)" }}>
+            <span className={prediccion.netPerGame >= 0 ? "pp-up" : "pp-down"}>
               {prediccion.netPerGame >= 0 ? "+" : "−"}{formatDecimal(Math.abs(prediccion.netPerGame))} LP
             </span>
           </>
@@ -1000,7 +966,7 @@ export const PatternsPanel: React.FC = () => {
   ) : forma ? (
     t("At least 8 ranked games are needed to compute the projection ({n} so far).", { n: forma.games.length })
   ) : (
-    <span className="skeleton" style={{ display: "inline-block", width: 140, height: 10 }} />
+    <Skeleton width={140} className="pp-skel-inline" />
   );
 
   const valorCruces: React.ReactNode =
@@ -1022,21 +988,42 @@ export const PatternsPanel: React.FC = () => {
       </>
     );
 
+  const valorReloj: React.ReactNode = peak ? (
+    <>
+      <span className="pp-ex-strong">{tramoTxt(peak)}</span>
+      <span className="pp-ex-soft">
+        {" · "}{t("{n} of {total} deaths", { n: peak.total, total: clock.total })}
+      </span>
+    </>
+  ) : (
+    t("No deaths in this window.")
+  );
+
   const minutosFoco = Math.max(1, Math.round((listaFoco.length * SEGUNDOS_POR_MUERTE) / 60));
   const hot = calientes[0] ?? null;
+  // El tramo del foco, con las palabras de la leyenda. Solo se nombra si hay
+  // alguna muerte suya en el mapa: una entrada de leyenda sin puntos confunde.
+  const focoTxt = ventanaFoco
+    ? ventanaFoco.to === null
+      ? t("Minute {a}+", { a: ventanaFoco.from })
+      : t("Minute {a}–{b}", { a: ventanaFoco.from, b: ventanaFoco.to })
+    : null;
+  const hayFoco = focoTxt != null && muertes.some(enFoco);
+  /** Partidas de la ventana sin ninguna muerte con sitio en el mapa. */
+  const sinMuertesEn =
+    fase === "all" && partidasConMapa > 0 ? Math.max(0, propias.length - partidasConMapa) : 0;
 
   return (
-    <div className="pp panel-enter">
+    <>
       {/* ------------------------------------------------------ cabecera */}
       <header className="pp-head">
-        <div className="pp-title">
-          <h1>{t("Patterns")}</h1>
-          <span className="pp-sub">
-            {propias.length} {t("games")} · {clock.total} {t("deaths")} · {t("{w}W {l}L", { w: clock.wins, l: clock.losses })}
-          </span>
-        </div>
+        <h1 className="pp-h1">{t("Patterns")}</h1>
+        <span className="pp-sub">
+          {propias.length} {t("games")} · {clock.total} {t("deaths")} · {t("{w}W {l}L", { w: clock.wins, l: clock.losses })}
+        </span>
         {/* Filtros: cada agregado de abajo se recalcula solo con las partidas
-            jugadas en ese puesto Y dentro de esa ventana temporal. */}
+            jugadas en ese puesto Y dentro de esa ventana temporal. El foco
+            del Coach no: es de todas tus partidas, como en Hoy. */}
         <div className="pp-filters">
           <Segmented
             label={t("Period")}
@@ -1072,46 +1059,53 @@ export const PatternsPanel: React.FC = () => {
       {/* =================================================== fila principal */}
       <div className="pp-main">
         {/* ------------------------------------------------ dónde mueres */}
-        <section className="card pp-hero" aria-labelledby="pp-hero-title">
+        <section className="card pp-card pp-hero" aria-labelledby="pp-hero-title">
           <div className="pp-hero-head">
             <div className="pp-hero-title">
-              <h2 id="pp-hero-title">{t("Where you die")}</h2>
-              <span className="pp-sub">
-                {fase !== "all"
-                  ? t("{n} of {total} deaths", { n: resaltadas.length, total: muertes.length })
-                  : muertes.length === 1
-                    ? t("1 death in 1 game")
-                    : partidasConMapa === 1
-                      ? t("{n} deaths in 1 game", { n: muertes.length })
-                      : t("{n} deaths in {g} games", { n: muertes.length, g: partidasConMapa })}
-                {/* Si faltan partidas respecto a la cabecera, se dice por qué: "99 en
-                    23" junto a "26 partidas" parecía un error y eran 3 sin muertes. */}
-                {fase === "all" && propias.length > partidasConMapa && partidasConMapa > 0 &&
-                  ` · ${t("none recorded in the other {k}", { k: propias.length - partidasConMapa })}`}
+              <h2 id="pp-hero-title" className="pp-cardtitle">{t("Where you die")}</h2>
+              {/* Cada trozo en su caja: si no cabe, la línea se parte por un
+                  separador y no a mitad de frase ("en las otras / 4"). */}
+              <span className="pp-hero-sub">
+                {[
+                  fase !== "all"
+                    ? t("{n} of {total} deaths", { n: resaltadas.length, total: muertes.length })
+                    : muertes.length === 1
+                      ? t("1 death in 1 game")
+                      : partidasConMapa === 1
+                        ? t("{n} deaths in 1 game", { n: muertes.length })
+                        : t("{n} deaths in {g} games", { n: muertes.length, g: partidasConMapa }),
+                  // Si faltan partidas respecto a la cabecera, se dice por qué: "99 en
+                  // 23" junto a "26 partidas" parecía un error y eran 3 sin muertes.
+                  sinMuertesEn > 0 ? t("none recorded in the other {k}", { k: sinMuertesEn }) : null,
+                  // La pista de los puntos cede su sitio a esa explicación: las
+                  // tres juntas eran tres líneas junto al segmentado.
+                  muertes.length > 0 && sinMuertesEn === 0 ? t("click a dot = that moment") : null,
+                ]
+                  .filter((x): x is string => !!x)
+                  .map((x, i) => (
+                    <React.Fragment key={i}>
+                      {i > 0 && " · "}
+                      <span className="pp-hero-sub-part">{x}</span>
+                    </React.Fragment>
+                  ))}
               </span>
             </div>
             {muertes.length > 0 && (
-              <div className="pp-phase">
-                {/* El último, el peor tramo: el mismo del foco, para ver en el
-                    mapa las muertes de las que habla la frase de al lado. */}
-                <Segmented
-                  size="sm"
-                  label={t("Game phase")}
-                  value={fase}
-                  onChange={(f) => { setFase(f); setHover(null); }}
-                  options={[
-                    ...PHASES.map((p) => ({ value: p.key as typeof fase, label: t(p.short), title: t(p.label) })),
-                    ...(peak
-                      ? [{
-                          value: "worst" as typeof fase,
-                          label: tramoTxt(peak),
-                          title: t("Your worst window"),
-                          icon: <span className="pp-chip-dot" aria-hidden="true" />,
-                        }]
-                      : []),
-                  ]}
-                />
-              </div>
+              <Segmented
+                label={t("Game phase")}
+                value={fase}
+                onChange={(f) => { setFase(f); setHover(null); }}
+                options={PHASES.map((p) => ({
+                  value: p.key,
+                  label: p.key === "all" ? t("All") : p.to === null ? `${p.from}+` : `${p.from}-${p.to}`,
+                  title:
+                    p.key === "all"
+                      ? undefined
+                      : p.to === null
+                        ? t("Minute {a}+", { a: p.from })
+                        : t("Minute {a}–{b}", { a: p.from, b: p.to }),
+                }))}
+              />
             )}
           </div>
 
@@ -1138,11 +1132,16 @@ export const PatternsPanel: React.FC = () => {
               {muertes.map((d, i) => {
                 const { left, top } = riftPercent(d.u, d.v);
                 const on = enFase(d);
+                const clase = [
+                  "pp-dot",
+                  fase !== "all" ? (on ? "is-on" : "is-off") : "",
+                  enFoco(d) ? "is-focus" : "",
+                ].filter(Boolean).join(" ");
                 return (
                   <button
                     key={`${d.matchId}-${d.time}-${i}`}
                     type="button"
-                    className={`pp-dot ${fase !== "all" ? (on ? "is-on" : "is-off") : ""}`.trim()}
+                    className={clase}
                     style={{ left: `${left}%`, top: `${top}%` }}
                     tabIndex={on ? 0 : -1}
                     aria-hidden={on ? undefined : true}
@@ -1171,14 +1170,9 @@ export const PatternsPanel: React.FC = () => {
                   <span className="pp-time">{mmss(hover.d.gameSec)}</span>
                   {hover.d.killer && <span> · {hover.d.killer}</span>}
                   <span
-                    style={{
-                      color:
-                        hover.d.result === "victory"
-                          ? "var(--win)"
-                          : hover.d.result === "defeat"
-                            ? "var(--loss)"
-                            : "var(--faint)",
-                    }}
+                    className={
+                      hover.d.result === "victory" ? "pp-up" : hover.d.result === "defeat" ? "pp-down" : "pp-tip-none"
+                    }
                   >
                     {" · "}
                     {t(
@@ -1203,130 +1197,45 @@ export const PatternsPanel: React.FC = () => {
             <div className="pp-legend">
               <span className="pp-legend-item">
                 <span className="pp-legend-dot" aria-hidden="true" />
-                {t("Each dot opens that game at that moment.")}
+                {t("Death")}
               </span>
-              {hot && (
+              {hayFoco && (
                 <span className="pp-legend-item">
-                  <span className="pp-legend-halo" aria-hidden="true" />
-                  <span>
-                    {t("Hot zone:")} <span className="pp-legend-strong">{t(hot.name)}</span>
-                  </span>
+                  <span className="pp-legend-dot pp-legend-dot--focus" aria-hidden="true" />
+                  {t("{window} (your focus)", { window: focoTxt as string })}
                 </span>
               )}
-              {/* Con 3 o más muertes con ruta, qué estabas haciendo. */}
-              {quehacias.n >= 3 && (
-                <span className="pp-legend-item">
-                  <RouteIcon size={12} aria-hidden="true" style={{ color: "var(--muted)" }} />
-                  <span>
-                    {t("You were:")}{" "}
-                    {quehacias.filas.slice(0, 3).map((f, i) => (
-                      <React.Fragment key={f.a}>
-                        {i > 0 && " · "}
-                        <span className="pp-legend-strong">{activityLabel(f.a, t)}</span> {f.n}
-                      </React.Fragment>
-                    ))}
-                    <span className="pp-legend-soft"> {t("({n} deaths with a measured route)", { n: quehacias.n })}</span>
-                  </span>
+              {hot && (
+                <span className="pp-legend-item pp-legend-hot">
+                  <span className="pp-legend-halo" aria-hidden="true" />
+                  {t("Hot zone:")} {t(hot.name)}
                 </span>
               )}
             </div>
+          )}
+          {/* Con 3 o más muertes con ruta, qué estabas haciendo. */}
+          {quehacias.n >= 3 && (
+            <p className="pp-legend pp-legend-route">
+              <RouteIcon size={12} aria-hidden="true" className="pp-legend-icon" />
+              <span>
+                {t("You were:")}{" "}
+                {quehacias.filas.slice(0, 3).map((f, i) => (
+                  <React.Fragment key={f.a}>
+                    {i > 0 && " · "}
+                    <span className="pp-legend-strong">{activityLabel(f.a, t)}</span> {f.n}
+                  </React.Fragment>
+                ))}
+                <span className="pp-legend-soft"> {t("({n} deaths with a measured route)", { n: quehacias.n })}</span>
+              </span>
+            </p>
           )}
         </section>
 
         {/* --------------------------------------------- qué hacer con esto */}
         <div className="pp-side">
-          {/* ------------------------------------------------ tu foco */}
-          <section className="card pp-card pp-focus" aria-labelledby="pp-focus-title">
-            <div className="pp-cardhead">
-              <span className="pp-cap">{t("Your focus")}</span>
-              {/* Cuánto aguanta la muestra, dicho UNA vez: aquí. Con la muestra
-                  sólida no se dice nada, es lo que se da por supuesto. */}
-              {c.under && (
-                <span className={`pp-sample ${conf === "low" ? "pp-sample--low" : ""}`.trim()} title={t(c.note)}>
-                  {sampleLabel(conf, propias.length, t)}
-                </span>
-              )}
-            </div>
-            {peak ? (
-              <>
-                <div className="pp-focus-text">
-                  <h2 id="pp-focus-title" className="pp-focus-title">
-                    {peak.to === null
-                      ? t("You die the most from minute {a} on", { a: peak.from })
-                      : t("You die the most between minute {a} and {b}", { a: peak.from, b: peak.to })}
-                  </h2>
-                  <p className="pp-prose pp-num">
-                    {t("{n} of your {total} deaths land there ({pct}%).", {
-                      n: peak.total,
-                      total: clock.total,
-                      pct: Math.round((peak.total / clock.total) * 100),
-                    })}
-                    {clock.deathsPerWin !== null && clock.deathsPerLoss !== null && (
-                      <>
-                        {" "}
-                        {t("{w} deaths per win, {l} per loss.", {
-                          w: formatDecimal(clock.deathsPerWin),
-                          l: formatDecimal(clock.deathsPerLoss),
-                        })}
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="pp-histo">
-                  <div className="pp-bars" aria-hidden="true">
-                    {histo.tramos.map((b) => {
-                      const esPeor = b.from === peak.from;
-                      return (
-                        <div
-                          key={b.from}
-                          className={`pp-bar-col ${esPeor ? "is-hot" : ""}`.trim()}
-                          title={t("{total} deaths · {w} in wins, {l} in losses", { total: b.total, w: b.inWins, l: b.inLosses })}
-                        >
-                          <span className="pp-bar-n">{b.total}</span>
-                          {/* 18 px son la cifra de encima y su hueco. */}
-                          <span
-                            className="pp-bar"
-                            style={{
-                              height: `max(3px, calc(${histo.max ? (b.total / histo.max).toFixed(3) : 0} * (100% - 18px)))`,
-                            }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="pp-axis" aria-hidden="true">
-                    {histo.tramos.map((b) => (
-                      <span key={b.from} className={b.from === peak.from ? "is-hot" : undefined}>
-                        {b.to === null ? `${b.from}'+` : `${b.from}'`}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-                {/* La acción de la pantalla: las muertes del peor tramo, una
-                    detrás de otra, partida tras partida. */}
-                <button
-                  type="button"
-                  className="btn btn--primary pp-cta"
-                  disabled={listaFoco.length === 0}
-                  title={listaFoco.length === 0 ? t("The videos of these games are missing") : undefined}
-                  onClick={verFoco}
-                >
-                  <Play size={14} fill="currentColor" aria-hidden="true" />
-                  <span>
-                    {listaFoco.length === 1
-                      ? t("Watch the death")
-                      : t("Watch the {n} deaths in a row", { n: listaFoco.length })}
-                  </span>
-                  {listaFoco.length > 0 && (
-                    <span className="pp-cta-dur">~{t("{n} min", { n: minutosFoco })}</span>
-                  )}
-                </button>
-              </>
-            ) : (
-              <p className="pp-prose">{t("No deaths in this window.")}</p>
-            )}
-          </section>
-
+          {/* La ruta /coach es de la pantalla Coach (fase 4.1); ver la nota
+              junto al botón. */}
+          <CoachFocusCard view={vistaCoach} onOpenCoach={() => navigate("/coach")} />
           {/* ------------------------------ tu última partida frente a tu rango */}
           <RankBenchmarkCard bench={bench} />
         </div>
@@ -1343,6 +1252,103 @@ export const PatternsPanel: React.FC = () => {
           </span>
         </div>
         <div className="pp-explore">
+          {/* ------------------------------------------------ cuándo mueres.
+              Era el foco de la pantalla hasta que el foco pasó a elegirlo el
+              Coach. Sigue siendo la pregunta más directa ("¿en qué minuto se
+              me tuerce?") y conserva su lista: las muertes de ese tramo, una
+              detrás de otra, partida tras partida. */}
+          <Ficha
+            id="reloj"
+            icon={<Clock size={14} aria-hidden="true" />}
+            label={t("When you die")}
+            value={valorReloj}
+            open={abiertas.has("reloj")}
+            onToggle={() => toggle("reloj")}
+            disabled={!peak}
+          >
+            {peak && (
+              <div className="card pp-card">
+                <div className="pp-cardhead">
+                  <h3 className="pp-cardtitle">
+                    {peak.to === null
+                      ? t("You die the most from minute {a} on", { a: peak.from })
+                      : t("You die the most between minute {a} and {b}", { a: peak.from, b: peak.to })}
+                  </h3>
+                  {/* Cuánto aguanta la muestra, dicho UNA vez: aquí. Con la
+                      muestra sólida no se dice nada, es lo que se da por supuesto. */}
+                  {c.under && (
+                    <Chip tone={conf === "low" ? "finding" : "neutral"} title={t(c.note)}>
+                      {sampleLabel(conf, propias.length, t)}
+                    </Chip>
+                  )}
+                </div>
+                <p className="pp-prose pp-num">
+                  {t("{n} of your {total} deaths land there ({pct}%).", {
+                    n: peak.total,
+                    total: clock.total,
+                    pct: Math.round((peak.total / clock.total) * 100),
+                  })}
+                  {clock.deathsPerWin !== null && clock.deathsPerLoss !== null && (
+                    <>
+                      {" "}
+                      {t("{w} deaths per win, {l} per loss.", {
+                        w: formatDecimal(clock.deathsPerWin),
+                        l: formatDecimal(clock.deathsPerLoss),
+                      })}
+                    </>
+                  )}
+                </p>
+                <div className="pp-histo">
+                  <div className="pp-bars" aria-hidden="true">
+                    {histo.tramos.map((b) => (
+                      <div
+                        key={b.from}
+                        className={`pp-bar-col ${b.from === peak.from ? "is-hot" : ""}`.trim()}
+                        title={t("{total} deaths · {w} in wins, {l} in losses", { total: b.total, w: b.inWins, l: b.inLosses })}
+                      >
+                        <span className="pp-bar-n">{b.total}</span>
+                        {/* La altura es el dato: 16 px son la cifra de encima y su hueco. */}
+                        <span
+                          className="pp-bar"
+                          style={{
+                            height: `max(3px, calc(${histo.max ? (b.total / histo.max).toFixed(3) : 0} * (100% - 16px)))`,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pp-axis" aria-hidden="true">
+                    {histo.tramos.map((b) => (
+                      <span key={b.from} className={b.from === peak.from ? "is-hot" : undefined}>
+                        {b.to === null ? `${b.from}'+` : `${b.from}'`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {/* Ya no es la acción oro de la pantalla (la pantalla ya no
+                    tiene una: la del foco vive en el Coach), pero sigue siendo
+                    la forma más corta de VER el tramo. */}
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<Play size={14} fill="currentColor" aria-hidden="true" />}
+                    disabled={listaFoco.length === 0}
+                    title={listaFoco.length === 0 ? t("The videos of these games are missing") : undefined}
+                    onClick={verFoco}
+                  >
+                    {listaFoco.length === 1
+                      ? t("Watch the death")
+                      : t("Watch the {n} deaths in a row", { n: listaFoco.length })}
+                    {listaFoco.length > 0 && (
+                      <span className="pp-cta-dur"> · ~{t("{n} min", { n: minutosFoco })}</span>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Ficha>
+
           {/* --------------------------------------- el punto ciego, por partida */}
           <Ficha
             id="ciego"
@@ -1365,7 +1371,7 @@ export const PatternsPanel: React.FC = () => {
                   <div className="pp-zone">
                     <span />
                     {SIDE_LANES.map((l) => (
-                      <span key={l} className="pp-cap" style={{ textAlign: "right" }}>{laneLabel(l, t)}</span>
+                      <span key={l} className="pp-cap pp-right">{laneLabel(l, t)}</span>
                     ))}
                     {filas.map((z) => {
                       const peor = peorDe(z.gaps);
@@ -1373,11 +1379,7 @@ export const PatternsPanel: React.FC = () => {
                         <React.Fragment key={z.match_id}>
                           <span className="pp-meta pp-num">{z.date.slice(5, 10)}</span>
                           {z.gaps.map((g, i) => (
-                            <span
-                              key={i}
-                              className="pp-num"
-                              style={{ textAlign: "right", color: i === peor ? "var(--loss)" : "var(--muted)" }}
-                            >
+                            <span key={i} className={`pp-num pp-right ${i === peor ? "pp-down" : "pp-soft"}`}>
                               {mmss(g)}
                             </span>
                           ))}
@@ -1418,12 +1420,12 @@ export const PatternsPanel: React.FC = () => {
                     <div className="pp-cats">
                       {SIDE_LANES.map((l, i) => (
                         <div key={l} className="pp-cat">
-                          <div style={{ minWidth: 0 }}>
+                          <div className="pp-shrink">
                             <div className="pp-cat-label">{laneLabel(l, t)}</div>
                             <div className="pp-track">
                               <span
-                                className="pp-fill"
-                                style={{ width: `${(miradas.porCarril![i] / max) * 100}%`, background: "var(--cool)" }}
+                                className="pp-fill pp-fill--cool"
+                                style={{ width: `${(miradas.porCarril![i] / max) * 100}%` }}
                               />
                             </div>
                           </div>
@@ -1516,9 +1518,9 @@ export const PatternsPanel: React.FC = () => {
 
                   <div className="pp-route-rows">
                     <span className="pp-cap">{t("Game")}</span>
-                    <span className="pp-cap" style={{ textAlign: "right" }}>{t("First clear")}</span>
-                    <span className="pp-cap" style={{ textAlign: "right" }}>{t("Invades")}</span>
-                    <span className="pp-cap" style={{ textAlign: "right" }} title={t("on average, from respawn to you")}>{t("Camp delay")}</span>
+                    <span className="pp-cap pp-right">{t("First clear")}</span>
+                    <span className="pp-cap pp-right">{t("Invades")}</span>
+                    <span className="pp-cap pp-right" title={t("on average, from respawn to you")}>{t("Camp delay")}</span>
                     {filas.map((g) => {
                       const fc = g.route.first_clear_end;
                       const lento = fc != null && resumenRuta.primerClear != null && fc - resumenRuta.primerClear > 15;
@@ -1532,7 +1534,7 @@ export const PatternsPanel: React.FC = () => {
                           title={t("Open this game at its first camp")}
                         >
                           <span className="pp-meta pp-num">{g.date.slice(5, 10)} · {g.champion}</span>
-                          <span className="pp-num" style={{ textAlign: "right", color: lento ? "var(--loss)" : "var(--text)" }}>
+                          <span className={`pp-num pp-right${lento ? " pp-down" : ""}`}>
                             {fc != null ? mmss(fc) : "—"}
                             {!g.route.full_clear && (
                               <span className="pp-meta" title={t("{n} camps", { n: g.route.first_clear_camps })}>
@@ -1540,8 +1542,8 @@ export const PatternsPanel: React.FC = () => {
                               </span>
                             )}
                           </span>
-                          <span className="pp-num" style={{ textAlign: "right" }}>{g.route.invades}</span>
-                          <span className="pp-num" style={{ textAlign: "right", color: "var(--muted)" }}>
+                          <span className="pp-num pp-right">{g.route.invades}</span>
+                          <span className="pp-num pp-right pp-soft">
                             {g.route.mean_delay != null ? mmss(g.route.mean_delay) : "—"}
                           </span>
                         </button>
@@ -1555,15 +1557,12 @@ export const PatternsPanel: React.FC = () => {
                       <div className="pp-cats">
                         {resumenRuta.muertes.map((m) => (
                           <div key={m.a} className="pp-cat">
-                            <div style={{ minWidth: 0 }}>
+                            <div className="pp-shrink">
                               <div className="pp-cat-label">{activityLabel(m.a, t)}</div>
                               <div className="pp-track">
                                 <span
-                                  className="pp-fill"
-                                  style={{
-                                    width: `${(m.n / maxM) * 100}%`,
-                                    background: m.a === "farming" || m.a === "invading" ? "var(--loss)" : "var(--muted)",
-                                  }}
+                                  className={`pp-fill ${m.a === "farming" || m.a === "invading" ? "pp-fill--loss" : "pp-fill--soft"}`}
+                                  style={{ width: `${(m.n / maxM) * 100}%` }}
                                 />
                               </div>
                             </div>
@@ -1603,13 +1602,10 @@ export const PatternsPanel: React.FC = () => {
                       <ChampionAvatar champion={p.champion} size={24} />
                       <span className="pp-list-name">{p.champion}</span>
                       <span className="pp-meta">{p.games} {t(p.games === 1 ? "game" : "games")}</span>
-                      <span
-                        className="pp-num"
-                        style={{ marginLeft: "auto", color: p.wr >= 0.5 ? "var(--win)" : "var(--loss)", fontWeight: 500 }}
-                      >
+                      <span className={`pp-num pp-list-wr ${p.wr >= 0.5 ? "pp-up" : "pp-down"}`}>
                         {Math.round(p.wr * 100)}%
                       </span>
-                      <span className="pp-meta pp-num" style={{ width: 74, textAlign: "right" }}>
+                      <span className="pp-meta pp-num pp-list-kda">
                         {p.d > 0 ? formatDecimal((p.k + p.a) / p.d) : "∞"} KDA
                       </span>
                     </div>
@@ -1630,10 +1626,7 @@ export const PatternsPanel: React.FC = () => {
                         <ChampionAvatar champion={r.champion} size={24} />
                         <span className="pp-list-name">vs {r.champion}</span>
                         <span className="pp-meta">{r.games} {t(r.games === 1 ? "game" : "games")}</span>
-                        <span
-                          className="pp-num"
-                          style={{ marginLeft: "auto", color: r.wr >= 0.5 ? "var(--win)" : "var(--loss)", fontWeight: 500 }}
-                        >
+                        <span className={`pp-num pp-list-wr ${r.wr >= 0.5 ? "pp-up" : "pp-down"}`}>
                           {Math.round(r.wr * 100)}%
                         </span>
                       </div>
@@ -1673,7 +1666,7 @@ export const PatternsPanel: React.FC = () => {
                   </div>
                 ) : (
                   !codigoForma && !forma && (
-                    <span className="skeleton" style={{ display: "inline-block", width: 180, height: 32 }} />
+                    <Skeleton width={180} height={32} />
                   )
                 )}
                 {prediccion && forma?.tier && (
@@ -1692,7 +1685,7 @@ export const PatternsPanel: React.FC = () => {
                       {t("{w}W {l}L", { w: prediccion.wins, l: prediccion.losses })}
                       {prediccion.avgScore != null && ` · ${Math.round(prediccion.avgScore)} ${t("score")}`}
                       {" · "}
-                      <span style={{ color: prediccion.netPerGame >= 0 ? "var(--win)" : "var(--loss)" }}>
+                      <span className={prediccion.netPerGame >= 0 ? "pp-up" : "pp-down"}>
                         {prediccion.netPerGame >= 0 ? "+" : "−"}{formatDecimal(Math.abs(prediccion.netPerGame))} LP
                       </span>{" "}
                       {t("per game at this pace")}.
@@ -1775,7 +1768,7 @@ export const PatternsPanel: React.FC = () => {
                       >
                         <ChampionAvatar champion={m.champion} size={28} />
                         {/* "#3" y no "3º": el ordinal español no se lee en inglés. */}
-                        <b style={{ color: colorPuesto(m.impact_rank as number) }}>
+                        <b className={clasePuesto(m.impact_rank as number)}>
                           {m.impact_rank === 1 ? "MVP" : `#${m.impact_rank}`}
                         </b>
                       </button>
@@ -1941,7 +1934,7 @@ export const PatternsPanel: React.FC = () => {
                 <div className="pp-cats">
                   {cats.map((x) => (
                     <div key={x.category} className="pp-cat">
-                      <div style={{ minWidth: 0 }}>
+                      <div className="pp-shrink">
                         {/* Se guardan en inglés (identificador del backend); se pintan traducidas. */}
                         <div className="pp-cat-label">{t(x.category)}</div>
                         <div className="pp-track">
@@ -1964,7 +1957,7 @@ export const PatternsPanel: React.FC = () => {
               {clock.total > 0 && (
                 <div className="pp-insight">
                   <p className="pp-prose">
-                    <span style={{ color: "var(--text)" }}>
+                    <span className="pp-legend-strong">
                       {t("{n} notes across {total} deaths.", { n: totalNotas, total: clock.total })}
                     </span>{" "}
                     {t("The window above comes from the data, not from your reading of it. Flagging even one moment per game is what turns \"when\" into \"why\".")}
@@ -1975,6 +1968,35 @@ export const PatternsPanel: React.FC = () => {
           </Ficha>
         </div>
       </section>
+    </>
+  );
+};
+
+/**
+ * La pantalla, con su red propia por dentro de la de App: si el cuerpo revienta
+ * al pintar, el título se queda en su sitio y el aviso ocupa el hueco de las
+ * tarjetas (Figma: Error de sección · Patrones), en vez de dejar la sección sin
+ * cabecera. «Recargar Patrones» remonta solo el cuerpo.
+ *
+ * Sin `panel-enter` aquí: la entrada la anima el contenedor de App, y con las
+ * dos corrían dos animaciones de 220 ms a la vez (auditoría M1).
+ */
+export const PatternsPanel: React.FC = () => {
+  const t = useT();
+  return (
+    <div className="pp">
+      <div className="pp-page">
+        <ErrorBoundary
+          name={t("Patterns")}
+          chrome={
+            <header className="pp-head">
+              <h1 className="pp-h1">{t("Patterns")}</h1>
+            </header>
+          }
+        >
+          <PatternsBody />
+        </ErrorBoundary>
+      </div>
     </div>
   );
 };

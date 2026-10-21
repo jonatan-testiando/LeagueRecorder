@@ -1,216 +1,171 @@
 /* =========================================================================
-   Patrones — de datos a UNA acción (rediseño «Post-partida», 2026-09).
+   Patrones — rediseño «Ritmo», fase 3d (2026-10).
 
    Cabecera en una fila (título + cifras · periodo + posición); fila principal
-   con el mapa de muertes como héroe y, a su derecha, el foco (con la acción
-   oro) y tu última partida frente a tu rango; debajo, "Explorar": fichas de
-   una línea que se abren enteras a todo el ancho.
+   con el mapa de muertes como héroe y, a su derecha, el foco del Coach (antes
+   y después del plan) y tu última partida frente a tu rango; debajo,
+   "Explorar": fichas de una línea que se abren enteras a todo el ancho.
 
-   Voz: sans en todo (Instrument Sans) con cifras tabulares; la mono solo en
-   marcas de tiempo. Sin mayúsculas con tracking. Solo tokens de index.css,
-   más los del mapa (--rift-*), que se definen aquí para los dos temas.
-   Prefijo `pp-`.
+   Solo tokens de index.css (--fs-*, --space-*, --radius-*), más los del mapa
+   (--rift-*), que se definen aquí para los dos temas. Sin animación de
+   entrada propia: la pone el contenedor del panel en App. Prefijo `pp-`.
    ========================================================================= */
 
+/* El panel es el que desplaza; la página va centrada dentro con el ancho de
+   los paneles de datos (1360 de contenido, más su margen). */
 .pp {
-  padding: 24px 32px 32px;
   height: 100%;
-  box-sizing: border-box;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   background: transparent;
   font-family: var(--font-sans);
+}
+.pp-page {
+  max-width: calc(var(--content-max) + 2 * var(--space-6));
+  min-height: 100%;
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+/* La sección caída (ErrorBoundary): el aviso ocupa el hueco de las tarjetas,
+   en una lámina como ellas, con el título de la pantalla encima. */
+.pp-page > [role="alert"] {
+  background: var(--panel);
+  border: 1px solid var(--hair);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--rim);
 }
 
 /* Voces pequeñas, compartidas por toda la pantalla. */
 .pp-num { font-variant-numeric: tabular-nums; }
-.pp-time { font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-.pp-cap { font-size: 13px; color: var(--faint); }
-.pp-meta { font-size: 12px; line-height: 1.4; color: var(--faint); }
-.pp-sub { font-size: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.pp-prose { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.pp-time { font-family: var(--font-mono); font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+.pp-label {
+  margin: 0;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+  letter-spacing: 0.0025em;
+  color: var(--faint);
+}
+.pp-cap { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+.pp-meta { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+.pp-sub { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-prose { margin: 0; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
 .pp-prose--faint { color: var(--faint); }
 /* La cautela de una tarjeta: una línea, al final, en voz baja. */
-.pp-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
+.pp-note { margin: 0; font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+/* Tonos de texto: lo que antes iba en `style={{ color }}`. */
+.pp-up { color: var(--win); }
+.pp-down { color: var(--loss); }
+.pp-soft { color: var(--muted); }
+.pp-mvp { color: var(--brand); }
+.pp-right { text-align: right; }
+.pp-shrink { min-width: 0; }
+.pp-skel-inline { display: inline-block; vertical-align: middle; }
 
 /* ------------------------------------------------------------ cabecera */
 .pp-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
-  min-height: 32px;
+  min-height: 36px;
   flex: none;
 }
-.pp-title { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; min-width: 0; }
-.pp-head h1 {
+.pp-h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-28);
+  line-height: var(--lh-28);
   font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 32px;
+  letter-spacing: -0.005em;
   color: var(--text);
+  white-space: nowrap;
 }
-.pp-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pp-head .pp-sub { flex: 1 1 auto; min-width: 0; }
+.pp-filters { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 /* Fuentes que no se pudieron leer: en voz baja, pero en su propia línea. */
 .pp-broken { flex-basis: 100%; color: var(--signal); }
 
-/* El peor tramo: el violeta del hallazgo, el mismo de la barra del foco. */
-.pp-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--flag); flex: none; }
-
-/* ------------------------------------------------------ selector de posición */
-.pp-posmenu { position: relative; }
-.pp-posbtn {
-  height: 32px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px 0 12px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--raised);
-  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
-  color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: box-shadow var(--t-instant) var(--e-move);
-}
-.pp-posbtn > svg:first-child { color: var(--muted); }
-.pp-posbtn:hover { box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair-strong); }
-.pp-posbtn:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-.pp-posbtn-chev { color: var(--faint); }
-.pp-posmenu-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 30;
-  min-width: 210px;
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border-radius: 10px;
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim), var(--shadow-2);
-  animation: pp-pop var(--t-quick) var(--e-out) both;
-}
-@keyframes pp-pop {
-  from { opacity: 0; transform: translateY(calc(-1 * var(--rise))); }
-  to { opacity: 1; transform: none; }
-}
-.pp-posmenu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-.pp-posmenu-item:hover,
-.pp-posmenu-item:focus-visible { background: var(--raised); color: var(--text); outline: none; }
-.pp-posmenu-item[aria-checked="true"] { color: var(--text); }
-.pp-posmenu-check { margin-left: auto; color: var(--cool); }
+/* El selector de posición: el campo del Select común, a la altura del
+   segmentado de al lado y con el ancho del texto más largo. */
+.select--field.pp-pos { height: 32px; min-width: 172px; }
+.pp-pos-opt { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.pp-pos-opt svg { flex: none; color: var(--muted); }
+.pp-pos-icon { flex: none; }
 
 /* ------------------------------------------------------- fila principal */
 .pp-main {
   display: grid;
-  /* Las proporciones de la maqueta (620 : 520 en 1440). */
-  grid-template-columns: minmax(0, 62fr) minmax(0, 52fr);
-  gap: 20px;
-  align-items: stretch;
+  /* Las proporciones de la maqueta (620 : 380 en 1280). */
+  grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+  gap: var(--space-4);
+  align-items: start;
 }
-.pp-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.pp-cardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
-.pp-cardtitle { margin: 0; font-size: 14px; font-weight: 500; line-height: 20px; color: var(--text); }
-
-/* El héroe: la Grieta ocupa la tarjeta. */
-.pp-hero {
-  position: relative;
-  min-width: 0;
-  padding: 18px 20px;
+.pp-card {
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-radius: 16px;
-  background: var(--panel);
-  box-shadow: inset 0 1px 0 var(--rim), var(--shadow-2);
+  gap: var(--space-3);
+  min-width: 0;
 }
+.pp-cardhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.pp-cardtitle { margin: 0; font-size: var(--fs-16); line-height: var(--lh-16); font-weight: 500; color: var(--text); }
+.pp-side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+
+/* El héroe: la Grieta ocupa la tarjeta. */
+.pp-hero { position: relative; }
 .pp-hero-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px 12px;
+  gap: var(--space-2) var(--space-3);
   flex-wrap: wrap;
-  min-height: 30px;
 }
-.pp-hero-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex-wrap: wrap; }
-.pp-hero-title h2,
-.pp-explore-head h2 { margin: 0; font-size: 16px; font-weight: 500; line-height: 20px; color: var(--text); }
-.pp-hero-title .pp-sub { font-size: 13px; }
-.pp-phase { display: flex; }
+.pp-hero-title { display: flex; flex-direction: column; min-width: 0; flex: 1 1 240px; }
+.pp-hero-sub { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-hero-sub-part { white-space: nowrap; }
 
 /* ------------------------------------------------------------- el mapa */
-/* La superficie del mapa llena lo que quede de la tarjeta: si la columna de la
-   derecha es más alta, la Grieta se queda centrada sobre su propio suelo en vez
-   de dejar un hueco de panel debajo de la leyenda. */
 .pp-rift-wrap {
   /* Tokens del mapa. El minimapa oficial trae los muros transparentes: los
-     rellena el fondo de esta superficie, que también es lo que rodea al mapa.
-     En partida son negro puro; aquí un marino casi negro, igual de oscuro a la
-     vista sin el negro puro que cansa. Oscuro también en el tema claro: el
-     minimapa del juego no tiene versión papel. `--rift-ground` es el anillo de
-     los puntos, para que se despeguen de las calles beige. */
-  --rift-ground: color-mix(in srgb, var(--cool) 8%, var(--ground));
+     rellena el fondo de la imagen. En partida son negro puro; aquí un marino
+     casi negro, igual de oscuro a la vista sin el negro puro que cansa.
+     Oscuro también en el tema claro: el minimapa del juego no tiene versión
+     papel. */
   --rift-wall: #0B1018;
   position: relative;
-  flex: 1 1 auto;
   display: flex;
-  align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--rift-wall);
+  padding-block: var(--space-1);
 }
-:root[data-theme="light"] .pp-rift-wrap {
-  --rift-ground: #1A2230;
-  --rift-wall: #141B26;
-}
-/* El filo, encima de todo lo pintado. Sin trama: sobre el minimapa oficial
-   solo ensuciaba la imagen. */
-.pp-rift-wrap::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px var(--hair);
-  pointer-events: none;
-  z-index: 5;
-}
+:root[data-theme="light"] .pp-rift-wrap { --rift-wall: #141B26; }
+/* El mapa cabe en la ventana: su alto es lo que queda debajo de la cabecera,
+   del título de la tarjeta y de la leyenda (360 px en total). A 1280 × 800
+   eso son los 440 de la maqueta; a 1920 × 1080 crece hasta el ancho de la
+   tarjeta. Nunca baja de 320. */
 .pp-rift {
   position: relative;
-  width: 100%;
+  width: min(100%, max(372px, calc((100vh - 360px) * 580 / 500)));
   aspect-ratio: 580 / 500;
   flex: none;
 }
 /* El minimapa oficial (512 px) estirado al cuadrado central; `left`/`width`
-   los pone RiftMap con la misma geometría que `riftPercent`. */
+   los pone RiftMap con la misma geometría que `riftPercent`. El fondo pinta
+   los muros transparentes. */
 .pp-rift-img {
   position: absolute;
   top: 0;
   height: 100%;
   display: block;
+  border-radius: var(--radius-md);
+  background: var(--rift-wall);
   user-select: none;
   pointer-events: none;
 }
@@ -218,7 +173,7 @@
   position: absolute;
   aspect-ratio: 1 / 1;
   transform: translate(-50%, -50%);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: radial-gradient(
     closest-side,
     color-mix(in srgb, var(--loss) 30%, transparent),
@@ -228,73 +183,86 @@
   pointer-events: none;
   transition: left var(--t-base) var(--e-move), top var(--t-base) var(--e-move);
 }
-/* Punto de muerte. Con un tramo elegido, las de dentro se encienden con un
-   anillo y las de fuera se quedan al 15 %: se ve el tramo SIN perder el resto. */
+/* Punto de muerte: rojo con un filo del color de la ventana, para que se
+   despegue de las calles. Las del tramo del foco, en oro y un punto mayores.
+   Con una fase elegida, las de dentro se encienden con un anillo y las de
+   fuera se quedan al 15 %: se ve la fase SIN perder el resto. */
 .pp-dot {
+  --dot: var(--loss);
   position: absolute;
   width: 8px;
   height: 8px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: var(--loss);
-  opacity: 0.78;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--rift-ground) 80%, transparent);
+  border-radius: var(--radius-full);
+  background: var(--dot);
+  box-shadow: 0 0 0 1.5px var(--ground);
   transform: translate(-50%, -50%);
   cursor: pointer;
   transition:
     opacity var(--t-quick) var(--e-move),
-    transform var(--t-instant) var(--e-move),
+    transform var(--t-hover) var(--e-move),
     box-shadow var(--t-quick) var(--e-move);
 }
+.pp-dot.is-focus { --dot: var(--brand); width: 10px; height: 10px; z-index: 1; }
 /* Más área que el punto: 8 px no se aciertan con el ratón. */
-.pp-dot::after { content: ""; position: absolute; inset: -5px; border-radius: 50%; }
-.pp-dot:hover { opacity: 1; transform: translate(-50%, -50%) scale(1.5); z-index: 3; }
-.pp-dot:focus-visible { opacity: 1; outline: 2px solid var(--cool); outline-offset: 2px; z-index: 3; }
+.pp-dot::after { content: ""; position: absolute; inset: -5px; border-radius: var(--radius-full); }
+@media (hover: hover) and (pointer: fine) {
+  .pp-dot:hover { transform: translate(-50%, -50%) scale(1.5); z-index: 3; }
+}
+.pp-dot:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; z-index: 3; }
 .pp-dot.is-on {
-  opacity: 1;
   z-index: 2;
-  box-shadow: 0 0 0 1.5px var(--rift-ground), 0 0 0 5px color-mix(in srgb, var(--loss) 22%, transparent);
+  box-shadow: 0 0 0 1.5px var(--ground), 0 0 0 5px color-mix(in srgb, var(--dot) 24%, transparent);
 }
 .pp-dot.is-off { opacity: 0.15; pointer-events: none; }
 /* Tooltip propio: el `title` nativo tarda un segundo y no colorea el resultado. */
 .pp-tip {
   position: absolute;
-  background: var(--panel);
+  background: var(--overlay);
   box-shadow: inset 0 0 0 1px var(--hair-strong), var(--shadow-1);
-  border-radius: 6px;
-  padding: 5px 9px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
   color: var(--text);
   white-space: nowrap;
   pointer-events: none;
   z-index: 4;
 }
+.pp-tip-none { color: var(--faint); }
 .pp-rift-empty {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: var(--space-6);
   text-align: center;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--panel) 55%, transparent);
 }
 .pp-rift-empty .pp-prose { max-width: 30ch; color: var(--text); }
 
+/* La leyenda en una fila: muerte, tramo del foco y, al otro lado, la zona
+   caliente. */
 .pp-legend {
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px 20px;
+  gap: var(--space-1) var(--space-4);
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--muted);
 }
-.pp-legend-item { display: flex; align-items: center; gap: 8px; }
-.pp-legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--loss); opacity: 0.78; flex: none; }
+.pp-legend-item { display: inline-flex; align-items: center; gap: var(--space-2); }
+.pp-legend-dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--loss); flex: none; }
+.pp-legend-dot--focus { background: var(--brand); }
+.pp-legend-hot { margin-left: auto; color: var(--text); font-weight: 500; }
 .pp-legend-halo {
   width: 16px;
   height: 16px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex: none;
   background: radial-gradient(
     closest-side,
@@ -303,125 +271,79 @@
     transparent 100%
   );
 }
+.pp-legend-route { align-items: flex-start; flex-wrap: nowrap; gap: var(--space-2); }
+.pp-legend-icon { flex: none; margin-top: var(--space-1); color: var(--muted); }
 .pp-legend-strong { color: var(--text); }
+.pp-legend-soft { color: var(--faint); }
 
-/* -------------------------------------------------------- columna derecha */
-.pp-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.pp-focus { flex: none; }
-.pp-rank { flex: 1 1 auto; }
-
-/* La muestra: cuánto aguanta lo que se dice, en un chip discreto. */
-.pp-sample {
-  flex: none;
-  font-size: 12px;
-  line-height: 18px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  white-space: nowrap;
-  cursor: help;
+/* ------------------------------------------------------ tu foco, del Coach */
+.pp-coach-title { margin: 0; font-size: var(--fs-16); line-height: var(--lh-16); font-weight: 500; color: var(--text); }
+.pp-kpis { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+.pp-kpi { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.pp-kpi dd { margin: 0; }
+.pp-kpi-value {
+  font-size: var(--fs-metric);
+  line-height: var(--lh-metric);
+  font-weight: 500;
+  letter-spacing: -0.0025em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
-.pp-sample--low { color: var(--flag); background: color-mix(in srgb, var(--flag) 12%, transparent); }
+.pp-kpi-value--good { color: var(--cool); }
+.pp-kpi-value--bad { color: var(--signal); }
+.pp-kpi-detail { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+/* El enlace al Coach: secundario (la pantalla no tiene acción oro), pero en
+   --text, que es la única salida de la tarjeta. Sin el --raised de la
+   maqueta: sobre él el texto se iba a 11,8:1 en claro y a 9,1 en oscuro,
+   fuera de la banda de 10-11. Con `.pp` delante: este CSS se carga antes que
+   index.css y a igual peso perdía. */
+.pp .btn.pp-coach-open { color: var(--text); }
 
-.pp-focus-text { display: flex; flex-direction: column; gap: 6px; }
-.pp-focus-title { margin: 0; font-size: 18px; font-weight: 500; line-height: 1.3; color: var(--text); }
-
-/* Cuándo mueres: ocho tramos, el peor en violeta de hallazgo. */
-.pp-histo { display: flex; flex-direction: column; gap: 6px; }
-.pp-bars { display: flex; align-items: flex-end; gap: 8px; height: 64px; }
-.pp-bar-col {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 100%;
+/* ------------------------------------ tu última partida frente a tu rango */
+.pp-rank-scope { flex: none; white-space: nowrap; }
+.pp-rank-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.pp-rank-line {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
 }
-.pp-bar-n { font-size: 12px; line-height: 14px; color: var(--faint); font-variant-numeric: tabular-nums; }
-/* Neutra en los dos temas: el texto mezclado en el panel sube en oscuro y baja
-   en claro (--raised en claro es MÁS claro que el panel y la barra se perdía). */
-.pp-bar { display: block; width: 100%; border-radius: 4px; background: color-mix(in srgb, var(--text) 11%, var(--panel)); }
-.pp-bar-col.is-hot .pp-bar {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--flag) 78%, var(--text)), var(--flag));
-}
-.pp-bar-col.is-hot .pp-bar-n { color: var(--flag); }
-.pp-axis { display: flex; gap: 8px; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.pp-axis span { flex: 1 1 0; text-align: center; }
-.pp-axis .is-hot { color: var(--flag); }
-
-/* La acción oro de la pantalla. */
-.pp-cta {
-  width: 100%;
-  height: 44px;
-  border-radius: 10px;
-  gap: 10px;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.pp-cta-dur { font-size: 12px; font-weight: 500; opacity: 0.72; font-variant-numeric: tabular-nums; }
-.pp-cta:disabled { opacity: 0.5; cursor: default; }
-.pp-cta:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-
-/* Tu última partida frente a tu rango. */
-.pp-rank-scope { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.pp-inline-icon { display: inline-flex; align-items: center; gap: 5px; }
-.pp-rank-rows { display: flex; flex-direction: column; gap: 12px; }
-.pp-rank-row { display: flex; flex-direction: column; gap: 7px; }
-.pp-rank-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; line-height: 18px; }
-.pp-rank-name { font-size: 14px; color: var(--text); }
-.pp-rank-line .pp-meta { font-size: 13px; }
-.pp-rank-value { font-size: 14px; font-weight: 600; }
-.pp-pbar { position: relative; height: 10px; }
+.pp-rank-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.pp-rank-figures { flex: none; white-space: nowrap; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-rank-value { font-weight: 500; color: var(--muted); }
+.pp-rank-value.is-good { color: var(--cool); }
+.pp-rank-value.is-bad { color: var(--signal); }
+/* El carril: una línea de 3 px que se ve en los dos temas, la muesca de la
+   mediana (lo normal en tu rango) y tu punto con un filo del panel. */
+.pp-pbar { --tone: var(--muted); position: relative; height: 10px; }
+.pp-pbar.is-good { --tone: var(--cool); }
+.pp-pbar.is-bad { --tone: var(--signal); }
 .pp-pbar-track {
   position: absolute;
   left: 0;
   right: 0;
-  top: 2px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--sunken);
-  box-shadow: var(--inset-sunken);
+  top: calc(50% - 1.5px);
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--hair-strong);
 }
-.pp-pbar-gap { position: absolute; top: 2px; height: 6px; border-radius: 999px; }
-.pp-pbar-median {
+.pp-pbar-median { position: absolute; left: calc(50% - 1px); top: 0; width: 2px; height: 10px; background: var(--faint); }
+.pp-pbar-dot {
   position: absolute;
-  left: calc(50% - 1px);
-  top: -1px;
-  width: 2px;
-  height: 12px;
-  border-radius: 1px;
-  background: var(--faint);
+  top: 0;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: var(--radius-full);
+  background: var(--tone);
+  box-shadow: 0 0 0 2px var(--panel);
 }
-.pp-pbar-dot { position: absolute; top: 0; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; }
-.pp-pbar-axis {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--faint);
-}
-.pp-pbar-axis span:nth-child(2) { text-align: center; }
-.pp-pbar-axis span:nth-child(3) { text-align: right; }
-.pp-lever {
-  margin-top: auto;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding-top: 12px;
-  box-shadow: inset 0 1px 0 var(--hair);
-}
-.pp-lever-icon { flex: none; margin-top: 2px; color: var(--cool); }
-.pp-lever-strong { color: var(--text); font-weight: 500; }
 
 /* -------------------------------------------------------------- explorar */
-.pp-explore-wrap { display: flex; flex-direction: column; gap: 10px; }
-.pp-explore-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.pp-explore-head .pp-sub { font-size: 13px; }
+.pp-explore-wrap { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-4); }
+.pp-explore-head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
+.pp-explore-head h2 { margin: 0; font-size: var(--fs-16); line-height: var(--lh-16); font-weight: 500; color: var(--text); }
 /* `dense`: el cuerpo abierto ocupa la fila entera justo debajo de la fila de
    su ficha, y las fichas que vienen detrás rellenan el hueco que dejó en
    vez de saltar a la fila siguiente. El orden del DOM (ficha, cuerpo) se
@@ -429,18 +351,18 @@
 .pp-explore {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: var(--space-3);
   grid-auto-flow: dense;
 }
 .pp-ex {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 76px;
   min-width: 0;
-  padding: 12px 14px 12px 18px;
+  padding: var(--space-3) var(--space-4);
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
   color: var(--faint);
@@ -448,15 +370,17 @@
   text-align: left;
   cursor: pointer;
   transition:
-    background-color var(--t-instant) var(--e-move),
-    box-shadow var(--t-instant) var(--e-move);
+    background-color var(--t-hover) var(--e-color),
+    box-shadow var(--t-hover) var(--e-color);
 }
-.pp-ex:hover:not(:disabled),
+@media (hover: hover) and (pointer: fine) {
+  .pp-ex:hover:not(:disabled) { background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim); }
+}
 .pp-ex.is-open { background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim); }
 .pp-ex:disabled { cursor: default; }
-.pp-ex:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
-.pp-ex-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.pp-ex-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--faint); }
+.pp-ex:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pp-ex-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.pp-ex-label { display: flex; align-items: center; gap: var(--space-2); font-size: var(--fs-13); line-height: var(--lh-13); color: var(--faint); }
 .pp-ex-label svg { flex: none; }
 /* El valor es una frase: hasta dos líneas antes de recortar. Con una sola, a
    1280 las frases de los cruces y del rango se quedaban en tres palabras. */
@@ -465,15 +389,15 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   min-width: 0;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
   color: var(--muted);
   overflow: hidden;
 }
 .pp-ex:disabled .pp-ex-value { color: var(--faint); }
-.pp-ex-strong { font-size: 15px; font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
-.pp-ex-soft { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.pp-ex-pool { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.pp-ex-strong { font-size: var(--fs-14); font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.pp-ex-soft { font-size: var(--fs-13); color: var(--muted); font-variant-numeric: tabular-nums; }
+.pp-ex-pool { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .pp-ex-pool .pp-ex-strong,
 .pp-ex-pool .pp-ex-soft { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pp-ex-pool .pp-ex-keep { flex: none; }
@@ -486,76 +410,143 @@
 .pp-ex-body[hidden] { display: none; }
 .pp-sheen { background: var(--media-sheen); }
 
+/* Cuándo mueres: ocho tramos, el peor en violeta de hallazgo. */
+.pp-histo { display: flex; flex-direction: column; gap: var(--space-2); max-width: 560px; }
+.pp-bars { display: flex; align-items: flex-end; gap: var(--space-2); height: 64px; }
+.pp-bar-col {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.pp-bar-n { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); font-variant-numeric: tabular-nums; }
+/* Neutra en los dos temas: el texto mezclado en el panel sube en oscuro y baja
+   en claro (--raised en claro es MÁS claro que el panel y la barra se perdía). */
+.pp-bar { display: block; width: 100%; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text) 11%, var(--panel)); }
+.pp-bar-col.is-hot .pp-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--flag) 78%, var(--text)), var(--flag));
+}
+.pp-bar-col.is-hot .pp-bar-n { color: var(--flag); }
+.pp-axis { display: flex; gap: var(--space-2); font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); font-variant-numeric: tabular-nums; }
+.pp-axis span { flex: 1 1 0; text-align: center; }
+.pp-axis .is-hot { color: var(--flag); }
+.pp-cta-dur { color: var(--faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+
 /* Cuerpos de las fichas. */
-.pp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.pp-list-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--hair); font-size: 13px; }
-.pp-list-name { font-size: 14px; font-weight: 500; color: var(--text); }
-.pp-zone { display: grid; grid-template-columns: 64px 1fr 1fr 1fr; gap: 6px 12px; align-items: baseline; font-size: 13px; }
-.pp-cats { display: flex; flex-direction: column; gap: 12px; }
-.pp-cat { display: grid; grid-template-columns: 1fr 40px; gap: 12px; align-items: center; }
-.pp-cat-label { font-size: 13px; color: var(--muted); }
-.pp-cat-n { font-size: 13px; text-align: right; color: var(--muted); }
-/* Pista hundida y relleno con filo: el mismo modelo de luz que el resto. */
-.pp-track { height: 4px; background: var(--sunken); border-radius: 2px; overflow: hidden; margin-top: 5px; box-shadow: var(--inset-sunken); }
-.pp-fill { display: block; height: 100%; border-radius: 2px; }
+.pp-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.pp-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--hair);
+  font-size: var(--fs-13);
+}
+.pp-list-name { font-size: var(--fs-14); font-weight: 500; color: var(--text); }
+.pp-list-wr { margin-left: auto; font-weight: 500; }
+.pp-list-kda { width: 72px; text-align: right; }
+.pp-zone {
+  display: grid;
+  grid-template-columns: 64px 1fr 1fr 1fr;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  font-size: var(--fs-13);
+}
+.pp-cats { display: flex; flex-direction: column; gap: var(--space-3); }
+.pp-cat { display: grid; grid-template-columns: 1fr 40px; gap: var(--space-3); align-items: center; }
+.pp-cat-label { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+.pp-cat-n { font-size: var(--fs-13); text-align: right; color: var(--muted); }
+/* Pista hundida y relleno: el mismo modelo de luz que el resto. */
+.pp-track {
+  height: 4px;
+  margin-top: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.pp-fill { display: block; height: 100%; border-radius: var(--radius-full); background: var(--muted); }
+.pp-fill--cool { background: var(--cool); }
+.pp-fill--loss { background: var(--loss); }
+.pp-fill--soft { background: var(--muted); }
 .pp-insight {
-  padding: 12px;
+  padding: var(--space-3);
   border-left: 2px solid var(--brand);
   background: color-mix(in srgb, var(--brand) 7%, transparent);
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
-.pp-bigline { display: flex; align-items: baseline; gap: 8px; }
-.pp-bignum { font-size: 22px; font-weight: 500; }
 
 /* Escalada. */
-.pp-bigv-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.pp-bigv-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .pp-bigv-row img { width: 40px; height: 40px; display: block; flex: none; object-fit: contain; }
 .pp-bigv {
-  font-size: 28px;
-  line-height: 1.1;
+  font-size: var(--fs-28);
+  line-height: var(--lh-28);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   color: var(--brand);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pp-climb-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--text); }
+.pp-climb-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; font-size: var(--fs-14); color: var(--text); }
 .pp-climb-row img { width: 20px; height: 20px; display: block; object-fit: contain; }
 .pp-climb-spark { display: block; width: 100%; height: 36px; }
-.pp-climb-aviso { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
-.pp-rk-row { display: flex; gap: 6px; }
+.pp-climb-aviso { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.pp-rk-row { display: flex; gap: var(--space-2); }
 .pp-rk {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 0;
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   font-family: var(--font-sans);
   color: inherit;
   cursor: pointer;
-  transition: background-color var(--t-instant) var(--e-move);
+  transition: background-color var(--t-hover) var(--e-color);
 }
-.pp-rk:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
-.pp-rk:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.pp-rk b { font-weight: 500; font-size: 15px; font-variant-numeric: tabular-nums; }
+@media (hover: hover) and (pointer: fine) {
+  .pp-rk:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+}
+.pp-rk:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.pp-rk b { font-weight: 500; font-size: var(--fs-14); font-variant-numeric: tabular-nums; }
 
 /* La media frente a tu rango (tabla de la ficha). */
 .pp-avg-rows { display: flex; flex-direction: column; }
-.pp-avg-row { display: flex; align-items: center; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--hair); }
-.pp-avg-name { flex: 0 0 170px; min-width: 0; font-size: 13px; color: var(--muted); }
-.pp-avg-value { flex: 0 0 60px; text-align: right; font-size: 13px; font-weight: 500; color: var(--text); }
-.pp-avg-track { position: relative; flex: 1; min-width: 90px; height: 6px; background: var(--sunken); border-radius: 999px; box-shadow: var(--inset-sunken); }
-.pp-avg-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; }
+.pp-avg-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) 0; border-bottom: 1px solid var(--hair); }
+.pp-avg-name { flex: 0 0 168px; min-width: 0; font-size: var(--fs-13); color: var(--muted); }
+.pp-avg-value { flex: 0 0 60px; text-align: right; font-size: var(--fs-13); font-weight: 500; color: var(--text); }
+.pp-avg-track { position: relative; flex: 1; min-width: 88px; height: 6px; background: var(--sunken); border-radius: var(--radius-full); box-shadow: var(--inset-sunken); }
+/* La neutra, atenuada: quince barras neutras a pleno eran lo más brillante de
+   la pantalla para decir justo lo que no importa. */
+.pp-avg-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+.pp-avg-fill.is-good { background: var(--cool); }
+.pp-avg-fill.is-bad { background: var(--signal); }
 /* La muesca del 50 SOBRESALE de la barra: dentro se perdía sobre el relleno
    claro, y es justo en las filas que rondan la mediana donde hay que verla. */
 .pp-avg-median { position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: var(--faint); z-index: 1; }
-.pp-avg-pct { flex: 0 0 28px; text-align: right; font-size: 13px; font-weight: 500; }
+.pp-avg-pct { flex: 0 0 28px; text-align: right; font-size: var(--fs-13); font-weight: 500; color: var(--muted); }
+.pp-avg-pct.is-good { color: var(--cool); }
+.pp-avg-pct.is-bad { color: var(--signal); }
+/* La chispa del percentil partida a partida, en el tono de su fila. */
+.pp-chispa { display: block; flex: none; width: 60px; height: 16px; color: var(--muted); }
+.pp-chispa.is-good { color: var(--cool); }
+.pp-chispa.is-bad { color: var(--signal); }
 
 /* ------------------------------------------------------------ anchuras */
 @media (max-width: 1100px) {
@@ -563,14 +554,14 @@
   .pp-explore { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
-  .pp { padding: 16px; }
+  .pp-page { padding: var(--space-4); }
   .pp-explore { grid-template-columns: minmax(0, 1fr); }
   .pp-two { grid-template-columns: minmax(0, 1fr); }
-  .pp-avg-name { flex-basis: 110px; }
+  .pp-avg-name { flex-basis: 112px; }
+  .pp-legend-hot { margin-left: 0; }
 }
 
 /* ------------------------------------------------- ruta de jungla (Explorar) */
-.pp-legend-soft { color: var(--faint); }
 .pp-route-budget {
   display: flex;
   height: 10px;
@@ -579,16 +570,16 @@
   background: var(--sunken);
 }
 .pp-route-budget span { height: 100%; }
-.pp-route-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
-.pp-route-legend span { display: inline-flex; align-items: center; gap: 6px; }
-.pp-route-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.pp-route-legend { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--fs-12); color: var(--muted); }
+.pp-route-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.pp-route-legend i { width: 8px; height: 8px; border-radius: var(--radius-sm); display: inline-block; }
 .pp-route-legend b { font-weight: 500; color: var(--text); }
 .pp-route-rows {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 96px 80px 72px;
-  gap: 2px 12px;
+  gap: 0 var(--space-3);
   align-items: baseline;
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 /* Cada fila es un botón que ocupa las cuatro columnas de la rejilla. */
 .pp-route-row {
@@ -596,8 +587,8 @@
   display: grid;
   grid-template-columns: subgrid;
   align-items: baseline;
-  padding: 5px 6px;
-  margin: 0 -6px;
+  padding: var(--space-1) var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -607,9 +598,11 @@
   cursor: pointer;
 }
 .pp-route-row > span { white-space: nowrap; }
-.pp-route-row:hover { background: var(--bg-hover); }
-.pp-route-row:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
-.pp-route-sub { margin: 4px 0 0; font-size: 13px; font-weight: 500; color: var(--text); }
+@media (hover: hover) and (pointer: fine) {
+  .pp-route-row:hover { background: var(--bg-hover); }
+}
+.pp-route-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.pp-route-sub { margin: var(--space-1) 0 0; font-size: var(--fs-13); font-weight: 500; color: var(--text); }
 
 /* Widgets que vienen del reproductor y no deben estirarse. */
 .pp-narrow { max-width: 560px; }

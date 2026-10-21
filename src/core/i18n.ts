@@ -2502,6 +2502,38 @@ const ES: Record<string, string> = {
     "{champion} · {date} · jugadas: {n} · −{p}% de victoria",
   // Hoy · enlace al Coach (rediseño «Ritmo»).
   "See the plan": "Ver el plan",
+  // Reproductor (3c) y Patrones (3d) del rediseño «Ritmo».
+  "speed": "velocidad",
+  "Team {v} gold": "Equipo {v} de oro",
+  "{v} vs {champion}": "{v} frente a {champion}",
+  "{v} vs your lane opponent": "{v} frente a tu rival",
+  "{n} moments": "{n} momentos",
+  "+{n} more": "+{n} más",
+  "Your focus · from the Coach": "Tu foco · del Coach",
+  "Plan {k} of {n}": "Plan {k} de {n}",
+  "Before the plan": "Antes del plan",
+  "Expected": "Se esperaba",
+  "if nothing changed": "sin cambiar nada",
+  "In the plan": "En el plan",
+  "Your {n} games": "Tus {n} partidas",
+  "Win chance it costs you per game": "Probabilidad de victoria que te cuesta por partida",
+  "No change": "Igual",
+  "With {n} games it can't be told apart yet.": "Con {n} partidas aún no se distingue.",
+  "With {n} games it can't be told apart: the change is between {a} and {b} points per game.":
+    "Con {n} partidas no se distingue: el cambio está entre {a} y {b} puntos por partida.",
+  "Below what was expected without changing anything: between {a} and {b} points per game.":
+    "Por debajo de lo esperado sin cambiar nada: entre {a} y {b} puntos por partida.",
+  "Above what was expected without changing anything: between {a} and {b} points per game.":
+    "Por encima de lo esperado sin cambiar nada: entre {a} y {b} puntos por partida.",
+  "The same as expected without changing anything: between {a} and {b} points per game.":
+    "Igual que lo esperado sin cambiar nada: entre {a} y {b} puntos por partida.",
+  "Your usual rate": "Tu media",
+  "Your rank": "Tu rango",
+  "A {n}-game plan in the Coach measures the before and after.":
+    "Un plan de {n} partidas en el Coach mide el antes y el después.",
+  "Open the Coach": "Abrir el Coach",
+  "click a dot = that moment": "clic en un punto = ese instante",
+  "{window} (your focus)": "{window} (tu foco)",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

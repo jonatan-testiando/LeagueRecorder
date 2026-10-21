@@ -6,35 +6,38 @@ import { rankLabel } from "../../../core/ddragon";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
-import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../components/PositionIcon";
+import { PositionIcon } from "../../../components/PositionIcon";
 import { ROLE_FILTERS, matchRole, type RoleFilter } from "../../../core/patterns";
 import { reviewProgress, type ReviewProgress } from "../../../core/review";
 import { useAppStore, useErrorClips } from "../../../store/useAppStore";
 import {
-  ArrowDownWideNarrow,
   Check,
+  CircleCheck,
+  CloudUpload,
+  EyeOff,
   FolderOpen,
-  Gamepad2,
-  HardDrive,
-  Link2Off,
+  Library,
   ListChecks,
+  Play,
   RefreshCw,
   Search,
   SearchX,
   Trash2,
   TriangleAlert,
+  WandSparkles,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { useNavigate } from "react-router-dom";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useLang, useT } from "../../../core/LanguageProvider";
-import { relativeDay } from "../../../core/time";
+import { useOnboarding } from "../../onboarding/useOnboarding";
 import { MatchDetailPanel } from "./MatchDetailPanel";
-import { cap, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
+import { dayLabel, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
 import { Segmented } from "../../../components/ui/Segmented";
-import { Chip } from "../../../components/ui/Chip";
 import { Select } from "../../../components/ui/Select";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import "./MatchGallery.css";
 
 interface DiskSpaceInfo {
@@ -106,9 +109,9 @@ interface MatchGalleryProps {
   onRetry?: () => void;
 }
 
-/* Alturas estimadas de las clases de fila. La real la mide `measureElement`;
-   esto solo evita que el primer cuadro baile. */
-const ALTO_FILA = 64;
+/* Alturas estimadas de las clases de fila (Figma, «Fila de partida»: 56). La
+   real la mide `measureElement`; esto solo evita que el primer cuadro baile. */
+const ALTO_FILA = 56;
 const ALTO_DIA = 32;
 const ALTO_MAS = 52;
 
@@ -148,6 +151,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const t = useT();
   const { lang } = useLang();
   const { showError } = useDialog();
+  const navigate = useNavigate();
+  const { restart: abrirAsistente } = useOnboarding();
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
   // Los errores que marcaste tú también cuentan como momentos a revisar, así
   // que hacen falta aquí para saber si una partida está revisada.
@@ -300,11 +305,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     for (const m of matches) {
       const d = lpDelta.get(m.id);
       if (d == null) continue;
-      const k = relativeDay(m.date, t);
+      const k = dayLabel(m.date, t, lang);
       out.set(k, (out.get(k) ?? 0) + d);
     }
     return out;
-  }, [matches, lpDelta, t]);
+  }, [matches, lpDelta, t, lang]);
 
   const hayFiltro = filter !== "all" || roleFilter !== "all" || query.trim() !== "";
   const ocultas = matches.length - visible.length;
@@ -328,9 +333,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     } else {
       let i = 0;
       while (i < visible.length) {
-        const label = relativeDay(visible[i].date, t);
+        const label = dayLabel(visible[i].date, t, lang);
         let j = i;
-        while (j < visible.length && relativeDay(visible[j].date, t) === label) j++;
+        while (j < visible.length && dayLabel(visible[j].date, t, lang) === label) j++;
         out.push({ kind: "day", label, count: j - i, lp: lpPorDia.get(label) ?? null, key: `day-${label}-${i}` });
         for (let k = i; k < j; k++) {
           out.push({ kind: "match", match: visible[k], key: visible[k].id });
@@ -343,7 +348,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       out.push({ kind: "more", hidden: ocultas, key: "more" });
     }
     return out;
-  }, [visible, sort, t, lpPorDia, hayFiltro, ocultas]);
+  }, [visible, sort, t, lang, lpPorDia, hayFiltro, ocultas]);
 
   /**
    * La fila seleccionada, resuelta contra lo que se ve.
@@ -533,6 +538,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   // revisión de esa partida seguía con veinte momentos sin tachar.
   const reviewed = revisadas.size;
   const porRevisar = matches.length - reviewed;
+  // Biblioteca leída y vacía: sin filtros ni cabecera de columnas, solo el
+  // estado vacío con sus tres salidas (Figma, «Biblioteca vacía»).
+  const vacia = !cargando && matches.length === 0;
 
   // Clic: selecciona (con el panel a la vista) o abre (sin él, como siempre).
   // Ctrl/Shift+clic marca para el lote aunque no esté el modo activo (y lo
@@ -552,9 +560,8 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     abrir(m);
   };
 
-
   return (
-    <div ref={rootRef} className={`lib panel-enter${wide ? "" : " lib--narrow"}`}>
+    <div ref={rootRef} className={`lib panel-enter${wide ? "" : " lib--narrow"}${vacia ? " lib--empty" : ""}`}>
       {/* Cabecera: título, censo y el disco en una línea. */}
       <div className="lib-head">
         <h1>{t("Library")}</h1>
@@ -562,7 +569,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         <span className="lib-head__sub">
           {cargando
             ? "—"
-            : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>}
+            : vacia
+              ? `${matches.length} ${t("games")}`
+              : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>}
         </span>
         <div className="lib-head__right">
           {isRecording && (
@@ -582,97 +591,103 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             className={`lib-disk${diskTight ? " lib-disk--tight" : ""}`}
             title={`${t("Disk")}: ${usedGb} ${t("of")} ${totalGb} GB · ${pct === null ? "—" : `${pct} %`}`}
           >
-            <HardDrive size={15} aria-hidden />
-            {t("{n} GB in recordings", { n: usedGb })}
-            {freeGb && <> · {t("{n} GB free", { n: freeGb })}</>}
+            {/* Sin partidas, «0 GB en grabaciones» no dice nada: solo el hueco. */}
+            {!vacia && t("{n} GB in recordings", { n: usedGb })}
+            {!vacia && freeGb && " · "}
+            {freeGb && t("{n} GB free", { n: freeGb })}
           </span>
         </div>
       </div>
 
-      {/* Una fila: estado · puesto · campeón · orden · seleccionar. */}
-      <div className="lib-filters">
-        <Segmented
-          label={t("Filter by status")}
-          value={filter}
-          onChange={setFilter}
-          options={FILTERS.map((f) => ({
-            value: f.key,
-            label: t(f.label),
-            count: cargando ? "—" : counts[f.key],
-            countTone: f.key === "unreviewed" ? ("gold" as const) : undefined,
-          }))}
-        />
-
-        <span className="lib-sep" aria-hidden />
-
-        {/* Filtro por puesto, con los iconos del cliente. El puesto llega con
-            la sincronización de Riot, así que las partidas sin él solo
-            aparecen sin filtro. Pulsar el activo lo quita. */}
-        <div className="lib-pos" role="group" aria-label={t("Filter by position")}>
-          {ROLE_FILTERS.filter((r) => r.key !== "all").map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              className="lib-pos__btn"
-              aria-pressed={roleFilter === r.key}
-              aria-label={t(r.label)}
-              title={t(r.label)}
-              onClick={() => setRoleFilter(roleFilter === r.key ? "all" : r.key)}
-            >
-              <PositionIcon position={r.key} size={18} />
-            </button>
-          ))}
-        </div>
-
-        <label className="lib-search">
-          <Search size={14} aria-hidden />
-          <input
-            type="search"
-            placeholder={t("champion, queue, date…")}
-            aria-label={t("Filter games")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
+      {/* Una fila: estado · puesto · búsqueda · orden · seleccionar. */}
+      {!vacia && (
+        <div className="lib-filters">
+          <Segmented
+            label={t("Filter by status")}
+            value={filter}
+            onChange={setFilter}
+            options={FILTERS.map((f) => ({
+              value: f.key,
+              label: t(f.label),
+              count: cargando ? "—" : counts[f.key],
+              countTone: f.key === "unreviewed" ? ("gold" as const) : undefined,
+            }))}
           />
-        </label>
 
-        <span className="lib-grow" aria-hidden />
+          {/* Puesto: un selector y no cinco iconos sueltos, que sin nombre no se
+              distinguían (y «todos» era no pulsar ninguno). El puesto llega con
+              la sincronización de Riot, así que las partidas sin él solo
+              aparecen con «Todos los puestos». */}
+          <Select
+            className="lib-ctl lib-role"
+            label={t("Filter by position")}
+            value={roleFilter}
+            onChange={setRoleFilter}
+            options={ROLE_FILTERS.map((r) => ({
+              value: r.key,
+              text: t(r.key === "all" ? "All roles" : r.label),
+              label:
+                r.key === "all" ? (
+                  t("All roles")
+                ) : (
+                  <span className="lib-role__opt">
+                    <PositionIcon position={r.key} size={16} />
+                    {t(r.label)}
+                  </span>
+                ),
+            }))}
+          />
 
-        {/* Orden. La nota es lo único de la fila que separa una partida buena de
-            una mala, así que ordenar por ella es lo que convierte la lista en
-            "enséñame lo peor", que es a lo que se viene. */}
-        <Select
-          variant="plain"
-          className="lib-sort"
-          label={t("Sort")}
-          value={sort}
-          onChange={setSort}
-          icon={<ArrowDownWideNarrow size={15} aria-hidden className="lib-sort__ico" />}
-          options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
-        />
+          <label className="lib-search">
+            <Search size={16} aria-hidden />
+            <input
+              type="search"
+              placeholder={t("champion, queue, date…")}
+              aria-label={t("Filter games")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
 
-        <button
-          type="button"
-          className="lib-tool"
-          aria-pressed={selectMode}
-          title={t("Select several games to delete them at once")}
-          onClick={() => (selectMode ? clearSelection() : setSelectMode(true))}
-        >
-          <ListChecks size={15} aria-hidden />
-          <span className="lib-tool__txt">{t("Select")}</span>
-        </button>
-      </div>
+          <span className="lib-grow" aria-hidden />
+
+          {/* Orden. La nota es lo único de la fila que separa una partida buena
+              de una mala, así que ordenar por ella es lo que convierte la lista
+              en "enséñame lo peor", que es a lo que se viene. */}
+          <Select
+            className="lib-ctl lib-sort"
+            label={t("Sort")}
+            value={sort}
+            onChange={setSort}
+            options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+          />
+
+          {/* El lote también se abre con Ctrl+clic (lo dice la ayuda de abajo);
+              el botón queda para quien no lo sabe, solo con el icono. */}
+          <button
+            type="button"
+            className="lib-tool lib-tool--icon"
+            aria-pressed={selectMode}
+            aria-label={t("Select")}
+            title={t("Select several games to delete them at once")}
+            onClick={() => (selectMode ? clearSelection() : setSelectMode(true))}
+          >
+            <ListChecks size={16} aria-hidden />
+          </button>
+        </div>
+      )}
 
       {/* La biblioteca no pudo leerse. Se dice, con salida: sin esto la pantalla
           enseñaba "Aún no hay partidas grabadas", que es una respuesta distinta
           y hace pensar que se han perdido. */}
       {loadError && (
         <div className="lib-notice">
-          <TriangleAlert size={14} color="var(--signal)" />
-          <span style={{ flex: 1, minWidth: 0 }}>
+          <TriangleAlert size={16} color="var(--signal)" aria-hidden />
+          <span className="lib-notice__txt">
             {t("Couldn't load your games: {msg}", { msg: loadError })}
           </span>
           {onRetry && (
-            <Button variant="ghost" size="sm" icon={<RefreshCw size={13} />} onClick={onRetry}>
+            <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />} onClick={onRetry}>
               {t("Retry")}
             </Button>
           )}
@@ -682,162 +697,155 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       {/* Maestro-detalle: la lista a la izquierda y la partida seleccionada a
           la derecha. */}
       <div className="lib-md">
-        <div className="lib-master">
-          <section className="lib-card" aria-label={t("Library")}>
-            {(visible.length > 0 || esqueleto) && (
-              <div className="lib-grid lib-th" aria-hidden>
-                <span />
-                <span>{t("Game")}</span>
-                <span>{t("Result")}</span>
-                <span>{t("KDA")}</span>
-                <span>{t("CS")}</span>
-                <span className="lib-col-rival">{t("Lane opponent")}</span>
-                <span>{t("Impact")}</span>
-                <span>{t("Review")}</span>
-              </div>
-            )}
+        <section className="lib-card" aria-label={t("Library")}>
+          {(visible.length > 0 || esqueleto) && (
+            <div className="lib-grid lib-th" aria-hidden>
+              <span />
+              <span />
+              <span>{t("Game")}</span>
+              <span>{t("Result")}</span>
+              <span>{t("KDA")}</span>
+              <span>{t("CS")}</span>
+              <span className="lib-col-rival">{t("Rival")}</span>
+              <span>{t("Impact")}</span>
+              <span />
+            </div>
+          )}
 
-            <div
-              className="lib-scroll"
-              ref={parentRef}
-              role="listbox"
-              aria-label={t("Games")}
-              aria-busy={cargando || undefined}
-              aria-multiselectable={selectMode || undefined}
-            >
-              {cargando ? (
-                // Mientras se lee, filas con la forma de las de verdad (y nada
-                // los primeros 150 ms). El vacío solo cuando la lectura acabó.
-                esqueleto ? <LibrarySkeleton /> : null
-              ) : matches.length === 0 ? (
-                <EmptyState
-                  icon={<Gamepad2 size={30} color="var(--faint)" />}
-                  title={t("No games recorded yet")}
-                  text={t("Play a match and it will show up here automatically.")}
-                />
-              ) : visible.length === 0 ? (
-                <EmptyState
-                  icon={<SearchX size={30} color="var(--faint)" />}
-                  title={t("No games match this filter")}
-                  text={t("Try a different search term, or switch back to All.")}
-                  action={
-                    <Button variant="ghost" size="sm" onClick={clearFilters}>
-                      {t("Clear filters")}
-                    </Button>
-                  }
-                />
-              ) : (
-                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: "100%", position: "relative" }}>
-                  {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    const wrap: React.CSSProperties = {
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${virtualRow.start}px)`,
-                    };
-
-                    if (row.kind === "day") {
-                      return (
-                        <div key={row.key} data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
-                          <div className="lib-day">
-                            <span>
-                              {cap(row.label)}
-                              {row.count > 1 && ` · ${row.count} ${t("games")}`}
-                            </span>
-                            {row.lp != null && <span className="lib-day__lp">{lpText(row.lp)}</span>}
-                          </div>
-                        </div>
-                      );
+          <div
+            className="lib-scroll"
+            ref={parentRef}
+            role="listbox"
+            aria-label={t("Games")}
+            aria-busy={cargando || undefined}
+            aria-multiselectable={selectMode || undefined}
+          >
+            {cargando ? (
+              // Mientras se lee, filas con la forma de las de verdad (y nada
+              // los primeros 150 ms). El vacío solo cuando la lectura acabó.
+              esqueleto ? <LibrarySkeleton /> : null
+            ) : matches.length === 0 ? (
+              // Si la lectura FALLÓ, el aviso de arriba ya lo dice: «aún no hay
+              // partidas» sería otra respuesta, y falsa.
+              loadError ? null : (
+                <div className="lib-empty">
+                  <EmptyState
+                    icon={<Library size={20} />}
+                    title={t("No games recorded yet")}
+                    text={t("Play one: LeagueRecorder detects the client, records on its own and files the game here when it ends.")}
+                    action={
+                      <div className="lib-empty__acts">
+                        {/* La prueba vive en Ajustes (lleva la cuenta atrás y el
+                            parar): se lleva al botón, no se lanza a ciegas. */}
+                        <Button variant="primary" icon={<Play size={16} />} onClick={() => navigate("/settings?cat=recording")}>
+                          {t("10-second test")}
+                        </Button>
+                        <Button variant="ghost" icon={<CloudUpload size={16} />} onClick={() => navigate("/vod")}>
+                          {t("Import a VOD")}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="lib-empty__plain"
+                          icon={<WandSparkles size={16} />}
+                          onClick={() => { abrirAsistente().catch(console.error); }}
+                        >
+                          {t("Open the setup assistant")}
+                        </Button>
+                      </div>
                     }
+                  />
+                </div>
+              )
+            ) : visible.length === 0 ? (
+              <EmptyState
+                icon={<SearchX size={20} />}
+                title={t("No games match this filter")}
+                text={t("Try a different search term, or switch back to All.")}
+                action={
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    {t("Clear filters")}
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="lib-virtual" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const row = rows[virtualRow.index];
+                  // La posición es del virtualizador y cambia con el scroll: es
+                  // lo único que va en línea.
+                  const wrap: React.CSSProperties = { transform: `translateY(${virtualRow.start}px)` };
 
-                    if (row.kind === "more") {
-                      return (
-                        <div key={row.key} data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
-                          <div className="lib-more">
-                            <span>
-                              {t(row.hidden === 1 ? "{n} game hidden by the filter" : "{n} games hidden by the filter", { n: row.hidden })}
-                            </span>
-                            <span aria-hidden>·</span>
-                            <button type="button" className="lib-link" onClick={clearFilters}>
-                              {t("Show all")}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    const match = row.match;
-                    const next = rows[virtualRow.index + 1];
-                    const isCurrent = current?.id === match.id;
-                    const beforeCurrent = next?.kind === "match" && next.match.id === current?.id;
-                    const lastOfGroup = !next || next.kind !== "match";
+                  if (row.kind === "day") {
                     return (
-                      <div key={row.key} data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
-                        {/* Sin animación de entrada: esta lista está virtualizada y
-                            se redispararía al hacer scroll. */}
-                        <LibraryRow
-                          match={match}
-                          current={isCurrent}
-                          divider={!isCurrent && !beforeCurrent && !lastOfGroup}
-                          selectMode={selectMode}
-                          checked={selected.has(match.id)}
-                          narrow={!wide}
-                          progress={progreso.get(match.id)}
-                          lp={lpDelta.get(match.id)}
-                          lang={lang}
-                          onClick={(e) => onRowClick(match, e)}
-                          onDoubleClick={() => onRowDoubleClick(match)}
-                          onReveal={() => revelar(match)}
-                          onDelete={() => onDeleteMatch(match.id)}
-                        />
+                      <div key={row.key} className="lib-vrow" data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
+                        <div className="lib-day">
+                          <span className="lib-day__txt">
+                            {row.label} · {row.count} {t(row.count === 1 ? "game" : "games")}
+                          </span>
+                          {row.lp != null && row.lp !== 0 && (
+                            <span className={`lib-day__lp lib-day__lp--${row.lp > 0 ? "win" : "loss"}`}>{lpText(row.lp)}</span>
+                          )}
+                        </div>
                       </div>
                     );
-                  })}
-                </div>
-              )}
-            </div>
-          </section>
+                  }
 
-          {/* Barra contextual del lote: fuera de la lista virtualizada para que no
-              se la lleve el scroll ni la mida el virtualizador. Mientras hay
-              lote, ocupa el sitio de la ayuda de teclado. */}
-          {selected.size > 0 ? (
-            <div className="lib-batch">
-              <span className="lib-batch__n">
-                {t(selected.size === 1 ? "{n} game selected" : "{n} games selected", { n: selected.size })}
-              </span>
-              <div className="lib-batch__acts">
-                <Button variant="ghost" size="sm" onClick={clearSelection}>
-                  {t("Cancel")}
-                </Button>
-                <Button variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={deleteSelected}>
-                  {t("Delete selected")}
-                </Button>
+                  if (row.kind === "more") {
+                    return (
+                      <div key={row.key} className="lib-vrow" data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
+                        <div className="lib-more">
+                          <span>
+                            {t(row.hidden === 1 ? "{n} game hidden by the filter" : "{n} games hidden by the filter", { n: row.hidden })}
+                          </span>
+                          <span aria-hidden>·</span>
+                          <button type="button" className="lib-link" onClick={clearFilters}>
+                            {t("Show all")}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const match = row.match;
+                  return (
+                    <div key={row.key} className="lib-vrow" data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
+                      {/* Sin animación de entrada: esta lista está virtualizada y
+                          se redispararía al hacer scroll. */}
+                      <LibraryRow
+                        match={match}
+                        current={current?.id === match.id}
+                        selectMode={selectMode}
+                        checked={selected.has(match.id)}
+                        narrow={!wide}
+                        progress={progreso.get(match.id)}
+                        lp={lpDelta.get(match.id)}
+                        lang={lang}
+                        onClick={(e) => onRowClick(match, e)}
+                        onDoubleClick={() => onRowDoubleClick(match)}
+                        onReveal={() => revelar(match)}
+                        onDelete={() => onDeleteMatch(match.id)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          ) : (
-            visible.length > 0 && (
-              <div className="lib-keys" aria-hidden>
-                <span><kbd className="u-kbd lib-kbd">↑</kbd><kbd className="u-kbd lib-kbd">↓</kbd>{t("move")}</span>
-                <span><kbd className="u-kbd lib-kbd">Enter</kbd>{t(wide ? "review" : "open")}</span>
-                <span><kbd className="u-kbd lib-kbd">{t("Del")}</kbd>{t("delete")}</span>
-                <span><kbd className="u-kbd lib-kbd">Ctrl</kbd>{t("click to select several")}</span>
-              </div>
-            )
-          )}
-        </div>
+            )}
+          </div>
+        </section>
 
         {/* El panel de detalle también ocupa su sitio mientras carga: sin
             esto la lista se estrechaba de golpe al llegar la primera partida. */}
         {wide && esqueleto && (
           <aside className="mdp lib-skel__detail" aria-hidden="true">
-            <span className="skeleton" style={{ width: 72, height: 72, borderRadius: "50%" }} />
-            <span className="skeleton" style={{ width: 180, height: 22 }} />
-            <span className="skeleton" style={{ width: 240, height: 13 }} />
-            <span className="skeleton" style={{ width: "100%", height: 120, marginTop: 8 }} />
-            <span className="skeleton" style={{ width: "100%", height: 40 }} />
+            <div className="lib-skel__head">
+              <Skeleton shape="circle" className="lib-skel__avatar" />
+              <div className="lib-skel__lines">
+                <Skeleton width={140} height={20} />
+                <Skeleton width={200} />
+              </div>
+            </div>
+            <Skeleton shape="block" />
+            <Skeleton shape="block" className="lib-skel__board" />
           </aside>
         )}
         {wide && current && !cargando && (
@@ -851,6 +859,34 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           />
         )}
       </div>
+
+      {/* Barra contextual del lote: fuera de la lista virtualizada para que no
+          se la lleve el scroll ni la mida el virtualizador. Mientras hay
+          lote, ocupa el sitio de la ayuda de teclado. */}
+      {selected.size > 0 ? (
+        <div className="lib-batch">
+          <span className="lib-batch__n">
+            {t(selected.size === 1 ? "{n} game selected" : "{n} games selected", { n: selected.size })}
+          </span>
+          <div className="lib-batch__acts">
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              {t("Cancel")}
+            </Button>
+            <Button variant="danger" size="sm" icon={<Trash2 size={14} />} onClick={deleteSelected}>
+              {t("Delete selected")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        visible.length > 0 && (
+          <div className="lib-keys" aria-hidden>
+            <span><kbd className="u-kbd">↑ ↓</kbd>{t("move")}</span>
+            <span><kbd className="u-kbd">Enter</kbd>{t(wide ? "review" : "open")}</span>
+            <span><kbd className="u-kbd">{t("Del")}</kbd>{t("delete")}</span>
+            <span><kbd className="u-kbd">Ctrl</kbd>{t("click to select several")}</span>
+          </div>
+        )
+      )}
     </div>
   );
 };
@@ -864,47 +900,81 @@ const SKELETON_ROWS = 8;
 const LibrarySkeleton: React.FC = () => (
   <div className="lib-skel">
     <div className="lib-day" aria-hidden="true">
-      <span className="skeleton" style={{ display: "block", width: 110, height: 12 }} />
+      <Skeleton width={110} />
     </div>
     {Array.from({ length: SKELETON_ROWS }, (_, i) => (
       <div key={i} className="lib-grid lib-tr lib-skel__row" aria-hidden="true">
-        <span className="skeleton" style={{ width: 44, height: 44, borderRadius: 10 }} />
+        <span className="lib-bar" />
+        <Skeleton shape="circle" className="lib-skel__avatar36" />
         <span className="lib-cell">
-          <span className="skeleton" style={{ width: "min(160px, 80%)", height: 14 }} />
-          <span className="skeleton" style={{ width: "min(120px, 60%)", height: 11 }} />
+          <Skeleton width="min(140px, 80%)" />
+          <Skeleton width="min(110px, 60%)" />
         </span>
         <span className="lib-cell">
-          <span className="skeleton" style={{ width: 52, height: 14 }} />
-          <span className="skeleton" style={{ width: 40, height: 11 }} />
+          <Skeleton width={52} />
+          <Skeleton width={40} />
         </span>
         <span className="lib-cell">
-          <span className="skeleton" style={{ width: 60, height: 14 }} />
-          <span className="skeleton" style={{ width: 36, height: 11 }} />
+          <Skeleton width={52} />
+          <Skeleton width={32} />
         </span>
         <span className="lib-cell">
-          <span className="skeleton" style={{ width: 32, height: 14 }} />
+          <Skeleton width={32} />
+          <Skeleton width={44} />
         </span>
         <span className="lib-col-rival">
-          <span className="skeleton" style={{ display: "block", width: 72, height: 24, borderRadius: 999 }} />
+          <Skeleton width={64} />
         </span>
         <span className="lib-cell">
-          <span className="skeleton" style={{ width: 28, height: 14 }} />
+          <Skeleton width={28} />
+          <Skeleton width={44} />
         </span>
-        <span className="lib-cell">
-          <span className="skeleton" style={{ width: 64, height: 20, borderRadius: 999 }} />
-        </span>
+        <span />
       </div>
     ))}
   </div>
 );
 
 /* ------------------------------------------------------------------------
-   Una fila de partida. Misma rejilla que la cabecera de columnas (.lib-grid).
+   La marca de revisión: solo lo que se sale de lo normal. Nada si está por
+   revisar (es el estado por defecto y ya es el filtro de arriba), un aro con
+   lo hecho si va a medias y el círculo con la marca si está revisada.
+   ------------------------------------------------------------------------ */
+const ReviewMark: React.FC<{ progress: ReviewProgress | undefined }> = ({ progress }) => {
+  const t = useT();
+  if (!progress) return null;
+  if (progress.reviewed) {
+    return (
+      <span className="lib-mark lib-mark--done" role="img" aria-label={t("Reviewed")} title={t("Reviewed")}>
+        <CircleCheck size={16} aria-hidden />
+      </span>
+    );
+  }
+  if (progress.done === 0 || progress.total === 0) return null;
+  const txt = t("{done} of {total} reviewed", { done: progress.done, total: progress.total });
+  // Aro de 16 (r = 6, trazo 2): lo hecho en jade sobre el filo, empezando
+  // arriba. Nunca lleno (lleno es «revisada», que lleva su propia marca) ni
+  // casi vacío: 1 de 17 eran 2 px de arco y no se veía que estaba empezada.
+  const C = 2 * Math.PI * 6;
+  const hecho = Math.max(0.15, Math.min(0.9, progress.done / progress.total)) * C;
+  return (
+    <span className="lib-mark" role="img" aria-label={txt} title={txt}>
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle className="lib-mark__track" cx="8" cy="8" r="6" />
+        <circle className="lib-mark__arc" cx="8" cy="8" r="6" strokeDasharray={`${hecho} ${C}`} />
+      </svg>
+    </span>
+  );
+};
+
+/* ------------------------------------------------------------------------
+   Una fila de partida (Figma, Componentes · «Fila de partida», 56 px). Misma
+   rejilla que la cabecera de columnas (.lib-grid): barra · retrato · partida ·
+   resultado · KDA · CS · rival · impacto · revisión.
    ------------------------------------------------------------------------ */
 interface RowProps {
   match: MatchMetadata;
   current: boolean;
-  divider: boolean;
   selectMode: boolean;
   checked: boolean;
   /** Sin panel de detalle: las acciones de fila vuelven a la fila. */
@@ -921,7 +991,6 @@ interface RowProps {
 const LibraryRow: React.FC<RowProps> = ({
   match,
   current,
-  divider,
   selectMode,
   checked,
   narrow,
@@ -937,7 +1006,6 @@ const LibraryRow: React.FC<RowProps> = ({
   const kda = kdaDe(match, computeKDA(match.events));
   // Lo que sólo sabe la sincronización con Riot. Sin ella, "—".
   const yo = selfOf(match);
-  const pos = normalizePosition(yo?.role);
   const minutos = match.game_duration / 60;
   const csmin = yo && minutos > 0 ? fmtDec(yo.cs / minutos, 1, lang) : null;
   const rival = laneRival(match);
@@ -956,7 +1024,6 @@ const LibraryRow: React.FC<RowProps> = ({
       className="lib-grid lib-tr"
       data-result={res === "victory" ? "win" : res === "defeat" ? "loss" : undefined}
       data-current={current || undefined}
-      data-divider={divider || undefined}
       data-match-id={match.id}
       role="option"
       aria-selected={selectMode ? checked : current}
@@ -964,14 +1031,12 @@ const LibraryRow: React.FC<RowProps> = ({
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
-      {/* Retrato con la insignia del puesto; en modo lote, la casilla encima. */}
-      <span className="lib-portrait">
-        <ChampionAvatar champion={match.champion} size={44} />
-        {pos && (
-          <span className="lib-portrait__pos" title={t(POSITION_LABEL[pos])}>
-            <PositionIcon position={pos} size={12} />
-          </span>
-        )}
+      {/* El resultado en reposo: la barra (gris sin resultado) y la palabra. */}
+      <span className="lib-bar" aria-hidden />
+
+      {/* Retrato; en modo lote, la casilla encima. */}
+      <span className="lib-avatar">
+        <ChampionAvatar champion={match.champion} size={36} />
         {selectMode && (
           <span className={`lib-check${checked ? " lib-check--on" : ""}`} aria-hidden>
             {checked && <Check size={12} />}
@@ -981,23 +1046,27 @@ const LibraryRow: React.FC<RowProps> = ({
 
       {/* Campeón y cola. */}
       <span className="lib-cell" title={match.champion}>
-        <span className="lib-champ">{match.champion}</span>
+        <span className="lib-main">{match.champion}</span>
         <span className="lib-sub">
           {t(queueKey(match.queue))} · {formatDuration(match.game_duration)}
         </span>
       </span>
 
-      {/* Resultado y LP. */}
+      {/* Resultado y LP. Sin resultado, el porqué en una palabra. */}
       <span className="lib-cell">
-        <span className={`lib-res${res === "victory" ? " lib-res--win" : res === "defeat" ? " lib-res--loss" : ""}`}>
-          {t(res === "victory" ? "Victory" : res === "defeat" ? "Defeat" : "No result")}
+        <span className={`lib-main lib-res${res === "victory" ? " lib-res--win" : res === "defeat" ? " lib-res--loss" : ""}`}>
+          {t(res === "victory" ? "Victory" : res === "defeat" ? "Defeat" : "No data")}
         </span>
-        {lpTxt && <span className="lib-sub lib-sub--muted" title={rango ?? undefined}>{lpTxt}</span>}
+        {lpTxt ? (
+          <span className="lib-sub lib-sub--muted" title={rango ?? undefined}>{lpTxt}</span>
+        ) : (
+          !res && !yo && <span className="lib-sub">{t("needs Riot")}</span>
+        )}
       </span>
 
-      {/* KDA: cifra grande y el ratio con su tono. */}
+      {/* KDA y el ratio con su tono. */}
       <span className="lib-cell">
-        <span className="lib-big">{kda.kills} / {kda.deaths} / {kda.assists}</span>
+        <span className="lib-main">{kda.kills} / {kda.deaths} / {kda.assists}</span>
         <span className={`lib-sub lib-ratio--${ratioTone(kda)}`}>{ratioLabel(kda, t, lang)}</span>
       </span>
 
@@ -1005,15 +1074,18 @@ const LibraryRow: React.FC<RowProps> = ({
       <span className="lib-cell">
         {yo ? (
           <>
-            <span className="lib-big">{yo.cs}</span>
+            <span className="lib-main">{yo.cs}</span>
             {csmin && <span className="lib-sub">{csmin}/min</span>}
           </>
         ) : (
-          <span className="lib-sub">—</span>
+          <>
+            <span className="lib-main lib-none">—</span>
+            <span className="lib-sub">—</span>
+          </>
         )}
       </span>
 
-      {/* El rival de tu puesto. Sin sincronizar, una palabra y el porqué en
+      {/* El rival de tu puesto. Sin sincronizar, dos palabras y el porqué en
           el título, no una frase repetida en cada fila. */}
       <span className="lib-col-rival lib-rival">
         {rival ? (
@@ -1021,47 +1093,29 @@ const LibraryRow: React.FC<RowProps> = ({
             className="lib-rival__in"
             title={`${rival.name ? `${rival.name}${rival.tag ? `#${rival.tag}` : ""} · ` : ""}${rival.kills}/${rival.deaths}/${rival.assists} · ${rival.cs} CS`}
           >
-            <span className="lib-rival__img"><ChampionAvatar champion={rival.champion} size={24} /></span>
+            <span className="lib-rival__img"><ChampionAvatar champion={rival.champion} size={20} /></span>
             <span className="lib-rival__name">{rival.champion}</span>
           </span>
         ) : (
           <span className="lib-nosync" title={t("Sync with Riot to see your lane opponent")}>
-            <Link2Off size={12} aria-hidden />
-            <span>{t("Not synced")}</span>
+            <EyeOff size={16} aria-hidden />
+            <span>{t("No Riot")}</span>
           </span>
         )}
       </span>
 
       {/* Impacto: el puesto entre los diez (o MVP) y, debajo, la nota, que es
           por lo que ordenan "Mejor/Peor nota". */}
-      <span className="lib-cell lib-impact">
-        {rank === 1 ? (
-          <span className="lib-mvp">{t("MVP")}</span>
-        ) : rank ? (
-          <span className="lib-rank">{ordinal(rank, t)}</span>
+      <span className="lib-cell">
+        {rank ? (
+          <span className="lib-main">{rank === 1 ? t("MVP") : ordinal(rank, t)}</span>
         ) : (
-          <span className="lib-sub">—</span>
+          <span className="lib-main lib-none">—</span>
         )}
         {nota != null && <span className="lib-sub">{t("Score {n}", { n: nota })}</span>}
       </span>
 
-      {/* Revisión: hecha, a medias (barra y cuenta) o por empezar. */}
-      <span className="lib-review">
-        {progress?.reviewed ? (
-          <Chip tone="win" icon={<Check size={12} strokeWidth={2.4} aria-hidden />}>
-            {t("Reviewed")}
-          </Chip>
-        ) : progress && progress.done > 0 ? (
-          <span className="lib-prog" title={t("{done} of {total} reviewed", { done: progress.done, total: progress.total })}>
-            <span className="lib-prog__bar">
-              <span style={{ width: `${Math.max(8, Math.round((progress.done / Math.max(1, progress.total)) * 100))}%` }} />
-            </span>
-            <span className="lib-sub lib-sub--muted">{progress.done}/{progress.total}</span>
-          </span>
-        ) : (
-          <Chip tone="gold">{t("To review")}</Chip>
-        )}
-      </span>
+      <ReviewMark progress={progress} />
 
       {/* Sin panel de detalle, abrir la carpeta y borrar vuelven a la fila, al
           pasar el cursor. */}

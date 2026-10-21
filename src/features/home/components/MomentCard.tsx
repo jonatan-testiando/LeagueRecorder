@@ -73,7 +73,7 @@ export const MomentCard: React.FC<{
       style={index != null ? ({ "--i": index } as React.CSSProperties) : undefined}
       aria-label={[clock(m.time), m.title, delta ? t("{n}% win chance", { n: delta }) : verdict(m.verdict)].join(" · ")}
     >
-      <span className="home-mo__thumb" aria-hidden="true">
+      <span className="home-mo__thumb stage-dark" aria-hidden="true">
         <span className="home-mo__kind">
           {glyph}
           <span className="t-label home-mo__caption">{tipo}</span>

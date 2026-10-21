@@ -35,6 +35,11 @@ interface AppState {
   selectedError: ErrorClipMetadata | null;
   setSelectedError: (err: ErrorClipMetadata | null) => void;
 
+  /** El clip abierto en su reproductor (su ruta), para que el rail se pliegue
+   *  como con una partida. */
+  playingClip: string | null;
+  setPlayingClip: (path: string | null) => void;
+
   /**
    * Los errores marcados, también compartidos.
    *
@@ -180,6 +185,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
     selectedError: null,
     setSelectedError: (err) => set({ selectedError: err }),
+
+    playingClip: null,
+    setPlayingClip: (path) => set({ playingClip: path }),
 
     errorClips: [],
     errorClipsLoaded: false,

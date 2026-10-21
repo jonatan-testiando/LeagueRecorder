@@ -265,7 +265,9 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
       style={styles.container}
     >
       <div style={styles.leftColumn}>
-        <div style={styles.videoWrapper}>
+        {/* El vídeo es escenario: marino y en tokens oscuros en los dos temas,
+            así la barra de arriba y el transporte se leen sobre su degradado. */}
+        <div className="stage-dark" style={styles.videoWrapper}>
           <div style={styles.topBar}>
             <button style={styles.backBtn} onClick={onClose}>
               <ChevronLeft size={20} /> {t("Back")}
@@ -561,7 +563,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
 const styles: Record<string, React.CSSProperties> = {
   container: { display: "flex", width: "100%", height: "100%", backgroundColor: "var(--sunken)", overflow: "hidden" },
   leftColumn: { flex: 1, display: "flex", flexDirection: "column", position: "relative" },
-  videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--sunken)", display: "flex", flexDirection: "column" },
+  videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--stage)", display: "flex", flexDirection: "column" },
   topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "var(--space-3) var(--space-4)", background: "linear-gradient(180deg, rgba(0,0,0,0.75) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", zIndex: 10 },
   titleBlock: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 },
   title: { fontSize: 15, fontWeight: 500, color: "var(--text)" },

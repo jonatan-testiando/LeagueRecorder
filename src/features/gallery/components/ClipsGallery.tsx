@@ -167,7 +167,9 @@ export const ClipsGallery: React.FC = () => {
   const [replayKey, setReplayKey] = useState<string>("");
   // Clip abierto en el reproductor. Por ruta y no por objeto: si se borra o
   // cambia de favorito, se resuelve contra la lista fresca.
-  const [playingPath, setPlayingPath] = useState<string | null>(null);
+  // En el store y no en un useState: con un clip abierto el rail se pliega.
+  const playingPath = useAppStore((s) => s.playingClip);
+  const setPlayingPath = useAppStore((s) => s.setPlayingClip);
   // El clip desde cuyo póster se abrió: al volver, el foco regresa a ese
   // póster y no al principio de la ventana. Se guarda la ruta y no el
   // elemento: las filas son del virtualizador y pueden ser otras al volver

@@ -57,7 +57,7 @@ export const ClipPoster: React.FC<ClipPosterProps> = ({ path, label, onOpen, ope
   return (
     <button
       type="button"
-      className="cg-poster"
+      className="cg-poster stage-dark"
       data-state={state}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
       aria-label={label}

@@ -228,9 +228,8 @@
 .home-mo:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* La vista previa es escenario (--stage, marino en los dos temas), como el
-   vídeo que abre. Su texto va en tintas claras también en el tema claro: el
-   tinte del tema claro, oscuro, no se leería sobre el marino. Se sacan de los
-   tokens (el tinte aclarado con el panel), sin colores fijos. */
+   vídeo que abre, y lleva el ámbito .stage-dark: su texto y sus tintes son los
+   del tema oscuro también en el tema claro. */
 .home-mo__thumb {
   --mo-tone: var(--loss);
   --mo-ink: var(--text);
@@ -245,12 +244,6 @@
 }
 .home-mo--finding .home-mo__thumb { --mo-tone: var(--flag); }
 .home-mo--best .home-mo__thumb { --mo-tone: var(--win); }
-:root[data-theme="light"] .home-mo__thumb {
-  --mo-ink: color-mix(in srgb, var(--panel) 80%, var(--stage));
-  --mo-tone: color-mix(in srgb, var(--loss) 45%, var(--panel));
-}
-:root[data-theme="light"] .home-mo--finding .home-mo__thumb { --mo-tone: color-mix(in srgb, var(--flag) 45%, var(--panel)); }
-:root[data-theme="light"] .home-mo--best .home-mo__thumb { --mo-tone: color-mix(in srgb, var(--win) 45%, var(--panel)); }
 
 .home-mo__kind { display: flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--mo-tone); }
 .home-mo__kind svg { flex: none; }

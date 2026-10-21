@@ -103,6 +103,7 @@ export const App: React.FC = () => {
 
   const selectedError = useAppStore(state => state.selectedError);
   const setSelectedError = useAppStore(state => state.setSelectedError);
+  const playingClip = useAppStore(state => state.playingClip);
   const selectedVod = useAppStore(state => state.selectedVod);
   const setSelectedVod = useAppStore(state => state.setSelectedVod);
   const refreshErrorClips = useAppStore(state => state.refreshErrorClips);
@@ -260,7 +261,8 @@ export const App: React.FC = () => {
   const playerOpen =
     (activePanel === "/review" && !!selectedMatch) ||
     (activePanel === "/vod" && !!selectedVod) ||
-    (activePanel === "/errors" && !!selectedError);
+    (activePanel === "/errors" && !!selectedError) ||
+    (activePanel === "/clips" && !!playingClip);
 
   return (
     <>

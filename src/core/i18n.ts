@@ -2362,6 +2362,8 @@ const ES: Record<string, string> = {
   "Theme": "Tema",
   "System follows Windows. Neither theme uses pure black or pure white.":
     "Sistema sigue a Windows. Ningún tema usa negro ni blanco puros.",
+  // Clips · reproductor de clips (rediseño «Ritmo», 3f).
+  "Playback position": "Posición de reproducción",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

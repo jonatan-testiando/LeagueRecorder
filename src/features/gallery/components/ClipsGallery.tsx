@@ -424,7 +424,7 @@ export const ClipsGallery: React.FC = () => {
   const esqueleto = useDelayedLoading(loading);
   if (loading || esqueleto) {
     return (
-      <div className="cg panel-enter">
+      <div className="cg">
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
             <Skeleton width={180} height={28} />
@@ -438,7 +438,7 @@ export const ClipsGallery: React.FC = () => {
 
   if (clips.length === 0) {
     return (
-      <div className="cg panel-enter">
+      <div className="cg">
         <div className="cg__head">
           <h1>{t("Clips")}</h1>
         </div>
@@ -484,7 +484,7 @@ export const ClipsGallery: React.FC = () => {
 
     {/* La lista sigue montada con el reproductor abierto: así vuelve con su
         scroll y su selección, y el virtualizador no se rehace de cero. */}
-    <div className="cg panel-enter" hidden={!!playing}>
+    <div className="cg" hidden={!!playing}>
       <div className="cg__head">
         <h1>{t("Clips")}</h1>
         <span className="cg__count">

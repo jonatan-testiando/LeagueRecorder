@@ -155,7 +155,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   const esqueleto = useDelayedLoading(!loaded);
   if (!loaded || esqueleto) {
     return (
-      <div className="cg panel-enter">
+      <div className="cg">
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
             <Skeleton width={180} height={28} />
@@ -168,7 +168,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   }
 
   return (
-    <div className="cg panel-enter">
+    <div className="cg">
       <div className="cg__head">
         <h1>{t("Errors")}</h1>
         {errors.length > 0 && (

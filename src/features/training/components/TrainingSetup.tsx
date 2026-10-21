@@ -12,6 +12,9 @@ import {
 import { useT } from "../../../core/LanguageProvider";
 import { roleLabel, sameRole } from "../../../core/roles";
 import { Select } from "../../../components/ui/Select";
+import { Button } from "../../../components/ui/Button";
+import { Segmented } from "../../../components/ui/Segmented";
+import "./TrainingPanel.css";
 
 /** Valores GUARDADOS de los puestos. No se pintan tal cual: ver `roleLabel`. */
 const ROLE_OPTIONS = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
@@ -30,9 +33,10 @@ const PROBLEM_TEXT: Record<KeyProblem, string> = {
  * silencio y además se dejaba de escuchar: el botón volvía a su estado normal
  * sin haber cambiado nada, que desde fuera es indistinguible de un botón roto.
  */
-const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void }> = ({
+const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void; label?: string }> = ({
   value,
   onChange,
+  label,
 }) => {
   const [listening, setListening] = useState(false);
   const [problem, setProblem] = useState<KeyProblem | null>(null);
@@ -57,18 +61,22 @@ const KeyCapture: React.FC<{ value: string; onChange: (k: string) => void }> = (
     return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, [listening, onChange]);
 
+  // Fragmento y no envoltorio: el aviso es un hijo más de la fila, que lo baja
+  // a su propia línea (ver .trn-keycap__problem).
   return (
-    <span style={styles.keyCapture}>
+    <>
       <button
-        className="btn btn--ghost btn--sm"
-        style={listening ? { ...styles.keyBtn, ...styles.keyBtnListening } : styles.keyBtn}
+        type="button"
+        className="trn-key"
+        data-listening={listening || undefined}
         onClick={() => { setListening(true); setProblem(null); }}
         title={listening ? t("Press a key, or Escape to cancel") : t("Change key")}
+        aria-label={label ? `${label}: ${value || "—"}` : undefined}
       >
         {listening ? t("press…") : value || "—"}
       </button>
-      {problem && <span style={styles.keyProblem}>{t(PROBLEM_TEXT[problem])}</span>}
-    </span>
+      {problem && <p className="trn-keycap__problem t-small" role="alert">{t(PROBLEM_TEXT[problem])}</p>}
+    </>
   );
 };
 
@@ -147,245 +155,179 @@ export const TrainingSetup: React.FC<{
     }
   };
 
+  // Encendido o apagado: el segmentado de Ajustes. Antes era un botón que
+  // decía «Activado» y no se sabía si era el estado o la acción.
+  const onOff = (on: boolean, set: (v: boolean) => void, label: string) => (
+    <Segmented
+      label={label}
+      value={on ? "on" : "off"}
+      onChange={(v) => set(v === "on")}
+      options={[
+        { value: "off" as const, label: t("Off") },
+        { value: "on" as const, label: t("On") },
+      ]}
+    />
+  );
+
   return (
-    <div style={styles.panel}>
-      <div style={styles.headerRow}>
-        <Keyboard size={18} color="var(--cool)" />
-        <h3 style={styles.title}>{t("Camera keys")}</h3>
-      </div>
-      <p style={styles.desc}>
-        {t("The key you actually press in game for each ally, in TAB order. Everything else — drills, metronome, post-game stats — reads from this.")}
-      </p>
+    <>
+      <section className="card trn-card">
+        <header className="trn-card__head">
+          <Keyboard size={18} />
+          <h2 className="trn-card__title t-card">{t("Camera keys")}</h2>
+        </header>
+        <p className="trn-desc t-body">
+          {t("The key you actually press in game for each ally, in TAB order. Everything else — drills, metronome, post-game stats — reads from this.")}
+        </p>
 
-      <div style={styles.bindings}>
-        {draft.bindings.map((b, i) => (
-          <div key={i} style={styles.bindingRow}>
-            <KeyCapture value={b.key} onChange={(k) => patchBinding(i, { key: k })} />
-            {/* Un `value` que no case con ninguna `option` NO da error: el
-                select enseña la primera, o sea que un rol guardado en otra
-                grafía ("mid" en vez de "MID") se veía como "Top" y el desplegable
-                mentía sobre lo que hay en disco. Se casa por rol, no por
-                cadena, y lo que no se reconozca se enseña tal cual. */}
-            {(() => {
-              const conocido = ROLE_OPTIONS.find((r) => sameRole(r, b.role));
-              return (
-                // El VALOR es el que se guarda; lo que se lee es la etiqueta.
-                <Select
-                  style={{ flex: 1, maxWidth: 200 }}
-                  label={t("Role")}
-                  value={conocido ?? b.role}
-                  onChange={(v) => patchBinding(i, { role: v })}
-                  options={[
-                    ...ROLE_OPTIONS.map((r) => ({ value: r as string, label: t(roleLabel(r)) })),
-                    ...(!conocido ? [{ value: b.role, label: b.role }] : []),
-                  ]}
-                />
-              );
-            })()}
-            <button
-              className="icon-btn icon-btn--danger"
-              onClick={() => removeBinding(i)}
-              title={t("Remove")}
-            >
-              <Trash2 size={16} />
-            </button>
-          </div>
-        ))}
-        {draft.bindings.length < ROLE_OPTIONS.length && (
-          <button className="btn btn--ghost btn--sm" style={styles.chip} onClick={addBinding}>
-            <Plus size={14} /> {t("Add key")}
-          </button>
-        )}
-      </div>
-
-      <div style={styles.divider} />
-
-      <div style={styles.settingRow}>
-        <div>
-          <div style={styles.settingLabel}>{t("Recentre key")}</div>
-          <div style={styles.settingHint}>
-            {t("Snapping back to yourself has to be part of the same gesture.")}
-          </div>
-        </div>
-        <KeyCapture value={draft.self_key} onChange={(k) => patch({ self_key: k })} />
-      </div>
-
-      <div style={styles.settingRow}>
-        <div>
-          <div style={styles.settingLabel}>{t("In-game metronome")}</div>
-          <div style={styles.settingHint}>
-            {t("A transparent overlay asks you to check an ally every N seconds.")}
-            {/* La salvedad vivía sólo en el tooltip del botón de prueba, o sea
-                que la leía quien ya sospechaba. Es la razón número uno de que el
-                overlay "no funcione", y va a la vista. */}
-            <div style={styles.caveat}>
-              {t("It only draws over borderless or windowed games. In exclusive fullscreen the game owns the screen and nothing can paint on top.")}
+        <div className="trn-binds">
+          {draft.bindings.map((b, i) => (
+            <div key={i} className="trn-bind">
+              <KeyCapture value={b.key} onChange={(k) => patchBinding(i, { key: k })} label={t(roleLabel(b.role))} />
+              {/* Un `value` que no case con ninguna `option` NO da error: el
+                  select enseña la primera, o sea que un rol guardado en otra
+                  grafía ("mid" en vez de "MID") se veía como "Top" y el desplegable
+                  mentía sobre lo que hay en disco. Se casa por rol, no por
+                  cadena, y lo que no se reconozca se enseña tal cual. */}
+              {(() => {
+                const conocido = ROLE_OPTIONS.find((r) => sameRole(r, b.role));
+                return (
+                  // El VALOR es el que se guarda; lo que se lee es la etiqueta.
+                  <Select
+                    label={t("Role")}
+                    value={conocido ?? b.role}
+                    onChange={(v) => patchBinding(i, { role: v })}
+                    options={[
+                      ...ROLE_OPTIONS.map((r) => ({ value: r as string, label: t(roleLabel(r)) })),
+                      ...(!conocido ? [{ value: b.role, label: b.role }] : []),
+                    ]}
+                  />
+                );
+              })()}
+              <Button
+                variant="danger"
+                className="trn-bind__del"
+                icon={<Trash2 size={16} />}
+                onClick={() => removeBinding(i)}
+                title={t("Remove")}
+                aria-label={t("Remove")}
+              />
             </div>
-          </div>
+          ))}
         </div>
-        <div style={styles.settingControls}>
-          <button
-            // El oro es UNO por pantalla (Guardar): el encendido se marca con
-            // aria-pressed, como el resto de interruptores de la app.
-            className="btn btn--ghost btn--sm"
-            aria-pressed={draft.metronome_enabled}
-            style={styles.chip}
-            onClick={() => patch({ metronome_enabled: !draft.metronome_enabled })}
-          >
-            {t(draft.metronome_enabled ? "On" : "Off")}
-          </button>
+        {draft.bindings.length < ROLE_OPTIONS.length && (
+          <div>
+            <Button size="sm" icon={<Plus size={14} />} onClick={addBinding}>
+              {t("Add key")}
+            </Button>
+          </div>
+        )}
+      </section>
+
+      <section className="card trn-rows">
+        <Row title={t("Recentre key")} help={t("Snapping back to yourself has to be part of the same gesture.")}>
+          <KeyCapture value={draft.self_key} onChange={(k) => patch({ self_key: k })} label={t("Recentre key")} />
+        </Row>
+
+        {/* La salvedad vivía sólo en el tooltip del botón de prueba, o sea
+            que la leía quien ya sospechaba. Es la razón número uno de que el
+            overlay "no funcione", y va a la vista. */}
+        <Row
+          title={t("In-game metronome")}
+          help={t("A transparent overlay asks you to check an ally every N seconds.")}
+          note={t("It only draws over borderless or windowed games. In exclusive fullscreen the game owns the screen and nothing can paint on top.")}
+        >
+          {onOff(draft.metronome_enabled, (v) => patch({ metronome_enabled: v }), t("In-game metronome"))}
           <input
             type="number"
+            className="field field--num"
+            aria-label={t("In-game metronome")}
             min={5}
             max={120}
             value={draft.metronome_interval_secs}
             onChange={(e) => patch({ metronome_interval_secs: clamped(e.target.value, 5, 120, draft.metronome_interval_secs) })}
-            style={styles.number}
           />
-          <span style={styles.unit}>{t("sec")}</span>
-          <button
-            className="btn btn--ghost btn--sm"
-            style={styles.chip}
+          <span className="trn-unit t-small">{t("sec")}</span>
+          <Button
+            size="sm"
+            icon={<Eye size={14} />}
             onClick={() => previewMetronomeOverlay().catch((e) => setError(t("Couldn't show the overlay: {msg}", { msg: String(e) })))}
             title={t("Show the overlay for a few seconds. Run it with the game open to confirm it draws on top.")}
           >
-            <Eye size={14} /> {t("Test")}
-          </button>
-        </div>
-      </div>
+            {t("Test")}
+          </Button>
+        </Row>
 
-      <div style={styles.settingRow}>
-        <div>
-          <div style={styles.settingLabel}>{t("Post-game quiz")}</div>
-          <div style={styles.settingHint}>
-            {t("Samples the live game state every N seconds so the quiz can be auto-graded.")}
-          </div>
-        </div>
-        <div style={styles.settingControls}>
-          <button
-            className="btn btn--ghost btn--sm"
-            aria-pressed={draft.awareness_quiz_enabled}
-            style={styles.chip}
-            onClick={() => patch({ awareness_quiz_enabled: !draft.awareness_quiz_enabled })}
-          >
-            {t(draft.awareness_quiz_enabled ? "On" : "Off")}
-          </button>
+        <Row
+          title={t("Post-game quiz")}
+          help={t("Samples the live game state every N seconds so the quiz can be auto-graded.")}
+        >
+          {onOff(draft.awareness_quiz_enabled, (v) => patch({ awareness_quiz_enabled: v }), t("Post-game quiz"))}
           <input
             type="number"
+            className="field field--num"
+            aria-label={t("Post-game quiz")}
             min={1}
             max={60}
             value={draft.snapshot_interval_secs}
             onChange={(e) => patch({ snapshot_interval_secs: clamped(e.target.value, 1, 60, draft.snapshot_interval_secs) })}
-            style={styles.number}
           />
-          <span style={styles.unit}>{t("sec")}</span>
-        </div>
-      </div>
+          <span className="trn-unit t-small">{t("sec")}</span>
+        </Row>
 
-      <div style={styles.settingRow}>
-        <div>
-          <div style={styles.settingLabel}>{t("Flash duration")}</div>
-          <div style={styles.settingHint}>
-            {t("How long the recall drill shows each frame. Lower is harder.")}
-          </div>
-        </div>
-        <div style={styles.settingControls}>
+        <Row
+          title={t("Flash duration")}
+          help={t("How long the recall drill shows each frame. Lower is harder.")}
+        >
           <input
             type="number"
+            className="field field--num"
+            aria-label={t("Flash duration")}
             min={100}
             max={2000}
             step={50}
             value={draft.flash_ms}
             onChange={(e) => patch({ flash_ms: clamped(e.target.value, 100, 2000, draft.flash_ms) })}
-            style={styles.number}
           />
-          <span style={styles.unit}>ms</span>
-        </div>
-      </div>
+          <span className="trn-unit t-small">ms</span>
+        </Row>
+      </section>
 
-      {error && <div style={styles.error}>{error}</div>}
+      {error && <p className="trn-error t-body" role="alert">{error}</p>}
 
-      <div style={styles.saveRow}>
-        <button
-          className="btn btn--primary"
-          style={styles.saveBtn}
+      <div className="trn-save">
+        <Button
+          variant="primary"
+          icon={saved && !dirty ? <Check size={16} /> : <Save size={16} />}
           onClick={save}
           disabled={!dirty && saved}
         >
-          {saved && !dirty ? <Check size={16} /> : <Save size={16} />}
           {t(saved && !dirty ? "Saved" : "Save")}
-        </button>
-        {dirty && <span style={styles.dirtyHint}>{t("Unsaved changes")}</span>}
+        </Button>
+        {dirty && <span className="trn-save__dirty t-small">{t("Unsaved changes")}</span>}
       </div>
-    </div>
+    </>
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
-  panel: {
-    background: "var(--surface-1)",
-    border: "1px solid var(--line-soft)",
-    borderRadius: "var(--radius-xl)",
-    padding: "var(--space-6)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-    maxWidth: 720,
-  },
-  headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  title: { margin: 0, fontSize: 16, fontWeight: 500, color: "var(--text)" },
-  desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)" },
-  bindings: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  bindingRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  keyBtn: {
-    width: 72,
-    justifyContent: "center",
-    padding: "8px 0",
-    fontFamily: "var(--font-mono)",
-    fontSize: "var(--font-sm)",
-    fontWeight: 500,
-  },
-  // Escuchando: "pulsa…" es una frase (sans) y el filo en jade, que es el
-  // color del foco; el oro queda para Guardar.
-  keyBtnListening: {
-    fontFamily: "var(--font-sans)",
-    color: "var(--cool)",
-    borderColor: "var(--cool)",
-  },
-  chip: { padding: "6px 14px", fontSize: 13, alignSelf: "flex-start" },
-  keyCapture: { display: "inline-flex", flexDirection: "column", gap: 4 },
-  keyProblem: { fontSize: 13, color: "var(--loss)", maxWidth: 220 },
-  caveat: { marginTop: 4, fontSize: 13, color: "var(--faint)", maxWidth: 420 },
-  saveRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  dirtyHint: { fontSize: 13, color: "var(--brand)" },
-  divider: { height: 1, background: "var(--line-soft)" },
-  settingRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "var(--space-4)",
-  },
-  settingLabel: { fontSize: "var(--font-sm)", fontWeight: 500, color: "var(--text)" },
-  settingHint: { fontSize: 13, color: "var(--faint)", marginTop: 2, maxWidth: 420 },
-  settingControls: { display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 },
-  number: {
-    width: 68,
-    background: "var(--surface-2)",
-    color: "var(--text)",
-    border: "1px solid var(--line)",
-    borderRadius: "var(--radius-md)",
-    padding: "8px 10px",
-    fontSize: "var(--font-sm)",
-    fontFamily: "var(--font-sans)",
-    fontVariantNumeric: "tabular-nums",
-  },
-  unit: { fontSize: 13, color: "var(--faint)", width: 24 },
-  saveBtn: { padding: "10px 24px", alignSelf: "flex-start" },
-  error: {
-    padding: "var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    background: "var(--danger-soft)",
-    color: "var(--loss)",
-    fontSize: "var(--font-sm)",
-  },
-};
+/**
+ * Fila de ajuste, como en Ajustes: título y ayuda a la izquierda, controles a
+ * la derecha. Fuera del componente para que React no la remonte en cada
+ * pintado (los campos perderían el foco a cada tecla).
+ */
+const Row: React.FC<{
+  title: string;
+  help?: string;
+  /** Salvedad que tiene que verse, debajo de la ayuda y un tono más baja. */
+  note?: string;
+  children: React.ReactNode;
+}> = ({ title, help, note, children }) => (
+  <div className="trn-row">
+    <div>
+      <h3 className="trn-row__title t-body-strong">{title}</h3>
+      {help && <p className="trn-row__help t-small">{help}</p>}
+      {note && <p className="trn-row__note t-small">{note}</p>}
+    </div>
+    <div className="trn-row__ctl">{children}</div>
+  </div>
+);

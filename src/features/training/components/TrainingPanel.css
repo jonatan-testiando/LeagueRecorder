@@ -1,0 +1,392 @@
+/* =========================================================================
+   Training — ejercicios, lectura de mapa y configuración.
+
+   Rediseño «Ritmo», fase 3g. Antes la pantalla entera eran objetos de estilos
+   en línea (`const styles`) con tamaños sueltos (15, 24, 56, 64, 96 px) y tres
+   anchos máximos distintos según la sección (720, 820 y ninguno): se cortaba a
+   820-1068 px y saltaba de ancho al cambiar de pestaña. Ahora todo pasa por
+   tokens y la columna es la de formulario, --form-max, centrada como el resto.
+
+   Un fichero para los cinco componentes de la sección (TrainingPanel,
+   ReflexDrill, RecallDrill, AwarenessQuiz y TrainingSetup): comparten tarjeta,
+   filas de opciones, barra de progreso y métricas. El overlay del metrónomo
+   (MetronomeOverlay) vive en otra ventana y no carga esto.
+   ========================================================================= */
+
+/* --- página ------------------------------------------------------------- */
+.trn {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6) var(--space-8) var(--space-8);
+}
+.trn__col {
+  max-width: var(--form-max);
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+.trn__head { display: flex; flex-direction: column; gap: var(--space-1); }
+.trn__title { margin: 0; color: var(--text); }
+.trn__sub { margin: 0; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+.trn__body { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* --- tarjeta de ejercicio ----------------------------------------------- */
+/* 20 de padding y 12 dentro, el ritmo fijo de las tarjetas. */
+.trn-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  /* Al traer un ejercicio a la vista, que no quede pegado al borde. */
+  scroll-margin-top: var(--space-4);
+}
+.trn-card__head { display: flex; align-items: center; gap: var(--space-2); }
+.trn-card__head > svg { flex: none; color: var(--cool); }
+.trn-card__title { margin: 0; color: var(--text); }
+.trn-desc { margin: 0; color: var(--muted); max-width: 62ch; text-wrap: pretty; }
+.trn-note { margin: 0; color: var(--faint); }
+.trn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+
+/* Filas de opciones del ejercicio: etiqueta a la izquierda y el segmentado.
+   Antes eran botones con borde sueltos, cada uno con su padding. */
+.trn-opts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}
+.trn-opts__label { color: var(--muted); min-width: 72px; }
+.trn-opts__ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+}
+.trn-opts__error {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--loss-ink);
+}
+
+/* --- progreso de la sesión (Figma, Componentes · Progreso) --------------
+   Pista hundida de 4 px y relleno jade que crece con scaleX: ni reflujo ni
+   repintado de la pista en cada ronda. El valor llega en --p (0-1). */
+.trn-run { display: flex; align-items: center; gap: var(--space-3); }
+.trn-run__count { min-width: 56px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.trn-progress {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  overflow: hidden;
+}
+.trn-progress__fill {
+  display: block;
+  height: 100%;
+  background: var(--cool);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+  transition: transform var(--t-base) var(--e-move);
+}
+
+/* --- escenario del estímulo ---------------------------------------------
+   Pista hundida, como los campos: el estímulo sale de ella. La cuenta atrás
+   usa la misma caja para que la tarjeta no cambie de alto al empezar. */
+.trn-stage {
+  position: relative;
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
+  overflow: hidden;
+}
+/* El fotograma del ejercicio de lectura, sin recorte. Con el 16:9 a todo lo
+   ancho medía 520 px y la pregunta quedaba por debajo del pliegue: tras el
+   destello había que bajar para contestar. Ahora el alto lo pone la ventana. */
+.trn-stage--frame { height: clamp(220px, 46vh, 460px); }
+.trn-stage__frame { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Cuenta atrás y estímulo a la cifra héroe (40): la única por pantalla. */
+.trn-stage__big { color: var(--text); }
+.trn-stage__big--count { color: var(--cool-ink); }
+.trn-stage__hint { color: var(--faint); }
+.trn-stage__ok { color: var(--cool-ink); }
+.trn-stage__miss { color: var(--loss-ink); }
+
+.trn-champ { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
+.trn-champ__img {
+  width: 112px;
+  height: 112px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 2px var(--hair-strong);
+  object-fit: cover;
+}
+.trn-champ__img--none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.trn-live { display: flex; justify-content: space-between; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* Tarea de carga: un punto que deriva y se sigue con el ratón. */
+.trn-track {
+  position: relative;
+  height: 88px;
+  border-radius: var(--radius-lg);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  overflow: hidden;
+}
+.trn-track__dot {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  border-radius: var(--radius-full);
+  background: var(--cool);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--cool) 50%, transparent);
+}
+.trn-track__hint { position: absolute; left: var(--space-3); bottom: var(--space-2); color: var(--faint); }
+
+/* --- métricas (Figma, Componentes · Métrica) ----------------------------
+   Etiqueta 12 en --faint y cifra KPI de 22. El tono lo pone data-tone: jade
+   si ya está en el objetivo y oro si todavía no. */
+.trn-stats { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); }
+.trn-stats--rule { padding-bottom: var(--space-4); box-shadow: inset 0 -1px 0 var(--hair); }
+.trn-stat { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.trn-stat__label { color: var(--faint); }
+.trn-stat__value { color: var(--text); }
+.trn-stat__value[data-tone="good"],
+.trn-tone[data-tone="good"] { color: var(--cool-ink); }
+.trn-stat__value[data-tone="bad"],
+.trn-tone[data-tone="bad"] { color: var(--loss-ink); }
+.trn-stat__value[data-tone="warn"],
+.trn-tone[data-tone="warn"] { color: var(--brand-ink); }
+.trn-stat__split { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Desglose por puesto: nombre, barra de latencia, media y acierto. */
+.trn-break { display: flex; flex-direction: column; gap: var(--space-2); }
+.trn-break__row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) 72px 48px;
+  align-items: center;
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.trn-break__role { color: var(--muted); }
+.trn-break__val { color: var(--muted); text-align: right; }
+.trn-break__acc { text-align: right; }
+/* La escala llega a 800 ms, así que el objetivo (400) cae justo en medio: la
+   raya del ::after. Por debajo de ella la barra es jade; por encima, neutra
+   (el oro es de la acción de la pantalla, no de un relleno). */
+.trn-bar {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+  overflow: hidden;
+}
+.trn-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: var(--muted);
+}
+.trn-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left center;
+}
+.trn-bar__fill[data-tone="good"] { background: var(--cool); }
+
+/* --- ejercicio de lectura: pregunta, respuestas y corrección ------------ */
+.trn-question { margin: 0; color: var(--text); }
+.trn-answers { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* La respuesta elegida en jade, el color de la selección: con el pulsado del
+   fantasma (un escalón de fondo) no se distinguía cuál habías marcado. */
+.trn-answers .btn[aria-pressed="true"] {
+  background: var(--cool-soft);
+  border-color: var(--cool);
+  color: var(--cool-ink);
+}
+.trn-grade { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.trn-grade__text { margin-right: auto; color: var(--muted); }
+.trn-grade__text strong { color: var(--text); font-weight: 500; }
+
+/* --- curva de progreso -------------------------------------------------- */
+.trn-spark { position: relative; }
+.trn-spark svg { display: block; width: 100%; height: 60px; }
+/* La etiqueta de la referencia va en HTML y no dentro del SVG: el gráfico se
+   estira a lo ancho (preserveAspectRatio="none") y deformaría el texto. Su
+   altura llega en --y (0-1). */
+.trn-spark__ref {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--y, 0) * 100%);
+  transform: translateY(50%);
+  padding-right: var(--space-2);
+  background: var(--panel);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.trn-spark__foot { display: flex; justify-content: space-between; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* --- lectura de mapa (quiz post-partida) -------------------------------- */
+.trn-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.trn-record {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+.trn-record__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.trn-record__title { display: flex; align-items: baseline; gap: var(--space-3); color: var(--text); }
+.trn-record__date { color: var(--faint); font-variant-numeric: tabular-nums; }
+.trn-record__meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
+.trn-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.trn-meta > svg { flex: none; }
+
+/* 8 dentro de una pregunta y 20 entre preguntas: si no, las respuestas de una
+   se leían pegadas a la siguiente. */
+.trn-q { display: flex; flex-direction: column; gap: var(--space-2); }
+.trn-q + .trn-q { margin-top: var(--space-2); }
+.trn-q__prompt { display: flex; align-items: center; gap: var(--space-3); margin: 0; color: var(--text); }
+.trn-q__num {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* Las respuestas van alineadas con el texto de la pregunta, no con su número. */
+.trn-q .trn-answers { padding-left: 36px; }
+
+.trn-score { display: flex; flex-direction: column; gap: var(--space-2); }
+.trn-score__caption { margin: 0; color: var(--muted); max-width: 62ch; }
+.trn-answer-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.trn-answer { display: flex; align-items: flex-start; gap: var(--space-3); }
+.trn-answer > svg { flex: none; margin-top: 2px; }
+.trn-answer__prompt { margin: 0; color: var(--text); }
+.trn-answer__detail { margin: 0; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* Iconos de acierto y fallo: el tinte pleno, que en un icono basta. */
+.trn-ic-ok { color: var(--cool); }
+.trn-ic-miss { color: var(--loss); }
+
+/* Aviso de error dentro de la sección: tinte suave y tinta. */
+.trn-error {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--loss-soft);
+  color: var(--loss-ink);
+}
+
+/* --- configuración: el lenguaje de Ajustes ------------------------------
+   Tarjeta de filas: título 14/22 y ayuda 13/20 a la izquierda, controles a la
+   derecha, filos de 1 px entre filas. */
+.trn-rows { padding: var(--space-1) var(--space-5); }
+.trn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  box-shadow: inset 0 1px 0 var(--hair);
+}
+.trn-row:first-child { box-shadow: none; }
+.trn-row__title { margin: 0; color: var(--text); }
+.trn-row__help { margin: var(--space-1) 0 0; color: var(--muted); max-width: 56ch; }
+.trn-row__note { margin: var(--space-1) 0 0; color: var(--faint); max-width: 56ch; }
+.trn-row__ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.trn-unit { min-width: 24px; color: var(--faint); }
+/* El campo numérico de siempre (.field), a la altura del segmentado. */
+.trn-row .field--num { height: 32px; padding: 0 var(--space-2); font-variant-numeric: tabular-nums; }
+
+.trn-binds { display: flex; flex-direction: column; gap: var(--space-2); }
+.trn-bind { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.trn-bind .select { flex: 1; max-width: 220px; }
+/* Quitar: botón de peligro solo con icono, cuadrado y a la altura del campo. */
+.trn-bind__del { padding: var(--space-2); }
+
+/* Tecla de cámara: la tapa de una tecla, que se pulsa para cambiarla. */
+.trn-key {
+  min-width: 72px;
+  height: 36px;
+  padding: 0 var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 -2px 0 var(--kbd-edge);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  cursor: pointer;
+  transition: box-shadow var(--t-hover) var(--e-color), color var(--t-hover) var(--e-color);
+}
+.trn-key:not(:disabled):active { transform: none; }
+.trn-key:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* Escuchando: «pulsa…» es una frase (sans) y el filo en jade, el color del
+   foco; el oro queda para Guardar. */
+.trn-key[data-listening] {
+  font-family: var(--font-sans);
+  color: var(--cool-ink);
+  box-shadow: inset 0 0 0 1px var(--cool), inset 0 -2px 0 var(--kbd-edge);
+}
+@media (hover: hover) and (pointer: fine) {
+  .trn-key:hover:not([data-listening]) { box-shadow: inset 0 0 0 1px var(--glass-line), inset 0 -2px 0 var(--kbd-edge); }
+}
+/* Por qué no vale la tecla: en su propia línea, debajo de la fila, para no
+   ensanchar la tecla ni empujar el selector. */
+.trn-keycap__problem { order: 1; flex-basis: 100%; margin: 0; color: var(--loss-ink); }
+.trn-row__ctl .trn-keycap__problem { text-align: right; }
+
+.trn-save { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.trn-save__dirty { color: var(--brand-ink); }

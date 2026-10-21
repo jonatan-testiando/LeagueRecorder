@@ -13,7 +13,7 @@ import { roleLabel } from "../../../core/roles";
  * de este trabajo; queda aquí, en un solo sitio y con nombre, que es lo que hay
  * que cambiar el día que se añada el ajuste.
  */
-const POSITION: React.CSSProperties = { top: 8, left: "50%", transform: "translateX(-50%)" };
+const POSITION: React.CSSProperties = { top: "var(--space-2)", left: "50%", transform: "translateX(-50%)" };
 
 interface PromptPayload {
   role: string;
@@ -123,8 +123,8 @@ const styles: Record<string, React.CSSProperties> = {
     ...POSITION,
     display: "inline-flex",
     alignItems: "center",
-    gap: 10,
-    padding: "8px 16px",
+    gap: "var(--space-2)",
+    padding: "var(--space-2) var(--space-4)",
     borderRadius: "var(--radius-full)",
     background: "color-mix(in srgb, var(--ground) 82%, transparent)",
     backdropFilter: "blur(6px)",
@@ -140,23 +140,25 @@ const styles: Record<string, React.CSSProperties> = {
   keyCap: {
     minWidth: 26,
     height: 26,
-    padding: "0 6px",
+    padding: "0 var(--space-1)",
     borderRadius: "var(--radius-md)",
     background: "var(--cool)",
-    color: "var(--text)",
+    // Tinta del fondo y no --text: el hueso sobre jade se quedaba en 1,4:1 en
+    // oscuro y 2,1:1 en claro; --ground da 7,7 y 4,9.
+    color: "var(--ground)",
     fontWeight: 600,
-    fontSize: 15,
+    fontSize: "var(--fs-14)",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     fontFamily: "var(--font-mono)",
   },
-  role: { color: "var(--text)", fontWeight: 500, fontSize: 14 },
-  tick: { color: "var(--win)", fontSize: 18, fontWeight: 600 },
-  cross: { color: "var(--loss)", fontSize: 18, fontWeight: 600 },
+  role: { color: "var(--text)", fontWeight: 500, fontSize: "var(--fs-14)" },
+  tick: { color: "var(--win)", fontSize: "var(--fs-16)", fontWeight: 600 },
+  cross: { color: "var(--loss)", fontSize: "var(--fs-16)", fontWeight: 600 },
   latency: {
     color: "var(--muted)",
-    fontSize: 13,
+    fontSize: "var(--fs-13)",
     fontVariantNumeric: "tabular-nums",
   },
 };

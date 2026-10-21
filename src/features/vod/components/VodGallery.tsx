@@ -5,11 +5,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { processVod, cancelVod } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";
-import { Film, Upload, Play, Loader, Trash2, X, FolderOpen, Zap } from "lucide-react";
+import { Film, Upload, Play, Trash2, X, FolderOpen, Zap } from "lucide-react";
 import { Button } from "../../../components/ui/Button";
+import { Chip } from "../../../components/ui/Chip";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useT } from "../../../core/LanguageProvider";
+import { clock, matchAge } from "../../../core/time";
+import "./VodGallery.css";
 
 /**
  * Análisis de vídeo.
@@ -114,7 +117,7 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   const handleDelete = async (vod: MatchMetadata) => {
     const ok = await showConfirm({
       title: t("Delete analysis"),
-      message: t("This permanently deletes the analysis of {name} and everything found in it. The original video file is not touched.", { name: vod.champion }),
+      message: t("This permanently deletes the analysis of {name} and everything found in it. The original video file is not touched.", { name: fileName(vod.video_path) || vod.champion }),
       confirmText: t("Delete"),
       cancelText: t("Cancel"),
       destructive: true,
@@ -137,230 +140,131 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
   };
 
   const gpu = hardwareInfo.trim().length > 0;
+  // Hasta el primer porcentaje (el modelo tarda en cargar) la barra está a 0:
+  // es lo que hay, y el texto de estado de debajo dice en qué anda.
+  const pct = Math.min(100, Math.max(0, progressPct ?? 0));
 
   return (
-    <div style={styles.container} className="panel-enter">
-      <div style={styles.header}>
-        <h1 style={styles.pageTitle}>{t("Video analysis")}</h1>
-        <p style={styles.pageSubtitle}>
-          {t("Import a video and it reads the cursor and the clicks frame by frame, the same way it does with your own recordings.")}
-        </p>
-      </div>
+    // Sin `panel-enter`: el envoltorio del panel en App.tsx ya hace el fundido
+    // de entrada, y con los dos la pantalla entraba dos veces.
+    <div className="vod">
+      <div className="vod__col">
+        <header className="vod__head">
+          <h1 className="vod__title t-page">{t("Video analysis")}</h1>
+          <p className="vod__sub t-body">
+            {t("Import a video and it reads the cursor and the clicks frame by frame, the same way it does with your own recordings.")}
+          </p>
+        </header>
 
-      <div style={styles.actionRow}>
-        <div style={styles.actionCol}>
-          <div style={styles.buttonRow}>
-            <button onClick={handleImport} disabled={isProcessing} style={{ ...styles.importBtn, opacity: isProcessing ? 0.6 : 1 }}>
-              {/* El keyframe `spin` ya vive en index.css; esta pantalla llevaba
-                  su propia copia en un <style> incrustado. */}
-              {isProcessing
-                ? <Loader size={18} style={{ animation: "spin 1s linear infinite" }} />
-                : <Upload size={18} />}
+        <section className="card vod-import" aria-busy={isProcessing || undefined}>
+          <div className="vod-import__row">
+            <Button variant="primary" icon={<Upload size={16} />} onClick={handleImport} disabled={isProcessing}>
               {isProcessing ? t("Analysing…") : t("Import video")}
-            </button>
-            {isProcessing && (
-              <Button variant="danger" size="sm" icon={<X size={14} />} onClick={handleCancel}>
-                {t("Cancel")}
-              </Button>
-            )}
+            </Button>
             {/* La insignia de GPU se queda puesta cuando el backend la anuncia:
                 saber con qué se analiza es lo que explica el tiempo de espera. */}
             {gpu && (
-              <span style={styles.gpuBadge} title={hardwareInfo}>
-                <Zap size={12} /> {t("GPU")} · {hardwareInfo}
-              </span>
+              <Chip tone="outline" icon={<Zap size={12} />} title={hardwareInfo} className="vod-gpu">
+                <span className="vod-gpu__text">{t("GPU")} · {hardwareInfo}</span>
+              </Chip>
             )}
           </div>
 
           {/* Lo que de verdad se pregunta al pulsar: cuánto va a tardar. */}
-          <span className="u-meta">
+          <p className="vod-import__hint t-small">
             {gpu
               ? t("With the GPU this runs at roughly the length of the video.")
               : t("On CPU this takes about 1.5× the length of the video. You can keep using the app.")}
-          </span>
+          </p>
 
-          {isProcessing && progressPct !== null && (
-            <div style={{ width: 260 }}>
-              <div style={styles.track}>
+          {/* Tarda minutos: barra con porcentaje, no un icono girando. */}
+          {isProcessing && (
+            <div className="vod-progress">
+              <div className="vod-progress__bar">
                 <div
-                  style={{
-                    ...styles.fill,
-                    width: `${Math.min(100, Math.max(0, progressPct))}%`,
-                  }}
-                />
+                  className="vod-progress__track"
+                  role="progressbar"
+                  aria-label={t("Analysing the video…")}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(pct)}
+                >
+                  <span className="vod-progress__fill" style={{ "--p": pct / 100 } as React.CSSProperties} />
+                </div>
+                <span className="vod-progress__pct t-small-strong">{pct.toFixed(0)}%</span>
               </div>
-              <span className="u-meta">{progressPct.toFixed(0)}%</span>
+              <div className="vod-progress__foot">
+                <span className="vod-progress__status t-small" title={statusText}>{statusText}</span>
+                <Button variant="danger" size="sm" icon={<X size={14} />} onClick={handleCancel}>
+                  {t("Cancel")}
+                </Button>
+              </div>
             </div>
           )}
-        </div>
+        </section>
 
-        {isProcessing && statusText && <span className="u-meta">{statusText}</span>}
-      </div>
-
-      <div style={styles.grid}>
         {vods.length === 0 && !isProcessing && (
           <EmptyState
-            icon={<Film size={30} color="var(--faint)" />}
+            icon={<Film />}
             title={t("No videos analysed yet")}
             text={t("Import a match recording and it comes back with the moments worth looking at.")}
           />
         )}
 
-        {vods.map((vod) => (
-          <div key={vod.id} className="card" style={styles.card}>
-            <div style={styles.cardInfo}>
-              <span style={styles.cardTitle}>{vod.champion}</span>
-              <span className="u-meta">{vod.date}</span>
+        {vods.length > 0 && (
+          <section className="vod-list">
+            <h2 className="vod-list__label t-small-strong">
+              {t("Analysed videos")}
+              <span className="vod-list__count">{vods.length}</span>
+            </h2>
+            <div className="card vod-rows">
+              {vods.map((vod) => {
+                const name = fileName(vod.video_path) || vod.champion;
+                return (
+                  <div key={vod.id} className="vod-row">
+                    <span className="vod-row__icon" aria-hidden="true">
+                      <Film size={16} />
+                    </span>
+                    <div className="vod-row__main">
+                      <span className="vod-row__name t-body-strong" title={vod.video_path}>{name}</span>
+                      <span className="vod-row__meta t-small">
+                        {matchAge(vod.date, t)} · {clock(vod.game_duration)}
+                      </span>
+                    </div>
+                    <div className="vod-row__actions">
+                      <Button size="sm" icon={<Play size={14} />} onClick={() => onSelectMatch(vod)}>
+                        {t("Play")}
+                      </Button>
+                      <Button
+                        variant="icon"
+                        title={t("Reveal in folder")}
+                        aria-label={t("Reveal in folder")}
+                        onClick={() => handleReveal(vod)}
+                        icon={<FolderOpen size={16} />}
+                      />
+                      <Button
+                        variant="danger"
+                        className="vod-row__del"
+                        title={t("Delete analysis")}
+                        aria-label={t("Delete analysis")}
+                        onClick={() => handleDelete(vod)}
+                        icon={<Trash2 size={16} />}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={styles.cardActions}>
-              <Button variant="ghost" size="sm" icon={<Play size={14} />} onClick={() => onSelectMatch(vod)}>
-                {t("Play")}
-              </Button>
-              <Button
-                variant="icon"
-                size="sm"
-                title={t("Reveal in folder")}
-                aria-label={t("Reveal in folder")}
-                onClick={() => handleReveal(vod)}
-                icon={<FolderOpen size={15} />}
-              />
-              <Button
-                variant="danger"
-                size="sm"
-                title={t("Delete analysis")}
-                aria-label={t("Delete analysis")}
-                onClick={() => handleDelete(vod)}
-                icon={<Trash2 size={15} />}
-              />
-            </div>
-          </div>
-        ))}
+          </section>
+        )}
       </div>
     </div>
   );
 };
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    // El mismo contenedor que Clips y Errores. Antes iba a `10%` de padding
-    // lateral, así que esta pantalla se veía más estrecha que todas las demás.
-    padding: "var(--space-6) var(--space-8)",
-    height: "100%",
-    display: "flex",
-    flexDirection: "column",
-    boxSizing: "border-box",
-    overflowY: "auto",
-    background: "transparent",
-  },
-  header: {
-    marginBottom: "var(--space-5)",
-  },
-  pageTitle: {
-    margin: 0,
-    fontSize: 24,
-    fontWeight: 500,
-    letterSpacing: "-0.01em",
-    lineHeight: 1.15,
-  },
-  pageSubtitle: {
-    margin: "var(--space-2) 0 0 0",
-    fontSize: 14,
-    color: "var(--muted)",
-    maxWidth: "62ch",
-  },
-  actionRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    padding: "var(--space-3) 0",
-    borderTop: "1px solid var(--line-soft)",
-    borderBottom: "1px solid var(--line-soft)",
-    marginBottom: "var(--space-5)",
-  },
-  actionCol: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-  },
-  buttonRow: {
-    display: "flex",
-    gap: "var(--space-3)",
-    alignItems: "center",
-  },
-  importBtn: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    padding: "var(--space-2) var(--space-5)",
-    background: "var(--action)",
-    color: "var(--on-action)",
-    border: "none",
-    borderRadius: 8,
-    fontWeight: 600,
-    fontSize: 14,
-    fontFamily: "var(--font-sans)",
-    cursor: "pointer",
-  },
-  gpuBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-    fontSize: 12,
-    fontWeight: 500,
-    color: "var(--cool)",
-    background: "color-mix(in srgb, var(--cool) 12%, transparent)",
-    border: "1px solid color-mix(in srgb, var(--cool) 30%, transparent)",
-    borderRadius: 999,
-    padding: "2px 9px",
-    maxWidth: 280,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  track: {
-    height: 4,
-    borderRadius: "var(--radius-full)",
-    background: "var(--sunken)",
-    overflow: "hidden",
-    boxShadow: "var(--inset-sunken)",
-  },
-  fill: {
-    height: "100%",
-    // Violeta: es el tinte de lo que encuentra el analizador.
-    background: "var(--flag)",
-    borderRadius: "var(--radius-full)",
-    transition: "width 0.3s linear",
-  },
-  grid: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-2)",
-  },
-  card: {
-    padding: "var(--space-3) var(--space-4)",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "var(--space-4)",
-  },
-  cardInfo: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    minWidth: 0,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: 500,
-    color: "var(--text)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  cardActions: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-2)",
-    flexShrink: 0,
-  },
-};
+/**
+ * Nombre del fichero de vídeo, sin carpeta. El backend guarda «VOD Analysis»
+ * como campeón de todos los análisis, así que la lista eran filas iguales:
+ * el nombre del fichero es lo único que las distingue.
+ */
+const fileName = (p: string): string => p.split(/[\\/]/).pop() ?? "";

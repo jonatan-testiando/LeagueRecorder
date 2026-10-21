@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Brain, ArrowLeft, Check, X, Eye, Timer, RefreshCw } from "lucide-react";
-import { clock } from "../../../core/time";
+import { clock, matchAge } from "../../../core/time";
+import { formatDecimal } from "../../../core/benchmarkFormat";
 import {
   AwarenessSummary,
   CameraStats,
@@ -13,6 +14,11 @@ import {
 import { useT } from "../../../core/LanguageProvider";
 import { roleLabel } from "../../../core/roles";
 import { getTrainingConfig } from "../api";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Button } from "../../../components/ui/Button";
+import { EmptyState } from "../../../components/ui/EmptyState";
+import { Skeleton } from "../../../components/ui/Skeleton";
+import "./TrainingPanel.css";
 
 /**
  * Hueco ciego, en segundos, a partir del cual el reparto deja de ser un dato y
@@ -33,34 +39,29 @@ const METRONOME_OK = 0.8;
 /** Preguntas que trae un quiz. */
 const QUIZ_QUESTIONS = 5;
 
-/** Tarjeta de métricas de uso de cámara de una partida. */
+/** Métricas de uso de cámara de una partida, encima del quiz. */
 const CameraStatsRow: React.FC<{ stats: CameraStats }> = ({ stats }) => {
   const t = useT();
   return (
-    <div style={styles.statsRow}>
-      <div style={styles.stat}>
-        <span style={styles.statLabel}>{t("Checks / min")}</span>
-        <span style={styles.statValue}>{stats.presses_per_minute.toFixed(1)}</span>
+    <div className="trn-stats trn-stats--rule">
+      <div className="trn-stat">
+        <span className="trn-stat__label t-label">{t("Checks / min")}</span>
+        <span className="trn-stat__value t-metric">{formatDecimal(stats.presses_per_minute)}</span>
       </div>
-      <div style={styles.stat}>
-        <span style={styles.statLabel}>{t("Longest blind gap")}</span>
-        <span
-          style={{
-            ...styles.statValue,
-            color: stats.longest_gap_secs > BLIND_GAP_BAD ? "var(--loss)" : "var(--win)",
-          }}
-        >
+      <div className="trn-stat">
+        <span className="trn-stat__label t-label">{t("Longest blind gap")}</span>
+        <span className="trn-stat__value t-metric" data-tone={stats.longest_gap_secs > BLIND_GAP_BAD ? "bad" : "good"}>
           {clock(stats.longest_gap_secs)}
         </span>
       </div>
-      <div style={styles.stat}>
-        <span style={styles.statLabel}>{t("Total")}</span>
-        <span style={styles.statValue}>{stats.total_presses}</span>
+      <div className="trn-stat">
+        <span className="trn-stat__label t-label">{t("Total")}</span>
+        <span className="trn-stat__value t-metric">{stats.total_presses}</span>
       </div>
       {stats.per_role.length > 0 && (
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>{t("Split")}</span>
-          <span style={styles.splitText}>
+        <div className="trn-stat">
+          <span className="trn-stat__label t-label">{t("Split")}</span>
+          <span className="trn-stat__split t-small">
             {stats.per_role.map(([role, n]) => `${t(roleLabel(role))} ${n}`).join(" · ")}
           </span>
         </div>
@@ -86,6 +87,9 @@ export const AwarenessQuiz: React.FC = () => {
   // parece que la app no ha guardado nada. Se pregunta a la config para poder
   // señalar el interruptor concreto.
   const [samplingOff, setSamplingOff] = useState(false);
+  // La partida cuyo quiz se está generando: su botón lleva el spinner.
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const showSkeleton = useDelayedLoading(records === null);
 
   const refresh = useCallback(() => {
     listAwarenessRecords()
@@ -103,6 +107,7 @@ export const AwarenessQuiz: React.FC = () => {
 
   const openQuiz = async (matchId: string, regenerate = false) => {
     setBusy(true);
+    setOpeningId(matchId);
     setError(null);
     setResult(null);
     setAnswers({});
@@ -112,6 +117,7 @@ export const AwarenessQuiz: React.FC = () => {
       setError(t("Couldn't build the quiz: {msg}", { msg: String(e) }));
     } finally {
       setBusy(false);
+      setOpeningId(null);
     }
   };
 
@@ -139,20 +145,17 @@ export const AwarenessQuiz: React.FC = () => {
   if (result && quiz) {
     const pct = (result.score / result.total) * 100;
     return (
-      <div style={styles.panel}>
-        <button className="btn btn--ghost" style={styles.backBtn} onClick={close}>
-          <ArrowLeft size={16} /> {t("Back")}
-        </button>
-        <div style={styles.scoreBlock}>
-          <span
-            style={{
-              ...styles.bigScore,
-              color: pct >= PASS_PCT ? "var(--win)" : "var(--brand)",
-            }}
-          >
+      <section className="card trn-card">
+        <div>
+          <Button size="sm" icon={<ArrowLeft size={14} />} onClick={close}>
+            {t("Back")}
+          </Button>
+        </div>
+        <div className="trn-score">
+          <span className="trn-stat__value t-hero" data-tone={pct >= PASS_PCT ? "good" : "warn"}>
             {result.score}/{result.total}
           </span>
-          <span style={styles.scoreCaption}>
+          <p className="trn-score__caption t-body">
             {t(
               pct >= KNEW_IT
                 ? "You actually knew what your team was doing."
@@ -160,45 +163,38 @@ export const AwarenessQuiz: React.FC = () => {
                 ? "Half the information reached you. That is the gap to close."
                 : "You were pressing keys without reading. This is the real starting point."
             )}
-          </span>
+          </p>
         </div>
 
-        <div style={styles.answerList}>
+        <div className="trn-answer-list">
           {result.answers.map((a) => (
-            <div key={a.question_id} style={styles.answerRow}>
-              {a.is_correct ? (
-                <Check size={18} color="var(--win)" style={{ flexShrink: 0 }} />
-              ) : (
-                <X size={18} color="var(--loss)" style={{ flexShrink: 0 }} />
-              )}
-              <div style={{ flex: 1 }}>
-                <div style={styles.answerPrompt}>{a.prompt}</div>
-                <div style={styles.answerDetail}>
+            <div key={a.question_id} className="trn-answer">
+              {a.is_correct ? <Check size={18} className="trn-ic-ok" /> : <X size={18} className="trn-ic-miss" />}
+              <div>
+                <p className="trn-answer__prompt t-body">{a.prompt}</p>
+                <p className="trn-answer__detail t-small">
                   {a.is_correct ? (
-                    <span style={{ color: "var(--win)" }}>{a.correct}</span>
+                    <span className="trn-tone" data-tone="good">{a.correct}</span>
                   ) : (
                     <>
-                      <span style={{ color: "var(--loss)" }}>
-                        {a.chosen || t("no answer")}
-                      </span>
-                      <span style={{ color: "var(--faint)" }}> → {t("right answer")}: </span>
-                      <span style={{ color: "var(--win)" }}>{a.correct}</span>
+                      <span className="trn-tone" data-tone="bad">{a.chosen || t("no answer")}</span>
+                      {" → "}
+                      {t("right answer")}:{" "}
+                      <span className="trn-tone" data-tone="good">{a.correct}</span>
                     </>
                   )}
-                </div>
+                </p>
               </div>
             </div>
           ))}
         </div>
 
-        <button
-          className="btn btn--ghost"
-          style={styles.chip}
-          onClick={() => openQuiz(quiz.match_id, true)}
-        >
-          <RefreshCw size={14} /> {t("New questions from this game")}
-        </button>
-      </div>
+        <div className="trn-actions">
+          <Button size="sm" icon={<RefreshCw size={14} />} onClick={() => openQuiz(quiz.match_id, true)}>
+            {t("New questions from this game")}
+          </Button>
+        </div>
+      </section>
     );
   }
 
@@ -206,118 +202,117 @@ export const AwarenessQuiz: React.FC = () => {
   if (quiz) {
     const allAnswered = quiz.questions.every((q) => answers[q.id]);
     return (
-      <div style={styles.panel}>
-        <button className="btn btn--ghost" style={styles.backBtn} onClick={close}>
-          <ArrowLeft size={16} /> {t("Back")}
-        </button>
+      <section className="card trn-card">
+        <div>
+          <Button size="sm" icon={<ArrowLeft size={14} />} onClick={close}>
+            {t("Back")}
+          </Button>
+        </div>
         {quiz.camera && <CameraStatsRow stats={quiz.camera} />}
-        <p style={styles.desc}>
+        <p className="trn-desc t-body">
           {t("No looking anything up. If you do not remember, guess — a wrong answer is the measurement, not a failure.")}
         </p>
 
         {quiz.questions.map((q, i) => (
-          <div key={q.id} style={styles.question}>
-            <div style={styles.questionPrompt}>
-              <span style={styles.questionNum}>{i + 1}</span>
+          <div key={q.id} className="trn-q">
+            <p className="trn-q__prompt t-body-strong">
+              <span className="trn-q__num t-label">{i + 1}</span>
               {q.prompt}
-            </div>
-            <div style={styles.options}>
+            </p>
+            <div className="trn-answers" role="group" aria-label={q.prompt}>
               {q.options.map((opt) => (
-                <button
+                <Button
                   key={opt}
-                  className="btn btn--ghost" aria-pressed={answers[q.id] === opt}
-                  style={styles.option}
+                  aria-pressed={answers[q.id] === opt}
                   onClick={() => setAnswers((a) => ({ ...a, [q.id]: opt }))}
                 >
                   {opt}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
         ))}
 
-        {error && <div style={styles.error}>{error}</div>}
-        <button
-          className="btn btn--primary"
-          style={{ ...styles.bigBtn, opacity: allAnswered && !busy ? 1 : 0.5 }}
-          onClick={submit}
-          disabled={!allAnswered || busy}
-        >
-          {t("Submit")}
-        </button>
-      </div>
+        {error && <p className="trn-error t-body">{error}</p>}
+        <div className="trn-actions">
+          <Button
+            variant="primary"
+            onClick={submit}
+            disabled={!allAnswered}
+            loading={busy}
+            loadingLabel={t("Grading…")}
+          >
+            {t("Submit")}
+          </Button>
+        </div>
+      </section>
     );
   }
 
   // --- Listado de partidas ---
   if (records === null) {
-    // Un panel con la palabra "Cargando" y nada más no dice qué está cargando.
-    return (
-      <div style={styles.panel}>
-        <div style={styles.headerRow}>
-          <Brain size={18} color="var(--cool)" />
-          <span style={styles.loadingTitle}>{t("Loading your sampled games…")}</span>
-        </div>
+    // Esqueleto con la forma de la lista, y solo si la carga tarda.
+    return showSkeleton ? (
+      <div className="trn-list" role="status" aria-busy="true" aria-label={t("Loading your sampled games…")}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="card trn-record">
+            <div className="trn-record__main">
+              <Skeleton width="32%" height={16} />
+              <Skeleton width="56%" />
+            </div>
+            <Skeleton shape="block" width={96} height={28} />
+          </div>
+        ))}
       </div>
-    );
+    ) : null;
   }
 
   if (records.length === 0) {
     return (
-      <div className="empty-state">
-        <div className="empty-state__icon">
-          <Brain size={30} color="var(--faint)" />
-        </div>
-        <p className="empty-state__title">{t("No games recorded yet")}</p>
-        <p className="empty-state__text">
-          {samplingOff
-            ? t("Post-game quiz sampling is off, so no game state is being recorded. Turn it on in Setup and play a game.")
-            : t("Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.")}
-        </p>
+      <div className="card">
+        <EmptyState
+          icon={<Brain />}
+          title={t("No games recorded yet")}
+          text={
+            samplingOff
+              ? t("Post-game quiz sampling is off, so no game state is being recorded. Turn it on in Setup and play a game.")
+              : t("Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.")
+          }
+        />
       </div>
     );
   }
 
   return (
-    <div style={styles.list}>
-      {error && <div style={styles.error}>{error}</div>}
+    <div className="trn-list">
+      {error && <p className="trn-error t-body">{error}</p>}
       {records.map((r, i) => (
-        <div key={r.match_id} className="card card-interactive" style={styles.recordCard}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={styles.recordTitle}>
-              {r.champion || t("Unknown champion")}
-              <span style={styles.recordDate}>{r.date}</span>
+        <div key={r.match_id} className="card card-interactive trn-record">
+          <div className="trn-record__main">
+            <div className="trn-record__title">
+              <span className="t-card">{r.champion || t("Unknown champion")}</span>
+              <span className="trn-record__date t-small" title={r.date}>{matchAge(r.date, t)}</span>
             </div>
-            <div style={styles.recordMeta}>
-              <span style={styles.metaItem}>
-                <Eye size={13} /> {r.camera.presses_per_minute.toFixed(1)} {t("checks/min")}
+            <div className="trn-record__meta t-small">
+              <span className="trn-meta">
+                <Eye size={14} /> {formatDecimal(r.camera.presses_per_minute)} {t("checks/min")}
               </span>
-              <span style={styles.metaItem}>
-                <Timer size={13} /> {clock(r.camera.longest_gap_secs)} {t("blind")}
+              <span className="trn-meta">
+                <Timer size={14} /> {clock(r.camera.longest_gap_secs)} {t("blind")}
               </span>
               {r.metronome && (
                 <span
-                  style={{
-                    ...styles.metaItem,
-                    color:
-                      r.metronome[0] / Math.max(1, r.metronome[1]) >= METRONOME_OK
-                        ? "var(--win)"
-                        : "var(--brand)",
-                  }}
+                  className="trn-meta trn-tone"
+                  data-tone={r.metronome[0] / Math.max(1, r.metronome[1]) >= METRONOME_OK ? "good" : "warn"}
                   title={t("Metronome prompts you answered in time")}
                 >
-                  <Timer size={13} /> {t("metronome")} {r.metronome[0]}/{r.metronome[1]}
+                  <Timer size={14} /> {t("metronome")} {r.metronome[0]}/{r.metronome[1]}
                 </span>
               )}
               {r.answered && (
                 <span
-                  style={{
-                    ...styles.metaItem,
-                    color:
-                      (r.last_score ?? 0) / Math.max(1, r.last_total ?? 1) >= PASS_PCT / 100
-                        ? "var(--win)"
-                        : "var(--brand)",
-                  }}
+                  className="trn-meta trn-tone"
+                  data-tone={(r.last_score ?? 0) / Math.max(1, r.last_total ?? 1) >= PASS_PCT / 100 ? "good" : "warn"}
                 >
                   {t("last quiz")} {r.last_score}/{r.last_total}
                 </span>
@@ -326,118 +321,16 @@ export const AwarenessQuiz: React.FC = () => {
           </div>
           {/* Oro solo en la primera (la partida más reciente): una acción de
               oro por pantalla. Las demás, en superficie. */}
-          <button
-            className={i === 0 ? "btn btn--primary" : "btn btn--ghost"}
-            style={styles.chip}
+          <Button
+            variant={i === 0 ? "primary" : "ghost"}
             onClick={() => openQuiz(r.match_id, r.answered)}
-            disabled={busy}
+            disabled={busy && openingId !== r.match_id}
+            loading={openingId === r.match_id}
           >
             {t(r.answered ? "Retake" : "Take quiz")}
-          </button>
+          </Button>
         </div>
       ))}
     </div>
   );
-};
-
-const styles: Record<string, React.CSSProperties> = {
-  headerRow: { display: "flex", alignItems: "center", gap: "var(--space-3)" },
-  loadingTitle: { fontSize: 14, color: "var(--muted)" },
-  panel: {
-    background: "var(--surface-1)",
-    border: "1px solid var(--line-soft)",
-    borderRadius: "var(--radius-xl)",
-    padding: "var(--space-6)",
-    display: "flex",
-    flexDirection: "column",
-    gap: "var(--space-4)",
-  },
-  list: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
-  recordCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-4)",
-    padding: "var(--space-4)",
-  },
-  recordTitle: {
-    display: "flex",
-    alignItems: "baseline",
-    gap: "var(--space-3)",
-    fontSize: "var(--font-md)",
-    fontWeight: 500,
-    color: "var(--text)",
-  },
-  recordDate: { fontSize: 13, color: "var(--faint)", fontWeight: 400, fontVariantNumeric: "tabular-nums" },
-  recordMeta: {
-    display: "flex",
-    gap: "var(--space-4)",
-    marginTop: "var(--space-2)",
-    flexWrap: "wrap",
-  },
-  metaItem: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-    fontSize: 13,
-    color: "var(--muted)",
-    fontVariantNumeric: "tabular-nums",
-  },
-  statsRow: {
-    display: "flex",
-    gap: "var(--space-6)",
-    flexWrap: "wrap",
-    paddingBottom: "var(--space-4)",
-    borderBottom: "1px solid var(--line-soft)",
-  },
-  stat: { display: "flex", flexDirection: "column", gap: 2 },
-  statLabel: {
-    fontSize: 13,
-    color: "var(--faint)",
-    fontWeight: 400,
-  },
-  statValue: { fontSize: "var(--font-xl)", fontWeight: 500, fontVariantNumeric: "tabular-nums", color: "var(--text)" },
-  splitText: { fontSize: 13, color: "var(--muted)", fontVariantNumeric: "tabular-nums" },
-  desc: { margin: 0, fontSize: "var(--font-sm)", color: "var(--muted)" },
-  question: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
-  questionPrompt: {
-    display: "flex",
-    alignItems: "center",
-    gap: "var(--space-3)",
-    fontSize: "var(--font-md)",
-    color: "var(--text)",
-    fontWeight: 500,
-  },
-  questionNum: {
-    width: 24,
-    height: 24,
-    borderRadius: "var(--radius-full)",
-    background: "var(--surface-2)",
-    color: "var(--faint)",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 12,
-    fontWeight: 500,
-    fontVariantNumeric: "tabular-nums",
-    flexShrink: 0,
-  },
-  options: { display: "flex", gap: "var(--space-2)", flexWrap: "wrap", paddingLeft: 36 },
-  option: { padding: "8px 18px", fontSize: 14, fontVariantNumeric: "tabular-nums" },
-  chip: { padding: "6px 14px", fontSize: 13, alignSelf: "flex-start" },
-  bigBtn: { padding: "10px 24px", alignSelf: "flex-start", justifyContent: "center" },
-  backBtn: { padding: "6px 12px", fontSize: 13, alignSelf: "flex-start" },
-  scoreBlock: { display: "flex", flexDirection: "column", gap: "var(--space-2)" },
-  bigScore: { fontSize: 64, fontWeight: 600, fontVariantNumeric: "tabular-nums", lineHeight: 1 },
-  scoreCaption: { fontSize: "var(--font-sm)", color: "var(--muted)", maxWidth: 520 },
-  answerList: { display: "flex", flexDirection: "column", gap: "var(--space-3)" },
-  answerRow: { display: "flex", gap: "var(--space-3)", alignItems: "flex-start" },
-  answerPrompt: { fontSize: "var(--font-sm)", color: "var(--text)" },
-  answerDetail: { fontSize: 13, fontVariantNumeric: "tabular-nums", marginTop: 2 },
-  error: {
-    padding: "var(--space-3)",
-    borderRadius: "var(--radius-md)",
-    background: "var(--danger-soft)",
-    color: "var(--loss)",
-    fontSize: "var(--font-sm)",
-  },
 };

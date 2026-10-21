@@ -2577,6 +2577,25 @@ const ES: Record<string, string> = {
   "Watch the {n} in a row": "Ver las {n} seguidas",
   "One more death: {cost}": "Una muerte más: {cost}",
   "{n} more deaths: {cost}": "{n} muertes más: {cost}",
+  // «Lo que te costó esta partida»: los objetivos rivales sin ti (coach).
+  "What your deaths and the enemy objectives taken without you cost your team in win probability.":
+    "Lo que costaron a tu equipo, en probabilidad de victoria, tus muertes y los objetivos rivales hechos sin ti.",
+  "{objective} without you": "{objective} sin ti",
+  "{n} {objective} without you": "{n} {objective} sin ti",
+  "The enemy gained {p}% and you were the only one of your team missing.":
+    "El rival ganó un {p} % y de tu equipo solo faltabas tú.",
+  "The enemy gained {p}%, split among the {n} of your team who were missing.":
+    "El rival ganó un {p} %, repartido entre los {n} de tu equipo que faltaban.",
+  "The enemy gained {p}%.": "El rival ganó un {p} %.",
+  "Buying, or next to your fountain.": "Comprando, o junto a tu fuente.",
+  "Still dead from a death more than a minute before.": "Aún muerto, de una muerte de más de un minuto antes.",
+  "More than 2,000 units from the pit, by your icon on the minimap of the video.":
+    "A más de 2.000 unidades del foso, según tu icono en el minimapa del vídeo.",
+  "More than 3,000 units from the pit, by Riot's position once a minute: right about 4 times in 5.":
+    "A más de 3.000 unidades del foso, según la posición de Riot una vez por minuto: acierta unas 4 de cada 5 veces.",
+  "One more objective without you: {cost}": "Un objetivo más sin ti: {cost}",
+  "{n} more objectives without you: {cost}": "{n} objetivos más sin ti: {cost}",
+  "under 0.1% win chance": "menos de un 0,1 % de victoria",
   "What this game cost you, your rival and the pressure you took come from Riot's data for the game.":
     "Lo que te costó la partida, tu rival y la presión que absorbiste salen de los datos de Riot de la partida.",
   "Impact needs your Riot API key": "Impacto necesita tu clave de la API de Riot",

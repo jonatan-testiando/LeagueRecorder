@@ -3,9 +3,11 @@ import {
   getGoldReport,
   getJungleRoute,
   getMatchAttribution,
+  getMatchCoach,
   getMatchPlays,
   getMatchTrack,
   getSpellAutopsy,
+  type CoachMatch,
   type GoldResponse,
   type JungleRouteResponse,
   type MatchPlays,
@@ -78,6 +80,11 @@ export const fetchAttribution = (matchId: string): Promise<PlayerCredit[]> =>
 /** Las jugadas con su ΔWP y la curva de probabilidad (`winprob.rs`). */
 export const useMatchPlays = (matchId: string | null) =>
   useCached<MatchPlays>(matchId && `plays:${matchId}`, () => getMatchPlays(matchId as string));
+
+/** Lo que el coach cobró en la partida (`coach.rs`). Llega `null` también si
+ *  la partida no entra en el coach: no hay que distinguirlo de un fallo. */
+export const useMatchCoach = (matchId: string | null) =>
+  useCached<CoachMatch | null>(matchId && `coach:${matchId}`, () => getMatchCoach(matchId as string));
 
 export const useMatchTrack = (matchId: string | null) =>
   useCached<MatchTrackResponse>(matchId && `track:${matchId}`, () => getMatchTrack(matchId as string));

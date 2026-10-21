@@ -2564,7 +2564,10 @@ button.cap:not(:disabled):active { transform: none; }
   height: 100%;
   background: var(--cool);
   border-radius: var(--radius-full);
-  transition: width var(--t-base) var(--e-move);
+  /* Avance con scaleX (--p de 0 a 1), no con width: no recalcula la maquetación. */
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform var(--t-base) var(--e-move);
 }
 
 /* Aviso de actualizacion lista, en el hueco de la version de la barra lateral.

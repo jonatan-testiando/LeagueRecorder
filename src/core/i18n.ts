@@ -2358,6 +2358,10 @@ const ES: Record<string, string> = {
   "Copied": "Copiado",
   // Carga de la biblioteca (Hoy y Biblioteca).
   "Loading your games…": "Cargando tus partidas…",
+  // Ajustes · Apariencia (rediseño «Ritmo», 3e).
+  "Theme": "Tema",
+  "System follows Windows. Neither theme uses pure black or pure white.":
+    "Sistema sigue a Windows. Ningún tema usa negro ni blanco puros.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

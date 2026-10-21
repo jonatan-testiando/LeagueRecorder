@@ -1256,7 +1256,7 @@ export const SettingsPanel: React.FC = () => {
       >
         {isDownloading ? (
           <div className="upd">
-            <span className="upd__track"><span className="upd__fill" style={{ width: `${downloadProgress}%` }} /></span>
+            <span className="upd__track"><span className="upd__fill" style={{ "--p": downloadProgress / 100 } as React.CSSProperties} /></span>
             <span className="u-metric stg-upd-pct">{downloadProgress}%</span>
           </div>
         ) : pending ? (

@@ -52,7 +52,7 @@ export const DiskMeter: React.FC<{ disk: DiskSpaceInfo | null }> = ({ disk }) =>
         <span
           className="upd__fill"
           {...(pct >= 90 ? { "data-tone": "full" } : {})}
-          style={{ width: `${pct}%` }}
+          style={{ "--p": pct / 100 } as React.CSSProperties}
         />
       </span>
 

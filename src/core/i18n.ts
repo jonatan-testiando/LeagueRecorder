@@ -1706,6 +1706,7 @@ const ES: Record<string, string> = {
   "Last 10": "Últimas 10",
   "Game phase": "Tramo de la partida",
   "{n} deaths in {g} games": "{n} muertes en {g} partidas",
+  "{n} of your {total} deaths have a place on the map": "{n} de tus {total} muertes tienen sitio en el mapa",
   "{n} deaths in 1 game": "{n} muertes en 1 partida",
   "1 death in 1 game": "1 muerte en 1 partida",
   "{n} of {total} deaths": "{n} de {total} muertes",
@@ -1932,6 +1933,7 @@ const ES: Record<string, string> = {
   "Late to your camps": "Tarde a tus campamentos",
   "on average, from respawn to you": "de media, desde que reaparecen hasta que llegas",
   "Recalls": "Vueltas a base",
+  "Scuttles": "Cangrejos",
   "{n} scuttles": "{n} cangrejos",
   "Camps over the game": "Campamentos a lo largo de la partida",
   "Recall": "Vuelta a base",
@@ -2017,6 +2019,7 @@ const ES: Record<string, string> = {
   "per game": "por partida",
   "{ability} of {champion}": "{ability} de {champion}",
   "{champion}'s passive": "pasiva de {champion}",
+  "{champion}'s basic attacks": "ataques básicos de {champion}",
   "{key} after {s} s": "{key} a los {s} s",
   "{n} enemies close": "{n} rivales cerca",
   "{n} fights started with a hit on you.": "{n} peleas empezaron con un golpe sobre ti.",
@@ -2074,6 +2077,10 @@ const ES: Record<string, string> = {
   "{lane} pushed": "{lane} empujado",
   "{n} ganks": "{n} ganks",
   "{n} invades": "{n} invasiones",
+  "{p}% short clicks": "{p}% de clics cortos",
+  "Kills you most: {what}": "Lo que más te mata: {what}",
+  "{n} fights started on you": "{n} peleas te empezaron",
+  "{g} ganks, {s} successful": "{g} ganks, {s} con éxito",
   "{n} objectives": "{n} objetivos",
   // Puntería y línea de fuego (barras.rs, AimSection).
   "Fleeing along their line": "Huyendo por su línea",
@@ -2186,6 +2193,7 @@ const ES: Record<string, string> = {
   "them": "ellos",
   "enemy avg.": "media rival",
   "Win probability": "Probabilidad de victoria",
+  "· line = 50%": "· raya = 50 %",
   "Your team's win probability": "Probabilidad de victoria de tu equipo",
   "{champ} dies": "Cae {champ}",
   "Each dot is a play that moved the odds 2 points or more; the bigger, the more. Bright and ringed: you took part. Click one to watch it.": "Cada punto es una jugada que movió la probabilidad 2 puntos o más; cuanto más grande, más. Enteros y con aro: estabas tú. Pulsa uno para verlo.",
@@ -2484,6 +2492,13 @@ const ES: Record<string, string> = {
   "No category has cost you anything yet.": "Ninguna categoría te ha costado nada todavía.",
   "Your grade by stretch": "Tu nota por tramo",
   "percentile in your rank": "percentil en tu rango",
+  "percentile in your rank · line = median": "percentil en tu rango · raya = mediana",
+  "{n} games · your focus is in this stretch": "{n} partidas · tu foco está en este tramo",
+  "Underlined: the stretch of your focus.": "Subrayado: el tramo de tu foco.",
+  "≈ baseline": "≈ baremo",
+  "{p} worse": "{p} peor",
+  "{p} better": "{p} mejor",
+  "Against the baseline, in points of win chance per game": "Frente al baremo, en puntos de victoria por partida",
   "Earlier plans": "Planes anteriores",
   "None yet. When you finish one, its before and after stay here.":
     "Aún ninguno. Cuando termines uno, su antes y después se quedan aquí.",
@@ -2529,6 +2544,9 @@ const ES: Record<string, string> = {
     "Igual que lo esperado sin cambiar nada: entre {a} y {b} puntos por partida.",
   "Your usual rate": "Tu media",
   "Your rank": "Tu rango",
+  "It costs you": "Te cuesta",
+  "At your usual rate": "Con tu tasa de siempre",
+  "In your rank": "En tu rango",
   "A {n}-game plan in the Coach measures the before and after.":
     "Un plan de {n} partidas en el Coach mide el antes y el después.",
   "Open the Coach": "Abrir el Coach",
@@ -2589,6 +2607,12 @@ export function translate(
       out = out.split(`{${k}}`).join(String(v));
     }
   }
+  // En español el % va separado de la cifra (RAE) y con espacio duro para que
+  // no se parta la línea entre los dos. Se hace aquí y no en cada cadena: había
+  // «50 %» en Hoy y «2,9%» en el Coach para el mismo tipo de cifra.
+  if (lang === "es") out = out.replace(PCT_PEGADO, "$1 %");
   return out;
 }
+
+const PCT_PEGADO = /(\d)[   ]?%/g;
 

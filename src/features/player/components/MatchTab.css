@@ -66,7 +66,9 @@
 /* Los bloques: cabeceras juntas cuando están plegados, aire tras el abierto.
    Al traer uno a la vista, que no quede debajo de la barra de anclas. */
 .mt-blocks { display: flex; flex-direction: column; gap: var(--space-1); }
-.mt-blocks > .isec { scroll-margin-top: 52px; }
+.mt-blocks > .isec,
+.mt-blocks > .mt-sec { scroll-margin-top: 52px; }
+.mt-sec { padding-top: var(--space-2); }
 .isec:not([data-open]) > .sect__head { margin-bottom: 0; }
 .isec[data-open] + .isec { margin-top: var(--space-4); }
 .isec__toggle {

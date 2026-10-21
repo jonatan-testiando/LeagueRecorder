@@ -20,6 +20,7 @@ import { clock } from "../core/time";
 import { formatDuration, outcome } from "../core/matchStats";
 import { reviewProgress } from "../core/review";
 import type { MatchMetadata } from "../types";
+import { withPercent } from "../core/benchmarkFormat";
 
 /**
  * Estado de captura: qué hace el grabador, en la barra de título.
@@ -456,7 +457,7 @@ export const CapturePill: React.FC<{ info: CaptureInfo }> = ({ info }) => {
                 <>
                   {" "}
                   <span className="cap__sub">·</span>{" "}
-                  <span className="cap__pct">{Math.round(capture.pct)} %</span>
+                  <span className="cap__pct">{withPercent(Math.round(capture.pct))}</span>
                 </>
               )}
             </span>

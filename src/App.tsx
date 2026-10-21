@@ -37,6 +37,8 @@ import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
 
+import { withPercent } from "./core/benchmarkFormat";
+import { jungleRoutesOnce } from "./features/player/components/matchMoves";
 type Tab = "home" | "clips" | "errors" | "review" | "coach" | "patterns" | "vod" | "training" | "settings";
 
 type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/vod" | "/training" | "/settings";
@@ -161,6 +163,16 @@ export const App: React.FC = () => {
       navigate("/home", { replace: true });
     }
   }, [currentPath, navigate]);
+
+  // Las rutas de jungla de todas las partidas tardan en leerse y las espera
+  // «Lo que decidió la partida» (la mediana del primer clear). Se adelantan en
+  // segundo plano la primera vez que se entra donde se van a usar; luego
+  // quedan para toda la sesión (jungleRoutesOnce).
+  React.useEffect(() => {
+    if (currentPath !== "/review" && currentPath !== "/patterns") return;
+    const id = window.setTimeout(() => jungleRoutesOnce().catch(() => {}), 400);
+    return () => window.clearTimeout(id);
+  }, [currentPath]);
 
   const {
     matches,
@@ -334,7 +346,7 @@ export const App: React.FC = () => {
           <div className="updpill" style={{ cursor: "default" }} title={t("Downloading in the background. You can keep using the app.")}>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <span className="updpill__dot" />
-              <span>v{updProgress.version} · {updProgress.percent}%</span>
+              <span>v{updProgress.version} · {withPercent(updProgress.percent)}</span>
             </div>
             <div className="updpill__track">
               <div className="updpill__fill" style={{ "--p": updProgress.percent / 100 } as React.CSSProperties} />

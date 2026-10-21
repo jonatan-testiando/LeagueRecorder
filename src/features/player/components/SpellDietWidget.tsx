@@ -12,6 +12,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { wstyles } from "./videoPlayerStyles";
 import { Segmented } from "../../../components/ui/Segmented";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Qué hechizos te comes y qué hacía tu mano al comértelos.
  *
@@ -178,7 +179,7 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
         <div style={wstyles.statBox}>
           <span className="u-label">{t("Died in a straight line")}</span>
           <span style={{ ...wstyles.statValue, color: rectaPct !== null && rectaPct > 33 ? "var(--loss)" : "var(--text)" }}>
-            {rectaPct === null ? "—" : `${rectaPct}%`}
+            {rectaPct === null ? "—" : withPercent(rectaPct)}
           </span>
           <span className="note">
             {rectaPct === null

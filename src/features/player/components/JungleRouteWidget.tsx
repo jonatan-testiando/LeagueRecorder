@@ -132,10 +132,15 @@ const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onOpenMap: OpenMa
           <b>{r.mean_delay != null ? mmss(r.mean_delay) : "—"}</b>
           <small>{t("on average, from respawn to you")}</small>
         </div>
+        {/* Dos filas: juntas se leía «Vueltas a base 9 · 6 cangrejos», como si
+            los cangrejos explicaran las vueltas. */}
         <div className="mt-fact">
           <span>{t("Recalls")}</span>
           <b>{r.recalls.length}</b>
-          <small>{t("{n} scuttles", { n: r.scuttles })}</small>
+        </div>
+        <div className="mt-fact">
+          <span>{t("Scuttles")}</span>
+          <b>{r.scuttles}</b>
         </div>
       </div>
 

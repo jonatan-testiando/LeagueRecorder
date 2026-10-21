@@ -90,7 +90,9 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.coach-hero__main p { margin: 0; }
+/* Las frases del foco y del plan, a un ancho de lectura: a 1600 px salían
+   líneas de 150 caracteres. */
+.coach-hero__main p { margin: 0; max-width: 72ch; }
 .coach-title { margin: 0; color: var(--text); }
 .coach-why { margin: 0; max-width: 72ch; color: var(--muted); }
 
@@ -228,7 +230,7 @@
   display: grid;
   /* La barra crece con la tarjeta: a 1920, con 150 fijos, quedaba un hueco
      entre el nombre y la barra. */
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.6fr) 64px 48px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.6fr) 64px 80px;
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) 0;
@@ -266,31 +268,53 @@
 .coach-cat__user { text-align: right; color: var(--text); white-space: nowrap; }
 .coach-cat__excess { text-align: right; white-space: nowrap; }
 
-/* Tu nota por tramo: una columna por tramo, la altura es el percentil. */
+/* Tu nota por tramo: una columna por tramo. La barra sale de la mediana
+   (percentil 50): hacia arriba si estás por encima, hacia abajo si no. */
 .coach-tramos { display: flex; flex-direction: column; gap: var(--space-3); }
 .coach-tramos__bars {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-2);
-  height: 112px;
 }
 .coach-tramo {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   align-items: stretch;
   gap: var(--space-1);
   text-align: center;
 }
-.coach-tramo__bar {
+.coach-tramo__plot {
+  position: relative;
   display: block;
-  height: max(3px, calc(var(--p) * 64px));
+  height: 72px;
+}
+/* La mediana: una raya fina a media altura, común a todas las columnas. */
+.coach-tramo__plot::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px dashed color-mix(in srgb, var(--text) 28%, var(--panel));
+}
+.coach-tramo__bar {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  /* 36 px = de la mediana a 25 puntos de ella (el percentil 25 o el 75). */
+  height: max(2px, calc(var(--d) * 36px));
   border-radius: var(--radius-sm);
   /* Mezcla con la tinta y no --raised: en claro --raised es MÁS claro que el
      panel y la barra desaparecía. */
-  background: color-mix(in srgb, var(--text) 10%, var(--panel));
+  background: color-mix(in srgb, var(--text) 22%, var(--panel));
 }
-.coach-tramo--hot .coach-tramo__bar { background: var(--brand); }
+.coach-tramo__bar--up { bottom: 50%; background: color-mix(in srgb, var(--win) 55%, var(--panel)); }
+.coach-tramo__bar--down { top: 50%; background: color-mix(in srgb, var(--loss) 55%, var(--panel)); }
+/* El tramo del foco: subrayado en la etiqueta, no la barra teñida. */
+.coach-tramo--hot .coach-tramo__label {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.coach-tramos__note { margin: 0; }
 
 /* Planes anteriores. */
 .coach-hist { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -339,5 +363,5 @@
   .coach-hero { gap: var(--space-5); }
   /* Apiladas, las acciones no se estiran a todo el ancho de la tarjeta. */
   .coach-actions { max-width: 400px; }
-  .coach-cat { grid-template-columns: minmax(0, 1fr) 96px 56px 44px; gap: var(--space-3); }
+  .coach-cat { grid-template-columns: minmax(0, 1fr) 96px 56px 72px; gap: var(--space-3); }
 }

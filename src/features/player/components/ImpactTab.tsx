@@ -22,6 +22,7 @@ import { formatGold, formatSigned } from "./pressureFormat";
 import type { OpenMap } from "../mapFocus";
 import "./ImpactTab.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Pestaña Impacto del reproductor: qué significó tu partida. Vivía dentro de
  * VideoPlayer.tsx; se separó para poder rehacerla sin tocar el reproductor.
@@ -484,7 +485,7 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, synci
                     <div className="mm__fill" style={{ width: `${Math.max(2, mmPct)}%` }} />
                   </div>
                   <div className="mm__row">
-                    <span className="u-metric">{Math.round(mmPct)}%</span>
+                    <span className="u-metric">{withPercent(Math.round(mmPct))}</span>
                     <span className="u-meta">{t("reading the minimap, about two minutes")}</span>
                     <Button size="sm" className="imt__stop" onClick={pararMinimapa}>
                       {t("Stop")}
@@ -498,7 +499,7 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, synci
                   </p>
                   <Button variant="primary" size="sm" className="imt__videoBtn" onClick={empezarMinimapa}>
                     {mmStatus.saved_progress
-                      ? `${t("Resume analysis")} (${Math.round(mmStatus.saved_progress)}%)`
+                      ? `${t("Resume analysis")} (${withPercent(Math.round(mmStatus.saved_progress))})`
                       : t("Analyze the video")}
                   </Button>
                 </>

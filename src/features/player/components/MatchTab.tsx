@@ -15,13 +15,13 @@ import { DeathsSection } from "./DeathsSection";
 import { HitsTaken } from "./HitsTaken";
 import { AimSection } from "./AimSection";
 import { GoldPurchases } from "./GoldPurchases";
-import { InspSection } from "./InspSection";
 import { InspNotice, SyncNotice } from "./InspNotice";
 import { BenchmarkWidget } from "./BenchmarkWidget";
 import { JungleMoves } from "./JungleMoves";
 import { MatchSummary, type BlockId } from "./MatchSummary";
 import type { OpenMap } from "../mapFocus";
 import { formatGold } from "./pressureFormat";
+import { formatThousands } from "../../../core/benchmarkFormat";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -111,10 +111,12 @@ export const MatchTab: React.FC<MatchTabProps> = ({
   ];
   const ids = secciones.map((s) => s.id);
 
-  // Un bloque abierto como mucho. Si el recordado no existe en esta partida
-  // (la jungla de un mid), el primero.
+  // Un bloque a la vista, siempre: la barra de arriba elige cuál. Antes había
+  // además un acordeón con las mismas cinco cabeceras justo debajo de la barra:
+  // dos controles para lo mismo. Si el recordado no existe en esta partida (la
+  // jungla de un mid), el primero.
   const [abiertoPedido, setAbiertoPedido] = useState<SeccionId | null>(abiertoEnLaSesion);
-  const abierto = abiertoPedido === null ? null : ids.includes(abiertoPedido) ? abiertoPedido : ids[0] ?? null;
+  const abierto = abiertoPedido !== null && ids.includes(abiertoPedido) ? abiertoPedido : ids[0] ?? null;
 
   // Abrir un bloque lo trae a la vista. `n` hace que pedir dos veces el
   // mismo funcione; `block` dice cuánto: una frase del resumen o un ancla lo
@@ -126,21 +128,24 @@ export const MatchTab: React.FC<MatchTabProps> = ({
     setAbiertoPedido(id);
     setALaVista((r) => ({ id, n: (r?.n ?? 0) + 1, block }));
   }, []);
-  const alternar = (id: SeccionId) => {
-    if (abierto === id) {
-      abiertoEnLaSesion = null;
-      setAbiertoPedido(null);
-    } else {
-      abrir(id, "nearest");
-    }
-  };
   useEffect(() => {
     if (!aLaVista) return;
     // Se espera a pintarlo abierto: desplazarse antes apunta al bloque
     // plegado, y lo que se abre o se cierra encima lo mueve.
     const raf = requestAnimationFrame(() => {
       const quieto = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      document.getElementById(aLaVista.id)?.scrollIntoView({ block: aLaVista.block, behavior: quieto ? "auto" : "smooth" });
+      const el = document.getElementById(aLaVista.id);
+      if (!el) return;
+      const behavior: ScrollBehavior = quieto ? "auto" : "smooth";
+      if (aLaVista.block === "nearest") {
+        // Una pestaña de la barra: solo si el bloque empieza por encima de lo
+        // que se ve (bajo la barra fija). Arriba del todo no hay que moverse.
+        const barra = el.closest(".insp")?.querySelector(".mt-anchors");
+        if (el.getBoundingClientRect().top >= (barra?.getBoundingClientRect().bottom ?? 0)) return;
+        el.scrollIntoView({ block: "start", behavior });
+      } else {
+        el.scrollIntoView({ block: aLaVista.block, behavior });
+      }
     });
     return () => cancelAnimationFrame(raf);
   }, [aLaVista]);
@@ -151,13 +156,14 @@ export const MatchTab: React.FC<MatchTabProps> = ({
   const hasCurve = !!match.minute_frames && match.minute_frames.length > 1;
   const has15 = match.gold_diff_15 != null || match.xp_diff_15 != null || match.jungle_cs_diff_15 != null;
 
+  // Solo se pinta el bloque elegido; lo nombra su pestaña (aria-labelledby).
   const seccion = (id: SeccionId, children: React.ReactNode) => {
     const s = secciones.find((x) => x.id === id);
-    if (!s) return null;
+    if (!s || abierto !== id) return null;
     return (
-      <InspSection id={id} title={s.title} open={abierto === id} onToggle={() => alternar(id)}>
+      <section id={id} className="mt-sec" role="tabpanel" aria-labelledby={`${id}-tab`}>
         {children}
-      </InspSection>
+      </section>
     );
   };
 
@@ -186,19 +192,23 @@ export const MatchTab: React.FC<MatchTabProps> = ({
       {/* Las anclas: fijas arriba al desplazarse, con el bloque abierto
           marcado. Pulsar una abre su bloque y lo trae. */}
       {secciones.length > 1 && (
-        <nav className="mt-anchors" aria-label={t("Game sections")}>
+        <div className="mt-anchors" role="tablist" aria-label={t("Game sections")}>
           {secciones.map((s) => (
             <button
               key={s.id}
+              id={`${s.id}-tab`}
               type="button"
+              role="tab"
               className="mt-anchor"
+              aria-selected={abierto === s.id}
+              aria-controls={s.id}
               aria-current={abierto === s.id || undefined}
-              onClick={() => abrir(s.id, "start")}
+              onClick={() => abrir(s.id, "nearest")}
             >
               {s.anchor}
             </button>
           ))}
-        </nav>
+        </div>
       )}
 
       <div className="mt-blocks">
@@ -380,7 +390,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
                       </span>
                       <span className="u-metric vp-sb__kda">{p.kills}/{p.deaths}/{p.assists}</span>
                       <span className="u-metric vp-sb__num">{p.cs}</span>
-                      <span className="u-metric vp-sb__num">{(p.gold / 1000).toFixed(1)}k</span>
+                      <span className="u-metric vp-sb__num">{formatThousands(p.gold)}</span>
                     </div>
                   );
                 })}

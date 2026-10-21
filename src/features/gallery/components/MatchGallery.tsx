@@ -39,6 +39,7 @@ import { Segmented } from "../../../components/ui/Segmented";
 import { Select } from "../../../components/ui/Select";
 import { Skeleton } from "../../../components/ui/Skeleton";
 import "./MatchGallery.css";
+import { withPercent } from "../../../core/benchmarkFormat";
 
 interface DiskSpaceInfo {
   used_bytes: number;
@@ -589,7 +590,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           )}
           <span
             className={`lib-disk${diskTight ? " lib-disk--tight" : ""}`}
-            title={`${t("Disk")}: ${usedGb} ${t("of")} ${totalGb} GB · ${pct === null ? "—" : `${pct} %`}`}
+            title={`${t("Disk")}: ${usedGb} ${t("of")} ${totalGb} GB · ${pct === null ? "—" : withPercent(pct)}`}
           >
             {/* Sin partidas, «0 GB en grabaciones» no dice nada: solo el hueco. */}
             {!vacia && t("{n} GB in recordings", { n: usedGb })}

@@ -104,10 +104,23 @@ export const formatDecimal = (value: number, digits = 1): string =>
     maximumFractionDigits: digits,
   });
 
+/**
+ * Una cifra con su %: «50 %» en español (espacio duro, como hace `translate`)
+ * y «50%» en inglés. Para las cifras que se pintan sin pasar por `t()`.
+ */
+export const withPercent = (n: string | number): string =>
+  `${n}${document.documentElement.lang === "en" ? "%" : " %"}`;
+
+/**
+ * Miles abreviados en el idioma de la interfaz: «9,2k» en español, «9.2k» en
+ * inglés. El marcador escribía «9.2k» con punto también en español.
+ */
+export const formatThousands = (value: number, digits = 1): string => `${formatDecimal(value / 1000, digits)}k`;
+
 export const formatMetricValue = (metric: string, value: number): string => {
   switch (METRIC_META[metric]?.fmt ?? "rate1") {
     case "pct":
-      return `${Math.round(value * 100)}%`;
+      return withPercent(Math.round(value * 100));
     case "diff":
       // El signo se enseña siempre: un "@15" sin signo no se puede leer.
       return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(Math.round(value))}`;

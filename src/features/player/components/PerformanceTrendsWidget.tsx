@@ -6,6 +6,7 @@ import { useMatches } from "../../../store/useAppStore";
 import { useT } from "../../../core/LanguageProvider";
 import { wstyles } from "./videoPlayerStyles";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 interface PerformanceTrendsWidgetProps {
   currentMatch: MatchMetadata;
 }
@@ -149,9 +150,9 @@ export const PerformanceTrendsWidget: React.FC<PerformanceTrendsWidgetProps> = (
         {gankNow != null && (
           <Trend
             label={t("Gank pressure")}
-            value={`${gankNow}%`}
+            value={withPercent(gankNow)}
             tone="var(--brand)"
-            avg={avgGank !== null ? t("avg {v}", { v: `${avgGank}%` }) : null}
+            avg={avgGank !== null ? t("avg {v}", { v: withPercent(avgGank) }) : null}
             delta={avgGank !== null ? Math.round((gankNow - avgGank) * 10) / 10 : null}
             deltaText={(d) =>
               d === 0 ? t("same as your average") : t("{v}% vs your average", { v: signo(d) })

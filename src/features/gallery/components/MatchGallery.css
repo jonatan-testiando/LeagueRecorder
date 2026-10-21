@@ -19,12 +19,14 @@
 .lib {
   /* Columnas de la fila (Figma, Componentes · «Fila de partida»). El nombre
      cede primero; las cifras tienen su ancho fijo para quedar en columna. */
-  --lib-name-max: 360px;
+  /* 320 y no 360: con el rival a 88 px se cortaba «Gangpla…» mientras el
+     nombre de la partida dejaba 300 px vacíos. */
+  --lib-name-max: 320px;
   --lib-col-gap: var(--space-2);
   --lib-row-pad: var(--space-3);
   /* Barra · retrato · partida · resultado · KDA · CS · rival · impacto ·
      revisión: nueve columnas y ocho huecos de 8. */
-  --lib-cols: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px 68px 60px 88px 60px 24px;
+  --lib-cols: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px 68px 60px 116px 60px 24px;
 
   display: flex;
   flex-direction: column;
@@ -210,7 +212,7 @@
    cede su sitio. */
 .lib-card {
   flex: 0 1 calc(
-    var(--result-bar) + 36px + var(--lib-name-max) + 72px + 68px + 60px + 88px + 60px + 24px +
+    var(--result-bar) + 36px + var(--lib-name-max) + 72px + 68px + 60px + 116px + 60px + 24px +
     8 * var(--lib-col-gap) + var(--lib-row-pad) + 6px + 2 * var(--space-2)
   );
   min-width: 0;

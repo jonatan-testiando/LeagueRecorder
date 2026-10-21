@@ -202,8 +202,15 @@ export const HitsTaken: React.FC<Props> = ({ matchId, onOpenMap }) => {
             <span className="u-label">{t("What opened them")}</span>
             <span className="ht-effects">
               {r.effects.slice(0, EFECTOS_VISIBLES).map((c) => (
-                <span key={c.effect.icon} className="ht-effect" title={c.effect.icon}>
-                  {c.icon_url && <img src={c.icon_url} alt="" />}
+                // Sin icono, la tecla en su hueco: si no, solo los efectos con
+                // icono llevaban algo delante y la fila parecía a medias. El
+                // title era el nombre interno del icono; fuera.
+                <span key={c.effect.icon} className="ht-effect">
+                  {c.icon_url ? (
+                    <img src={c.icon_url} alt="" />
+                  ) : (
+                    <span className="ht-effect__key" aria-hidden="true">{c.effect.ability ?? "·"}</span>
+                  )}
                   {effectLabel(c.effect, t)} ×{c.times}
                 </span>
               ))}

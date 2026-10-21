@@ -7,13 +7,14 @@ import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./WavesSection.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Las tres reglas de macro de `oleadas.rs` sobre tus últimas partidas: cuántas
  * veces las cumpliste y qué pasó cuando sí y cuando no. La comparación es lo
  * que dice si la regla te importa a ti, no sólo a las guías.
  */
 
-const pct = (n: number, d: number) => (d > 0 ? `${Math.round((100 * n) / d)}%` : "—");
+const pct = (n: number, d: number) => (d > 0 ? withPercent(Math.round((100 * n) / d)) : "—");
 
 export const WavesCareer: React.FC = () => {
   const t = useT();

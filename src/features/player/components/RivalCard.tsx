@@ -10,6 +10,7 @@ import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
 import { Segmented } from "../../../components/ui/Segmented";
 import "./RivalCard.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Tú contra tu rival directo: el del otro equipo con tu mismo puesto.
  *
@@ -133,8 +134,8 @@ export const RivalCard: React.FC<RivalCardProps> = ({
   if (kpMe !== null && kpThem !== null) {
     rows.push({
       label: t("Kill participation"),
-      me: `${Math.round(kpMe * 100)}%`,
-      them: `${Math.round(kpThem * 100)}%`,
+      me: withPercent(Math.round(kpMe * 100)),
+      them: withPercent(Math.round(kpThem * 100)),
       cmp: Math.round(kpMe * 100) - Math.round(kpThem * 100),
     });
   }

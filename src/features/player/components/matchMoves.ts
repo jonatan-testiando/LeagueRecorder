@@ -5,6 +5,7 @@ import {
   getWaves,
   JUNGLE_AGREEMENT_MIN,
   type JungleRoute,
+  type JungleRouteGame,
   type LanePush,
   type WavesReport,
 } from "../../../core/tauri-ipc";
@@ -146,6 +147,27 @@ export const useWaves = (matchId: string | null) =>
   useCachedLocal<WavesReport>(matchId && `waves:${matchId}`, () => getWaves(matchId as string));
 
 /**
+ * Las rutas de jungla de todas tus partidas, una vez por sesión. El backend
+ * las recorre todas en cada llamada (unos 4 s medidos en la build de
+ * depuración) y las pedían la mediana del primer clear de CADA partida que
+ * abrías y Patrones: «Lo que decidió la partida» se quedaba en esqueleto ese
+ * rato. Si falla se olvida, para reintentar la próxima vez.
+ */
+let rutasSesion: Promise<JungleRouteGame[]> | null = null;
+export function jungleRoutesOnce(): Promise<JungleRouteGame[]> {
+  if (!rutasSesion) {
+    rutasSesion = getJungleRoutes().then(
+      (r) => r ?? [],
+      (e) => {
+        rutasSesion = null;
+        throw e;
+      }
+    );
+  }
+  return rutasSesion;
+}
+
+/**
  * Tu primer clear de siempre: la mediana de tus OTRAS partidas con la vuelta
  * completa y la ruta fiable. Con menos de tres no hay referencia (`null`).
  */
@@ -153,7 +175,7 @@ export const useFirstClearMedian = (matchId: string | null): number | null | und
   // Si falla da `null`, igual que "sin referencia": la mediana es un extra y
   // no puede tumbar lo demás.
   useCachedLocal<number | null>(matchId && `fcmedian:${matchId}`, () =>
-    getJungleRoutes().then((rs) => {
+    jungleRoutesOnce().then((rs) => {
       const fc = rs
         .filter((g) => g.match_id !== matchId && g.route.full_clear && g.route.agreement >= JUNGLE_AGREEMENT_MIN)
         .map((g) => g.route.first_clear_end as number)

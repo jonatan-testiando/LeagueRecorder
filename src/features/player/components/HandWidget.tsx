@@ -5,6 +5,7 @@ import { useT } from "../../../core/LanguageProvider";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { wstyles } from "./videoPlayerStyles";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * La geometría de tus clics de movimiento.
  *
@@ -198,12 +199,12 @@ export const HandWidget: React.FC<HandWidgetProps> = ({ matchId }) => {
         <div style={wstyles.statBox}>
           <span className="u-label">{t("Median click radius")}</span>
           <span style={wstyles.statValue}>{Math.round(report.ring_px_p50)} px</span>
-          <span className="note">{Math.round(report.ring_pct_p50 * 100)}% {t("of screen height")}</span>
+          <span className="note">{withPercent(Math.round(report.ring_pct_p50 * 100))} {t("of screen height")}</span>
         </div>
         <div style={wstyles.statBox}>
           <span className="u-label">{t("Short clicks")}</span>
           <span style={{ ...wstyles.statValue, color: cortoPct > 35 ? "var(--loss)" : "var(--text)" }}>
-            {cortoPct}%
+            {withPercent(cortoPct)}
           </span>
           <span className="note">{t("under {pct}% of height", { pct: Math.round(RADIO_CORTO * 100) })}</span>
         </div>

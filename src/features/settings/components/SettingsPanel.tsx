@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
-import { formatDecimal } from "../../../core/benchmarkFormat";
+import { formatDecimal, withPercent } from "../../../core/benchmarkFormat";
 import { queueKey } from "../../../core/matchStats";
 // La lista de regiones se comparte con el asistente de primer arranque.
 import { RIOT_PLATFORMS, platformLabel } from "../../../core/riotRegions";
@@ -395,7 +395,7 @@ export const SettingsPanel: React.FC = () => {
     const stopProgress = onUpdateProgress(({ percent }) => {
       setIsDownloading(percent < 100);
       setDownloadProgress(percent);
-      setUpdateMsg(`${t("Downloading…")} ${percent}%`);
+      setUpdateMsg(`${t("Downloading…")} ${withPercent(percent)}`);
     });
     const stopReady = onUpdateReady((u) => {
       setIsDownloading(false);
@@ -804,13 +804,9 @@ export const SettingsPanel: React.FC = () => {
       <DiagStrip
         label={t("Diagnostics")}
         cells={[
+          // El sonido del juego no va aquí: su fila, dos bloques más abajo, ya
+          // lo dice (y en rojo si falta) con su «Volver a detectar».
           { label: t("Encoder"), tone: recorderKnown ? "ok" : "bad", value: ENCODER_LABEL },
-          {
-            label: t("Game sound"),
-            tone: audioReady ? "ok" : "bad",
-            value: audioLabel,
-            title: audio?.system_audio_device ?? undefined,
-          },
         ]}
         action={quickTestButton}
         note={(statusMsg || maint) && [statusMsg, maintText].filter(Boolean).join(" · ")}
@@ -1257,7 +1253,7 @@ export const SettingsPanel: React.FC = () => {
         {isDownloading ? (
           <div className="upd">
             <span className="upd__track"><span className="upd__fill" style={{ "--p": downloadProgress / 100 } as React.CSSProperties} /></span>
-            <span className="u-metric stg-upd-pct">{downloadProgress}%</span>
+            <span className="u-metric stg-upd-pct">{withPercent(downloadProgress)}</span>
           </div>
         ) : pending ? (
           <button onClick={installUpdate} className="btn btn--ghost btn--sm">
@@ -1350,12 +1346,9 @@ export const SettingsPanel: React.FC = () => {
         </Button>
       </div>
 
+      {/* Solo la lista: la fuente que se graba ya se elige y se ve en Grabación
+          (antes salía tres veces entre las dos categorías). */}
       <section className="card stg-card">
-        <Row label={t("Game sound")} desc={t("Source recorded alongside the video. If the test has no sound, detect again.")}>
-          <span className="stg-field" data-tone={audioReady ? undefined : "bad"} title={audio?.system_audio_device ?? undefined}>
-            <span>{audioLabel}</span>
-          </span>
-        </Row>
         <div className="stg-row">
           {audio && audio.all_devices.length > 0 ? (
             <ul className="stg-list stg-row__full">
@@ -1419,7 +1412,7 @@ export const SettingsPanel: React.FC = () => {
                   // El aviso de disco que antes llevaba la tira de estado: el
                   // hueco libre ya está en la barra de título, pero que la cuota
                   // o el disco van justos se señala donde se arregla.
-                  <span className="stg-nav__meta" {...(diskBad ? { "data-tone": "bad" } : {})}>{diskPct} %</span>
+                  <span className="stg-nav__meta" {...(diskBad ? { "data-tone": "bad" } : {})}>{withPercent(diskPct)}</span>
                 )}
                 {/* El tema que hay puesto, para no tener que entrar a mirarlo. */}
                 {c.key === "appearance" && themeLabel && (

@@ -1,7 +1,7 @@
 import React from "react";
 import { useT } from "../../../core/LanguageProvider";
 import type { DiskSpaceInfo } from "../../../core/tauri-ipc";
-import { formatDecimal } from "../../../core/benchmarkFormat";
+import { formatDecimal, withPercent } from "../../../core/benchmarkFormat";
 
 const GB = 1024 ** 3;
 // Con la coma del idioma, como el resto de cifras («12,4 GB»).
@@ -43,7 +43,7 @@ export const DiskMeter: React.FC<{ disk: DiskSpaceInfo | null }> = ({ disk }) =>
             total: gb(disk.total_bytes, 0),
           })}
         </span>
-        <span className="stg-disk__label">{pct}%</span>
+        <span className="stg-disk__label">{withPercent(pct)}</span>
       </div>
 
       {/* La pista es la de la barra de descarga; `.stg-disk__track` le quita el

@@ -18,6 +18,19 @@
   color: var(--text);
 }
 .ht-effect img { width: 18px; height: 18px; border-radius: 4px; }
+.ht-effect__key {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+}
 .ht-more { align-self: flex-start; }
 
 /* Sin el HUD leído: el aviso con su botón, y la barra mientras se lee. */

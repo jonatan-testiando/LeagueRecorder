@@ -8,6 +8,7 @@ import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./HitsTaken.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * "Golpes que te comes" sobre tus últimas partidas con el HUD leído: la cifra
  * que contesta "¿qué tan bien esquivo?" con lo que sí se puede medir (ver
@@ -41,13 +42,13 @@ export const HitsCareer: React.FC = () => {
   const porPartida = r.openers / r.matches;
   const filas: [string, string, string][] = [
     [t("Fights started on you"), porPartida.toFixed(1), t("per game")],
-    [t("In a straight line"), `${pct(r.straight, r.straight_known)}%`, t("of the first hits")],
-    [t("From the fog"), `${pct(r.from_fog, r.openers)}%`, t("no enemy visible in the 4 s before")],
-    [t("Ended in your death"), `${pct(r.died, r.openers)}%`, t("of those fights")],
+    [t("In a straight line"), withPercent(pct(r.straight, r.straight_known)), t("of the first hits")],
+    [t("From the fog"), withPercent(pct(r.from_fog, r.openers)), t("no enemy visible in the 4 s before")],
+    [t("Ended in your death"), withPercent(pct(r.died, r.openers)), t("of those fights")],
   ];
   if (r.line_known > 0) {
-    filas.push([t("Moving sideways"), `${pct(r.line_lateral, r.line_known)}%`, t("at random it would be ~67%")]);
-    filas.push([t("Fleeing along their line"), `${pct(r.line_away, r.line_known)}%`, t("the easiest to hit")]);
+    filas.push([t("Moving sideways"), withPercent(pct(r.line_lateral, r.line_known)), t("at random it would be ~67%")]);
+    filas.push([t("Fleeing along their line"), withPercent(pct(r.line_away, r.line_known)), t("the easiest to hit")]);
   }
   if (r.matches_with_keys > 0 && r.reaction_p50 != null) {
     filas.push([t("Reaction"), t("{s} s", { s: r.reaction_p50.toFixed(2) }), t("{n} of {m} with a key", { n: r.reaction_n, m: r.reaction_known })]);

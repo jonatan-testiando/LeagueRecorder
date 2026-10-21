@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { CircleCheck, Crosshair, EyeOff, Flag, Magnet, Play, Skull, Swords } from "lucide-react";
 import { clock } from "../../../core/time";
+import { streamUrl } from "../../../core/media";
 import { useLang } from "../../../core/LanguageProvider";
 import { Chip } from "../../../components/ui/Chip";
 import { eventMeta } from "../../player/components/eventMeta";
@@ -27,8 +28,16 @@ export const MomentCard: React.FC<{
   onPlay: () => void;
   /** Posición en la entrada escalonada de la primera visita. */
   index?: number;
-}> = ({ moment: m, wp, onPlay, index }) => {
+  /**
+   * El vídeo de la partida: la vista previa enseña el fotograma del momento
+   * (`m.time` va en segundos de vídeo), como el póster de Clips. Sin él, o si
+   * el fichero falta, queda el escenario teñido.
+   */
+  videoPath?: string | null;
+}> = ({ moment: m, wp, onPlay, index, videoPath }) => {
   const { t, lang } = useLang();
+  const [frameReady, setFrameReady] = useState(false);
+  const [frameFailed, setFrameFailed] = useState(false);
 
   const verdict = (v: MomentVerdict) => {
     switch (v) {
@@ -73,7 +82,21 @@ export const MomentCard: React.FC<{
       style={index != null ? ({ "--i": index } as React.CSSProperties) : undefined}
       aria-label={[clock(m.time), m.title, delta ? t("{n}% win chance", { n: delta }) : verdict(m.verdict)].join(" · ")}
     >
-      <span className="home-mo__thumb stage-dark" aria-hidden="true">
+      <span className="home-mo__thumb stage-dark" aria-hidden="true" data-frame={frameReady || undefined}>
+        {videoPath && !frameFailed && (
+          // Mudo, sin controles y con #t= en la URL: pinta ese fotograma con
+          // solo pedir los metadatos, sin miniaturas generadas en el backend.
+          <video
+            className="home-mo__frame"
+            src={`${streamUrl(videoPath)}#t=${Math.max(0.1, m.time).toFixed(1)}`}
+            preload="metadata"
+            muted
+            playsInline
+            tabIndex={-1}
+            onLoadedData={() => setFrameReady(true)}
+            onError={() => setFrameFailed(true)}
+          />
+        )}
         <span className="home-mo__kind">
           {glyph}
           <span className="t-label home-mo__caption">{tipo}</span>

@@ -16,6 +16,7 @@ import { Button } from "../../../components/ui/Button";
 import { Chip, type ChipTone } from "../../../components/ui/Chip";
 import { SkeletonLines } from "../../../components/ui/Skeleton";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * «Tu foco», del Coach: el resumen que Patrones enseña del plan de 10 partidas
  * (rediseño «Ritmo», fase 3d). Antes esta tarjeta era «el bloque de cinco
@@ -71,7 +72,7 @@ export function coachFocusTramo(view: CoachFocusView): number | null {
 }
 
 /** «2,1%»: probabilidad de victoria (0-1) en puntos, como en Hoy y en el Coach. */
-const pct = (x: number, lang: string): string => `${wpPoints(x, lang)}%`;
+const pct = (x: number, lang: string): string => withPercent(wpPoints(x, lang));
 
 /** «−1,2» / «+0,8»: un extremo del intervalo, siempre con signo. */
 const signed = (x: number, lang: string): string => `${x < 0 ? "−" : "+"}${wpPoints(x, lang)}`;
@@ -180,10 +181,13 @@ export const CoachFocusCard: React.FC<{ view: CoachFocusView; onOpenCoach: () =>
           {focusTitle(row, t)}
         </p>
         <dl className="pp-kpis" title={t("Win chance it costs you per game")}>
-          <Kpi label={t("You")} value={pct(row.user, lang)} detail={t("per game")} />
+          {/* «Tú» y «Tu media» eran las dos cifras tuyas y no se sabía cuál era
+              cuál: la primera es lo que te cuesta ahora este foco; la segunda,
+              lo que costaría con tu tasa de siempre (o en tu rango). */}
+          <Kpi label={t("It costs you")} value={pct(row.user, lang)} detail={t("per game")} />
           {row.base != null && (
             <Kpi
-              label={propia ? t("Your usual rate") : t("Your rank")}
+              label={propia ? t("At your usual rate") : t("In your rank")}
               value={pct(row.base, lang)}
               detail={t("per game")}
             />

@@ -11,7 +11,7 @@ import { Button } from "../../../components/ui/Button";
 import { Chip, type ChipTone } from "../../../components/ui/Chip";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Skeleton } from "../../../components/ui/Skeleton";
-import { bandLabel } from "../../../core/benchmarkFormat";
+import { bandLabel, withPercent } from "../../../core/benchmarkFormat";
 import { confidenceOf, sampleLabel } from "../../../core/patterns";
 import {
   categoryHelp,
@@ -65,6 +65,20 @@ function signedPoints(x: number, lang: string): string {
   const s = wpPoints(x, lang);
   if (Math.abs(x) * 100 < 0.05) return s;
   return `${x > 0 ? "+" : "−"}${s}`;
+}
+
+/** Lo que te cuesta una categoría: «−9,4 %», y «0 %» si no llega a una décima (no «−0,0 %»). */
+function lossText(x: number, lang: string): string {
+  return Math.abs(x) * 100 < 0.05 ? withPercent(0) : `−${withPercent(wpPoints(x, lang))}`;
+}
+
+/**
+ * Frente al baremo, en palabras: «5,6 peor», «5,5 mejor». Con signo («+5,6» en
+ * rojo junto a un «−9,4 %») el «+» se leía como algo bueno.
+ */
+function excessText(x: number, t: (k: string, v?: Record<string, string | number>) => string, lang: string): string {
+  if (Math.abs(x) * 100 < 0.05) return t("≈ baseline");
+  return t(x > 0 ? "{p} worse" : "{p} better", { p: wpPoints(x, lang) });
 }
 
 /** "17 oct" / "Oct 17". */
@@ -789,9 +803,12 @@ const Categories: React.FC<{ summary: CoachSummary | null; focus: CoachCategory 
                   />
                   {r.base != null && <i className="coach-cat__base" style={{ left: `${(r.base / max) * 100}%` }} />}
                 </div>
-                <span className={`t-body coach-cat__user${over ? " coach-loss" : ""}`}>−{wpPoints(r.user, lang)}%</span>
-                <span className={`t-small coach-cat__excess ${over ? "coach-loss" : "coach-win"}`}>
-                  {r.excess != null ? signedPoints(r.excess, lang) : "—"}
+                <span className={`t-body coach-cat__user${over ? " coach-loss" : ""}`}>{lossText(r.user, lang)}</span>
+                <span
+                  className={`t-small coach-cat__excess ${r.excess == null || Math.abs(r.excess) * 100 < 0.05 ? "coach-faint" : over ? "coach-loss" : "coach-win"}`}
+                  title={r.excess != null ? t("Against the baseline, in points of win chance per game") : undefined}
+                >
+                  {r.excess != null ? excessText(r.excess, t, lang) : "—"}
                 </span>
               </li>
             );
@@ -805,7 +822,15 @@ const Categories: React.FC<{ summary: CoachSummary | null; focus: CoachCategory 
 /** Percentil = la convención de RankBenchmarkCard: verde arriba, rojo abajo. */
 const pctTone = (p: number | null) => (p == null ? "coach-faint" : p >= 70 ? "coach-win" : p < 30 ? "coach-loss" : "coach-muted");
 
-/** Tu nota por tramo: tu impacto en victoria frente a tu rol y franja. */
+/**
+ * Tu nota por tramo: tu impacto en victoria frente a tu rol y franja.
+ *
+ * Las barras salen de la mediana (percentil 50) hacia arriba o hacia abajo.
+ * Medidas desde cero, unos percentiles de 44 a 59 daban barras de 28 a 38 px
+ * que se leían planas. El tramo del foco se marca en la etiqueta y no tiñendo
+ * la barra: el foco es la categoría que más te cuesta DENTRO de ese tramo, y
+ * una barra dorada en tu mejor tramo se leía como «aquí vas bien».
+ */
 const Tramos: React.FC<{ summary: CoachSummary | null; focusTramo: number | null }> = ({ summary, focusTramo }) => {
   const t = useLang().t;
   const tramos = summary?.tramos ?? [];
@@ -815,7 +840,7 @@ const Tramos: React.FC<{ summary: CoachSummary | null; focusTramo: number | null
         <span id="coach-tramos-title" className="t-label coach-faint">
           {t("Your grade by stretch")}
         </span>
-        <span className="t-label coach-faint">{t("percentile in your rank")}</span>
+        <span className="t-label coach-faint">{t("percentile in your rank · line = median")}</span>
       </header>
       {tramos.length === 0 ? (
         <p className="t-small coach-muted">{t("Couldn't work this out this time. It retries on the next game.")}</p>
@@ -824,19 +849,30 @@ const Tramos: React.FC<{ summary: CoachSummary | null; focusTramo: number | null
           {tramos.map((tr) => {
             const pct = tr.percentile == null ? null : Math.round(tr.percentile);
             const hot = tr.tramo === focusTramo;
+            // ±25 puntos (un cuartil) llenan la columna: a ±50, los tramos
+            // reales (44-59) daban bultos de 4-7 px que no se veían.
+            const d = pct == null ? 0 : Math.max(-1, Math.min(1, (pct - 50) / 25));
             return (
               <div
                 key={tr.tramo}
                 className={`coach-tramo${hot ? " coach-tramo--hot" : ""}`}
-                title={t("{n} games", { n: tr.games })}
+                title={hot ? t("{n} games · your focus is in this stretch", { n: tr.games }) : t("{n} games", { n: tr.games })}
               >
-                <span className={`t-small coach-tramo__pct ${hot ? "coach-brand" : pctTone(pct)}`}>{pct ?? "—"}</span>
-                <i className="coach-tramo__bar" style={{ "--p": (pct ?? 0) / 100 } as React.CSSProperties} />
+                <span className={`t-small coach-tramo__pct ${pctTone(pct)}`}>{pct ?? "—"}</span>
+                <span className="coach-tramo__plot">
+                  <i
+                    className={`coach-tramo__bar ${d >= 0 ? "coach-tramo__bar--up" : "coach-tramo__bar--down"}`}
+                    style={{ "--d": Math.abs(d) } as React.CSSProperties}
+                  />
+                </span>
                 <span className={`t-label coach-tramo__label ${hot ? "coach-brand" : "coach-faint"}`}>{tramoShort(tr.tramo)}</span>
               </div>
             );
           })}
         </div>
+      )}
+      {focusTramo != null && tramos.some((tr) => tr.tramo === focusTramo) && (
+        <p className="t-small coach-faint coach-tramos__note">{t("Underlined: the stretch of your focus.")}</p>
       )}
     </section>
   );

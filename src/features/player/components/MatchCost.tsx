@@ -16,6 +16,7 @@ import { costText, deathFocus, deathParts, deathTitle, useDeathRows, type DeathR
 import { formatSigned } from "./pressureFormat";
 import "./ImpactTab.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * «Lo que te costó esta partida», arriba de Impacto (plan 4.4).
  *
@@ -243,7 +244,7 @@ export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, on
       elegidas.map((j) => ({
         matchId: match.id,
         time: j.fila.tVideo,
-        label: `${j.titulo} · ${formatSigned(-j.coste * 100)}%`,
+        label: `${j.titulo} · ${withPercent(formatSigned(-j.coste * 100))}`,
       }))
     );
 
@@ -270,7 +271,7 @@ export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, on
           <span className="imc__line">
             <span className="imc__time u-time">{mmss(Math.max(0, j.fila.tGame))}</span>
             <span className="imc__name">{j.titulo}</span>
-            <Chip tone="loss">{formatSigned(-j.coste * 100)}%</Chip>
+            <Chip tone="loss">{withPercent(formatSigned(-j.coste * 100))}</Chip>
           </span>
           {j.cats.length > 0 && (
             <span className="imc__tags">

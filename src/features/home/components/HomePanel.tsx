@@ -21,8 +21,6 @@ import {
   coachPlaylist,
   focusTitle,
   focusWhy,
-  isOwnBaseline,
-  liftText,
   planCounted,
   planErrorText,
   planIsRow,
@@ -67,6 +65,7 @@ import {
   rankText,
 } from "../format";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Hoy: la sala post-partida.
  *
@@ -543,7 +542,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const barrasMax = Math.max(1e-9, ...barras.map((r) => r.user));
   const altura = (x: number) => Math.max(0, Math.min(1, x / barrasMax));
   const listaFoco = focus ? coachPlaylist(focus, t, lang) : [];
-  const lift = focus ? liftText(focus, t, lang) : null;
   const verFoco = () => {
     if (!focus || listaFoco.length === 0) return;
     startPlaylist(focusTitle(focus, t), listaFoco);
@@ -800,6 +798,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                         wp={momentWp(m, plays, offset, yo?.team_id)}
                         index={i + 1}
                         onPlay={() => abrirEn(ultima, m.time)}
+                        videoPath={ultima.video_path || null}
                       />
                     ))}
                   </div>
@@ -927,13 +926,10 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                       <span className="t-card home-focus__title" title={categoryHelp(focus.category, t)}>
                         {focusTitle(focus, t)}
                       </span>
+                      {/* Una línea: lo que te cuesta. El porqué (la tasa antes de
+                          morir, de dónde sale el baremo) está entero en el Coach;
+                          aquí eran cuatro párrafos en una columna estrecha. */}
                       <span className="t-small home-focus__why">{focusWhy(focus, coach, t, lang)}</span>
-                      {lift && <span className="t-small home-focus__why">{lift}</span>}
-                      {isOwnBaseline(focus) && (
-                        <span className="t-small home-focus__note">
-                          {t("Riot's data can't see this, so the baseline is your own average, not your rank's.")}
-                        </span>
-                      )}
                     </div>
                     {barras.length > 0 && (
                       <div
@@ -1116,7 +1112,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                     <div>
                       <dt>{t("Win rate")}</dt>
                       <dd>
-                        {Math.round(trend.wr * 100)} %
+                        {withPercent(Math.round(trend.wr * 100))}
                         {trendDelta != null && (
                           <span className={trendDelta >= 0 ? "home-win" : "home-loss"}>
                             {" "}
@@ -1148,7 +1144,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                           >
                             <ChampionAvatar champion={p.champion} size={20} />
                             {mmss(p.time)}
-                            <span className="home-chip__meta">−{wpPoints(p.lost, lang)}%</span>
+                            <span className="home-chip__meta">−{withPercent(wpPoints(p.lost, lang))}</span>
                           </button>
                         );
                       })}

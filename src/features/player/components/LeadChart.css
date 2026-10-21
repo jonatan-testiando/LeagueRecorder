@@ -78,9 +78,10 @@
 }
 .lc-tick--top { top: 0; }
 .lc-tick--bottom { bottom: 0; }
-/* El 50 % a la derecha: al empezar la curva siempre está en el 50 %, y al
-   final casi nunca (la partida ya está decidida). */
-.lc-tick--mid { top: 50%; left: auto; right: 2px; transform: translateY(-130%); }
+/* La raya del 50 % se nombra en la cabecera y no dentro del gráfico: dentro,
+   la etiqueta acababa encima de la curva en las partidas que terminan cerca
+   del 50 %. */
+.lc-wp__legend { color: var(--faint); font-weight: 400; }
 
 /* El punto del cursor sobre la curva de diferencia. */
 .lc-dot {

@@ -14,6 +14,7 @@ import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
 import { Segmented } from "../../../components/ui/Segmented";
 import { useMatchPlays } from "../useMatchData";
 import "./LeadChart.css";
+import { withPercent } from "../../../core/benchmarkFormat";
 
 /**
  * La ventaja minuto a minuto, con modos (fila 3.2 de docs/coach-de-macro-diseno.md).
@@ -590,18 +591,20 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
         {wp && (
           <div className="lc-wp">
             <div className="lc-wp__head">
-              <span className="u-label">{t("Win probability")}</span>
+              <span className="u-label">
+                {t("Win probability")} <span className="lc-wp__legend">{t("· line = 50%")}</span>
+              </span>
               {hp ? (
                 <span className="lc-read">
                   {clock(hp.p.time)} · {nombreJugada(hp.p, data.players, t)}{" "}
                   <b className="u-metric" style={{ color: hp.delta >= 0 ? "var(--win)" : "var(--loss)" }}>
-                    {formatSigned(hp.delta * 100)} %
+                    {withPercent(formatSigned(hp.delta * 100))}
                   </b>
                 </span>
               ) : (
                 wpCursor !== null && (
                   <span className="lc-read">
-                    <b className="u-metric">{Math.round(wpCursor * 100)} %</b>
+                    <b className="u-metric">{withPercent(Math.round(wpCursor * 100))}</b>
                   </span>
                 )
               )}
@@ -635,7 +638,6 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
                   <line x1={x(hoverMin)} y1={0} x2={x(hoverMin)} y2={WH} className="lc-hover" vectorEffect="non-scaling-stroke" />
                 )}
               </svg>
-              <span className="lc-tick lc-tick--mid">50 %</span>
               {wp.dots.map((d) => {
                 // El tamaño dice cuánto movió; el aro claro, que estabas tú.
                 const r = Math.min(5, 2.5 + Math.abs(d.delta) * 30);
@@ -648,7 +650,7 @@ export const LeadChart: React.FC<LeadChartProps> = ({ matchId, videoTime, videoO
                     data-yours={d.yours || undefined}
                     data-on={hoverPlay === d.i || undefined}
                     style={{ left: pct(d.m), top: yWp(d.v), ["--r" as string]: `${r}px` }}
-                    aria-label={`${clock(d.p.time)} · ${nombreJugada(d.p, data.players, t)} · ${formatSigned(d.delta * 100)} %`}
+                    aria-label={`${clock(d.p.time)} · ${nombreJugada(d.p, data.players, t)} · ${withPercent(formatSigned(d.delta * 100))}`}
                     onPointerEnter={() => setHoverPlay(d.i)}
                     onPointerLeave={() => setHoverPlay(null)}
                     onFocus={() => setHoverPlay(d.i)}

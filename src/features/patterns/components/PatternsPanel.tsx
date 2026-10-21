@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { usePressureSummary } from "../../player/usePressureSummary";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { MatchEvent, MatchMetadata } from "../../../types";
 import {
   deathClock,
@@ -22,10 +22,20 @@ import {
   ErrorClipMetadata,
   getAllErrorClips,
   getCameraZoneHistory,
+  getHandCareer,
+  getHitsTakenCareer,
   getSeasonForm,
+  getSpellDiet,
+  getWavesCareer,
+  type HandReport,
+  type HitsReport,
   type SeasonForm,
+  type SpellHit,
+  type SpellReport,
+  type WavesReport,
   type ZoneHistoryRow,
 } from "../../../core/tauri-ipc";
+import { champLabel } from "../../../core/matchEvents";
 import { computeKDA, outcome } from "../../../core/matchStats";
 import { laneLabel, SIDE_LANES } from "../../../core/lanes";
 import { mmss } from "../../../core/time";
@@ -60,7 +70,8 @@ import {
   useRankBenchmarks,
 } from "./RankBenchmarkCard";
 import { RiftMap, riftPercent, RIFT_SQUARE_PCT } from "./RiftMap";
-import { getJungleRoutes, JUNGLE_AGREEMENT_MIN, type JungleRouteGame } from "../../../core/tauri-ipc";
+import { JUNGLE_AGREEMENT_MIN, type JungleRouteGame } from "../../../core/tauri-ipc";
+import { jungleRoutesOnce } from "../../player/components/matchMoves";
 import { ACTIVITY_ORDER, activityLabel, BUDGET_PARTS } from "../../player/jungleRoute";
 import { HandWidget } from "../../player/components/HandWidget";
 import { SpellDietWidget } from "../../player/components/SpellDietWidget";
@@ -70,7 +81,7 @@ import { PerformanceTrendsWidget } from "../../player/components/PerformanceTren
 import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
-import { formatDecimal } from "../../../core/benchmarkFormat";
+import { formatDecimal, withPercent } from "../../../core/benchmarkFormat";
 import { Segmented } from "../../../components/ui/Segmented";
 import { Select } from "../../../components/ui/Select";
 import { Chip } from "../../../components/ui/Chip";
@@ -390,6 +401,35 @@ const PatternsBody: React.FC = () => {
   const coach = useCoachSummary();
   const { plan: coachPlan } = useCoachPlan();
   const vistaCoach = useMemo(() => coachFocusView(coach, coachPlan), [coach, coachPlan]);
+
+  // Las fichas de mano, hechizos, golpes y oleadas montan su widget al
+  // abrirse; su cifra de portada se pide aparte, en segundo plano, la primera
+  // vez que se ve Patrones. Sin ella eran media rejilla de frases sin número.
+  const enPatrones = useLocation().pathname === "/patterns";
+  const [carreras, setCarreras] = useState<Carreras>(carrerasCache);
+  useEffect(() => {
+    if (!enPatrones) return;
+    setCarreras(carrerasCache);
+    if (carrerasPedidas) return;
+    let vivo = true;
+    const guarda = (p: Partial<Carreras>) => {
+      carrerasCache = { ...carrerasCache, ...p };
+      if (vivo) setCarreras(carrerasCache);
+    };
+    // Tras pintar la vista y de una en una: son lecturas de todas tus
+    // partidas y no deben competir con lo que se ve primero.
+    const id = window.setTimeout(async () => {
+      carrerasPedidas = true;
+      await getHandCareer().then((r) => guarda({ mano: r }), () => guarda({ mano: null }));
+      await getSpellDiet().then((r) => guarda({ hechizos: r }), () => guarda({ hechizos: null }));
+      await getHitsTakenCareer().then((r) => guarda({ golpes: r }), () => guarda({ golpes: null }));
+      await getWavesCareer().then((r) => guarda({ oleadas: r }), () => guarda({ oleadas: null }));
+    }, 600);
+    return () => {
+      vivo = false;
+      window.clearTimeout(id);
+    };
+  }, [enPatrones]);
   const tramoFoco = coachFocusTramo(vistaCoach);
   const setSelectedMatch = useAppStore((s) => s.setSelectedMatch);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
@@ -418,7 +458,8 @@ const PatternsBody: React.FC = () => {
       .catch(console.error)
       .finally(() => alive && setLoading(false));
     // Las rutas tampoco esperan a nadie: la primera vez se calculan (~1 s).
-    getJungleRoutes()
+    // Las mismas de la sesión que usa el reproductor para la mediana.
+    jungleRoutesOnce()
       // Un `null` (un doble que falta, un comando que no contesta) es "sin
       // rutas", no un motivo para tumbar la pantalla.
       .then((r) => alive && setRutas(r ?? []))
@@ -858,6 +899,64 @@ const PatternsBody: React.FC = () => {
     tr.to === null ? t("Minute {a}+", { a: tr.from }) : t("Minute {a}–{b}", { a: tr.from, b: tr.to });
 
   // ------------------------------------------------ valores de las fichas
+  // Cifra de portada de las fichas que cargan al abrirse; sin datos (o
+  // mientras llegan), la frase que dice qué hay dentro.
+  const suave = (txt: string) => <span className="pp-ex-soft">{txt}</span>;
+  const valorMano: React.ReactNode =
+    carreras.mano && carreras.mano.clicks > 0 ? (
+      <>
+        <span className="pp-ex-strong">{t("{p}% short clicks", { p: Math.round(carreras.mano.short_ratio * 100) })}</span>
+        {carreras.mano.matches ? <span className="pp-ex-soft"> · {t("{n} games", { n: carreras.mano.matches })}</span> : null}
+      </>
+    ) : (
+      suave(t("how you click to move, over your last games"))
+    );
+  // El nombre de lo que te mata, nunca el interno de Riot («quinnpassive»).
+  // La ranura va de 0 a 3 para Q-W-E-R (como en SpellDietWidget); lo demás son
+  // pasivas, objetos o hechizos de invocador.
+  const nombreHechizo = (s: SpellHit): string => {
+    const champion = champLabel(s.champion);
+    if (s.basic) return t("{champion}'s basic attacks", { champion });
+    if (s.slot >= 0 && s.slot <= 3) return t("{ability} of {champion}", { ability: "QWER"[s.slot], champion });
+    if (/passive$/i.test(s.spell)) return t("{champion}'s passive", { champion });
+    return t("an effect from {champion}", { champion });
+  };
+  const topHechizo = carreras.hechizos?.spells.length
+    ? [...carreras.hechizos.spells].sort((a, b) => b.deaths - a.deaths)[0]
+    : null;
+  const valorHechizos: React.ReactNode =
+    topHechizo && topHechizo.deaths > 0 ? (
+      <>
+        <span className="pp-ex-strong">{t("Kills you most: {what}", { what: nombreHechizo(topHechizo) })}</span>
+        <span className="pp-ex-soft"> · {t("{n} deaths", { n: topHechizo.deaths })}</span>
+      </>
+    ) : (
+      suave(t("what kills you, across your synced games"))
+    );
+  const valorGolpes: React.ReactNode =
+    carreras.golpes && carreras.golpes.openers > 0 ? (
+      <>
+        <span className="pp-ex-strong">{t("{n} fights started on you", { n: carreras.golpes.openers })}</span>
+        <span className="pp-ex-soft"> · {t("{n} from the fog", { n: carreras.golpes.from_fog })}</span>
+      </>
+    ) : (
+      suave(t("the fights enemies start on you, over your last games"))
+    );
+  const gankBuenos = carreras.oleadas?.ganks.filter((g) => g.outcome === "success").length ?? 0;
+  // La ficha de tu última partida con un campeón abre con su KDA.
+  const kdaUltima = ultima ? computeKDA(ultima.events) : null;
+  const valorOleadas: React.ReactNode =
+    carreras.oleadas && carreras.oleadas.ganks.length + carreras.oleadas.invades.length > 0 ? (
+      <>
+        <span className="pp-ex-strong">
+          {t("{g} ganks, {s} successful", { g: carreras.oleadas.ganks.length, s: gankBuenos })}
+        </span>
+        <span className="pp-ex-soft"> · {t("{n} invades", { n: carreras.oleadas.invades.length })}</span>
+      </>
+    ) : (
+      suave(t("invades, ganks and objectives against the waves, over your last games"))
+    );
+
   const valorCiego: React.ReactNode =
     resumenCiego === null ? (
       faltan(3 - zonasRango.length)
@@ -931,7 +1030,7 @@ const PatternsBody: React.FC = () => {
     pool.length < 2 ? (
       faltan(2 - propias.length)
     ) : (
-      <span className="pp-ex-pool" title={pool.slice(0, 3).map((p) => `${p.champion} ${Math.round(p.wr * 100)}%`).join(" · ")}>
+      <span className="pp-ex-pool" title={pool.slice(0, 3).map((p) => `${p.champion} ${withPercent(Math.round(p.wr * 100))}`).join(" · ")}>
         <span className="pp-ex-faces">
           {pool.slice(0, 3).map((p) => (
             <ChampionAvatar key={p.champion} champion={p.champion} size={22} ring="var(--panel)" />
@@ -1069,7 +1168,12 @@ const PatternsBody: React.FC = () => {
                 {[
                   fase !== "all"
                     ? t("{n} of {total} deaths", { n: resaltadas.length, total: muertes.length })
-                    : muertes.length === 1
+                    : // La cabecera cuenta las muertes en directo; el mapa, las que
+                      // traen sitio (sin datos de Riot no hay). «100» arriba y «99»
+                      // aquí parecía un error: se dice que son las que tienen sitio.
+                      muertes.length < clock.total
+                      ? t("{n} of your {total} deaths have a place on the map", { n: muertes.length, total: clock.total })
+                      : muertes.length === 1
                       ? t("1 death in 1 game")
                       : partidasConMapa === 1
                         ? t("{n} deaths in 1 game", { n: muertes.length })
@@ -1603,7 +1707,7 @@ const PatternsBody: React.FC = () => {
                       <span className="pp-list-name">{p.champion}</span>
                       <span className="pp-meta">{p.games} {t(p.games === 1 ? "game" : "games")}</span>
                       <span className={`pp-num pp-list-wr ${p.wr >= 0.5 ? "pp-up" : "pp-down"}`}>
-                        {Math.round(p.wr * 100)}%
+                        {withPercent(Math.round(p.wr * 100))}
                       </span>
                       <span className="pp-meta pp-num pp-list-kda">
                         {p.d > 0 ? formatDecimal((p.k + p.a) / p.d) : "∞"} KDA
@@ -1627,7 +1731,7 @@ const PatternsBody: React.FC = () => {
                         <span className="pp-list-name">vs {r.champion}</span>
                         <span className="pp-meta">{r.games} {t(r.games === 1 ? "game" : "games")}</span>
                         <span className={`pp-num pp-list-wr ${r.wr >= 0.5 ? "pp-up" : "pp-down"}`}>
-                          {Math.round(r.wr * 100)}%
+                          {withPercent(Math.round(r.wr * 100))}
                         </span>
                       </div>
                     ))}
@@ -1838,7 +1942,12 @@ const PatternsBody: React.FC = () => {
               id="tendencias"
               icon={<TrendingUp size={14} aria-hidden="true" />}
               label={t("Your last game on {champion}", { champion: ultima.champion })}
-              value={<span className="pp-ex-soft">{t("against your own average on that champion")}</span>}
+              value={
+                <>
+                  <span className="pp-ex-strong">{kdaUltima && `${kdaUltima.kills}/${kdaUltima.deaths}/${kdaUltima.assists}`}</span>
+                  <span className="pp-ex-soft"> · {t("against your own average on that champion")}</span>
+                </>
+              }
               open={abiertas.has("tendencias")}
               onToggle={() => toggle("tendencias")}
             >
@@ -1854,7 +1963,7 @@ const PatternsBody: React.FC = () => {
             id="mano"
             icon={<Hand size={14} aria-hidden="true" />}
             label={t("Your hand")}
-            value={<span className="pp-ex-soft">{t("how you click to move, over your last games")}</span>}
+            value={valorMano}
             open={abiertas.has("mano")}
             onToggle={() => toggle("mano")}
           >
@@ -1871,7 +1980,7 @@ const PatternsBody: React.FC = () => {
             id="hechizos"
             icon={<Zap size={14} aria-hidden="true" />}
             label={t("Spells you ate")}
-            value={<span className="pp-ex-soft">{t("what kills you, across your synced games")}</span>}
+            value={valorHechizos}
             open={abiertas.has("hechizos")}
             onToggle={() => toggle("hechizos")}
           >
@@ -1886,7 +1995,7 @@ const PatternsBody: React.FC = () => {
             id="golpes"
             icon={<Crosshair size={14} aria-hidden="true" />}
             label={t("Hits you take")}
-            value={<span className="pp-ex-soft">{t("the fights enemies start on you, over your last games")}</span>}
+            value={valorGolpes}
             open={abiertas.has("golpes")}
             onToggle={() => toggle("golpes")}
           >
@@ -1901,7 +2010,7 @@ const PatternsBody: React.FC = () => {
             id="oleadas"
             icon={<Waves size={14} aria-hidden="true" />}
             label={t("Waves and macro")}
-            value={<span className="pp-ex-soft">{t("invades, ganks and objectives against the waves, over your last games")}</span>}
+            value={valorOleadas}
             open={abiertas.has("oleadas")}
             onToggle={() => toggle("oleadas")}
           >
@@ -1971,6 +2080,17 @@ const PatternsBody: React.FC = () => {
     </>
   );
 };
+
+/** Las cifras de portada de las fichas que cargan al abrirse (ver PatternsBody). */
+interface Carreras {
+  mano?: HandReport | null;
+  hechizos?: SpellReport | null;
+  golpes?: HitsReport | null;
+  oleadas?: WavesReport | null;
+}
+/** Una vez por sesión: son lecturas de todas tus partidas. */
+let carrerasCache: Carreras = {};
+let carrerasPedidas = false;
 
 /**
  * La pantalla, con su red propia por dentro de la de App: si el cuerpo revienta

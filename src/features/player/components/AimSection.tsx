@@ -10,6 +10,7 @@ import "./DeathsSection.css";
 import "./HitsTaken.css";
 import "./WavesSection.css";
 
+import { withPercent } from "../../../core/benchmarkFormat";
 /**
  * Tu puntería (ver `barras.rs`): en cada Q/W/E/R con un rival en la dirección
  * del cursor, si apuntaste adonde estaba, adonde iba o por detrás, y si perdió
@@ -19,7 +20,7 @@ import "./WavesSection.css";
 
 const VISIBLES = 8;
 
-const pct = (b?: AimBucket) => (b && b.known > 0 ? `${Math.round((100 * b.hits) / b.known)}%` : "—");
+const pct = (b?: AimBucket) => (b && b.known > 0 ? withPercent(Math.round((100 * b.hits) / b.known)) : "—");
 
 interface Props {
   matchId: string;

@@ -10,9 +10,9 @@ import type { MapFocus, OpenMap } from "../mapFocus";
 import { formatGold, formatSigned } from "./pressureFormat";
 import { BLIND_LOOKBACK_S as ANTES_S } from "./ReviewQueue";
 import { HelpDot } from "./HelpDot";
-import { wstyles } from "./videoPlayerStyles";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { SkeletonLines } from "../../../components/ui/Skeleton";
+import { Chip } from "../../../components/ui/Chip";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -220,7 +220,7 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
 
   const esqueleto = useDelayedLoading(cargando);
   if (cargando || esqueleto) return esqueleto ? <SkeletonLines lines={4} /> : null;
-  if (filas.length === 0) return <p className="note" style={{ margin: 0 }}>{t("You didn't die this game.")}</p>;
+  if (filas.length === 0) return <p className="note ds-none">{t("You didn't die this game.")}</p>;
 
   const ciegas = filas.filter((f) => f.miradas === 0).length;
   const rectas = filas.filter((f) => f.recta === true).length;
@@ -234,7 +234,7 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
   const total = conPrecio.reduce((s, f) => s + (f.precio?.wpa ?? 0), 0);
 
   return (
-    <div style={wstyles.body}>
+    <div className="ds">
       <p className="ds-summary">
         {filas.length === 1 ? t("One death") : t("{n} deaths", { n: filas.length })}
         {conPrecio.length > 0 && ` (${costText(total, t)})`}
@@ -274,13 +274,13 @@ export const DeathsSection: React.FC<Props> = ({ matchId, markers, cameraSnaps, 
                 {tags.length > 0 && (
                   <span className="ds-tags">
                     {tags.map((g) => (
-                      <span key={g.text} className="ds-tag" title={g.help}>{g.text}</span>
+                      <Chip key={g.text} tone="outline" title={g.help}>{g.text}</Chip>
                     ))}
                   </span>
                 )}
               </span>
               {f.precio ? (
-                <span className="ds-cost" title={costDetail(f.precio, t)}>{costText(f.precio.wpa, t)}</span>
+                <Chip tone="loss" className="ds-cost" title={costDetail(f.precio, t)}>{costText(f.precio.wpa, t)}</Chip>
               ) : (
                 <span />
               )}

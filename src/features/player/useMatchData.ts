@@ -3,10 +3,12 @@ import {
   getGoldReport,
   getJungleRoute,
   getMatchAttribution,
+  getMatchPlays,
   getMatchTrack,
   getSpellAutopsy,
   type GoldResponse,
   type JungleRouteResponse,
+  type MatchPlays,
   type MatchTrackResponse,
   type PlayerCredit,
   type SpellReport,
@@ -65,6 +67,17 @@ export const useSpellAutopsy = (matchId: string | null) =>
  *  y "Lo que decidió la partida", que comparten filas. */
 export const useAttribution = (matchId: string | null) =>
   useCached<PlayerCredit[]>(matchId && `attribution:${matchId}`, () => getMatchAttribution(matchId as string));
+
+/** La misma petición del reparto, para quien necesita el MOTIVO de un fallo:
+ *  Impacto distingue "sin clave de Riot" de "falló la API", y el hook se lo
+ *  come. Comparte la promesa con `useAttribution`, así que no se pide dos
+ *  veces; como un fallo se olvida, volver a llamarla es reintentar. */
+export const fetchAttribution = (matchId: string): Promise<PlayerCredit[]> =>
+  cached(`attribution:${matchId}`, () => getMatchAttribution(matchId));
+
+/** Las jugadas con su ΔWP y la curva de probabilidad (`winprob.rs`). */
+export const useMatchPlays = (matchId: string | null) =>
+  useCached<MatchPlays>(matchId && `plays:${matchId}`, () => getMatchPlays(matchId as string));
 
 export const useMatchTrack = (matchId: string | null) =>
   useCached<MatchTrackResponse>(matchId && `track:${matchId}`, () => getMatchTrack(matchId as string));

@@ -2042,7 +2042,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
         {/* Impacto: qué significó. Ver ImpactTab.tsx. */}
         {tab === "impact" && (
-          <ImpactTab match={match} participants={participants} seekTo={seekTo} onOpenMap={openMap} />
+          <ImpactTab
+            match={currentMatch}
+            participants={participants}
+            syncing={syncing}
+            onSync={handleSync}
+            seekTo={seekTo}
+            onOpenMap={openMap}
+          />
         )}
 
         </aside>

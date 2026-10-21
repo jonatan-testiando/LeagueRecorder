@@ -13,6 +13,8 @@ import { invadeTally, moveFocus, useFirstClearMedian, useMoves, type GankMove, t
 import { LANE_LABEL } from "./WavesSection";
 import { campLabel } from "../jungleRoute";
 import { HelpDot } from "./HelpDot";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import "./MatchTab.css";
 
 /**
@@ -403,7 +405,9 @@ export const MatchSummary: React.FC<Props> = ({ match, isJungler, wantsMoves, en
     );
   }, [cargandoAlgo, match, isJungler, enemyTeam, filas, mv.moves, mv.route, mv.doubtful, mediana, oro, t]);
 
-  if (!cargandoAlgo && elegidas.length === 0) return null;
+  const esqueleto = useDelayedLoading(cargandoAlgo);
+
+  if (!cargandoAlgo && !esqueleto && elegidas.length === 0) return null;
 
   return (
     <section>
@@ -414,11 +418,17 @@ export const MatchSummary: React.FC<Props> = ({ match, isJungler, wantsMoves, en
         />
         <i className="sect__rule" />
       </div>
-      {cargandoAlgo ? (
-        <p className="mt-sum__wait" role="status">
-          <span className="spinner" />
-          {t("Reading the game…")}
-        </p>
+      {cargandoAlgo || esqueleto ? (
+        // El hueco de las tres frases desde el primer fotograma (P5); el
+        // esqueleto, a los 150 ms.
+        <div className="mt-sum mt-sum--wait" role="status" aria-busy="true" aria-label={t("Reading the game…")}>
+          {esqueleto &&
+            ["88%", "72%", "80%"].map((w) => (
+              <span key={w} className="mt-sum__ghost">
+                <Skeleton width={w} />
+              </span>
+            ))}
+        </div>
       ) : (
         <div className="mt-sum">
           {elegidas.map((f) => {

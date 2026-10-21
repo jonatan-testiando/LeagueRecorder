@@ -6,8 +6,102 @@
    estas clases es la contraria: una frase por fila, en 13 px; el gris para lo
    que se vio y el color sólo en el juicio ("bien", "moriste"). */
 
+/* ------------------------------------------- aviso de la pestaña
+   Uno y arriba (InspNotice), con la acción que lo arregla. Lámina un escalón
+   por encima del panel, como las tarjetas de Impacto. */
+.mt-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.mt-notice__title { margin: 0; font-size: var(--fs-14); line-height: var(--lh-14); font-weight: 500; color: var(--text); }
+.mt-notice__text { margin: 0; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--muted); }
+.mt-notice__action { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* ------------------------------------------- anclas y acordeón (E3)
+   La barra se queda arriba al desplazarse y marca el bloque abierto. Se sale
+   a los bordes del inspector (los 16 px de .insp) para tapar lo que pasa por
+   debajo; si no cabe, se desplaza en horizontal. */
+.mt-anchors {
+  position: sticky;
+  top: calc(-1 * var(--space-4));
+  z-index: 2;
+  /* Con overflow-x, en la columna de .insp se encogía hasta 16 px. */
+  flex: none;
+  display: flex;
+  gap: var(--space-1);
+  margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  box-shadow: 0 1px 0 var(--hair);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mt-anchors::-webkit-scrollbar { display: none; }
+.mt-anchor {
+  flex: none;
+  min-height: 28px;
+  padding: var(--space-1) 10px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--t-hover) var(--e-color), color var(--t-hover) var(--e-color);
+}
+.mt-anchor[aria-current="true"] { background: var(--raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.mt-anchor:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .mt-anchor:hover { color: var(--text); }
+}
+
+/* Los bloques: cabeceras juntas cuando están plegados, aire tras el abierto.
+   Al traer uno a la vista, que no quede debajo de la barra de anclas. */
+.mt-blocks { display: flex; flex-direction: column; gap: var(--space-1); }
+.mt-blocks > .isec { scroll-margin-top: 52px; }
+.isec:not([data-open]) > .sect__head { margin-bottom: 0; }
+.isec[data-open] + .isec { margin-top: var(--space-4); }
+.isec__toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.isec__toggle .u-label { font-size: var(--fs-13); line-height: var(--lh-13); color: inherit; }
+.isec[data-open] .isec__toggle { color: var(--text); }
+.isec__toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+@media (hover: hover) and (pointer: fine) {
+  .isec__toggle:hover { color: var(--text); }
+}
+.isec__chev { flex: none; transform: rotate(-90deg); transition: transform var(--t-base) var(--e-move); }
+.isec[data-open] .isec__chev { transform: none; }
+
+/* Cifras y marcas con tono: el signo es lo que significa algo. */
+.mt-diff[data-tone="win"], .mt-teamResult[data-tone="win"] { color: var(--win); }
+.mt-diff[data-tone="loss"], .mt-teamResult[data-tone="loss"] { color: var(--loss); }
+.mt-teamDot[data-tone="win"] { background: var(--win); }
+.mt-teamDot[data-tone="loss"] { background: var(--loss); }
+
 /* ------------------------------------------- lo que decidió la partida */
 .mt-sum { display: flex; flex-direction: column; }
+/* Mientras se lee, el hueco de las tres frases (P5): si no, al llegar
+   empujaban todo lo de debajo. */
+.mt-sum--wait { min-height: calc(3 * 38px); }
+.mt-sum__ghost { display: flex; align-items: center; height: 38px; padding-left: 18px; }
 .mt-sum__item {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) 14px;
@@ -20,22 +114,22 @@
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
   text-align: left;
   cursor: pointer;
 }
 .mt-sum__item + .mt-sum__item { box-shadow: inset 0 1px 0 var(--line-soft); }
-.mt-sum__item:hover { background: var(--bg-hover); }
-.mt-sum__item:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .mt-sum__item:hover { background: var(--bg-hover); }
+}
+.mt-sum__item:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 /* El punto va a la altura de la primera línea, no centrado en la frase. */
-.mt-sum__dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--faint); }
+.mt-sum__dot { width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--faint); }
 .mt-sum__dot[data-tone="good"] { background: var(--win); }
 .mt-sum__dot[data-tone="bad"] { background: var(--loss); }
-.mt-sum__go { margin-top: 3px; color: var(--faint); }
+.mt-sum__go { margin-top: 4px; color: var(--faint); }
 .mt-sum__item:hover .mt-sum__go { color: var(--muted); }
-.mt-sum__wait { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 12px; color: var(--faint); }
-.mt-sum__wait .spinner { width: 12px; height: 12px; }
 
 /* ------------------------------------------- dentro de un bloque */
 /* El cuerpo de un bloque: sus partes apiladas con el mismo aire. */
@@ -54,20 +148,20 @@
 .mt-soft { color: var(--faint); }
 
 /* Líneas de resumen de un bloque, una por tema. */
-.mt-tally { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.5; color: var(--text); }
+.mt-tally { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--text); }
 
 /* El "?": la regla o la definición, a un vistazo y fuera del texto. */
 .mt-help {
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 16px;
-  height: 16px;
-  margin-left: 4px;
+  width: 18px;
+  height: 18px;
+  margin-left: var(--space-1);
   border-radius: 50%;
   box-shadow: inset 0 0 0 1px var(--hair-strong);
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: var(--fs-12);
   font-weight: 600;
   line-height: 1;
   vertical-align: 1px;
@@ -91,14 +185,14 @@
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-13);
   text-align: left;
 }
 .mt-fact b { font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
-.mt-fact small { grid-column: 1 / -1; font-size: 12px; line-height: 1.45; color: var(--faint); }
+.mt-fact small { grid-column: 1 / -1; font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
 button.mt-fact { padding: 6px var(--space-2); margin: 0 calc(-1 * var(--space-2)); border-radius: var(--radius-sm) var(--radius-sm) 0 0; cursor: pointer; }
 button.mt-fact:hover { background: var(--bg-hover); }
-button.mt-fact:focus-visible { outline: 2px solid var(--cool); outline-offset: 1px; }
+button.mt-fact:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* Lo plegado dentro de un bloque (la puntería sin validar). El aire de
    encima lo pone el bloque. */
@@ -120,3 +214,52 @@ button.mt-fact:focus-visible { outline: 2px solid var(--cool); outline-offset: 1
 .mt-more__body { padding-top: var(--space-2); }
 
 .mt-showall { align-self: flex-start; }
+
+/* ------------------------------------------- frente a tu rango
+   BenchmarkWidget: etiqueta y cifra arriba, barra de percentil y su lectura
+   debajo. Mientras carga, el hueco de la versión corta (P5). */
+.bw--loading { min-height: 212px; }
+.bw-sub { margin: 0 0 var(--space-2); }
+.bw-resumen { margin: 0 0 var(--space-3); font-size: var(--fs-13); line-height: var(--lh-13); color: var(--text); }
+.bw-lista { display: flex; flex-direction: column; gap: var(--space-3); }
+.bw-fila { display: flex; flex-direction: column; gap: var(--space-1); }
+.bw-cabeza { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.bw-etiqueta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-13);
+  color: var(--muted);
+}
+.bw-valor { flex: none; font-size: var(--fs-13); font-weight: 500; color: var(--text); font-variant-numeric: tabular-nums; }
+.bw-pie { display: flex; align-items: center; gap: var(--space-2); }
+.bw-pista {
+  position: relative;
+  flex: 1;
+  min-width: 40px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.bw-relleno { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); }
+/* La mediana está SIEMPRE al 50 del eje de percentiles. Un punto más clara
+   que la pista: sobre --line la marca desaparecía. */
+.bw-marca { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--faint); opacity: 0.7; }
+/* Ancho fijo para que las barras queden alineadas entre filas: 112 es lo que
+   pide la más larga en español («entre el 46% mejor»). Con 92 se salía del
+   inspector por la derecha. */
+.bw-percentil {
+  flex: none;
+  width: 112px;
+  font-size: var(--fs-12);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+.bw-mas { align-self: flex-start; margin-top: var(--space-2); }
+.bw-aviso { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+.bw-aviso__text { flex: 1; min-width: 0; }

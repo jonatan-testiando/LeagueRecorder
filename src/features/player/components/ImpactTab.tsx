@@ -1,16 +1,21 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
-import { RefreshCw } from "lucide-react";
+import { KeyRound, RefreshCw } from "lucide-react";
 import type { MatchMetadata, Participant } from "../../../types";
 import {
-  cancelMatchMinimap, getCameraZones, getMatchAttribution, getMatchPressure, getMinimapStatus, getPressureSummary,
+  cancelMatchMinimap, getCameraZones, getMatchPressure, getMinimapStatus, getPressureSummary,
   processMatchMinimap,
   type MinimapStatus, type PlayerCredit, type PressureSummary, type PressureWindow, type ZoneStat,
 } from "../../../core/tauri-ipc";
 import { useT } from "../../../core/LanguageProvider";
 import { clock } from "../../../core/time";
 import { sameRole } from "../../../core/roles";
+import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { fetchAttribution } from "../useMatchData";
+import { InspNotice, SyncNotice } from "./InspNotice";
+import { MatchCost } from "./MatchCost";
 import { PressureEpisodeCard } from "./PressureEpisodeCard";
 import { RivalCard } from "./RivalCard";
 import { formatGold, formatSigned } from "./pressureFormat";
@@ -22,25 +27,40 @@ import "./ImpactTab.css";
  * VideoPlayer.tsx; se separó para poder rehacerla sin tocar el reproductor.
  * Se monta sólo con la pestaña abierta, así que lo que pide lo pide al abrirla.
  *
- * Orden, de la conclusión al detalle: tu impacto (puesto y de dónde salió),
- * tú contra tu rival, la presión que absorbiste y dónde miraste. Se fueron
- * «Crédito real» (la tabla de los diez con el desfase de oro de remates: habla
- * de la partida de todos, no de la tuya), «Muerte más cara» (salía la de otro
- * jugador) y «Análisis del vídeo» como sección propia: es estado, no
- * información, y cuando falta vive dentro de la presión, que es lo que mejora.
+ * Orden, de la conclusión al detalle (rediseño «Ritmo», fase 3): lo que te
+ * costó esta partida, tú contra tu rival, tu impacto (puesto y de dónde
+ * salió), la presión que absorbiste y dónde miraste. Se fueron «Crédito real»
+ * (la tabla de los diez con el desfase de oro de remates: habla de la partida
+ * de todos, no de la tuya), «Muerte más cara» (salía la de otro jugador) y
+ * «Análisis del vídeo» como sección propia: es estado, no información, y
+ * cuando falta vive dentro de la presión, que es lo que mejora.
+ *
+ * Lo que falla se dice UNA vez, arriba, con la acción que lo arregla
+ * (auditoría I3): sincronizar, poner la clave o reintentar. Debajo, solo los
+ * bloques con datos.
  */
 
 export interface ImpactTabProps {
   match: MatchMetadata;
   participants: Participant[];
+  syncing: boolean;
+  onSync: () => void;
   /** Saltar en el vídeo (segundos de VÍDEO). */
   seekTo: (videoSeconds: number, play: boolean) => void;
   /** Abrir el Mapa en un momento con lo suyo dibujado. */
   onOpenMap: OpenMap;
 }
 
-export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekTo, onOpenMap }) => {
+/** Por qué no llegaron los datos de Riot: cada causa tiene su arreglo. Los
+ *  mensajes salen del backend (`riot_api.rs`), en español. */
+type Fallo = "sync" | "key" | "other";
+const motivo = (e: string): Fallo =>
+  /sincronizada|not synced/i.test(e) ? "sync" : /api key|clave/i.test(e) ? "key" : "other";
+
+export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, syncing, onSync, seekTo, onOpenMap }) => {
   const t = useT();
+  const navigate = useNavigate();
+  const synced = !match.is_vod && !!match.riot_match_id;
   // Reparto de credito por dano real. Se pide al abrir la pestana de la partida
   // y no antes: la primera vez puede costar dos llamadas a la API, luego sale de
   // cache en disco. Ya no se enseña como tabla: de él salen el impacto (WPA) y
@@ -62,53 +82,57 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
   // del usuario) y `null` que falló (sale la versión sin cifras).
   const [resumen, setResumen] = useState<PressureSummary | null | undefined>(undefined);
 
-  // El reparto de credito se pide al abrir la pestana de la partida, una sola
-  // vez por partida. Si falla no se reintenta en bucle: se guarda el motivo y se
-  // enseña, que es mas util que un panel vacio.
+  // El reparto y la presión se piden al abrir la pestaña, una vez por partida
+  // y SOLO si está sincronizada: sin Riot no hay nada que pedir, y pedirlo
+  // era lo que llenaba la pestaña de errores encadenados.
+  //
   // OJO con las dependencias: `credits` NO puede estar aqui. Al estarlo, en
   // cuanto la atribucion respondia y hacia setCredits, el efecto se re-ejecutaba
   // y su limpieza ponia vivo=false, descartando la respuesta de presion que
-  // seguia en vuelo. Funcionaba mientras las dos iban a la API (la presion
-  // ganaba la carrera) y se rompio al cachear, cuando la atribucion paso a
-  // responder primero. El "ya pedido" se lleva en un ref, que no dispara
-  // re-ejecuciones.
+  // seguia en vuelo. El "ya pedido" que lo evitaba se llevaba en un ref, y con
+  // StrictMode (que monta los efectos dos veces) la segunda pasada salía por
+  // él sin pedir nada: la pestaña se quedaba vacía en desarrollo. El reparto
+  // va por la promesa compartida de `useMatchData`, así que repetir es gratis.
   //
   // `intento` sube al pulsar Reintentar: es lo que permite volver a pedirlo sin
   // reabrir la pestaña. Un fallo de la API dejaba el panel muerto hasta cambiar
   // de partida y volver.
-  const pedidoRef = useRef<string | null>(null);
   const [intento, setIntento] = useState(0);
-  const reintentar = useCallback(() => {
-    pedidoRef.current = null;
+  const reintentar = useCallback(() => setIntento((n) => n + 1), []);
+  useEffect(() => {
     setCredits(null);
     setCreditsErr(null);
     setPressure(null);
     setPressureErr(null);
-    setIntento((n) => n + 1);
-  }, []);
+    if (!synced) return;
+    let vivo = true;
+    // El error se guarda, no se traga: tragarselo hacia que un fallo del
+    // comando y "esta partida no tuvo tramos" fueran indistinguibles. Lo que
+    // se ENSEÑA es su causa, en el aviso de arriba; el texto, a la consola.
+    fetchAttribution(match.id)
+      .then((rows) => { if (vivo) setCredits(rows); })
+      .catch((e) => { console.error("[impacto] reparto", e); if (vivo) setCreditsErr(String(e)); });
+    getMatchPressure(match.id)
+      .then((ws) => { if (vivo) setPressure(ws); })
+      .catch((e) => { console.error("[impacto] presión", e); if (vivo) setPressureErr(String(e)); });
+    return () => { vivo = false; };
+  }, [match.id, synced, intento]);
+
+  // Tus miradas por carril salen del vídeo, no de Riot: valen también en una
+  // partida sin sincronizar.
+  //
+  // Aqui se lanzaba ADEMAS el procesado del video (dos minutos de Python) solo
+  // por entrar en la pestana. Salia con consola propia -la ventana negra- y
+  // cerrarla mataba el trabajo antes de que escribiera nada, asi que a la
+  // siguiente visita vuelta a empezar. Ahora se pide desde el panel.
   useEffect(() => {
     if (match.is_vod) return;
-    if (pedidoRef.current === match.id) return;
-    pedidoRef.current = match.id;
     let vivo = true;
-    getMatchAttribution(match.id)
-      .then((rows) => { if (vivo) setCredits(rows); })
-      .catch((e) => { if (vivo) setCreditsErr(String(e)); });
-    // El error se ENSENA, no se traga: tragarselo hacia que un fallo del comando
-    // y "esta partida no tuvo tramos" fueran indistinguibles.
-    //
-    // Aqui se lanzaba ADEMAS el procesado del video (dos minutos de Python) solo
-    // por entrar en la pestana. Salia con consola propia -la ventana negra- y
-    // cerrarla mataba el trabajo antes de que escribiera nada, asi que a la
-    // siguiente visita vuelta a empezar. Ahora se pide desde el panel.
     getCameraZones(match.id)
       .then((z) => { if (vivo) setZonas(z); })
       .catch(() => { if (vivo) setZonas([]); });
-    getMatchPressure(match.id)
-      .then((ws) => { if (vivo) setPressure(ws); })
-      .catch((e) => { if (vivo) { setPressure([]); setPressureErr(String(e)); } });
     return () => { vivo = false; };
-  }, [match.id, match.is_vod, intento]);
+  }, [match.id, match.is_vod]);
 
   // Estado del procesado del video. Se consulta al abrir Impacto (y al cambiar
   // de partida) y se mantiene al dia con el evento de progreso del backend.
@@ -226,103 +250,56 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
     : -1;
   const rivalP = rivalIdx >= 0 ? participants[rivalIdx] : undefined;
 
+  // El aviso único: la causa del primer fallo manda. Si la partida no está
+  // sincronizada, o el backend dice que no lo está, solo la sincronización lo
+  // arregla, y Reintentar no sale. El texto del error no se enseña (iba metido
+  // en la frase, «No se pudo calcular…: Esta partida aún no…»): va a la consola.
+  const causas = [creditsErr, pressureErr].filter((e): e is string => e !== null).map(motivo);
+  const fallo: Fallo | null =
+    !synced || causas.includes("sync") ? "sync" : causas.includes("key") ? "key" : causas.length > 0 ? "other" : null;
+
   return (
     <div className="insp">
-      {/* --------------------------------------- tu impacto
-          El puesto y el percentil ya existian, pero solo en la columna de
-          la biblioteca: quien abria esta pestana veia la tabla de los diez
-          y tenia que buscarse. Y un puesto suelto no se puede revisar, asi
-          que va con el desglose de DONDE salio. */}
-      {(creditsErr !== null || mio) && (
-        <section>
-          <div className="sect__head">
-            <span className="u-label">{t("Your impact")}</span>
-            <i className="sect__rule" />
-          </div>
-          {creditsErr !== null ? (
-            <>
-              <p className="note">{t("Couldn't work out your impact: {msg}", { msg: creditsErr })}</p>
-              <button className="btn btn--ghost btn--sm" onClick={reintentar}>
-                <RefreshCw size={13} /> {t("Retry")}
-              </button>
-            </>
-          ) : mio && credits ? (() => {
-            // El percentil por rol se satura en 100: con dos jugadores en 100
-            // salías «2º de 10» con +36,4 frente a +10,8. Desempata el WPA, que
-            // es la cifra de debajo (el backend guarda el puesto igual).
-            const puesto =
-              [...credits]
-                .sort((a, b) => b.role_percentile - a.role_percentile || b.wpa - a.wpa)
-                .findIndex((c) => c.participant_id === yo) + 1;
-            const partes: [string, number][] = [
-              [t("kills"), mio.wpa_kills],
-              [t("objectives"), mio.wpa_objectives],
-              [t("structures"), mio.wpa_structures],
-              [t("deaths"), mio.wpa_deaths],
-            ];
-            // Todas las barras contra la misma escala: la parte mas grande de
-            // esta partida llena medio carril. Escalar cada una por su cuenta
-            // haria que una aportacion minuscula pareciera enorme.
-            const escala = Math.max(...partes.map(([, v]) => Math.abs(v)), 0.01);
-            return (
-              <>
-                <div className="imp__head">
-                  <span
-                    className="imp__rank"
-                    style={{ color: puesto === 1 ? "var(--win)" : puesto >= 8 ? "var(--loss)" : undefined }}
-                  >
-                    {/* El "º" es la abreviatura ORDINAL española, y salía
-                        igual con la interfaz en inglés ("3º"). */}
-                    {puesto === 1 ? t("MVP") : t("#{n}", { n: puesto })}
-                  </span>
-                  <span className="u-meta">{t("of")} {credits.length}</span>
-                  {/* El total va arriba, junto al puesto: es la cifra por la
-                      que se ordena, y la fila de «Total» de debajo repetía. */}
-                  <span className="imt__score">
-                    <span
-                      className="u-metric imt__wpa"
-                      style={{ color: mio.wpa >= 0 ? "var(--win)" : "var(--loss)" }}
-                    >
-                      {formatSigned(mio.wpa * 100)}
-                    </span>
-                    <span className="u-meta">{t("win %")}</span>
-                    <span
-                      className="u-meta"
-                      title={`${t("vs role")}: ${Math.round(mio.role_percentile)} · ${mio.role}`}
-                    >
-                      · {Math.round(mio.role_percentile)} {t("vs role")}
-                    </span>
-                  </span>
-                </div>
-                <p className="note">
-                  {t("Win probability you added, and where it came from. The four parts add up to your total.")}
-                </p>
-                {partes.map(([nombre, v]) => {
-                  const ancho = (Math.abs(v) / escala) * 50;
-                  const color = v >= 0 ? "var(--win)" : "var(--loss)";
-                  return (
-                    <div key={nombre} className="imp__row">
-                      <span className="imp__rowName">{nombre}</span>
-                      <span className="imp__track">
-                        <span
-                          className="imp__bar"
-                          style={{
-                            background: color,
-                            width: `${ancho}%`,
-                            left: v >= 0 ? "50%" : `${50 - ancho}%`,
-                          }}
-                        />
-                      </span>
-                      <span className="u-metric imp__rowNum" style={{ color }}>
-                        {formatSigned(v * 100)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </>
-            );
-          })() : null}
-        </section>
+      {fallo === "sync" ? (
+        <SyncNotice
+          text={t("What this game cost you, your rival and the pressure you took come from Riot's data for the game.")}
+          syncing={syncing}
+          onSync={onSync}
+        />
+      ) : fallo === "key" ? (
+        <InspNotice
+          title={t("Impact needs your Riot API key")}
+          text={t("Without a Riot key the app still records and tracks your games; the scoreboard, rank and impact score need one.")}
+          action={
+            <Button size="sm" icon={<KeyRound size={14} />} onClick={() => navigate("/settings?cat=account")}>
+              {t("Add your Riot key")}
+            </Button>
+          }
+        />
+      ) : fallo === "other" ? (
+        <InspNotice
+          title={t("Couldn't load Riot's data for this game")}
+          text={t("Usually it's the connection or a hiccup in Riot's API: trying again is enough.")}
+          action={
+            <Button size="sm" icon={<RefreshCw size={14} />} onClick={reintentar}>
+              {t("Retry")}
+            </Button>
+          }
+        />
+      ) : null}
+
+      {/* --------------------------------------- lo que te costó
+          Arriba del todo: es lo que se corrige jugando. Ver MatchCost. Con
+          el reparto aún en camino reserva su hueco (no hay `credits` que
+          dar todavía, y el bloque espera). */}
+      {synced && creditsErr === null && yo > 0 && (
+        <MatchCost
+          match={match}
+          selfPid={yo}
+          credit={credits === null ? undefined : mio ?? null}
+          onSeekVideo={conVideo ? (v) => seekTo(v, true) : undefined}
+          onOpenMap={onOpenMap}
+        />
       )}
 
       {/* --------------------------------------- tú contra tu rival */}
@@ -346,6 +323,91 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
         </section>
       )}
 
+      {/* --------------------------------------- tu impacto
+          El puesto y el percentil ya existian, pero solo en la columna de
+          la biblioteca: quien abria esta pestana veia la tabla de los diez
+          y tenia que buscarse. Y un puesto suelto no se puede revisar, asi
+          que va con el desglose de DONDE salio. */}
+      {mio && credits && (
+        <section>
+          <div className="sect__head">
+            <span className="u-label">{t("Your impact")}</span>
+            <i className="sect__rule" />
+          </div>
+          {(() => {
+            // El percentil por rol se satura en 100: con dos jugadores en 100
+            // salías «2º de 10» con +36,4 frente a +10,8. Desempata el WPA, que
+            // es la cifra de debajo (el backend guarda el puesto igual).
+            const puesto =
+              [...credits]
+                .sort((a, b) => b.role_percentile - a.role_percentile || b.wpa - a.wpa)
+                .findIndex((c) => c.participant_id === yo) + 1;
+            const partes: [string, number][] = [
+              [t("kills"), mio.wpa_kills],
+              [t("objectives"), mio.wpa_objectives],
+              [t("structures"), mio.wpa_structures],
+              [t("deaths"), mio.wpa_deaths],
+            ];
+            // Todas las barras contra la misma escala: la parte mas grande de
+            // esta partida llena medio carril. Escalar cada una por su cuenta
+            // haria que una aportacion minuscula pareciera enorme.
+            const escala = Math.max(...partes.map(([, v]) => Math.abs(v)), 0.01);
+            return (
+              <>
+                <div className="imp__head">
+                  <span
+                    className="imp__rank"
+                    data-tone={puesto === 1 ? "win" : puesto >= 8 ? "loss" : undefined}
+                  >
+                    {/* El "º" es la abreviatura ORDINAL española, y salía
+                        igual con la interfaz en inglés ("3º"). */}
+                    {puesto === 1 ? t("MVP") : t("#{n}", { n: puesto })}
+                  </span>
+                  <span className="u-meta">{t("of")} {credits.length}</span>
+                  {/* El total va arriba, junto al puesto: es la cifra por la
+                      que se ordena, y la fila de «Total» de debajo repetía. */}
+                  <span className="imt__score">
+                    <span className="u-metric imt__wpa" data-tone={mio.wpa >= 0 ? "win" : "loss"}>
+                      {formatSigned(mio.wpa * 100)}
+                    </span>
+                    <span className="u-meta">{t("win %")}</span>
+                    <span
+                      className="u-meta"
+                      title={`${t("vs role")}: ${Math.round(mio.role_percentile)} · ${mio.role}`}
+                    >
+                      · {Math.round(mio.role_percentile)} {t("vs role")}
+                    </span>
+                  </span>
+                </div>
+                <p className="note">
+                  {t("Win probability you added, and where it came from. The four parts add up to your total.")}
+                </p>
+                {partes.map(([nombre, v]) => {
+                  const ancho = (Math.abs(v) / escala) * 50;
+                  const tono = v >= 0 ? "win" : "loss";
+                  return (
+                    <div key={nombre} className="imp__row">
+                      <span className="imp__rowName">{nombre}</span>
+                      <span className="imp__track">
+                        {/* Ancho y arranque son el dato: van en línea. */}
+                        <span
+                          className="imp__bar"
+                          data-tone={tono}
+                          style={{ width: `${ancho}%`, left: v >= 0 ? "50%" : `${50 - ancho}%` }}
+                        />
+                      </span>
+                      <span className="u-metric imp__rowNum" data-tone={tono}>
+                        {formatSigned(v * 100)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
+        </section>
+      )}
+
       {/* --------------------------------------- presión absorbida
           Los tramos en los que tuviste más rivales encima que aliados, y
           lo que tu equipo sacó al otro lado del mapa mientras tanto. En un
@@ -353,7 +415,7 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
 
           Sólo se muestran los tuyos. Se detectan para los 10, pero los de
           los demás no ayudan a revisar tu partida. */}
-      {(pressure !== null || pressureErr !== null) && (
+      {pressure !== null && pressureErr === null && (
         <section>
           <div className="sect__head">
             <span className="u-label">{t("Pressure you absorbed")}</span>
@@ -424,9 +486,9 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
                   <div className="mm__row">
                     <span className="u-metric">{Math.round(mmPct)}%</span>
                     <span className="u-meta">{t("reading the minimap, about two minutes")}</span>
-                    <button className="btn btn--ghost btn--sm" style={{ marginLeft: "auto" }} onClick={pararMinimapa}>
+                    <Button size="sm" className="imt__stop" onClick={pararMinimapa}>
                       {t("Stop")}
-                    </button>
+                    </Button>
                   </div>
                 </>
               ) : (
@@ -434,27 +496,20 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
                   <p className="note">
                     {t("Without it each stretch is a lower bound: the API only gives one position per minute. Takes about two minutes and can be stopped; what it has done is kept.")}
                   </p>
-                  <button className="btn btn--primary btn--sm imt__videoBtn" onClick={empezarMinimapa}>
+                  <Button variant="primary" size="sm" className="imt__videoBtn" onClick={empezarMinimapa}>
                     {mmStatus.saved_progress
                       ? `${t("Resume analysis")} (${Math.round(mmStatus.saved_progress)}%)`
                       : t("Analyze the video")}
-                  </button>
+                  </Button>
                 </>
               )}
-              {mmErr !== null && <p className="note" style={{ color: "var(--loss)" }}>{mmErr}</p>}
+              {mmErr !== null && <p className="note imt__err">{mmErr}</p>}
             </div>
           ))}
 
-          {/* Tres estados distinguibles: fallo, vacio de verdad, y datos. */}
-          {pressureErr !== null && (
-            <>
-              <p className="note">{t("Couldn't load the pressure stretches: {msg}", { msg: pressureErr })}</p>
-              <button className="btn btn--ghost btn--sm" onClick={reintentar}>
-                <RefreshCw size={13} /> {t("Retry")}
-              </button>
-            </>
-          )}
-          {pressureErr === null && !hayEpisodios && (
+          {/* Dos estados: vacío de verdad y datos. El fallo va en el aviso
+              de arriba. */}
+          {!hayEpisodios && (
             <p className="note">{t("No stretches detected in this game.")}</p>
           )}
           {mios.map((w) => (
@@ -501,18 +556,11 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, seekT
                 <div key={z.key} className="imp__row">
                   <span className="imp__rowName">{t(CARRILES[z.key] ?? z.key)}</span>
                   <span className="imp__track imt__plain">
-                    <span
-                      className="imp__bar"
-                      style={{
-                        background: "var(--cool)",
-                        width: `${(z.per_minute / masMirado) * 100}%`,
-                        left: 0,
-                      }}
-                    />
+                    <span className="imp__bar" data-tone="cool" style={{ width: `${(z.per_minute / masMirado) * 100}%` }} />
                   </span>
                   <span
                     className="u-metric imp__rowNum"
-                    style={{ color: malo ? "var(--loss)" : "var(--muted)" }}
+                    data-tone={malo ? "loss" : "muted"}
                     title={`${z.looks} ${t("looks")} · ${z.per_minute.toFixed(1)}/min`}
                   >
                     {clock(z.longest_gap_secs)}

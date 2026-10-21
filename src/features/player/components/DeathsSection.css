@@ -1,7 +1,9 @@
 /* "Tus muertes" (DeathsSection) y "Tu oro y tus compras" (GoldPurchases).
    Prefijos `ds-` y `gp-`. Solo tokens de index.css. */
 
-.ds-summary { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+.ds { display: flex; flex-direction: column; gap: var(--space-3); }
+.ds-none { margin: 0; }
+.ds-summary { margin: 0; font-size: var(--fs-13); color: var(--text); line-height: var(--lh-13); }
 .ds-list { display: flex; flex-direction: column; }
 .ds-row {
   display: grid;
@@ -22,34 +24,13 @@
 .ds-row + .ds-row { box-shadow: inset 0 1px 0 var(--line-soft); }
 .ds-time { color: var(--muted); }
 .ds-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.ds-who { font-size: 13px; }
+.ds-who { font-size: var(--fs-13); }
 .ds-soft { color: var(--muted); }
-.ds-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-.ds-tag {
-  font-size: 11px;
-  line-height: 18px;
-  padding: 0 7px;
-  border-radius: var(--radius-full);
-  background: var(--sunken);
-  color: var(--muted);
-}
-.ds-tag--bad { background: var(--tint-loss); color: var(--loss); }
+.ds-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 /* Las muertes llevan su precio a la derecha: lo que costaron en probabilidad
-   de victoria (muertes.rs). */
+   de victoria (muertes.rs). Es el Chip de derrota, como en «Lo que te costó». */
 .ds-row--priced { grid-template-columns: 44px minmax(0, 1fr) auto; }
-.ds-cost {
-  align-self: start;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 0 8px;
-  border-radius: var(--radius-full);
-  /* Relleno liso, como el LP perdido: --tint-loss es un degradado de fila y
-     en una píldora se desvanece hacia la derecha. */
-  background: color-mix(in srgb, var(--loss) 14%, transparent);
-  color: var(--loss);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
+.ds-cost { align-self: start; font-variant-numeric: tabular-nums; }
 
 .gp-visit {
   display: grid;
@@ -63,7 +44,7 @@
   background: none;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-12);
   text-align: left;
   cursor: pointer;
 }

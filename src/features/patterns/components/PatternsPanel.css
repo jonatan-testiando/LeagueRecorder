@@ -90,21 +90,6 @@
 .pp-chip:disabled { opacity: 0.45; cursor: default; }
 .pp-chip:focus-visible { outline: 2px solid var(--cool); outline-offset: 2px; }
 
-/* El periodo: un control segmentado, una sola píldora. */
-.pp-seg {
-  display: flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair);
-}
-.pp-seg .pp-chip { height: 26px; box-shadow: none; font-weight: 400; }
-.pp-seg .pp-chip[aria-pressed="true"] {
-  font-weight: 500;
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
-}
-
 /* El peor tramo: el violeta del hallazgo, el mismo de la barra del foco. */
 .pp-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--flag); flex: none; }
 .pp-chip--worst[aria-pressed="true"] {

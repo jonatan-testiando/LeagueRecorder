@@ -6,6 +6,7 @@ import { champLabel } from "../../../core/matchEvents";
 import { sameRole } from "../../../core/roles";
 import { PositionIcon, POSITION_LABEL, normalizePosition } from "../../../components/PositionIcon";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Button } from "../../../components/ui/Button";
 import { ChampFace } from "./eventMeta";
 import { GoldXpChart } from "./GoldXpChart";
 import { LeadChart } from "./LeadChart";
@@ -105,10 +106,9 @@ export const MatchTab: React.FC<MatchTabProps> = ({
             title={t("This game isn't synced with Riot yet")}
             text={t("The lead, your deaths, the route and your gold come from Riot's timeline of the game.")}
           />
-          <button className="btn btn--primary btn--sm" onClick={onSync} disabled={syncing}>
-            <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-            {syncing ? t("Syncing…") : t("Sync with Riot")}
-          </button>
+          <Button variant="primary" size="sm" icon={<RefreshCw size={13} />} loading={syncing} loadingLabel={t("Syncing…")} onClick={onSync}>
+            {t("Sync with Riot")}
+          </Button>
           <p className="note">{t("Needs your Riot API key set in Settings.")}</p>
         </section>
       )}
@@ -333,18 +333,16 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         // Sincronizada pero sin los diez: falta sólo el marcador.
         <section>
           <p className="note">{t("The 10-player scoreboard is not loaded yet.")}</p>
-          <button className="btn btn--primary btn--sm" onClick={onSync} disabled={syncing}>
-            <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-            {syncing ? t("Syncing…") : t("Sync with Riot")}
-          </button>
+          <Button variant="primary" size="sm" icon={<RefreshCw size={13} />} loading={syncing} loadingLabel={t("Syncing…")} onClick={onSync}>
+            {t("Sync with Riot")}
+          </Button>
         </section>
       ) : null}
 
       {!match.is_vod && participants.length > 0 && (
-        <button className="btn btn--ghost btn--sm insp__resync" onClick={onSync} disabled={syncing}>
-          <RefreshCw size={13} style={syncing ? { animation: "spin 1s linear infinite" } : undefined} />
-          {syncing ? t("Updating…") : t("Refresh Riot data")}
-        </button>
+        <Button size="sm" className="insp__resync" icon={<RefreshCw size={13} />} loading={syncing} loadingLabel={t("Updating…")} onClick={onSync}>
+          {t("Refresh Riot data")}
+        </Button>
       )}
     </div>
   );

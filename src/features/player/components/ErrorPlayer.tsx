@@ -13,6 +13,7 @@ import { useT } from "../../../core/LanguageProvider";
 import { clock } from "../../../core/time";
 
 import { streamUrl } from "../../../core/media";
+import { Segmented } from "../../../components/ui/Segmented";
 
 /**
  * Las categorías de error, en el orden en que se ofrecen.
@@ -337,18 +338,13 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
 
             {/* Segmentado y no desplegable, igual que en el reproductor
                 principal: en una revisión la velocidad se cambia todo el rato. */}
-            <span className="tp-seg" role="group" aria-label={t("Playback speed")}>
-              {RATES.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setPlaybackRate(r)}
-                  aria-pressed={playbackRate === r}
-                  data-on={playbackRate === r ? "" : undefined}
-                >
-                  {r}&times;
-                </button>
-              ))}
-            </span>
+            <Segmented
+              size="sm"
+              label={t("Playback speed")}
+              value={playbackRate}
+              onChange={setPlaybackRate}
+              options={RATES.map((r) => ({ value: r, label: `${r}×` }))}
+            />
 
             <span style={{ flex: 1, minWidth: 12 }} />
 

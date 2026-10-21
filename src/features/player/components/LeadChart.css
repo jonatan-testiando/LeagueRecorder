@@ -12,9 +12,6 @@
 .lc--loading { min-height: 220px; }
 
 .lc-controls { display: flex; flex-wrap: wrap; gap: 6px; }
-.lc-controls .tp-seg button { padding: 4px 9px; white-space: nowrap; }
-.lc-controls .tp-seg button:disabled { opacity: 0.4; cursor: default; }
-.lc-controls .tp-seg button:disabled:hover { color: var(--faint); }
 
 .lc-caption { margin: 0; font-size: 12px; line-height: 1.45; color: var(--faint); }
 

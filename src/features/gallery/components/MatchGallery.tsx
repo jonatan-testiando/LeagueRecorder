@@ -33,6 +33,7 @@ import { useLang, useT } from "../../../core/LanguageProvider";
 import { relativeDay } from "../../../core/time";
 import { MatchDetailPanel } from "./MatchDetailPanel";
 import { cap, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioTone, selfOf } from "./libraryShared";
+import { Segmented } from "../../../components/ui/Segmented";
 import "./MatchGallery.css";
 
 interface DiskSpaceInfo {
@@ -590,22 +591,17 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
       {/* Una fila: estado · puesto · campeón · orden · seleccionar. */}
       <div className="lib-filters">
-        <div className="lib-seg" role="group" aria-label={t("Filter by status")}>
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              className="lib-seg__btn"
-              aria-pressed={filter === f.key}
-              onClick={() => setFilter(f.key)}
-            >
-              {t(f.label)}
-              <span className={`lib-seg__n${f.key === "unreviewed" ? " lib-seg__n--gold" : ""}`}>
-                {cargando ? "—" : counts[f.key]}
-              </span>
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Filter by status")}
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((f) => ({
+            value: f.key,
+            label: t(f.label),
+            count: cargando ? "—" : counts[f.key],
+            countTone: f.key === "unreviewed" ? ("gold" as const) : undefined,
+          }))}
+        />
 
         <span className="lib-sep" aria-hidden />
 

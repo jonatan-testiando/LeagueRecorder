@@ -23,6 +23,7 @@ import {
   type Vista,
 } from "../mapDraw";
 import { EpisodeStrip } from "./EpisodeStrip";
+import { Segmented } from "../../../components/ui/Segmented";
 import "./RouteReplay.css";
 
 /**
@@ -506,14 +507,8 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
     return () => cancelAnimationFrame(raf);
   }, [videoRef, tr]);
 
-  const seg = <K extends string>(opts: [K, string][], val: K, set: (k: K) => void) => (
-    <span className="tp-seg">
-      {opts.map(([k, l]) => (
-        <button key={k} type="button" aria-pressed={val === k} data-on={val === k ? "" : undefined} onClick={() => set(k)}>
-          {t(l)}
-        </button>
-      ))}
-    </span>
+  const seg = <K extends string>(opts: [K, string][], val: K, set: (k: K) => void, label: string) => (
+    <Segmented size="sm" label={label} value={val} onChange={set} options={opts.map(([k, l]) => ({ value: k, label: t(l) }))} />
   );
 
   const aviso =
@@ -535,8 +530,8 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
       <div className="rr-bar" ref={barra}>
         <span className="rr-group">
           <span className="u-label">{t("Your trail")}</span>
-          {seg<Modo>([["off", "Off"], ["recent", "Last 30 s"], ["sofar", "So far"], ["all", "Whole game"]], modo, setModo)}
-          {modo === "all" && seg<Fase>(FASES.map((x) => [x.key, x.label] as [Fase, string]), fase, setFase)}
+          {seg<Modo>([["off", "Off"], ["recent", "Last 30 s"], ["sofar", "So far"], ["all", "Whole game"]], modo, setModo, t("Trail"))}
+          {modo === "all" && seg<Fase>(FASES.map((x) => [x.key, x.label] as [Fase, string]), fase, setFase, t("Stretch"))}
         </span>
         <button
           type="button"
@@ -686,23 +681,11 @@ const Descarga: React.FC<{ matchId: string; disponible: boolean; desde: number; 
         <div className="rr-pop tp-pop" role="dialog" aria-label={t("Download the route")}>
           <div className="rr-pop-row">
             <span className="u-label">{t("Speed")}</span>
-            <span className="tp-seg">
-              {VELOCIDADES.map((v) => (
-                <button key={v} type="button" aria-pressed={vel === v} data-on={vel === v ? "" : undefined} onClick={() => setVel(v)}>
-                  {v}×
-                </button>
-              ))}
-            </span>
+            <Segmented size="sm" label={t("Speed")} value={vel} onChange={setVel} options={VELOCIDADES.map((v) => ({ value: v, label: `${v}×` }))} />
           </div>
           <div className="rr-pop-row">
             <span className="u-label">{t("Stretch")}</span>
-            <span className="tp-seg">
-              {tramos.map(([k, l]) => (
-                <button key={k} type="button" aria-pressed={tramo === k} data-on={tramo === k ? "" : undefined} onClick={() => setTramo(k)}>
-                  {t(l)}
-                </button>
-              ))}
-            </span>
+            <Segmented size="sm" label={t("Stretch")} value={tramo} onChange={setTramo} options={tramos.map(([k, l]) => ({ value: k, label: t(l) }))} />
           </div>
           <p className="note" style={{ margin: 0 }}>
             {modo === "off"

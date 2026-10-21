@@ -1137,9 +1137,10 @@ button.cap:not(:disabled):active { transform: none; }
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
-  /* El spinner del botón se sustituye por un texto de progreso (Button, fase 2). */
+  /* El spinner del botón se quita: queda el verbo («Comprobando…») o, si el
+     botón no lo tiene, su texto con puntos suspensivos. */
   .btn[data-loading] .btn__spinner { display: none; }
-  .btn[data-loading] .btn__label::after { content: "…"; }
+  .btn[data-loading="spin"] .btn__label::after { content: "…"; }
   /* Plegar el rail: sin recorte ni ancho animados. */
   .rail,
   .rail-profile,
@@ -1318,12 +1319,30 @@ button.cap:not(:disabled):active { transform: none; }
   box-shadow: none;
   border: 1px solid transparent;
   white-space: nowrap;
-  transition: background-color var(--t-instant) var(--e-move),
-    border-color var(--t-instant) var(--e-move),
-    color var(--t-instant) var(--e-move);
+  transition: transform var(--t-press) var(--e-out),
+    background-color var(--t-hover) var(--e-color),
+    border-color var(--t-hover) var(--e-color),
+    color var(--t-hover) var(--e-color);
 }
 .btn--md { padding: 8px var(--space-4); }
 .btn--sm { padding: 5px var(--space-3); font-size: var(--fs-13); }
+/* Pulsar: responde en el pointerdown (:active), no al soltar. Gana a la regla
+   global de button:active, que desplaza 1 px. */
+.btn:active:not(:disabled):not([data-loading]) { transform: scale(var(--pop-scale)); }
+.btn__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Cargando: el spinner ocupa el sitio del icono y el texto pasa a gerundio
+   («Comprobando…»). No se apaga el botón entero, solo deja de responder. */
+.btn[data-loading] { cursor: progress; }
+.btn__spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  animation: spin 0.8s linear infinite;
+}
+.btn--sm .btn__spinner { width: 12px; height: 12px; }
 
 /* El botón es la superficie más pequeña de la app y por eso es donde más se
    nota que hay volumen: filo iluminado arriba, cuerpo, y base un punto más
@@ -1340,26 +1359,17 @@ button.cap:not(:disabled):active { transform: none; }
   font-weight: 600;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32), 0 1px 2px rgba(0, 0, 0, 0.45);
 }
-.btn--primary:hover:not(:disabled) {
-  background: linear-gradient(
-    152deg,
-    color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
-    var(--action-hover) 60%,
-    var(--action) 100%
-  );
-  box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
-}
-
 .btn--ghost {
   background: transparent;
   border-color: var(--hair-strong);
   color: var(--text);
 }
-.btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
+/* El fantasma pequeño habla en --muted: en --text competía con la acción de
+   la pantalla, y en --faint («Descargar», «Quitar») apenas se veía. */
+.btn--ghost.btn--sm { color: var(--muted); }
 .btn--ghost[aria-pressed="true"] { background: var(--surface-2); color: var(--text); border-color: var(--glass-line); }
 
 .btn--danger { background: transparent; border-color: transparent; color: var(--faint); }
-.btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
 
 .btn--icon {
   background: transparent;
@@ -1367,7 +1377,150 @@ button.cap:not(:disabled):active { transform: none; }
   color: var(--faint);
   padding: var(--space-2);
 }
-.btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+/* Hover solo con ratón: en una pantalla táctil el hover se queda pegado
+   después de tocar. */
+@media (hover: hover) and (pointer: fine) {
+  .btn--primary:hover:not(:disabled) {
+    background: linear-gradient(
+      152deg,
+      color-mix(in srgb, #fff 12%, var(--action-hover)) 0%,
+      var(--action-hover) 60%,
+      var(--action) 100%
+    );
+    box-shadow: 0 6px 20px -10px color-mix(in srgb, var(--action) 55%, transparent);
+  }
+  .btn--ghost:hover:not(:disabled) { background: var(--surface-2); border-color: var(--glass-line); color: var(--text); }
+  .btn--danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--loss); }
+  .btn--icon:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+}
+
+/* --- Segmentado (Segmented.tsx) ------------------------------------------
+   Carril hundido en píldora y una lámina flotante que se desliza a la opción
+   elegida. La lámina la coloca useIndicator con --ind-x/--ind-w; sin medida
+   (panel oculto) la pinta la propia opción. */
+.seg {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.seg__thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  width: var(--ind-w, 0);
+  transform: translateX(var(--ind-x, 0));
+  border-radius: var(--radius-full);
+  background: var(--overlay);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+  opacity: 0;
+  pointer-events: none;
+}
+.seg[data-measured] .seg__thumb { opacity: 1; }
+.seg[data-ready] .seg__thumb {
+  transition: transform var(--t-base) var(--e-move), width var(--t-base) var(--e-move);
+}
+.seg__opt {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-13);
+  font-weight: 500;
+  line-height: var(--lh-13);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-hover) var(--e-color);
+}
+.seg__opt[aria-pressed="true"] { color: var(--text); }
+.seg:not([data-measured]) .seg__opt[aria-pressed="true"] {
+  background: var(--overlay);
+  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
+}
+.seg__opt:not(:disabled):active { transform: none; }
+.seg__opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.seg__n {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.seg__n--gold { color: var(--brand-ink); }
+.seg--sm .seg__opt {
+  height: 22px;
+  gap: 4px;
+  padding: 0 10px;
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+}
+
+/* --- Pestañas (Tabs.tsx) -------------------------------------------------
+   Subrayado de oro de 2 px que se desliza; el contenido cambia al instante. */
+.tabs {
+  position: relative;
+  display: flex;
+  gap: 20px;
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.tabs__tab {
+  height: 40px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  font-weight: 500;
+  line-height: var(--lh-14);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--t-hover) var(--e-color);
+}
+.tabs__tab[aria-selected="true"] { color: var(--text); }
+.tabs__tab:not(:disabled):active { transform: none; }
+.tabs__tab:focus-visible { outline: 2px solid var(--focus); outline-offset: -4px; border-radius: var(--radius-sm); }
+.tabs__ink {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: var(--ind-w, 0);
+  transform: translateX(var(--ind-x, 0));
+  border-radius: var(--radius-full);
+  background: var(--brand);
+  opacity: 0;
+  pointer-events: none;
+}
+.tabs[data-measured] .tabs__ink { opacity: 1; }
+.tabs[data-ready] .tabs__ink {
+  transition: transform var(--t-base) var(--e-move), width var(--t-base) var(--e-move);
+}
+.tabs:not([data-measured]) .tabs__tab[aria-selected="true"] { box-shadow: inset 0 -2px 0 var(--brand); }
+
+@media (hover: hover) and (pointer: fine) {
+  .seg__opt:hover:not(:disabled):not([aria-pressed="true"]),
+  .tabs__tab:hover { color: var(--text); }
+}
+/* Con movimiento reducido el indicador salta: deslizarse es desplazarse. */
+@media (prefers-reduced-motion: reduce) {
+  .seg[data-ready] .seg__thumb,
+  .tabs[data-ready] .tabs__ink { transition: none; }
+}
 
 /* Chip de estado ("Error", "Hallazgo", "Excelente"): píldora en sans. */
 .badge {
@@ -1679,29 +1832,6 @@ button.cap:not(:disabled):active { transform: none; }
   flex-shrink: 0;
   margin: 0 var(--space-1);
 }
-
-.tp-seg {
-  display: flex;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.tp-seg button {
-  font-family: var(--font-sans);
-  font-size: var(--fs-12);
-  font-weight: 500;
-  padding: 4px 10px;
-  background: transparent;
-  border: 0;
-  color: var(--faint);
-  cursor: pointer;
-  transition: color var(--t-instant) var(--e-move),
-    background-color var(--t-instant) var(--e-move);
-}
-.tp-seg button + button { border-left: 1px solid var(--line); }
-.tp-seg button:hover { color: var(--text); }
-.tp-seg button[data-on] { background: var(--surface-2); color: var(--text); }
 
 /* El volumen se despliega al pasar por encima: se ajusta una vez y no merece
    ocupar sitio permanente en horizontal. */

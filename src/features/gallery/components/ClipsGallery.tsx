@@ -15,6 +15,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Segmented } from "../../../components/ui/Segmented";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
@@ -433,29 +434,28 @@ export const ClipsGallery: React.FC = () => {
       </div>
 
       <div className="cg__tools">
-        <div className="cg-seg" role="group" aria-label={t("Filter clips")}>
-          <button type="button" aria-pressed={!onlyFavorites} onClick={() => setOnlyFavorites(false)}>
-            {t("All clips")} <span className="cg-seg__n">{clips.length}</span>
-          </button>
-          <button type="button" aria-pressed={onlyFavorites} onClick={() => setOnlyFavorites(true)}>
-            <Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />
-            {t("Favourites")} <span className="cg-seg__n">{favCount}</span>
-          </button>
-        </div>
+        <Segmented
+          label={t("Filter clips")}
+          value={onlyFavorites ? "fav" : "all"}
+          onChange={(v) => setOnlyFavorites(v === "fav")}
+          options={[
+            { value: "all", label: t("All clips"), count: clips.length },
+            {
+              value: "fav",
+              label: t("Favourites"),
+              count: favCount,
+              icon: <Heart size={13} fill={onlyFavorites ? "currentColor" : "transparent"} />,
+            },
+          ]}
+        />
         <span className="cg__spacer" />
         <span className="cg__toolLabel">{t("Sort")}</span>
-        <div className="cg-seg" role="group" aria-label={t("Sort")}>
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              type="button"
-              aria-pressed={sort === s.key}
-              onClick={() => setSort(s.key)}
-            >
-              {t(s.label)}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Sort")}
+          value={sort}
+          onChange={setSort}
+          options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+        />
       </div>
 
       {visible.length === 0 ? (

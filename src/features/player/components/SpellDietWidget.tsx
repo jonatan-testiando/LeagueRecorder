@@ -10,6 +10,7 @@ import { mmss } from "../../../core/time";
 import { useT } from "../../../core/LanguageProvider";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { wstyles } from "./videoPlayerStyles";
+import { Segmented } from "../../../components/ui/Segmented";
 
 /**
  * Qué hechizos te comes y qué hacía tu mano al comértelos.
@@ -116,18 +117,16 @@ export const SpellDietWidget: React.FC<SpellDietWidgetProps> = ({ matchId, onSee
 
   const selector = !matchId ? null : (
     <div style={wstyles.toolbar}>
-      <span className="tp-seg">
-        {(["match", "career"] as Scope[]).map((s) => (
-          <button
-            key={s}
-            onClick={() => setScope(s)}
-            aria-pressed={scope === s}
-            data-on={scope === s ? "" : undefined}
-          >
-            {s === "match" ? t("This game") : t("All synced games")}
-          </button>
-        ))}
-      </span>
+      <Segmented
+        size="sm"
+        label={t("Scope")}
+        value={scope}
+        onChange={setScope}
+        options={[
+          { value: "match" as Scope, label: t("This game") },
+          { value: "career" as Scope, label: t("All synced games") },
+        ]}
+      />
     </div>
   );
 

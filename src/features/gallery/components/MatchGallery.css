@@ -77,45 +77,6 @@
 .lib-grow { flex: 1; min-width: 0; }
 .lib-sep { width: 1px; height: 20px; background: var(--hair); flex: none; }
 
-/* Píldoras segmentadas de estado. */
-.lib-seg {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 34px;
-  padding: 3px;
-  border-radius: 999px;
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px var(--hair);
-  flex: none;
-}
-.lib-seg__btn {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 13px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 400;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.lib-seg__btn:hover { color: var(--text); }
-.lib-seg__btn[aria-pressed="true"] {
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
-  color: var(--text);
-  font-weight: 500;
-}
-.lib-seg__btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
-.lib-seg__n { color: var(--faint); font-weight: 400; }
-.lib-seg__n--gold { color: var(--brand); }
-
 /* Posiciones: botones de icono, como en el cliente. */
 .lib-pos {
   display: flex;

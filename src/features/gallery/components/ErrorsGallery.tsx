@@ -6,6 +6,7 @@ import { MatchMetadata } from "../../../types";
 import { Badge } from "../../../components/ui/Badge";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Segmented } from "../../../components/ui/Segmented";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useToast } from "../../../components/ui/Toaster";
@@ -193,25 +194,23 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
 
       {errors.length > 0 && (
         <div className="cg__tools">
-          <div className="cg-seg" role="group" aria-label={t("Filter by category")}>
-            <button type="button" aria-pressed={category === "all"} onClick={() => setCategory("all")}>
-              {t("All")} <span className="cg-seg__n">{errors.length}</span>
-            </button>
-            {presentCategories.map((c) => (
-              <button key={c} type="button" aria-pressed={category === c} onClick={() => setCategory(c)}>
-                {t(c)} <span className="cg-seg__n">{countByCategory.get(c) ?? 0}</span>
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={t("Filter by category")}
+            value={category}
+            onChange={setCategory}
+            options={[
+              { value: "all", label: t("All"), count: errors.length },
+              ...presentCategories.map((c) => ({ value: c, label: t(c), count: countByCategory.get(c) ?? 0 })),
+            ]}
+          />
           <span className="cg__spacer" />
           <span className="cg__toolLabel">{t("Sort")}</span>
-          <div className="cg-seg" role="group" aria-label={t("Sort")}>
-            {SORTS.map((s) => (
-              <button key={s.key} type="button" aria-pressed={sort === s.key} onClick={() => setSort(s.key)}>
-                {t(s.label)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={t("Sort")}
+            value={sort}
+            onChange={setSort}
+            options={SORTS.map((s) => ({ value: s.key, label: t(s.label) }))}
+          />
         </div>
       )}
 

@@ -19,6 +19,7 @@ import { MatchTab } from "./MatchTab";
 import { ImpactTab } from "./ImpactTab";
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { EmptyState } from "../../../components/ui/EmptyState";
+import { Tabs } from "../../../components/ui/Tabs";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVideoPlayback } from "../hooks/useVideoPlayback";
@@ -1693,21 +1694,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
         {!isFullscreen && (
         <aside ref={asideRef} className="vp-insp" aria-label={t("Game review")}>
           <div style={styles.resizeHandle} onPointerDown={startResize} title={t("Drag to resize")} />
-          <div className="vp-tabs" role="tablist" aria-label={t("Game panels")}>
-            {(["review", "match", "impact"] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                className="vp-tab"
-                aria-selected={tab === id}
-                data-on={tab === id ? "" : undefined}
-                onClick={() => setTab(id)}
-              >
-                {t(id === "review" ? "Review" : id === "match" ? "Game" : "Impact")}
-              </button>
-            ))}
-          </div>
+          <Tabs
+            className="vp-tabs"
+            label={t("Game panels")}
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: "review", label: t("Review") },
+              { value: "match", label: t("Game") },
+              { value: "impact", label: t("Impact") },
+            ]}
+          />
 
         {tab === "review" && (() => {
           const counts = { good: 0, neutral: 0, bad: 0 };

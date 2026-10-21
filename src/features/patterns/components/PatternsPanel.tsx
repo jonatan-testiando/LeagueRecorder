@@ -72,6 +72,7 @@ import { hotSpots, RIFT_H, RIFT_W, type Side } from "../riftZones";
 import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
 import { formatDecimal } from "../../../core/benchmarkFormat";
+import { Segmented } from "../../../components/ui/Segmented";
 import "./PatternsPanel.css";
 
 /**
@@ -1032,19 +1033,17 @@ export const PatternsPanel: React.FC = () => {
         {/* Filtros: cada agregado de abajo se recalcula solo con las partidas
             jugadas en ese puesto Y dentro de esa ventana temporal. */}
         <div className="pp-filters">
-          <div className="pp-seg" role="group" aria-label={t("Period")}>
-            {RANGES.map((r) => (
-              <Chip
-                key={r.key}
-                on={rango === r.key}
-                disabled={r.key === "patch" && !parcheActual}
-                title={r.key === "patch" && parcheActual ? t("Patch {v}", { v: parcheActual }) : undefined}
-                onClick={() => { setRango(r.key); setHover(null); }}
-              >
-                {t(r.label)}
-              </Chip>
-            ))}
-          </div>
+          <Segmented
+            label={t("Period")}
+            value={rango}
+            onChange={(r) => { setRango(r); setHover(null); }}
+            options={RANGES.map((r) => ({
+              value: r.key,
+              label: t(r.label),
+              disabled: r.key === "patch" && !parcheActual,
+              title: r.key === "patch" && parcheActual ? t("Patch {v}", { v: parcheActual }) : undefined,
+            }))}
+          />
           <PositionMenu value={rol} onChange={(r) => { setRol(r); setHover(null); }} />
         </div>
         {/* En voz baja, pero dicho: un panel que se queda vacío por un fallo de

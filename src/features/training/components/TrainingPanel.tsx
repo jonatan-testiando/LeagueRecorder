@@ -7,13 +7,14 @@ import { AwarenessQuiz } from "./AwarenessQuiz";
 import { TrainingSetup } from "./TrainingSetup";
 import { useT } from "../../../core/LanguageProvider";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { Segmented } from "../../../components/ui/Segmented";
 
 type Section = "drills" | "awareness" | "setup";
 
 const SECTIONS: { key: Section; label: string; icon: React.ReactNode }[] = [
-  { key: "drills", label: "Drills", icon: <Zap size={16} /> },
-  { key: "awareness", label: "Awareness", icon: <Brain size={16} /> },
-  { key: "setup", label: "Setup", icon: <Keyboard size={16} /> },
+  { key: "drills", label: "Drills", icon: <Zap size={14} /> },
+  { key: "awareness", label: "Awareness", icon: <Brain size={14} /> },
+  { key: "setup", label: "Setup", icon: <Keyboard size={14} /> },
 ];
 
 /**
@@ -157,18 +158,12 @@ export const TrainingPanel: React.FC = () => {
       </div>
 
       <div style={styles.tabs}>
-        {SECTIONS.map((s) => (
-          <button
-            key={s.key}
-            className="btn btn--ghost"
-            aria-pressed={section === s.key}
-            style={styles.tab}
-            onClick={() => { void goTo(s.key); }}
-          >
-            {s.icon}
-            {t(s.label)}
-          </button>
-        ))}
+        <Segmented
+          label={t("Training")}
+          value={section}
+          onChange={(k) => { void goTo(k); }}
+          options={SECTIONS.map((s) => ({ value: s.key, label: t(s.label), icon: s.icon }))}
+        />
       </div>
 
       <div style={styles.content}>

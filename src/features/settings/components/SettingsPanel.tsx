@@ -11,6 +11,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { RIOT_DEV_PORTAL } from "../../../components/RiotKeyBanner";
 import { useDialog } from "../../../components/ui/DialogProvider";
+import { Button } from "../../../components/ui/Button";
+import { Segmented } from "../../../components/ui/Segmented";
 import { useToast } from "../../../components/ui/Toaster";
 import { listen } from "@tauri-apps/api/event";
 import { useOnboarding } from "../../onboarding/useOnboarding";
@@ -762,56 +764,40 @@ export const SettingsPanel: React.FC = () => {
 
       <section className="card stg-card">
         <Row label={t("Quality")} desc={t("Constant quality: a lower CQ is sharper and heavier.")}>
-          <div className="tp-seg">
-            {([
-              { key: "High", label: t("High"), hint: t("Constant quality {cq}", { cq: 20 }) },
-              { key: "Medium", label: t("Medium"), hint: t("Constant quality {cq}", { cq: 23 }) },
-              { key: "Low", label: t("Low"), hint: t("Constant quality {cq}", { cq: 26 }) },
-            ] as const).map((q) => (
-              <button
-                key={q.key}
-                onClick={() => video && saveVideo(video.fps, q.key)}
-                {...(video?.quality === q.key ? { "data-on": true } : {})}
-                title={q.hint}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={t("Quality")}
+            value={video?.quality}
+            onChange={(q) => video && saveVideo(video.fps, q)}
+            options={[
+              { value: "High" as const, label: t("High"), title: t("Constant quality {cq}", { cq: 20 }) },
+              { value: "Medium" as const, label: t("Medium"), title: t("Constant quality {cq}", { cq: 23 }) },
+              { value: "Low" as const, label: t("Low"), title: t("Constant quality {cq}", { cq: 26 }) },
+            ]}
+          />
         </Row>
 
         <Row label={t("Frame rate")} desc={t("Encoded on the GPU (NVENC), so your in-game FPS is untouched.")}>
-          <div className="tp-seg">
-            {[60, 30].map((f) => (
-              <button
-                key={f}
-                onClick={() => video && saveVideo(f, video.quality)}
-                {...(video?.fps === f ? { "data-on": true } : {})}
-              >
-                {f} FPS
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={t("Frame rate")}
+            value={video?.fps}
+            onChange={(f) => video && saveVideo(f, video.quality)}
+            options={[60, 30].map((f) => ({ value: f, label: `${f} FPS` }))}
+          />
         </Row>
 
         {/* Antes esto no se podía elegir: se grababa a 1080p siempre, así que
             quien juega a 1440p perdía resolución de balde. */}
         <Row label={t("Resolution")} desc={t("Native records at the game's window size (up to 1440p)")}>
-          <div className="tp-seg">
-            {([
-              { key: "native", label: t("Native") },
-              { key: "1080p", label: "1080p" },
-              { key: "1440p", label: "1440p" },
-            ] as const).map((r) => (
-              <button
-                key={r.key}
-                onClick={() => video && saveVideo(video.fps, video.quality, r.key)}
-                {...((video?.resolution ?? "native") === r.key ? { "data-on": true } : {})}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            label={t("Resolution")}
+            value={video?.resolution ?? "native"}
+            onChange={(r) => video && saveVideo(video.fps, video.quality, r)}
+            options={[
+              { value: "native" as const, label: t("Native") },
+              { value: "1080p" as const, label: "1080p" },
+              { value: "1440p" as const, label: "1440p" },
+            ]}
+          />
         </Row>
 
         <Row label={t("Save replay")} desc={t("Saves the last 30 seconds as a clip while recording")}>
@@ -835,10 +821,9 @@ export const SettingsPanel: React.FC = () => {
           >
             <span>{audioLabel}</span>
           </span>
-          <button className="btn btn--ghost btn--sm" onClick={refreshAudio} disabled={audioLoading}>
-            <RefreshCw size={12} style={audioLoading ? { animation: "spin 1s linear infinite" } : undefined} />
-            {audioLoading ? t("Checking…") : t("Re-detect")}
-          </button>
+          <Button size="sm" icon={<RefreshCw size={12} />} loading={audioLoading} loadingLabel={t("Checking…")} onClick={refreshAudio}>
+            {t("Re-detect")}
+          </Button>
         </Row>
 
         <Row label={t("Reset to defaults")} desc={t("Video goes back to 60 FPS, High quality and Native resolution.")}>
@@ -1007,31 +992,21 @@ export const SettingsPanel: React.FC = () => {
   const accountView = (
     <section className="card stg-card">
       <Row label={t("Language")} desc={t("Interface language. Saved with your settings.")}>
-        <div className="tp-seg">
-          {LANGUAGES.map((l) => (
-            <button
-              key={l.code}
-              onClick={() => setLang(l.code as Language)}
-              {...(lang === l.code ? { "data-on": true } : {})}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Language")}
+          value={lang}
+          onChange={(l) => setLang(l)}
+          options={LANGUAGES.map((l) => ({ value: l.code as Language, label: l.label }))}
+        />
       </Row>
 
       <Row label={t("Appearance")} desc={t("Follows Windows. Saved with your settings.")}>
-        <div className="tp-seg">
-          {THEMES.map((th) => (
-            <button
-              key={th.code}
-              onClick={() => setTheme(th.code as Theme)}
-              {...(theme === th.code ? { "data-on": true } : {})}
-            >
-              {t(th.label)}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          label={t("Appearance")}
+          value={theme}
+          onChange={(th) => setTheme(th)}
+          options={THEMES.map((th) => ({ value: th.code as Theme, label: t(th.label) }))}
+        />
       </Row>
 
       <Row
@@ -1296,10 +1271,9 @@ export const SettingsPanel: React.FC = () => {
           {t("Detected audio devices")}
           {audio && audio.all_devices.length > 0 ? ` (${audio.all_devices.length})` : ""}
         </span>
-        <button className="btn btn--ghost btn--sm" onClick={refreshAudio} disabled={audioLoading}>
-          <RefreshCw size={12} style={audioLoading ? { animation: "spin 1s linear infinite" } : undefined} />
-          {audioLoading ? t("Checking…") : t("Re-detect")}
-        </button>
+        <Button size="sm" icon={<RefreshCw size={12} />} loading={audioLoading} loadingLabel={t("Checking…")} onClick={refreshAudio}>
+          {t("Re-detect")}
+        </Button>
       </div>
 
       <section className="card stg-card">

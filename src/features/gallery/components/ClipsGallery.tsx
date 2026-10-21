@@ -22,6 +22,8 @@ import { streamUrl } from "../../../core/media";
 import { matchAge } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { useAppStore, useMatches } from "../../../store/useAppStore";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import "./ClipsGallery.css";
 
 /**
@@ -383,12 +385,17 @@ export const ClipsGallery: React.FC = () => {
     return t("Expires in ~{m} min", { m });
   };
 
-  if (loading) {
+  const esqueleto = useDelayedLoading(loading);
+  if (loading || esqueleto) {
     return (
       <div className="cg panel-enter">
-        <div className="cg-center">
-          <div className="spinner" />
-        </div>
+        {esqueleto && (
+          <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
+            <Skeleton width={180} height={28} />
+            <Skeleton shape="block" width={300} height={34} style={{ borderRadius: 999 }} />
+            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={132} />)}
+          </div>
+        )}
       </div>
     );
   }

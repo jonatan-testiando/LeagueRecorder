@@ -23,7 +23,6 @@
   background: transparent;
   font-family: var(--font-sans);
 }
-.pp-center { display: grid; place-items: center; height: 100%; }
 
 /* Voces pequeñas, compartidas por toda la pantalla. */
 .pp-num { font-variant-numeric: tabular-nums; }

@@ -1129,8 +1129,8 @@ button.cap:not(:disabled):active { transform: none; }
   .rec-dot,
   .rec-dot::after,
   .cap__dot--rec,
-  .updpill__dot,
-  .skeleton { animation: none; }
+  .updpill__dot { animation: none; }
+  .skeleton::after { display: none; }
   .skeleton { opacity: 0.7; }
   /* El latido de progreso conserva el pulso de opacidad, sin la escala. */
   @keyframes pulse {
@@ -1236,55 +1236,79 @@ button.cap:not(:disabled):active { transform: none; }
 /* =========================================================================
    Estados vacíos y esqueletos de carga
    ========================================================================= */
+/* Estado vacío (EmptyState.tsx). Figma, Componentes · Estado vacío: un
+   círculo de 48 en --raised con el icono a 20, el título como título de
+   tarjeta y el texto que dice qué hacer, no solo que no hay nada. El icono lo
+   trae quien lo usa, a cualquier tamaño: aquí se ajusta a 20. Si no trae
+   color, va en --muted; uno de error puede traer el suyo. */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  padding: var(--space-12);
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-6);
   text-align: center;
-  color: var(--text-muted);
+  color: var(--muted);
 }
 .empty-state__icon {
-  width: 72px;
-  height: 72px;
+  width: 48px;
+  height: 48px;
+  flex: none;
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-1);
-  border: 1px solid var(--glass-line-soft);
-  box-shadow: var(--shadow-1);
+  background: var(--raised);
+  color: var(--muted);
 }
+.empty-state__icon svg { width: 20px; height: 20px; }
 .empty-state__title {
-  font-size: var(--font-md);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
   font-weight: 500;
-  color: var(--text-primary);
+  color: var(--text);
   margin: 0;
 }
 .empty-state__text {
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  line-height: var(--lh-14);
+  color: var(--muted);
   margin: 0;
-  max-width: 340px;
+  max-width: 420px;
 }
+.empty-state > .btn { margin-top: var(--space-1); }
 
+/* Esqueleto (Skeleton.tsx): un escalón por encima de la lámina, para que se
+   vea sobre el panel en los dos temas, y un barrido que se mueve con
+   transform (animar background-position repintaba en cada fotograma). */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--bg-card) 25%,
-    var(--bg-elevated) 37%,
-    var(--bg-card) 63%
-  );
-  background-size: 400% 100%;
-  animation: skeleton-shimmer 1.4s ease infinite;
+  position: relative;
+  overflow: hidden;
+  background: var(--raised);
   border-radius: var(--radius-md);
 }
-@keyframes skeleton-shimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--text) 5%, transparent), transparent);
+  animation: skeleton-sweep 1.4s var(--e-move) infinite;
 }
+@keyframes skeleton-sweep {
+  to { transform: translateX(100%); }
+}
+.skeleton--line,
+.skeleton--block,
+.skeleton--circle { display: block; }
+.skeleton--line { height: 12px; border-radius: var(--radius-sm); }
+.skeleton--block { height: 72px; }
+.skeleton--circle { width: 40px; height: 40px; border-radius: var(--radius-full); }
+.skeleton-lines { display: flex; flex-direction: column; gap: 10px; padding: var(--space-2) 0; }
+/* Esqueleto de una pantalla entera mientras llega su primera carga. */
+.page-skel { display: flex; flex-direction: column; gap: var(--space-5); }
+.page-skel__cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--space-5); align-items: start; }
 
 /* =========================================================================
    Turquesa atenuado para superficies grandes.

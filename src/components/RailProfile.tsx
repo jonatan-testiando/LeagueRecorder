@@ -108,7 +108,7 @@ export const RailProfile: React.FC<{ collapsed?: boolean }> = ({ collapsed }) =>
         ) : (
           <span
             className="rail-profile__rank skeleton"
-            style={{ display: "block", width: 96, height: 14, backgroundImage: "linear-gradient(90deg, var(--sunken) 25%, color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%, var(--sunken) 63%)" }}
+            style={{ display: "block", width: 96, height: 14 }}
           />
         )}
         {meta.length > 0 && <span className="rail-profile__meta">{meta.join(" · ")}</span>}

@@ -307,17 +307,6 @@
 .lib-skel__row .lib-cell > .skeleton { display: block; max-width: 100%; }
 .lib-skel__detail { gap: 12px; padding: 24px; box-sizing: border-box; }
 .lib-skel__detail > .skeleton { display: block; flex: none; }
-/* Lista y detalle son láminas (--panel), el mismo color que el .skeleton de
-   serie: las piezas se hunden un escalón para que se vean. */
-.lib-skel .skeleton,
-.lib-skel__detail .skeleton {
-  background-image: linear-gradient(
-    90deg,
-    var(--sunken) 25%,
-    color-mix(in srgb, var(--sunken) 45%, var(--panel)) 37%,
-    var(--sunken) 63%
-  );
-}
 /* Resultado en reposo: una barra a la izquierda (gris si aún no hay
    resultado) y la palabra. El tinte solo al pasar por encima o con la fila
    seleccionada: fijo, 26 filas seguidas hacían persiana en claro. */

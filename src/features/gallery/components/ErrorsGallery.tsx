@@ -16,6 +16,8 @@ import { ERROR_CATEGORIES } from "../../player/components/ErrorPlayer";
 
 import { streamUrl } from "../../../core/media";
 import { useErrorClips, useMatches } from "../../../store/useAppStore";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import "./ClipsGallery.css";
 /**
  * Los errores marcados.
@@ -152,12 +154,17 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
     [errors]
   );
 
-  if (!loaded) {
+  const esqueleto = useDelayedLoading(!loaded);
+  if (!loaded || esqueleto) {
     return (
       <div className="cg panel-enter">
-        <div className="cg-center">
-          <div className="spinner" />
-        </div>
+        {esqueleto && (
+          <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
+            <Skeleton width={180} height={28} />
+            <Skeleton shape="block" width={300} height={34} style={{ borderRadius: 999 }} />
+            {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={132} />)}
+          </div>
+        )}
       </div>
     );
   }

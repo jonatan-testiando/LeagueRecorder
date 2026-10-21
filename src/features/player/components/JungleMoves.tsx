@@ -6,6 +6,8 @@ import type { OpenMap } from "../mapFocus";
 import { cap, invadeTally, moveFocus, moveText, useMoves, type Move } from "./matchMoves";
 import { HelpDot } from "./HelpDot";
 import { wstyles } from "./videoPlayerStyles";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { SkeletonLines } from "../../../components/ui/Skeleton";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -51,13 +53,9 @@ export const JungleMoves: React.FC<Props> = ({ matchId, markers, videoOffset, is
   const resincronizar =
     gk.length === 0 && (markers ?? []).some((m) => m.event_type === "gank_attempt" && !m.lane);
 
-  if (loading && moves.length === 0) {
-    return (
-      <div className="ds-loading" role="status">
-        <div className="spinner" />
-      </div>
-    );
-  }
+  const esperando = loading && moves.length === 0;
+  const esqueleto = useDelayedLoading(esperando);
+  if (esperando || esqueleto) return esqueleto ? <SkeletonLines /> : null;
 
   // Una línea por tema. La cifra de invasiones es la de la lista de abajo (la
   // ruta), y no otra: "Oleadas" decía "6 de 13" porque quitaba del total las

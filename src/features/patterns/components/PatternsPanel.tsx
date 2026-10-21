@@ -73,6 +73,8 @@ import { PressureBreakdown } from "./PressureBreakdown";
 import { formatGold, formatSeconds } from "../../player/components/pressureFormat";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { Segmented } from "../../../components/ui/Segmented";
+import { useDelayedLoading } from "../../../core/useDelayedLoading";
+import { Skeleton } from "../../../components/ui/Skeleton";
 import "./PatternsPanel.css";
 
 /**
@@ -832,10 +834,20 @@ export const PatternsPanel: React.FC = () => {
       return next;
     });
 
-  if (loading || !matchesLoaded) {
+  const cargandoTodo = loading || !matchesLoaded;
+  const esqueleto = useDelayedLoading(cargandoTodo);
+  if (cargandoTodo || esqueleto) {
     return (
       <div className="pp panel-enter">
-        <div className="pp-center"><div className="spinner" /></div>
+        {esqueleto && (
+          <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
+            <Skeleton width={180} height={28} />
+            <div className="page-skel__cols">
+              <Skeleton shape="block" height={460} />
+              <Skeleton shape="block" height={300} />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

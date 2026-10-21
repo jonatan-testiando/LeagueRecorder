@@ -1,7 +1,6 @@
 /* "Tus muertes" (DeathsSection) y "Tu oro y tus compras" (GoldPurchases).
    Prefijos `ds-` y `gp-`. Solo tokens de index.css. */
 
-.ds-loading { display: grid; place-items: center; padding: var(--space-5) 0; }
 .ds-summary { margin: 0; font-size: 13px; color: var(--text); line-height: 1.5; }
 .ds-list { display: flex; flex-direction: column; }
 .ds-row {

@@ -72,16 +72,16 @@ export const JungleMoves: React.FC<Props> = ({ matchId, markers, videoOffset, is
   }
   if (gk.length > 0) {
     const salieron = gk.filter((g) => g.outcome === "success").length;
-    const conOleada = gk.filter((g) => g.setup != null && g.setup !== "unknown");
+    const conZona = gk.filter((g) => g.zone != null);
     lineas.push(
       <>
         {gk.length === 1
           ? t("One gank: {result}.", { result: moveText(gk[0], t).verdict })
           : t("You ganked {n} times: {m} worked.", { n: gk.length, m: salieron })}
-        {conOleada.length > 0 &&
-          ` ${t("The enemy was far from their tower in {m} of {k}.", {
-            m: conOleada.filter((g) => g.setup === "good").length,
-            k: conOleada.length,
+        {conZona.length > 0 &&
+          ` ${t("The wave was in a gankable zone (1 or 2) in {m} of {k}.", {
+            m: conZona.filter((g) => g.zone !== "own_3" && g.zone !== "enemy_3").length,
+            k: conZona.length,
           })}`}
       </>
     );
@@ -110,7 +110,7 @@ export const JungleMoves: React.FC<Props> = ({ matchId, markers, videoOffset, is
             <li key={i}>
               {l}
               {i === 0 && (
-                <HelpDot text={t("The rules: invade with the two nearby lanes pushed in your favour (their laners can't rotate first); gank with the wave on your side (the enemy far from their tower); contest objectives with priority in the nearby lanes. Waves are read from the minimap's minion dots every ~4 s.")} />
+                <HelpDot text={t("The rules: invade with the two nearby lanes pushed in your favour (their laners can't rotate first). Gank by where the wave is, from your outer tower to theirs: the 1, the middle (in top and bot, the corner), is gankable; the 2 on each side is the last chance; the 3 next to each tower is ungankable; the best side is your 2. Contest objectives with priority in the nearby lanes. Waves are read from the minimap's minion dots every ~4 s.")} />
               )}
             </li>
           ))}

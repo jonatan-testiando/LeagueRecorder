@@ -45,6 +45,7 @@ mod training;
 mod ultimate;
 mod winprob;
 mod winsys;
+mod zonas;
 
 use commands::{
     add_error_event, delete_error_event, delete_match, delete_matches, edit_error_event, export_clip,

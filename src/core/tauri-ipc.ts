@@ -1312,8 +1312,40 @@ export interface WavesReport {
   /** `[t_partida, top, mid, bot]`, -1 donde no se vio oleada. */
   series: [number, number, number, number][];
   invades: { t_game: number; t_video: number; camp: string; lanes: LanePush[]; verdict: "prio" | "half" | "none" | "early" | "unknown"; died: boolean }[];
-  ganks: { t_game: number; t_video: number; lane: "top" | "mid" | "bot"; push: number | null; setup: "good" | "even" | "dive" | "unknown"; outcome: "success" | "neutral" | "failed" }[];
+  ganks: GankWaves[];
   objectives: { t_game: number; t_video: number; kind: string; ours: boolean; lanes: LanePush[]; verdict: "prio" | "half" | "none" | "unknown" }[];
+}
+
+/** Zona de la teoría del gank (`zonas.rs`): 3 | 2 | 1 | 2 | 3 de tu torre exterior a la suya. */
+export type GankZone = "own_3" | "own_2" | "center_1" | "enemy_2" | "enemy_3";
+
+export interface GankWaves {
+  t_game: number;
+  t_video: number;
+  lane: "top" | "mid" | "bot";
+  push: number | null;
+  setup: "good" | "even" | "dive" | "unknown";
+  outcome: "success" | "neutral" | "failed";
+  /** Cuando pisaste la línea (rastro del vídeo), o `t_game` si no se te vio entrar. */
+  t_start: number;
+  start_from_video: boolean;
+  /** Zona de la oleada al empezar. */
+  zone: GankZone | null;
+  /** Oleada en tu 2 (sólo top y bot; en mid la teoría no marca mejor lado). */
+  best_side: boolean | null;
+  entry: "own_jungle" | "river" | "enemy_jungle" | "mid" | "base" | null;
+  entry_region: string | null;
+  /** Zona del rival en el fotograma de la API más cercano (≤ 20 s). */
+  rival_zone: GankZone | null;
+  /** Tu nivel menos el del rival. */
+  level_diff: number | null;
+  /** Nivel de tu compañero de su puesto menos el suyo. */
+  lane_level_diff: number | null;
+  /** R aprendida al empezar (`SKILL_LEVEL_UP`), tuya y suya. */
+  has_r: boolean;
+  rival_has_r: boolean | null;
+  /** 0..1, sólo con un fotograma de la API a ≤ 15 s. */
+  rival_hp: number | null;
 }
 
 /** Oleadas y macro de una partida (las lee del vídeo si faltan: segundos). */

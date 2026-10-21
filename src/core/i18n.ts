@@ -2364,6 +2364,17 @@ const ES: Record<string, string> = {
     "Sistema sigue a Windows. Ningún tema usa negro ni blanco puros.",
   // Clips · reproductor de clips (rediseño «Ritmo», 3f).
   "Playback position": "Posición de reproducción",
+  // Hoy (rediseño «Ritmo», 3a).
+  "Sync": "Sincronizar",
+  "no Riot data yet": "aún sin datos de Riot",
+  "{n}%": "{n} %",
+  "{n}% win chance": "{n} % de probabilidad de victoria",
+  "What this moment moved your win chance": "Lo que este momento movió tu probabilidad de victoria",
+  "A mistake that cost you": "Un error que te costó",
+  "A play that paid off": "Jugada que valió",
+  "Your focus · {n}-game plan": "Tu foco · plan de {n} partidas",
+  "{k} of {n}": "{k} de {n}",
+  "Watch your {n} worst plays": "Ver tus {n} peores jugadas",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

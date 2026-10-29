@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChevronLeft, FileWarning, Maximize, Minimize, Pause, Play, PlaySquare,
+  ChevronRight, FileWarning, Maximize, Minimize, Pause, Play, PlaySquare,
   Volume1, Volume2, VolumeX,
 } from "lucide-react";
 import { ClipMetadata, MatchMetadata } from "../../../types";
 import { Button } from "../../../components/ui/Button";
 import { Segmented } from "../../../components/ui/Segmented";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import { useT } from "../../../core/LanguageProvider";
 import { streamUrl } from "../../../core/media";
 import { clock, matchAge } from "../../../core/time";
@@ -203,33 +204,29 @@ export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clip, match, onBack, onO
 
   return (
     <section ref={rootRef} className="cp panel-enter" aria-label={clip.name} tabIndex={-1}>
-      <header className="cp-top">
-        <Button variant="ghost" size="sm" icon={<ChevronLeft size={15} />} onClick={onBack} title="Esc">
-          {t("Back")}
-        </Button>
-        <div className="cp-top__text">
-          <h1 className="cp-title" title={clip.name}>{clip.name}</h1>
+      {/* El clip, en la barra de título (piel A): «Clips › nombre» y de
+          dónde salió. Esc también vuelve. */}
+      <ScreenTitle
+        title={
+          <span className="crumb">
+            <button type="button" className="crumb__back" onClick={onBack} title="Esc">
+              {t("Clips")}
+            </button>
+            <ChevronRight size={16} className="crumb__sep" aria-hidden="true" />
+            <span className="crumb__name crumb__name--fit" title={clip.name}>{clip.name}</span>
+          </span>
+        }
+        sub={
           <span className="cp-meta">
-            {match && <ChampionAvatar champion={match.champion} size={20} />}
+            {match && <ChampionAvatar champion={match.champion} size={16} />}
             <span>
               {match
                 ? t("From {champion} · {date}", { champion: match.champion, date: matchAge(match.date, t) })
                 : t("From {id}", { id: clip.match_id })}
             </span>
           </span>
-        </div>
-        {onOpenMatch && (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={<PlaySquare size={14} />}
-            onClick={onOpenMatch}
-            title={t("Open the game this clip came from")}
-          >
-            {t("Open match")}
-          </Button>
-        )}
-      </header>
+        }
+      />
 
       <div className="cp-stage">
         {missing ? (
@@ -302,6 +299,20 @@ export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clip, match, onBack, onO
           </span>
 
           <span className="cp-transport__spacer" />
+
+          {/* A la partida de la que salió: en el transporte y no junto al
+              título, que a 1280 se quedaba sin sitio para el nombre. */}
+          {onOpenMatch && (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<PlaySquare size={14} />}
+              onClick={onOpenMatch}
+              title={t("Open the game this clip came from")}
+            >
+              {t("Open match")}
+            </Button>
+          )}
 
           {/* Tamaño normal y no el pequeño de los otros reproductores: a 22 px
               las opciones no llegaban al mínimo de 24 para el puntero. */}

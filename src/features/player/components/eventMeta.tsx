@@ -22,14 +22,18 @@ export interface EvMeta {
   category: "kills" | "deaths" | "assists" | "objectives" | "structures" | "abilities" | "other";
 }
 
+// Glifos propios (laboratorio del sistema de diseño, «Glifo propio»): dibujados
+// para el juego en una caja de 16, trazo de 1,5 y algún relleno para que
+// aguanten a 11-12 px, que es lo que miden dentro de una chapa de la línea de
+// tiempo.
 const GlyphBase: React.FC<{ size: number; children: React.ReactNode }> = ({ size, children }) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 24 24"
+    viewBox="0 0 16 16"
     fill="none"
     stroke="currentColor"
-    strokeWidth={1.6}
+    strokeWidth={1.5}
     strokeLinecap="round"
     strokeLinejoin="round"
     aria-hidden="true"
@@ -41,75 +45,84 @@ const GlyphBase: React.FC<{ size: number; children: React.ReactNode }> = ({ size
 /** Espadas cruzadas. */
 export const IconKill: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M4.5 4.5h3l9.5 9.5M19.5 4.5h-3L7 14" />
-    <path d="M5 17l2 2M19 17l-2 2" />
-    <path d="M4 19.5l3-3M20 19.5l-3-3" />
+    <path d="M3 13 13 3M10.5 3H13v2.5M3 3l10 10M5.5 13H3v-2.5" />
   </GlyphBase>
 );
 
 /** Calavera. */
 export const IconDeath: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M12 3.5c-4.1 0-7 2.9-7 6.8 0 2.2 1 3.9 2.4 5v2.2c0 .6.4 1 1 1h7.2c.6 0 1-.4 1-1V15.3c1.4-1.1 2.4-2.8 2.4-5 0-3.9-2.9-6.8-7-6.8Z" />
-    <circle cx="9.4" cy="10.6" r="1.4" />
-    <circle cx="14.6" cy="10.6" r="1.4" />
-    <path d="M10.5 18.5v2M13.5 18.5v2" />
+    <path d="M8 2.5a5 5 0 0 0-5 5c0 1.6.8 2.8 2 3.5V13.5h6V11c1.2-.7 2-1.9 2-3.5a5 5 0 0 0-5-5Z" />
+    <circle cx="6" cy="8" r="1" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="8" r="1" fill="currentColor" stroke="none" />
   </GlyphBase>
 );
 
-/** Escudo con visto: participaste sin rematar. */
+/** Círculo con cruz: participaste sin rematar. */
 export const IconAssist: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M12 3.5 5.5 6v5.2c0 4 2.8 7 6.5 8.8 3.7-1.8 6.5-4.8 6.5-8.8V6L12 3.5Z" />
-    <path d="m9.3 11.6 1.9 1.9 3.6-3.7" />
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M8 5v6M5 8h6" />
   </GlyphBase>
 );
 
 /** Ala de dragón. */
 export const IconDragon: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M3 8.5c3.5-.4 6 .6 7.6 2.4L12 4l1.4 6.9C15 9.1 17.5 8.1 21 8.5c-1.6 2.6-2.9 4.4-4.8 5.6l1.5 5.4-5.7-3.2-5.7 3.2 1.5-5.4C5.9 12.9 4.6 11.1 3 8.5Z" />
+    <path d="M2 12 8 3l6 9-3-1.8L8 13l-3-2.8Z" />
   </GlyphBase>
 );
 
 /** Fauces del barón. */
 export const IconBaron: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M4 5.5 6.5 11 12 4.5 17.5 11 20 5.5 18.2 15H5.8L4 5.5Z" />
-    <path d="M6.2 17.5h11.6" />
-    <path d="M9 15v2.5M12 15v2.5M15 15v2.5" />
+    <path d="M3.5 14V8a4.5 4.5 0 0 1 9 0v6" />
+    <path d="M5.5 4.5 4.5 2M8 3.5V1.5M10.5 4.5l1-2.5" />
+    <circle cx="8" cy="8.5" r="1.2" fill="currentColor" stroke="none" />
   </GlyphBase>
 );
 
 /** Torreta. */
 export const IconTower: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M8 4.5v2.2M12 4.5v2.2M16 4.5v2.2" />
-    <path d="M7 4.5h10v2.5l-1.5 1.6V16h-7V8.6L7 7V4.5Z" />
-    <path d="M6.5 19.5h11v-2.2h-11v2.2Z" />
+    <path d="M5 14V7h6v7M4 7h8M6 7V4h4v3" />
+    <circle cx="8" cy="2.5" r="1" fill="currentColor" stroke="none" />
   </GlyphBase>
 );
 
-/** Heraldo: el caparazón con su ojo. Compartía la torreta, y en la línea de
- *  tiempo un heraldo y una torre caídos al lado eran la misma marca. */
+/** Inhibidor: el cristal. Compartía la torreta. */
+export const IconInhib: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <GlyphBase size={size}>
+    <path d="M8 1.5 12.5 8 8 14.5 3.5 8Z" />
+    <path d="M8 5v6" />
+  </GlyphBase>
+);
+
+/** Heraldo: el ojo. Compartía la torreta, y en la línea de tiempo un heraldo
+ *  y una torre caídos al lado eran la misma marca. */
 export const IconHerald: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
-    <path d="M4 15.5c0-5 3.6-9 8-9s8 4 8 9" />
-    <path d="M4 15.5h16" />
-    <circle cx="12" cy="12" r="2.2" />
-    <path d="M7.5 19.5 9 15.5M16.5 19.5 15 15.5" />
+    <path d="M1.8 8C4 4.3 12 4.3 14.2 8 12 11.7 4 11.7 1.8 8Z" />
+    <circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none" />
+  </GlyphBase>
+);
+
+/** Definitiva (R): el destello. */
+export const IconUltimate: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <GlyphBase size={size}>
+    <path d="M8 1.8 9.4 6.6 14.2 8 9.4 9.4 8 14.2 6.6 9.4 1.8 8 6.6 6.6Z" />
   </GlyphBase>
 );
 
 /** Rombo: hallazgo del analizador. Es la única forma que no es un círculo en
  *  la línea de tiempo, así que se distingue sin depender solo del violeta. */
 export const IconFinding: React.FC<{ size?: number }> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+  <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
     <path
-      d="M12 3.5 20.5 12 12 20.5 3.5 12Z"
+      d="M8 2 14 8 8 14 2 8Z"
       fill="color-mix(in srgb, currentColor 30%, transparent)"
       stroke="currentColor"
-      strokeWidth={1.8}
+      strokeWidth={1.5}
       strokeLinejoin="round"
     />
   </svg>
@@ -154,9 +167,9 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
     case "TowerKill":
       return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Tower", tone: structTone(ev.subtype), category: "structures" };
     case "InhibKill":
-      return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Inhibitor", tone: structTone(ev.subtype), category: "structures" };
+      return { icon: <IconInhib size={size} />, color: structColor(ev.subtype), label: "Inhibitor", tone: structTone(ev.subtype), category: "structures" };
     case "Ultimate":
-      return { icon: <Sparkles size={size} />, color: C_ABILITY, label: "Ultimate (R)", tone: "neutral", category: "abilities" };
+      return { icon: <IconUltimate size={size} />, color: C_ABILITY, label: "Ultimate (R)", tone: "neutral", category: "abilities" };
     case "GameStart":
       return { icon: <Flag size={size} />, color: C_NEUTRAL, label: "Game Start", tone: "neutral", category: "other" };
     case "GameEnd":

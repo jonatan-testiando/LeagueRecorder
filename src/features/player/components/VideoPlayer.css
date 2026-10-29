@@ -21,14 +21,17 @@
    ========================================================================= */
 
 .vp {
-  /* Las alturas de las filas de la línea de tiempo (Figma: regla 16, APM 28,
-     sucesos 20, miradas 16, con 6 entre medias). Viven en .vp y no en la
-     tarjeta porque en pantalla completa la tira cuelga del escenario. */
+  /* Las alturas de las filas de la línea de tiempo: regla 16, APM 28, cada
+     pista 22 (la chapa mide 18) y miradas 16, con 6 entre bloques; las pistas
+     van pegadas, con un filo entre ellas. Viven en .vp y no en la tarjeta
+     porque en pantalla completa la tira cuelga del escenario. */
   --tl-ruler: 16px;
   --tl-gap: 6px;
   --tl-apm: 28px;
-  --tl-lane: 20px;
+  --tl-lane: 22px;
   --tl-looks: 16px;
+  /* Abrir o cerrar una pista: ocasional, 180 ms sin rebote. */
+  --tl-move: 180ms cubic-bezier(0.23, 1, 0.32, 1);
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -44,15 +47,23 @@
    también las vistas previas de Hoy y los pósteres de Clips. */
 
 /* --- cabecera de la partida ---------------------------------------------- */
-/* Una línea: volver, retrato, quién y cómo acabó, cuánto llevas revisado,
-   Vídeo | Mapa y las dos acciones. El detalle (hora, puesto por impacto) va
-   en una etiqueta: a 1280 la línea de metadatos se cortaba (auditoría I7). */
+/* Piel A: quién y cómo acabó va en la barra de título, como miga
+   («Biblioteca › Gwen · Derrota»), y el detalle (hora, puesto por impacto) en
+   una etiqueta: a 1280 la línea de metadatos se cortaba (auditoría I7).
+   Encima del escenario queda una fila de herramientas: Vídeo | Mapa, cuánto
+   llevas revisado y las dos acciones. */
+/* En la miga (index.css, .crumb), el resultado no cede y va en la letra del
+   título; la línea de metadatos es el subtítulo y hereda la suya. */
+.crumb .vp-top__result { flex: none; font: inherit; }
+.crumb .vp-top__lp { flex: none; font-family: var(--font-sans); letter-spacing: 0; }
+.screen-title .vp-top__meta { font: inherit; color: inherit; }
+
 .vp-top {
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  padding: 0 var(--space-3) 10px;
   min-width: 0;
 }
 /* Botón de icono de 32 px con el dibujo a 18. */
@@ -203,7 +214,7 @@
 /* Crear clip y Marcar error: el Button fantasma sobre lámina elevada (Figma).
    El oro es de UNA acción por pantalla (guardar la nota). */
 .vp-top .vp-hbtn {
-  height: 36px;
+  height: 32px;
   padding-block: 0;
   background: var(--raised);
   box-shadow: inset 0 1px 0 var(--rim);
@@ -291,8 +302,8 @@
      lista larga tienen que caber, no empujar. Las columnas las pone el
      componente (la derecha es redimensionable). */
   grid-template-rows: minmax(0, 1fr);
-  gap: var(--space-3);
-  padding: 0 var(--space-4) var(--space-4);
+  gap: 10px;
+  padding: 0 var(--space-3) var(--space-3);
   /* La barra del recortador se ancla aquí: así también sale en pantalla
      completa, que es este mismo nodo. */
   position: relative;
@@ -302,7 +313,7 @@
 .vp-left {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 10px;
   min-width: 0;
   min-height: 0;
   /* El transporte se adapta al ancho de ESTA columna, que cambia al
@@ -533,45 +544,77 @@
   flex: none;
   position: relative;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  padding: var(--space-3) var(--space-4);
+  grid-template-columns: 104px minmax(0, 1fr);
+  column-gap: var(--space-2);
+  padding: 10px var(--space-3);
   border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
+
+/* Las filas, de arriba abajo: regla, curva de APM, una pista por tipo de
+   suceso (`--tl-lanes` encendidas, cada una en su `--i`) y miradas. El nombre
+   de cada fila (a la izquierda) y la pista se colocan con las mismas cuentas,
+   así que se mueven juntos al encender o apagar una pista. Sin la curva
+   (pantalla completa) o sin miradas, las filas de debajo suben. */
+.vp-tl__gutter,
+.vp-track {
+  --tl-lanes: 0;
+  --tl-apm-row: calc(var(--tl-apm) + var(--tl-gap));
+  --tl-looks-row: 0px;
+  --tl-lane-top: calc(var(--tl-ruler) + var(--tl-gap) + var(--tl-apm-row));
+  position: relative;
+  min-width: 0;
+  height: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-looks-row));
+  transition: height var(--tl-move);
+}
+.vp-tl[data-looks] .vp-tl__gutter,
+.vp-track[data-looks] { --tl-looks-row: calc(var(--tl-gap) + var(--tl-looks)); }
+.vp-track--compact { --tl-apm-row: 0px; }
+.vp-track {
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
 .vp-tl__gutter {
-  display: grid;
-  grid-template-rows: var(--tl-ruler) var(--tl-apm) var(--tl-lane) var(--tl-looks);
-  row-gap: var(--tl-gap);
-  align-items: center;
   font-size: var(--fs-12);
   line-height: var(--lh-12);
   font-weight: 500;
   color: var(--faint);
   white-space: nowrap;
 }
-.vp-tl:not([data-looks]) .vp-tl__gutter {
-  grid-template-rows: var(--tl-ruler) var(--tl-apm) var(--tl-lane);
-}
-.vp-tl__g[data-row="apm"] { grid-row: 2; }
-.vp-tl__g[data-row="lane"] { grid-row: 3; }
-.vp-tl__g[data-row="looks"] { grid-row: 4; }
-
-/* La pista: regla, curva de APM, sucesos y miradas, de arriba abajo. Sin la
-   curva (pantalla completa) o sin miradas, las filas de debajo suben. */
-.vp-track {
-  --tl-apm-row: calc(var(--tl-apm) + var(--tl-gap));
-  --tl-looks-row: 0px;
-  --tl-lane-top: calc(var(--tl-ruler) + var(--tl-gap) + var(--tl-apm-row));
-  position: relative;
+.vp-tl__g {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  height: calc(var(--tl-lane-top) + var(--tl-lane) + var(--tl-looks-row));
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
+  /* El texto de APM y Miradas, a plomo con el de las pistas (tras su chapa). */
+  padding-left: 22px;
+  transition: top var(--tl-move), opacity var(--tl-move);
 }
-.vp-track[data-looks] { --tl-looks-row: calc(var(--tl-gap) + var(--tl-looks)); }
-.vp-track--compact { --tl-apm-row: 0px; }
+.vp-tl__g[data-row="apm"] { top: calc(var(--tl-ruler) + var(--tl-gap)); height: var(--tl-apm); }
+.vp-tl__g[data-row="looks"] {
+  top: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-gap));
+  height: var(--tl-looks);
+}
+.vp-tl__lane {
+  top: calc(var(--tl-lane-top) + var(--i, 0) * var(--tl-lane));
+  height: var(--tl-lane);
+  padding-left: 0;
+  color: var(--muted);
+  box-shadow: inset 0 1px 0 var(--hair);
+}
+.vp-tl__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vp-tl__n {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.vp-tl__lane[data-off] { opacity: 0; visibility: hidden; transition: top var(--tl-move), opacity var(--tl-move), visibility 0s linear 180ms; }
 
 /* Regla: mono de 12 (A3: estaba a 11). */
 .vp-track__ruler {
@@ -604,100 +647,116 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: var(--tl-lane-top);
+  top: calc(var(--tl-lane-top) + var(--i, 0) * var(--tl-lane));
   height: var(--tl-lane);
+  box-shadow: inset 0 1px 0 var(--hair);
+  transition: top var(--tl-move), opacity var(--tl-move);
+}
+.vp-track--compact .vp-track__lane { box-shadow: none; }
+/* La pista apagada se funde mientras las de debajo suben; luego, ni foco ni
+   clics. */
+.vp-track__lane[data-off] {
+  opacity: 0;
+  visibility: hidden;
+  transition: top var(--tl-move), opacity var(--tl-move), visibility 0s linear 180ms;
 }
 
-/* Marca de suceso (Figma, Componentes · Marca de línea de tiempo). El botón
-   mide 24 px (A6) y el dibujo 10: círculo lleno para el combate, hueco para
-   la asistencia, rombo para objetivos y hallazgos y un punto pequeño para el
-   resto. El tono lo pone `data-tone`. */
+/* Chapa (laboratorio, «tratamiento en chapa»): el glifo en tinta sobre el
+   color de lo que fue, así se lee igual sobre la curva y en los dos temas. El
+   tono lo pone `data-tone` de la marca. */
+.vp-chapa {
+  --chapa: var(--muted);
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--chapa) 30%, var(--panel));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--chapa) 60%, transparent);
+  color: var(--text);
+  transition: transform 120ms var(--e-out), background-color var(--t-hover) var(--e-color);
+}
+.vp-chapa--sm { width: 16px; height: 16px; }
+
+/* Marca de suceso: el botón mide 24 de alto (A6) y lleva la chapa; un racimo
+   le pone detrás «×N» con el tono que más pesa. */
 .vp-mark {
   --mark: var(--muted);
-  --mark-soft: var(--raised);
-  --mark-ink: var(--muted);
   position: absolute;
   top: 50%;
   z-index: 5;
   transform: translate(-50%, -50%);
   min-width: 24px;
   height: 24px;
-  display: grid;
-  place-items: center;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 2px;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: transparent;
   cursor: pointer;
 }
-.vp-mark[data-tone="win"] { --mark: var(--win); --mark-soft: var(--cool-soft); --mark-ink: var(--cool-ink); }
-.vp-mark[data-tone="loss"] { --mark: var(--loss); --mark-soft: var(--loss-soft); --mark-ink: var(--loss-ink); }
-.vp-mark[data-tone="brand"] { --mark: var(--brand); --mark-soft: var(--brand-soft); --mark-ink: var(--brand-ink); }
-.vp-mark[data-tone="flag"] { --mark: var(--flag); --mark-soft: var(--flag-soft); --mark-ink: var(--flag-ink); }
+.vp-mark[data-tone="win"] { --mark: var(--win); }
+.vp-mark[data-tone="loss"] { --mark: var(--loss); }
+.vp-mark[data-tone="brand"] { --mark: var(--brand); }
+.vp-mark[data-tone="flag"] { --mark: var(--flag); }
+.vp-mark .vp-chapa { --chapa: var(--mark); }
 .vp-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.vp-mark__shape {
-  display: block;
-  width: 10px;
-  height: 10px;
-  border-radius: var(--radius-full);
-  background: var(--mark);
-}
-.vp-mark[data-shape="ring"] .vp-mark__shape {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--mark);
-}
-.vp-mark[data-shape="pip"] .vp-mark__shape { width: 6px; height: 6px; }
-.vp-mark[data-shape="diamond"] .vp-mark__shape {
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  transform: rotate(45deg);
-}
-/* Racimo: las marcas que se tocarían, con el número y el tono que más pesa. */
-.vp-mark--cluster { min-width: 30px; }
-.vp-mark__cluster {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 16px;
-  min-width: 26px;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--mark-soft);
-  box-shadow: inset 0 0 0 1px var(--mark);
+.vp-mark:active .vp-chapa { transform: scale(0.92); }
+.vp-mark__n {
   font-size: var(--fs-12);
   line-height: 16px;
-  font-weight: 500;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--mark-ink);
-}
-.vp-mark__cluster > i {
-  width: 6px;
-  height: 6px;
-  flex: none;
-  border-radius: var(--radius-full);
-  background: var(--mark);
+  color: var(--text);
 }
 /* El suceso elegido: aro de oro separado por el color de la tarjeta. */
-.vp-mark[data-on] .vp-mark__shape {
-  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
-}
-.vp-mark[data-on][data-shape="ring"] .vp-mark__shape {
-  box-shadow: inset 0 0 0 2px var(--mark), 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
-}
-.vp-mark[data-on] .vp-mark__cluster {
-  box-shadow: inset 0 0 0 1px var(--mark), 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
+.vp-mark[data-on] .vp-chapa {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--chapa) 60%, transparent), 0 0 0 2px var(--panel), 0 0 0 3.5px var(--brand);
 }
 @media (hover: hover) and (pointer: fine) {
-  .vp-mark:hover .vp-mark__shape {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 30%, transparent);
-  }
-  .vp-mark[data-shape="ring"]:hover .vp-mark__shape {
-    box-shadow: inset 0 0 0 2px var(--mark), 0 0 0 3px color-mix(in srgb, var(--mark) 30%, transparent);
-  }
-  .vp-mark--cluster:hover .vp-mark__cluster {
-    background: color-mix(in srgb, var(--mark) 26%, var(--panel));
-  }
+  .vp-mark:hover .vp-chapa { background: color-mix(in oklab, var(--chapa) 48%, var(--panel)); }
+}
+
+/* Encender y apagar pistas, en los ajustes del transporte: un chip por pista,
+   encendido sobre lámina elevada, apagado en tenue. */
+.vp-lanes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-2);
+}
+.vp-lanebtn {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--faint);
+  font: inherit;
+  font-size: var(--fs-12);
+  line-height: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 120ms var(--e-out), background-color var(--t-hover) var(--e-color), color var(--t-hover) var(--e-color);
+}
+.vp-lanebtn[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
+}
+.vp-lanebtn:active:not(:disabled) { transform: scale(0.97); }
+.vp-lanebtn:disabled { opacity: 0.5; cursor: default; }
+.vp-lanebtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  .vp-lanebtn:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--muted); }
 }
 
 /* Miradas al mapa: tres filas de 3 px (top, mid, bot) o una sola de 8 si
@@ -706,8 +765,9 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--tl-lane-top) + var(--tl-lane) + var(--tl-gap));
+  top: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-gap));
   height: var(--tl-looks);
+  transition: top var(--tl-move);
   display: flex;
   flex-direction: column;
   justify-content: center;

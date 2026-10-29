@@ -12,6 +12,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useT } from "../../../core/LanguageProvider";
 import { clock, matchAge } from "../../../core/time";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./VodGallery.css";
 
 /**
@@ -149,12 +150,11 @@ export const VodGallery: React.FC<VodGalleryProps> = ({ onSelectMatch }) => {
     // de entrada, y con los dos la pantalla entraba dos veces.
     <div className="vod">
       <div className="vod__col">
-        <header className="vod__head">
-          <h1 className="vod__title t-page">{t("Video analysis")}</h1>
-          <p className="vod__sub t-body">
-            {t("Import a video and it reads the cursor and the clicks frame by frame, the same way it does with your own recordings.")}
-          </p>
-        </header>
+        {/* El título, en la barra (piel A); la entradilla, aquí. */}
+        <ScreenTitle align="form" title={t("Video analysis")} />
+        <p className="vod__sub t-body">
+          {t("Import a video and it reads the cursor and the clicks frame by frame, the same way it does with your own recordings.")}
+        </p>
 
         <section className="card vod-import" aria-busy={isProcessing || undefined}>
           <div className="vod-import__row">

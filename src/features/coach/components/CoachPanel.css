@@ -16,12 +16,13 @@
 .coach-page {
   container: coach / inline-size;
   width: 100%;
-  max-width: var(--content-max);
+  max-width: calc(var(--content-max) + 2 * var(--space-3));
   margin: 0 auto;
-  padding: var(--space-6) var(--space-6) var(--space-8);
+  /* Piel A: el título va en la barra; 12 al borde y 10 entre tarjetas. */
+  padding: 0 var(--space-3) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 10px;
 }
 
 /* Color del texto: el tamaño lo ponen las clases .t-* del sistema. */
@@ -32,17 +33,7 @@
 .coach-loss { color: var(--loss); }
 .coach-brand { color: var(--brand-ink); }
 
-/* ---------------------------------------------------------------- cabecera */
-.coach-head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-}
-.coach-h1 { margin: 0; color: var(--text); }
-.coach-sub { color: var(--faint); }
-.coach-head__how { margin-left: auto; align-self: center; }
-
+/* La cabecera va en la barra de título (ScreenTitle). */
 .coach-how {
   display: flex;
   flex-direction: column;
@@ -52,7 +43,7 @@
 
 /* ----------------------------------------------------------------- tarjeta */
 .coach-card {
-  padding: var(--space-5);
+  padding: var(--space-4);
   background: var(--panel);
   border-radius: var(--radius-lg);
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
@@ -217,10 +208,10 @@
 .coach-detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 344px;
-  gap: var(--space-4);
+  gap: 10px;
   align-items: start;
 }
-.coach-col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.coach-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 
 /* Dónde se te va la partida: nombre y baremo, barra con la raya del baremo,
    lo que pierdes y cuánto por encima o por debajo de él. */
@@ -352,7 +343,7 @@
   transform: scaleX(var(--p));
 }
 
-.coach-skel { display: flex; flex-direction: column; gap: var(--space-4); }
+.coach-skel { display: flex; flex-direction: column; gap: 10px; }
 
 /* ------------------------------------------------------------- estrecho */
 /* Por el ancho del contenido y no de la ventana: con el rail desplegado, una

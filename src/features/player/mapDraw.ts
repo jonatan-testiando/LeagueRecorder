@@ -42,18 +42,18 @@ export function rgb(hex: string): RGB {
 export function leerPaleta(): Paleta {
   const css = getComputedStyle(document.documentElement);
   const c = (k: string, def: string) => css.getPropertyValue(k).trim() || def;
-  const cool = c("--cool", "#3CB787");
-  const brand = c("--brand", "#C8AA6E");
+  const cool = c("--cool", "#5aa9f2");
+  const brand = c("--brand", "#d1a856");
   return {
     cool,
-    loss: c("--loss", "#F26073"),
+    loss: c("--loss", "#ff5a6e"),
     win: c("--win", cool),
-    muted: c("--muted", "#ADAAA5"),
+    muted: c("--muted", "#a0a0a8"),
     brand,
     flag: c("--flag", "#A589F1"),
-    text: c("--text", "#D4D0CA"),
-    panel: c("--panel", "#0F1622"),
-    ground: c("--ground", "#080D16"),
+    text: c("--text", "#c6c6cb"),
+    panel: c("--panel", "#1b1b1f"),
+    ground: c("--ground", "#111114"),
     font: c("--font-sans", "system-ui, sans-serif"),
     coolRGB: rgb(cool),
     brandRGB: rgb(brand),

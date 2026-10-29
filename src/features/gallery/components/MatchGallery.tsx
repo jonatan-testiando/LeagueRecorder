@@ -38,6 +38,7 @@ import { dayLabel, fmtDec, kdaDe, laneRival, lpText, ordinal, ratioLabel, ratioT
 import { Segmented } from "../../../components/ui/Segmented";
 import { Select } from "../../../components/ui/Select";
 import { Skeleton } from "../../../components/ui/Skeleton";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./MatchGallery.css";
 import { withPercent } from "../../../core/benchmarkFormat";
 
@@ -101,7 +102,6 @@ interface MatchGalleryProps {
   onDeleteMatch: (id: string) => void;
   /** Borrado por lotes con confirmación. Devuelve true si se llegó a borrar. */
   onDeleteMatches: (ids: string[]) => Promise<boolean>;
-  isRecording: boolean;
   /** La biblioteca aún no se ha leído: esqueleto, nunca «no hay partidas». */
   loading?: boolean;
   /** Motivo del último fallo al leer la biblioteca, en crudo. */
@@ -126,7 +126,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   onSelectMatch,
   onDeleteMatch,
   onDeleteMatches,
-  isRecording,
   loading = false,
   loadError,
   onRetry,
@@ -563,42 +562,20 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
 
   return (
     <div ref={rootRef} className={`lib panel-enter${wide ? "" : " lib--narrow"}${vacia ? " lib--empty" : ""}`}>
-      {/* Cabecera: título, censo y el disco en una línea. */}
-      <div className="lib-head">
-        <h1>{t("Library")}</h1>
-        {/* Mientras se lee, sin censo: «0 partidas» era el vacío disfrazado. */}
-        <span className="lib-head__sub">
-          {cargando
+      {/* Título y censo en la barra de título (piel A). El disco y su salida
+          rápida, en el pie; «Grabando» ya lo dice la barra. */}
+      <ScreenTitle
+        align="content"
+        title={t("Library")}
+        sub={
+          /* Mientras se lee, sin censo: «0 partidas» era el vacío disfrazado. */
+          cargando
             ? "—"
             : vacia
               ? `${matches.length} ${t("games")}`
-              : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>}
-        </span>
-        <div className="lib-head__right">
-          {isRecording && (
-            <span className="lib-recording">
-              <span className="rec-dot" /> {t("Recording")}
-            </span>
-          )}
-          {/* Con el disco ajustado, la salida rápida: lo ya revisado y viejo es
-              lo único que se puede borrar sin perder nada por aprender. */}
-          {diskTight && viejasRevisadas.length > 0 && (
-            <button type="button" className="lib-tool" onClick={() => onDeleteMatches(viejasRevisadas)}>
-              <Trash2 size={14} aria-hidden />
-              {t("Delete reviewed games older than 30 days")} · {viejasRevisadas.length}
-            </button>
-          )}
-          <span
-            className={`lib-disk${diskTight ? " lib-disk--tight" : ""}`}
-            title={`${t("Disk")}: ${usedGb} ${t("of")} ${totalGb} GB · ${pct === null ? "—" : withPercent(pct)}`}
-          >
-            {/* Sin partidas, «0 GB en grabaciones» no dice nada: solo el hueco. */}
-            {!vacia && t("{n} GB in recordings", { n: usedGb })}
-            {!vacia && freeGb && " · "}
-            {freeGb && t("{n} GB free", { n: freeGb })}
-          </span>
-        </div>
-      </div>
+              : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>
+        }
+      />
 
       {/* Una fila: estado · puesto · búsqueda · orden · seleccionar. */}
       {!vacia && (
@@ -879,14 +856,34 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
           </div>
         </div>
       ) : (
-        visible.length > 0 && (
-          <div className="lib-keys" aria-hidden>
-            <span><kbd className="u-kbd">↑ ↓</kbd>{t("move")}</span>
-            <span><kbd className="u-kbd">Enter</kbd>{t(wide ? "review" : "open")}</span>
-            <span><kbd className="u-kbd">{t("Del")}</kbd>{t("delete")}</span>
-            <span><kbd className="u-kbd">Ctrl</kbd>{t("click to select several")}</span>
-          </div>
-        )
+        <div className="lib-foot">
+          {visible.length > 0 && (
+            <div className="lib-keys" aria-hidden>
+              <span><kbd className="u-kbd">↑ ↓</kbd>{t("move")}</span>
+              <span><kbd className="u-kbd">Enter</kbd>{t(wide ? "review" : "open")}</span>
+              <span><kbd className="u-kbd">{t("Del")}</kbd>{t("delete")}</span>
+              <span><kbd className="u-kbd">Ctrl</kbd>{t("click to select several")}</span>
+            </div>
+          )}
+          <span className="lib-grow" aria-hidden />
+          {/* Con el disco ajustado, la salida rápida: lo ya revisado y viejo es
+              lo único que se puede borrar sin perder nada por aprender. */}
+          {diskTight && viejasRevisadas.length > 0 && (
+            <button type="button" className="lib-tool" onClick={() => onDeleteMatches(viejasRevisadas)}>
+              <Trash2 size={14} aria-hidden />
+              {t("Delete reviewed games older than 30 days")} · {viejasRevisadas.length}
+            </button>
+          )}
+          <span
+            className={`lib-disk${diskTight ? " lib-disk--tight" : ""}`}
+            title={`${t("Disk")}: ${usedGb} ${t("of")} ${totalGb} GB · ${pct === null ? "—" : withPercent(pct)}`}
+          >
+            {/* Sin partidas, «0 GB en grabaciones» no dice nada: solo el hueco. */}
+            {!vacia && t("{n} GB in recordings", { n: usedGb })}
+            {!vacia && freeGb && " · "}
+            {freeGb && t("{n} GB free", { n: freeGb })}
+          </span>
+        </div>
       )}
     </div>
   );

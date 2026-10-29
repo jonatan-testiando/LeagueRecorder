@@ -10,12 +10,14 @@ import { originOf, type NavOrigin } from "../core/navOrigin";
  * La zona `titlebar__drag` lleva `data-tauri-drag-region` para poder mover la
  * ventana; doble-clic sobre ella la maximiza/restaura (lo gestiona Tauri).
  *
- * «Post-partida»: 44 px y tres zonas. La marca a la izquierda (ancho del rail,
- * así el buscador cae centrado sobre el contenido), el buscador en medio —un
- * botón con cara de campo que abre la paleta, Ctrl K— y a la derecha el estado
- * de captura, que antes vivía al pie del rail y no se veía desde el
- * reproductor. Los dos son opcionales: el asistente de primer arranque solo
- * necesita poder mover y cerrar la ventana.
+ * Piel A (2026-10-29): la barra va a la derecha del raíl, que sube hasta
+ * arriba con la marca. Tres zonas: las de los lados crecen igual, así el
+ * buscador queda centrado mientras el título quepa. A la izquierda, el hueco
+ * donde cada pantalla pinta su título (`slotRef`); en medio, el buscador en
+ * cápsula, un botón con cara de campo que abre la paleta (Ctrl K); a la
+ * derecha, el estado de captura. Todo es opcional: el asistente de primer
+ * arranque, sin raíl, pide `brand` para llevar la marca, y solo necesita
+ * poder mover y cerrar la ventana.
  */
 export const Titlebar: React.FC<{
   /** Abre la paleta de comandos. Sin esto no hay buscador. */
@@ -23,7 +25,11 @@ export const Titlebar: React.FC<{
   onSearch?: (origin: NavOrigin) => void;
   /** Píldora de captura y espacio libre. */
   status?: React.ReactNode;
-}> = ({ onSearch, status }) => {
+  /** Recibe el hueco donde cada pantalla pinta su título. */
+  slotRef?: (el: HTMLDivElement | null) => void;
+  /** Marca y nombre a la izquierda, cuando no hay raíl que los lleve. */
+  brand?: boolean;
+}> = ({ onSearch, status, slotRef, brand }) => {
   const [isMaximized, setIsMaximized] = useState(false);
   const appWindow = getCurrentWindow();
   const t = useT();
@@ -47,13 +53,13 @@ export const Titlebar: React.FC<{
   return (
     <div className="titlebar">
       <div className="titlebar__drag" data-tauri-drag-region>
-        {/* Eran unas tijeras giradas: "recortar un clip" es una funcion mas de
-            la app, no lo que la app es. */}
-        <div className="titlebar__brand">
-          <span style={{ color: "var(--brand)", display: "flex" }}>
-            <BrandMark size={16} />
-          </span>
-          <span className="titlebar__title">LeagueRecorder</span>
+        <div className="titlebar__start" ref={slotRef} data-tauri-drag-region>
+          {brand && (
+            <div className="titlebar__brand">
+              <BrandMark size={18} />
+              <span className="titlebar__title">Wardline</span>
+            </div>
+          )}
         </div>
 
         {/* El centro también arrastra la ventana: solo el botón no. */}
@@ -73,7 +79,9 @@ export const Titlebar: React.FC<{
           )}
         </div>
 
-        {status && <div className="titlebar__status">{status}</div>}
+        <div className="titlebar__end" data-tauri-drag-region>
+          {status && <div className="titlebar__status">{status}</div>}
+        </div>
       </div>
 
       <div className="titlebar__controls">

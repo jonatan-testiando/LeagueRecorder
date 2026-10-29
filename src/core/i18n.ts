@@ -985,6 +985,9 @@ const ES: Record<string, string> = {
   // widgets: mapa táctico
   "Kills": "Kills",
   "Deaths": "Muertes",
+  "Findings": "Hallazgos",
+  "Ultimates": "Definitivas",
+  "Timeline tracks": "Pistas de la línea de tiempo",
   "{n} of {total} events": "{n} de {total} eventos",
   "No positions for this game": "Sin posiciones en esta partida",
   "Map positions come from Riot's timeline. Sync the game with Riot and they show up here.": "Las posiciones del mapa salen de la timeline de Riot. Sincroniza la partida y aparecen aquí.",

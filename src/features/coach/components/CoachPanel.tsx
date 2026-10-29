@@ -35,6 +35,7 @@ import type {
   CoachSummary,
   CoachVerdict,
 } from "../../../core/tauri-ipc";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./CoachPanel.css";
 
 /**
@@ -182,21 +183,21 @@ export const CoachPanel: React.FC = () => {
 
   const head = (
     <>
-      <header className="coach-head">
-        <h1 className="t-page coach-h1">{t("Coach")}</h1>
-        {sub && <span className="t-small coach-sub">{sub}</span>}
+      {/* Título, censo y «Cómo se calcula» en la barra de título (piel A);
+          la explicación se abre en la página, encima de todo. */}
+      <ScreenTitle align="content" title={t("Coach")} sub={sub || undefined}>
+        {/* En icono: con el texto, en la barra no cabía el censo a 1280. */}
         <Button
-          variant="ghost"
+          variant="icon"
           size="sm"
-          className="coach-head__how"
-          icon={<Info size={14} />}
+          icon={<Info size={15} />}
+          aria-label={t("How it's calculated")}
+          title={t("How it's calculated")}
           aria-expanded={howOpen}
           aria-controls="coach-how"
           onClick={() => setHowOpen((o) => !o)}
-        >
-          {t("How it's calculated")}
-        </Button>
-      </header>
+        />
+      </ScreenTitle>
       {howOpen && (
         <section id="coach-how" className="coach-card coach-how" aria-label={t("How it's calculated")}>
           <p className="t-small">

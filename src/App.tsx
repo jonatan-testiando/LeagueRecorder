@@ -15,6 +15,9 @@ import { TrainingPanel } from "./features/training/components/TrainingPanel";
 import { CoachPanel } from "./features/coach/components/CoachPanel";
 import { ChampSelectPanel } from "./features/champselect/components/ChampSelectPanel";
 import { Titlebar } from "./components/Titlebar";
+import { BrandMark } from "./components/BrandMark";
+import { PanelActiveContext, TitleOff, TitleSlotContext } from "./components/ScreenTitle";
+import { motion } from "framer-motion";
 import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap, Swords } from "lucide-react";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
@@ -107,6 +110,8 @@ export const App: React.FC = () => {
   // llegar en vez de aparecer de golpe como "lista".
   const [updProgress, setUpdProgress] = useState<UpdateProgress | null>(null);
   const [installing, setInstalling] = useState(false);
+  // A · el hueco de la barra de título donde cada pantalla pinta su título.
+  const [titleSlot, setTitleSlot] = useState<HTMLDivElement | null>(null);
   const t = useT();
 
   // El asistente de primer arranque. Se decide arriba del todo porque tapa la
@@ -116,7 +121,6 @@ export const App: React.FC = () => {
 
   const selectedError = useAppStore(state => state.selectedError);
   const setSelectedError = useAppStore(state => state.setSelectedError);
-  const playingClip = useAppStore(state => state.playingClip);
   const selectedVod = useAppStore(state => state.selectedVod);
   const setSelectedVod = useAppStore(state => state.setSelectedVod);
   const refreshErrorClips = useAppStore(state => state.refreshErrorClips);
@@ -266,7 +270,8 @@ export const App: React.FC = () => {
             la barra de título y el rail siguen ahí. */}
         {mountedPanels.has(path) ? (
           <ErrorBoundary name={t([...NAV_ITEMS, CHAMP_SELECT_ITEM].find((n) => n.path === path)?.label ?? "Section")}>
-            {content}
+            {/* Solo la pantalla visible pinta su título en la barra. */}
+            <PanelActiveContext.Provider value={active}>{content}</PanelActiveContext.Provider>
           </ErrorBoundary>
         ) : null}
       </div>
@@ -279,42 +284,34 @@ export const App: React.FC = () => {
   if (onboarding.done === false) {
     return (
       <>
-        <Titlebar />
+        <Titlebar brand />
         <OnboardingWizard onDone={() => { onboarding.finish().catch(console.error); }} />
       </>
     );
   }
 
-  // Con una partida abierta en el reproductor el rail se pliega a iconos: el
-  // vídeo necesita el ancho, y la navegación sigue a un clic.
-  const playerOpen =
-    (activePanel === "/review" && !!selectedMatch) ||
-    (activePanel === "/vod" && !!selectedVod) ||
-    (activePanel === "/errors" && !!selectedError) ||
-    (activePanel === "/clips" && !!playingClip);
-
   return (
-    <>
-      <Titlebar
-        onSearch={openPalette}
-        status={<CaptureStatus isRecording={isRecording} />}
-      />
+    <TitleSlotContext.Provider value={titleSlot}>
       <div className="app-body" style={styles.appContainer}>
-      {/* Rail. La marca se fue a la barra de título: aquí empieza la
-          navegación. */}
-      <nav className={`rail${playerOpen ? " rail--collapsed" : ""}`} aria-label={t("Sections")}>
+      {/* Raíl de A: sube hasta arriba con la marca y solo lleva iconos, siempre
+          (ya no se pliega con el reproductor: mide lo mismo que plegado). El
+          nombre de cada sección sale al pasar el ratón o con el teclado. */}
+      <nav className="rail" aria-label={t("Sections")}>
+        <div className="rail__brand" data-tauri-drag-region>
+          <BrandMark size={30} />
+        </div>
         <div className="rail__nav">
           {(!!champSelect || onChampSelect) && (
             <>
-              <div className="nav-grp" aria-hidden={playerOpen ? true : undefined}>{t("Now")}</div>
+              <div className="nav-grp" aria-hidden="true">{t("Now")}</div>
               <button
                 type="button"
                 onClick={(e) => goTo(CHAMP_SELECT_ITEM.path, originOf(e))}
                 className={`nav-btn${onChampSelect ? " nav-btn--active" : ""}`}
                 aria-current={onChampSelect ? "page" : undefined}
                 aria-label={t(CHAMP_SELECT_ITEM.label)}
-                title={playerOpen ? t(CHAMP_SELECT_ITEM.label) : undefined}
               >
+                {onChampSelect && <motion.span layoutId="rail-activo" className="nav-btn__pill" transition={RAIL_SPRING} />}
                 {CHAMP_SELECT_ITEM.icon}
                 <span className="nav-btn__label">{t(CHAMP_SELECT_ITEM.label)}</span>
                 {!!champSelect && <span className="nav-btn__live" aria-hidden="true" />}
@@ -323,7 +320,7 @@ export const App: React.FC = () => {
           )}
           {NAV_GROUPS.map((group) => (
             <React.Fragment key={group.label}>
-              <div className="nav-grp" aria-hidden={playerOpen ? true : undefined}>{t(group.label)}</div>
+              <div className="nav-grp" aria-hidden="true">{t(group.label)}</div>
               {group.items.map((item) => {
                 const activo = activeTabKey === item.key;
                 const cuenta = item.key === "review" && toReview > 0 ? toReview : 0;
@@ -336,8 +333,8 @@ export const App: React.FC = () => {
                     className={`nav-btn${activo ? " nav-btn--active" : ""}`}
                     aria-current={activo ? "page" : undefined}
                     aria-label={cuenta ? `${label} · ${t("{n} to review", { n: cuenta })}` : label}
-                    title={playerOpen ? label : undefined}
                   >
+                    {activo && <motion.span layoutId="rail-activo" className="nav-btn__pill" transition={RAIL_SPRING} />}
                     {item.icon}
                     <span className="nav-btn__label">{label}</span>
                     {cuenta > 0 && (
@@ -350,7 +347,7 @@ export const App: React.FC = () => {
           ))}
         </div>
 
-        <RailProfile collapsed={playerOpen} />
+        <RailProfile collapsed />
         {pendingUpdate ? (
           <button
             className="updpill updpill--lista"
@@ -391,8 +388,15 @@ export const App: React.FC = () => {
         ) : null}
       </nav>
 
-      {/* El contenido, marcado como región principal: los lectores de
-          pantalla saltan a él desde el rail. */}
+      {/* A la derecha del raíl: la barra de título y, debajo, el contenido,
+          marcado como región principal (los lectores de pantalla saltan a él
+          desde el raíl). */}
+      <div className="app-col">
+      <Titlebar
+        onSearch={openPalette}
+        status={<CaptureStatus isRecording={isRecording} />}
+        slotRef={setTitleSlot}
+      />
       <main style={styles.mainContent}>
         <RiotKeyBanner />
         {panel("/settings", <SettingsPanel />)}
@@ -422,7 +426,7 @@ export const App: React.FC = () => {
               {/* La cabecera (campeón, resultado, clip y error) la pinta el
                   propio reproductor: es quien sabe la duración real del vídeo
                   y tiene el recortador a mano. */}
-              <VideoPlayer match={selectedVod} onBack={() => setSelectedVod(null)} />
+              <VideoPlayer match={selectedVod} onBack={() => setSelectedVod(null)} backLabel={t("Video analysis")} />
             </div>
           ) : (
             <VodGallery onSelectMatch={setSelectedVod} />
@@ -451,7 +455,7 @@ export const App: React.FC = () => {
           <>
             {selectedMatch && (
               <div style={styles.playerWrapper}>
-                <VideoPlayer match={selectedMatch} onBack={() => setSelectedMatch(null)} />
+                <VideoPlayer match={selectedMatch} onBack={() => setSelectedMatch(null)} backLabel={t("Library")} />
               </div>
             )}
             {/* La galería NO se desmonta al abrir una partida: se oculta, igual
@@ -467,16 +471,17 @@ export const App: React.FC = () => {
                 minHeight: 0,
               }}
             >
-              <MatchGallery
-                matches={matches}
-                loading={firstLoad}
-                onSelectMatch={setSelectedMatch}
-                onDeleteMatch={deleteMatch}
-                onDeleteMatches={deleteMatches}
-                isRecording={isRecording}
-                loadError={matchesError}
-                onRetry={refreshMatches}
-              />
+              <TitleOff off={selectedMatch != null}>
+                <MatchGallery
+                  matches={matches}
+                  loading={firstLoad}
+                  onSelectMatch={setSelectedMatch}
+                  onDeleteMatch={deleteMatch}
+                  onDeleteMatches={deleteMatches}
+                  loadError={matchesError}
+                  onRetry={refreshMatches}
+                />
+              </TitleOff>
             </div>
           </>
         )}
@@ -489,6 +494,7 @@ export const App: React.FC = () => {
           <PlaylistBar />
         </div>
       </main>
+      </div>
       </div>
 
       <CommandPalette open={paletteOpen} openedBy={paletteBy} onClose={() => setPaletteOpen(false)} />
@@ -517,9 +523,12 @@ export const App: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </TitleSlotContext.Provider>
   );
 };
+
+/** El indicador de la sección activa salta de icono a icono: rápido y sin rebote (Emil). */
+const RAIL_SPRING = { type: "spring", duration: 0.22, bounce: 0 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
   appContainer: {

@@ -2,7 +2,7 @@ import React, { useRef, useState, useEffect, useCallback } from "react";
 import { ErrorClipMetadata, addErrorEvent, deleteErrorEvent, editErrorEvent } from "../../../core/tauri-ipc";
 import { 
   Play, Pause, VolumeX, Volume1, Volume2, Maximize, 
-  ChevronLeft, Plus, Target, Focus, BrainCircuit, Flag, Edit2, Trash2,
+  ChevronRight, Plus, Target, Focus, BrainCircuit, Flag, Edit2, Trash2,
   SkipBack, SkipForward, Clock3
 } from "lucide-react";
 import { useDialog } from "../../../components/ui/DialogProvider";
@@ -15,6 +15,8 @@ import { clock } from "../../../core/time";
 import { streamUrl } from "../../../core/media";
 import { Segmented } from "../../../components/ui/Segmented";
 import { Select } from "../../../components/ui/Select";
+import { ScreenTitle } from "../../../components/ScreenTitle";
+import "./ErrorPlayer.css";
 
 /**
  * Las categorías de error, en el orden en que se ofrecen.
@@ -262,31 +264,33 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      style={styles.container}
+      style={isFullscreen ? { ...styles.container, padding: 0, gap: 0 } : styles.container}
     >
-      <div style={styles.leftColumn}>
+      {/* Qué error es y en qué minuto, en la barra de título (piel A), con la
+          miga que vuelve a la lista. El título era el nombre del .mp4 en
+          crudo: un nombre de fichero no es información. */}
+      <ScreenTitle
+        title={
+          <span className="crumb">
+            <button type="button" className="crumb__back" onClick={onClose}>
+              {t("Errors")}
+            </button>
+            <ChevronRight size={16} className="crumb__sep" aria-hidden="true" />
+            <span className="crumb__name">
+              {clip.events?.[0]?.category ? t(clip.events[0].category) : t("Flagged error")}
+            </span>
+          </span>
+        }
+        sub={
+          clip.start_time !== undefined && clip.start_time !== null
+            ? t("at {t} in the game", { t: clock(clip.start_time) })
+            : undefined
+        }
+      />
+      <div className="ep-left" style={styles.leftColumn}>
         {/* El vídeo es escenario: marino y en tokens oscuros en los dos temas,
             así la barra de arriba y el transporte se leen sobre su degradado. */}
-        <div className="stage-dark" style={styles.videoWrapper}>
-          <div style={styles.topBar}>
-            <button style={styles.backBtn} onClick={onClose}>
-              <ChevronLeft size={20} /> {t("Back")}
-            </button>
-            {/* El título era el nombre del .mp4 en crudo. Un nombre de fichero
-                no es información: lo que identifica a este clip es qué error es
-                y en qué minuto de la partida ocurre. */}
-            <div style={styles.titleBlock}>
-              <span style={styles.title}>
-                {clip.events?.[0]?.category ? t(clip.events[0].category) : t("Flagged error")}
-              </span>
-              {clip.start_time !== undefined && clip.start_time !== null && (
-                <span className="u-meta" style={{ marginTop: 2 }}>
-                  {t("at {t} in the game", { t: clock(clip.start_time) })}
-                </span>
-              )}
-            </div>
-            <div style={{ width: "120px" }}></div>
-          </div>
+        <div className="stage-dark" style={isFullscreen ? { ...styles.videoWrapper, borderRadius: 0 } : styles.videoWrapper}>
 
           <video
             ref={videoRef}
@@ -356,7 +360,7 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
               onClick={startAdding}
               title={t("Write a note at the current time")}
             >
-              <Plus size={13} /> {t("Add note")}
+              <Plus size={13} /> <span className="ep-add__text">{t("Add note")}</span>
             </button>
 
             <div className="tp-vol">
@@ -561,13 +565,11 @@ export const ErrorPlayer: React.FC<ErrorPlayerProps> = ({ clip, onUpdate, onClos
 };
 
 const styles: Record<string, React.CSSProperties> = {
-  container: { display: "flex", width: "100%", height: "100%", backgroundColor: "var(--sunken)", overflow: "hidden" },
-  leftColumn: { flex: 1, display: "flex", flexDirection: "column", position: "relative" },
-  videoWrapper: { flex: 1, position: "relative", backgroundColor: "var(--stage)", display: "flex", flexDirection: "column" },
-  topBar: { position: "absolute", top: 0, left: 0, right: 0, padding: "var(--space-3) var(--space-4)", background: "linear-gradient(180deg, rgba(0,0,0,0.75) 0%, transparent 100%)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", zIndex: 10 },
-  titleBlock: { display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 },
-  title: { fontSize: 15, fontWeight: 500, color: "var(--text)" },
-  backBtn: { background: "transparent", color: "var(--text-secondary)", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 500 },
+  // Piel A: vídeo, transporte y cuaderno son láminas sobre el fondo, con 10
+  // entre ellas y 12 al borde, como el reproductor de partidas.
+  container: { display: "flex", gap: 10, width: "100%", height: "100%", padding: "0 var(--space-3) var(--space-3)", boxSizing: "border-box", overflow: "hidden" },
+  leftColumn: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 10, position: "relative" },
+  videoWrapper: { flex: 1, minHeight: 0, position: "relative", backgroundColor: "var(--stage)", display: "flex", flexDirection: "column", borderRadius: "var(--radius-lg)", overflow: "hidden" },
   video: { width: "100%", height: "100%", objectFit: "contain", flex: 1 },
   videoProgressWrapper: {
     position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 20px",
@@ -579,14 +581,14 @@ const styles: Record<string, React.CSSProperties> = {
   videoTime: { color: "var(--text)", fontSize: "13px", fontWeight: 500, fontVariantNumeric: "tabular-nums" },
   // Transporte y tira, una sola superficie. `--bg-panel` no existe como
   // token: se usaba en tres sitios y resolvia a nada, o sea transparente.
-  deck: { background: "var(--surface-1)", borderTop: "1px solid var(--line-soft)", padding: "var(--space-3) var(--space-4) var(--space-4)", display: "flex", flexDirection: "column", gap: "var(--space-3)" },
-  transport: { display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "0 0 var(--space-3) 0", borderBottom: "1px solid var(--line-soft)" },
+  deck: { background: "var(--panel)", borderRadius: "var(--radius-lg)", boxShadow: "inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim)", padding: "10px var(--space-3) var(--space-3)", display: "flex", flexDirection: "column", gap: 10 },
+  transport: { display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "0 0 10px 0", borderBottom: "1px solid var(--hair)" },
   timelineGraph: { position: "relative", height: "8px", backgroundColor: "var(--sunken)", border: "1px solid var(--line-soft)", borderRadius: "var(--radius-sm)", cursor: "pointer" },
-  rightColumn: { width: "340px", backgroundColor: "var(--bg-sidebar)", display: "flex", flexDirection: "column", borderLeft: "1px solid var(--border-subtle)", overflow: "hidden" },
-  reviewHeader: { padding: "20px 24px", borderBottom: "1px solid var(--border-subtle)", display: "flex" },
-  reviewTitle: { fontSize: "var(--font-md)", fontWeight: 500, color: "var(--text)" },
-  reviewList: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" },
-  reviewCard: { padding: "12px", borderRadius: "8px", border: "1px solid var(--border-subtle)", cursor: "pointer", transition: "all 0.2s" },
+  rightColumn: { width: "340px", flex: "none", backgroundColor: "var(--panel)", borderRadius: "var(--radius-lg)", boxShadow: "inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim)", display: "flex", flexDirection: "column", overflow: "hidden" },
+  reviewHeader: { padding: "14px 16px", borderBottom: "1px solid var(--hair)", display: "flex" },
+  reviewTitle: { fontSize: "var(--fs-14)", lineHeight: "var(--lh-14)", fontWeight: 700, color: "var(--text)" },
+  reviewList: { flex: 1, overflowY: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: 10 },
+  reviewCard: { padding: "12px", borderRadius: "12px", border: "1px solid var(--hair-strong)", cursor: "pointer", transition: "border-color var(--t-hover) var(--e-color), background-color var(--t-hover) var(--e-color)" },
   reviewCardHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
   toneBadge: { padding: "2px 8px", borderRadius: "12px", display: "flex", alignItems: "center", gap: "4px" },
   reviewCardBody: { fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5 },
@@ -594,7 +596,6 @@ const styles: Record<string, React.CSSProperties> = {
   addForm: { backgroundColor: "var(--raised)", padding: "var(--space-4)", borderRadius: "var(--radius-md)", border: "1px solid var(--line)" },
   noteTimeRow: { display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)", flexWrap: "wrap" },
   volumeSlider: {
-    width: "80px",
     accentColor: "var(--cool)",
     cursor: "pointer",
     height: "4px",
@@ -603,6 +604,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: "var(--sunken)",
     boxShadow: "var(--inset-sunken)",
   },
-  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--bg-app)", color: "var(--text)", border: "1px solid var(--border-subtle)", outline: "none", resize: "vertical", fontFamily: "var(--font-sans)", fontSize: 14 },
+  textarea: { width: "100%", boxSizing: "border-box", padding: "10px", borderRadius: "6px", backgroundColor: "var(--sunken)", color: "var(--text)", border: "1px solid var(--hair)", outline: "none", resize: "vertical", fontFamily: "var(--font-sans)", fontSize: 14 },
   iconBtn: { background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px", display: "flex" }
 };

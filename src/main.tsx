@@ -42,7 +42,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
                 scope="app"
                 // La ventana no tiene marco: sin barra no se podría ni cerrar.
                 // Va con su propia red por si la que falla es ella.
-                chrome={<ErrorBoundary name="Titlebar" fallback={null}><Titlebar /></ErrorBoundary>}
+                chrome={<ErrorBoundary name="Titlebar" fallback={null}><Titlebar brand /></ErrorBoundary>}
               >
                 <App />
               </ErrorBoundary>

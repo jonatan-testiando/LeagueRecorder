@@ -1,3 +1,5 @@
+@import "@fontsource-variable/figtree";
+
 :root {
   /* =========================================================================
      Sistema de diseño — piel "Marino y oro, suave" (2026-09-16)
@@ -67,44 +69,42 @@
   /* Superficies: escala de valor, croma casi nulo. La profundidad la marca el
      escalón, no la sombra ni el color. Lo que flota (menú, popover, selector)
      tiene su escalón propio, --overlay, un punto por encima de --raised. */
-  --ground: #080D16;     /* fondo de ventana: el marino de la piel Rift */
-  --panel: #0F1622;      /* rail, barras, tarjetas, inspector */
-  --raised: #18212E;     /* elemento activo, hover, botón */
-  --overlay: #1E2735;    /* menú, popover, selector: lo que flota encima */
-  --sunken: #0B111B;     /* campos y pistas: entre el fondo y el panel. El
-                            #04070E de antes quedaba por debajo de la ventana
-                            y los campos se leían como agujeros */
+  --ground: #111114;  /* fondo de ventana: casi negro neutro (piel A, 2026-10-29) */
+  --panel: #1b1b1f;  /* rail, barras, tarjetas, inspector */
+  --raised: #27272c;  /* elemento activo, hover, botón */
+  --overlay: #2a2a30;  /* menú, popover, selector: lo que flota encima */
+  --sunken: #0b0b0d;  /* campos y pistas: entre el fondo y el panel, no un agujero */
   /* Escenario del vídeo: marino en los DOS temas. Es lo único oscuro del tema
      claro, y es a propósito: un marco gris claro apaga el vídeo. */
-  --stage: #080D16;
+  --stage: #111114;
   /* Vidrio: panel translúcido para las superficies estructurales (barra de
      título, HUD del reproductor, toasts, Ctrl K). Con transparencia reducida
      pasa a opaco (ver el bloque de movimiento reducido). */
   --glass: color-mix(in srgb, var(--panel) 78%, transparent);
   --glass-filter: blur(16px);   /* el desenfoque del vidrio: 16 px como mucho */
   /* Velo bajo un diálogo o Ctrl K. */
-  --scrim: rgba(4, 7, 14, 0.62);
+  --scrim: rgba(6, 6, 8, 0.62);
 
   /* Filos. No hay bordes opacos: hay luz que pasa. */
-  --hair: rgba(219, 215, 208, 0.09);        /* filo de tarjeta y división */
-  --hair-strong: rgba(219, 215, 208, 0.17); /* filo de control y chip activo */
-  --rim: rgba(255, 255, 255, 0.07);         /* luz de canto, 1px arriba */
+  --hair: rgba(198, 198, 203, 0.09);  /* filo de tarjeta y división */
+  --hair-strong: rgba(198, 198, 203, 0.17);  /* filo de control y chip activo */
+  --rim: rgba(255, 255, 255, 0.06);  /* luz de canto, 1px arriba */
   --line: var(--hair-strong);
   --line-soft: var(--hair);
   --hairline: color-mix(in srgb, var(--brand) 32%, transparent);
 
   /* Texto. Medido con herramientas/contrast.mjs. Si vuelve a deslumbrar, se
      toca el texto y no el fondo (memoria «contraste-suave»). */
-  --text: #C6C2BC;       /* hueso: 10,97 sobre el fondo, 10,23 sobre el panel */
-  --muted: #A6A39E;      /* 7,2 sobre el panel */
-  --faint: #8E9398;      /* etiquetas y metadatos: 4,85 aun sobre --overlay */
+  --text: #c6c6cb;  /* 11,1 sobre el fondo, 10,1 sobre el panel */
+  --muted: #a0a0a8;  /* 6,6 sobre el panel */
+  --faint: #94949c;  /* etiquetas y metadatos: 4,7 aun sobre --overlay */
 
   /* Tintes */
-  --brand: #C8AA6E;      /* oro hextech: acción y marca */
-  --signal: #F26073;     /* rojo: grabando, derrota, destructivo */
-  --flag: #A589F1;       /* violeta: hallazgo del analizador */
-  --cool: #3CB787;       /* jade: datos, victoria, foco, enlaces */
-  --cool-hover: #4FC08F;
+  --brand: #d1a856;  /* el oro de «Jugar»: acción y marca */
+  --signal: #ff5a6e;  /* rojo: grabando, derrota, el rival */
+  --flag: #a589f1;  /* violeta: hallazgo del analizador */
+  --cool: #5aa9f2;  /* azul: lo tuyo, victoria, datos, enlaces */
+  --cool-hover: #74b7f4;
 
   /* Semánticos */
   --win: var(--cool);
@@ -135,8 +135,8 @@
 
   /* Relleno de acción: UNA por pantalla. Texto oscuro encima (contraste 7,9). */
   --action: var(--brand);
-  --action-hover: #D9BE85;
-  --on-action: #0A1420;
+  --action-hover: #dcb86c;
+  --on-action: #1c160a;
 
   /* Series ambientales (APM) sin tinte, para no competir con los eventos. */
   --apm-fill: color-mix(in srgb, var(--muted) 8%, transparent);
@@ -225,7 +225,7 @@
   --gradient-violet: linear-gradient(135deg, var(--cool), color-mix(in srgb, #000 22%, var(--cool)));
 
   /* =========================================================================
-     Tipografía. La interfaz habla en sans (Instrument Sans) y las cifras van
+     Tipografía. La interfaz habla en sans (Figtree) y las cifras van
      con tabular-nums. La mono (JetBrains Mono) solo marca tiempos de vídeo y
      atajos de teclado: antes era la voz de toda la app —etiquetas en
      mayúsculas incluidas— y se leía como una consola, no como un producto.
@@ -234,7 +234,7 @@
      Las dos familias van empaquetadas en public/fonts, no son fuentes del
      sistema: así la app se ve igual en una instalación limpia que aquí.
      ========================================================================= */
-  --font-sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Figtree Variable', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   /* Escala tipográfica: seis tamaños de texto y dos de cifra, cada uno con su
@@ -265,9 +265,11 @@
 
   /* Radios: cuatro y ninguno más (el censo contó trece). */
   --radius-sm: 4px;      /* kbd y marcas */
-  --radius-md: 8px;      /* controles: botón, campo, selector, menú */
-  --radius-lg: 12px;     /* tarjetas y paneles */
+  --radius-md: 8px;      /* menús, avisos y filas; lo que se pulsa va en --radius-control */
+  --radius-lg: 14px;     /* tarjetas y paneles (A) */
   --radius-full: 999px;  /* chips y píldoras */
+
+  --radius-control: var(--radius-full); /* A · todo lo que se pulsa es cápsula */
   --radius-xl: var(--radius-lg); /* alias heredado (era 16) */
 
   /* Anchos máximos: dos y nada más. A 1920 nada tenía tope y cada pantalla se
@@ -277,11 +279,11 @@
 
   /* Altura de la barra de título personalizada. 44 y no 36: ahora lleva el
      buscador y el estado de captura, no solo la marca. */
-  --titlebar-h: 44px;
+  --titlebar-h: 48px;
   /* Ancho del rail: desplegado, y plegado a solo iconos (con una partida
      abierta en el reproductor, el vídeo se queda el sitio). */
-  --rail-w: 216px;
-  --rail-w-collapsed: 64px;
+  --rail-w: 72px;
+  --rail-w-collapsed: 72px;
   /* Canto inferior del kbd: la tecla "hundida" del teclado. */
   --kbd-edge: rgba(0, 0, 0, 0.4);
 
@@ -346,31 +348,31 @@
    ========================================================================= */
 :root[data-theme="light"] {
   color-scheme: light;
-  --ground: #E3E6EB;
-  --panel: #ECEFF2;
-  --raised: #F5F7F9;
-  --overlay: #F5F7F9;
-  --sunken: #DCE0E6;
+  --ground: #e4e4e7;  /* papel gris neutro (A) */
+  --panel: #ececef;
+  --raised: #f2f2f4;
+  --overlay: #f2f2f4;
+  --sunken: #dcdce0;
   --glass: color-mix(in srgb, var(--panel) 80%, transparent);
-  --scrim: rgba(45, 51, 61, 0.35);
-  --hair: rgba(23, 27, 38, 0.10);
-  --hair-strong: rgba(23, 27, 38, 0.18);
+  --scrim: rgba(40, 40, 48, 0.35);
+  --hair: rgba(20, 20, 26, 0.10);
+  --hair-strong: rgba(20, 20, 26, 0.18);
   --rim: rgba(255, 255, 255, 0.85);
-  --text: #2D333D;       /* 11,0 sobre el panel, 10,2 sobre el fondo */
-  --muted: #474D56;      /* 7,4 sobre el panel */
-  --faint: #5A6069;      /* 5,1 sobre el fondo: el #666C75 de antes suspendía AA */
-  --brand: #7F5D08;
-  --signal: #B61537;
-  --flag: #6C4AB3;
-  --cool: #006F47;
-  --cool-hover: color-mix(in srgb, #006F47 80%, black);
+  --text: #34343a;  /* 10,5 sobre el panel, 9,8 sobre el fondo */
+  --muted: #4a4a52;  /* 7,4 sobre el panel */
+  --faint: #5c5c64;  /* 5,2 sobre el fondo */
+  --brand: #7f5d08;  /* oro como texto sobre papel: 5,1 */
+  --signal: #b4233b;  /* 5,5 sobre el panel */
+  --flag: #6c4ab3;
+  --cool: #1d5fa6;  /* azul sobre papel: 5,5 */
+  --cool-hover: color-mix(in srgb, #1d5fa6 80%, black);
   --brand-soft: color-mix(in srgb, var(--brand) 12%, transparent);
   --cool-soft: color-mix(in srgb, var(--cool) 11%, transparent);
   --loss-soft: color-mix(in srgb, var(--loss) 10%, transparent);
   --flag-soft: color-mix(in srgb, var(--flag) 11%, transparent);
-  --action: #C8AA6E;
-  --action-hover: #D9BE85;
-  --on-action: #0A1420;
+  --action: #d1a856;
+  --action-hover: #dcb86c;
+  --on-action: #1c160a;  /* 8,1 sobre el oro */
   --shadow-1: 0 1px 2px rgba(16, 20, 30, 0.06), 0 6px 16px -12px rgba(16, 20, 30, 0.25);
   --shadow-2: 0 2px 6px rgba(16, 20, 30, 0.08), 0 18px 40px -22px rgba(16, 20, 30, 0.3);
   --shadow-3: 0 28px 64px -24px rgba(16, 20, 30, 0.35);
@@ -391,26 +393,26 @@
    ========================================================================= */
 .stage-dark {
   color-scheme: dark;
-  --ground: #080D16;
-  --panel: #0F1622;
-  --raised: #18212E;
-  --overlay: #1E2735;
-  --sunken: #0B111B;
+  --ground: #111114;  /* fondo de ventana: casi negro neutro (piel A, 2026-10-29) */
+  --panel: #1b1b1f;  /* rail, barras, tarjetas, inspector */
+  --raised: #27272c;  /* elemento activo, hover, botón */
+  --overlay: #2a2a30;  /* menú, popover, selector: lo que flota encima */
+  --sunken: #0b0b0d;  /* campos y pistas: entre el fondo y el panel */
   --glass: color-mix(in srgb, var(--panel) 78%, transparent);
-  --scrim: rgba(4, 7, 14, 0.62);
-  --hair: rgba(219, 215, 208, 0.09);
-  --hair-strong: rgba(219, 215, 208, 0.17);
-  --rim: rgba(255, 255, 255, 0.07);
+  --scrim: rgba(6, 6, 8, 0.62);
+  --hair: rgba(198, 198, 203, 0.09);  /* filo de tarjeta y división */
+  --hair-strong: rgba(198, 198, 203, 0.17);  /* filo de control y chip activo */
+  --rim: rgba(255, 255, 255, 0.06);  /* luz de canto, 1px arriba */
   --line: var(--hair-strong);
   --line-soft: var(--hair);
-  --text: #C6C2BC;
-  --muted: #A6A39E;
-  --faint: #8E9398;
-  --brand: #C8AA6E;
-  --signal: #F26073;
-  --flag: #A589F1;
-  --cool: #3CB787;
-  --cool-hover: #4FC08F;
+  --text: #c6c6cb;  /* 11,1 sobre el fondo, 10,1 sobre el panel */
+  --muted: #a0a0a8;  /* 6,6 sobre el panel */
+  --faint: #94949c;  /* etiquetas y metadatos: 4,7 aun sobre --overlay */
+  --brand: #d1a856;  /* el oro de «Jugar»: acción y marca */
+  --signal: #ff5a6e;  /* rojo: grabando, derrota, el rival */
+  --flag: #a589f1;  /* violeta: hallazgo del analizador */
+  --cool: #5aa9f2;  /* azul: lo tuyo, victoria, datos, enlaces */
+  --cool-hover: #74b7f4;
   --win: var(--cool);
   --loss: var(--signal);
   --gold: var(--brand);
@@ -627,9 +629,9 @@ h1 {
   font-weight: 500;
   letter-spacing: 0;
 }
-.t-page { font-size: var(--fs-28); line-height: var(--lh-28); letter-spacing: -0.005em; }
-.t-section { font-size: var(--fs-20); line-height: var(--lh-20); letter-spacing: -0.0025em; }
-.t-card { font-size: var(--fs-16); line-height: var(--lh-16); }
+.t-page { font-size: var(--fs-28); line-height: var(--lh-28); letter-spacing: -0.02em; font-weight: 800; } /* A: la grotesca negra de riotgames.com */
+.t-section { font-size: var(--fs-20); line-height: var(--lh-20); letter-spacing: -0.015em; font-weight: 750; }
+.t-card { font-size: var(--fs-16); line-height: var(--lh-16); font-weight: 700; }
 .t-body,
 .t-body-strong { font-size: var(--fs-14); line-height: var(--lh-14); }
 .t-small,
@@ -1167,6 +1169,300 @@ button.cap:not(:disabled):active { transform: none; }
 .rail--collapsed .updpill { opacity: 0; pointer-events: none; }
 
 /* =========================================================================
+   Piel A · el marco (2026-10-29). El raíl del launcher de Riot: sube hasta
+   arriba con la marca, solo iconos (72 px) y el nombre de cada sección en
+   una etiqueta que sale al pasar el ratón o con el teclado. Ya no se pliega
+   con el reproductor: mide siempre lo mismo. La barra de título va a su
+   derecha, sobre el fondo, sin franja ni filo.
+   ========================================================================= */
+.app-col {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rail {
+  align-items: center;
+  padding: 14px 12px 12px;
+  background: var(--sunken);
+  box-shadow: none;
+  /* Las etiquetas salen fuera del raíl: nada de recortes. */
+  overflow: visible;
+  clip-path: none;
+  transition: none;
+  position: relative;
+  z-index: 20;
+}
+.rail__brand {
+  height: 34px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+.rail__nav {
+  align-items: center;
+  width: 100%;
+  gap: 6px;
+}
+.nav-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+.nav-btn > svg { position: relative; }
+.nav-btn--active {
+  background: transparent;
+  box-shadow: none;
+}
+/* El círculo de la sección activa: uno solo, que salta con un muelle de
+   220 ms sin rebote (framer, layoutId). */
+.nav-btn__pill {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  box-shadow: inset 0 1px 0 var(--rim);
+}
+/* La etiqueta, ahora emergente: aparece a los 300 ms (pasar por encima no
+   la dispara) y al instante con el teclado. */
+.rail .nav-btn__label {
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: var(--overlay);
+  color: var(--text);
+  font-size: var(--fs-13);
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 40;
+  box-shadow: var(--shadow-2), inset 0 0 0 1px var(--hair);
+  opacity: 0;
+  transform: translate(-4px, -50%) scale(0.97);
+  transform-origin: left center;
+  transition:
+    opacity var(--t-quick-exit) var(--e-out),
+    transform var(--t-quick-exit) var(--e-out);
+}
+.rail .nav-btn:hover .nav-btn__label {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+  transition:
+    opacity var(--t-quick) var(--e-out) 300ms,
+    transform var(--t-quick) var(--e-out) 300ms;
+}
+.rail .nav-btn:focus-visible .nav-btn__label {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+  transition-delay: 0s;
+}
+/* Partidas por revisar: la insignia roja del launcher, bajo el icono. */
+.rail .nav-btn__count {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 18px;
+  height: 15px;
+  padding: 0 5px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  color: #f2efe9;
+  background: #d4002a;
+  box-shadow: 0 0 0 2px var(--sunken);
+}
+.rail .nav-btn__live {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  margin: 0;
+  box-shadow: 0 0 0 2px var(--sunken);
+}
+/* Los grupos, como filos cortos entre iconos. */
+.rail .nav-grp {
+  width: 24px;
+  height: 1px;
+  padding: 0;
+  margin: 8px auto;
+  font-size: 0;
+  color: transparent;
+  background: var(--hair-strong);
+  overflow: hidden;
+}
+.rail .nav-grp:first-child { display: none; }
+/* El perfil se queda en el emblema; el rango, en su título. */
+.rail .rail-profile {
+  padding: 4px;
+  background: transparent;
+  box-shadow: none;
+  justify-content: center;
+}
+.rail .rail-profile__emblem { width: 34px; height: 34px; }
+.rail .rail-profile__text { display: none; }
+.rail .rail-version { font-size: 11px; }
+.rail .updpill {
+  width: 48px;
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+  font-size: 0;
+}
+.rail .updpill .updpill__dot { margin: 0; }
+
+.titlebar {
+  background: transparent;
+  border-bottom: 0;
+  /* Por encima del contenido: las etiquetas del título (el detalle de la
+     partida) cuelgan sobre la fila de debajo. */
+  position: relative;
+  z-index: 30;
+}
+.titlebar__drag {
+  /* Tres columnas: los lados reparten igual y el buscador queda centrado; si
+     el estado de la derecha no cabe en su mitad, cede el título, no el buscador. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(auto, 1fr);
+  gap: 12px;
+  /* Los mismos 12 px que el relleno de las páginas: el título cae en su borde. */
+  padding-left: 12px;
+}
+.titlebar__start {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.titlebar__brand { width: auto; }
+.titlebar__center { flex: none; }
+.titlebar__end {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.titlebar__search {
+  width: clamp(200px, 26vw, 360px);
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  padding: 0 8px 0 14px;
+}
+/* Estrecho, el estado cede su coletilla («· se activa al entrar en partida»)
+   y el disco libre, que sigue en el pie de la Biblioteca: el título de la
+   pantalla va antes. */
+@media (max-width: 1200px) {
+  .titlebar .cap__sub,
+  .titlebar__free { display: none; }
+}
+/* El título de la pantalla en la barra (ScreenTitle). */
+.screen-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+/* Relativo: de aquí cuelgan las etiquetas del subtítulo, fuera de su recorte. */
+.screen-title__txt { position: relative; min-width: 0; }
+/* Pantallas de datos centradas en --content-max: a partir de ese ancho el
+   contenido se separa del raíl y el título lo sigue. Cuenta el relleno de
+   12 px de la página, que es también el de la barra. */
+.screen-title--content {
+  margin-left: max(0px, calc((100vw - var(--rail-w) - var(--content-max) - 24px) / 2));
+}
+.screen-title--form {
+  margin-left: max(0px, calc((100vw - var(--rail-w) - var(--form-max) - 24px) / 2));
+}
+.screen-title__h1 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.screen-title__sub {
+  margin: 0;
+  font-size: var(--fs-12);
+  line-height: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.screen-title__extra {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Un botón de icono de la barra que abre algo en la página (Coach, «Cómo se
+   calcula»): abierto, se queda en lámina. */
+.screen-title__extra .btn--icon[aria-expanded="true"] { background: var(--raised); color: var(--text); }
+
+/* Miga de las pantallas de detalle (una partida, un clip, un error): la
+   lista de la que vienes, que vuelve a ella, y lo que estás viendo. Si no
+   cabe, cede el nombre de la lista; lo demás no cede, salvo un nombre que
+   escribe el usuario (`--fit`), que puede ser largo. */
+.crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.crumb__back {
+  flex: 0 10 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--t-hover) var(--e-color);
+}
+.crumb__back:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.crumb__sep { flex: none; color: var(--faint); }
+.crumb__face {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--hair-strong);
+}
+.crumb__name { flex: none; }
+.crumb__name--fit { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Con un nombre largo que ya cede, la lista se queda entera: es una palabra. */
+.crumb:has(.crumb__name--fit) .crumb__back { flex: none; }
+@media (hover: hover) and (pointer: fine) {
+  .crumb__back:hover { color: var(--text); }
+}
+
+
+/* =========================================================================
    Tarjetas y filas interactivas
    ========================================================================= */
 /* Sin animación de entrada: la pantalla ya entra con su fundido, y una
@@ -1292,7 +1588,7 @@ button.cap:not(:disabled):active { transform: none; }
   );
   color: var(--on-action);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
@@ -1316,7 +1612,7 @@ button.cap:not(:disabled):active { transform: none; }
   background: var(--surface-1);
   border: 1px solid var(--glass-line);
   color: var(--text-primary);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   cursor: pointer;
   font-weight: 500;
   box-shadow: none;
@@ -1338,7 +1634,7 @@ button.cap:not(:disabled):active { transform: none; }
   color: var(--text-muted);
   cursor: pointer;
   padding: var(--space-2);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   box-shadow: none;
   display: inline-flex;
   align-items: center;
@@ -1459,7 +1755,7 @@ button.cap:not(:disabled):active { transform: none; }
   font-weight: 500;
   line-height: 1.25;
   letter-spacing: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   cursor: pointer;
   box-shadow: none;
   border: 1px solid transparent;
@@ -1646,7 +1942,7 @@ button.cap:not(:disabled):active { transform: none; }
   height: 36px;
   padding: 0 10px 0 12px;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: var(--sunken);
   box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
   color: var(--text);
@@ -2632,7 +2928,7 @@ button.cap:not(:disabled):active { transform: none; }
 .field {
   background: var(--sunken);
   border: 1px solid var(--line-soft);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   box-shadow: var(--inset-sunken);
   color: var(--text);
   font-family: var(--font-sans);

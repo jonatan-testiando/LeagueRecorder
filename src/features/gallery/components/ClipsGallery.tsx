@@ -26,6 +26,7 @@ import { Skeleton } from "../../../components/ui/Skeleton";
 import { Select } from "../../../components/ui/Select";
 import { ClipPoster } from "./ClipPoster";
 import { ClipPlayer } from "./ClipPlayer";
+import { ScreenTitle, TitleOff } from "../../../components/ScreenTitle";
 import "./ClipsGallery.css";
 
 /**
@@ -427,9 +428,9 @@ export const ClipsGallery: React.FC = () => {
   if (loading || esqueleto) {
     return (
       <div className="cg">
+        <ScreenTitle align="content" title={t("Clips")} />
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
-            <Skeleton width={180} height={28} />
             <Skeleton shape="block" width={300} height={34} className="cg-skel__seg" />
             {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={168} />)}
           </div>
@@ -441,9 +442,7 @@ export const ClipsGallery: React.FC = () => {
   if (clips.length === 0) {
     return (
       <div className="cg">
-        <div className="cg__head">
-          <h1>{t("Clips")}</h1>
-        </div>
+        <ScreenTitle align="content" title={t("Clips")} />
         <div className="cg-center">
           <EmptyState
             icon={<Film size={30} color="var(--faint)" />}
@@ -487,12 +486,14 @@ export const ClipsGallery: React.FC = () => {
     {/* La lista sigue montada con el reproductor abierto: así vuelve con su
         scroll y su selección, y el virtualizador no se rehace de cero. */}
     <div className="cg" hidden={!!playing}>
-      <div className="cg__head">
-        <h1>{t("Clips")}</h1>
-        <span className="cg__count">
-          {clips.length} {t(clips.length === 1 ? "clip" : "clips")} · {formatSize(totalBytes)}
-        </span>
-      </div>
+      {/* Con un clip abierto, el título de la barra es el del clip. */}
+      <TitleOff off={!!playing}>
+        <ScreenTitle
+          align="content"
+          title={t("Clips")}
+          sub={<>{clips.length} {t(clips.length === 1 ? "clip" : "clips")} · {formatSize(totalBytes)}</>}
+        />
+      </TitleOff>
 
       <div className="cg__tools">
         <Segmented

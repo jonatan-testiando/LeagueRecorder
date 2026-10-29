@@ -17,6 +17,7 @@ import { useErrorClips, useMatches } from "../../../store/useAppStore";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { Skeleton } from "../../../components/ui/Skeleton";
 import { ClipPoster } from "./ClipPoster";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./ClipsGallery.css";
 
 /**
@@ -156,9 +157,9 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
   if (!loaded || esqueleto) {
     return (
       <div className="cg">
+        <ScreenTitle align="content" title={t("Errors")} />
         {esqueleto && (
           <div className="page-skel" role="status" aria-busy="true" aria-label={t("Loading…")}>
-            <Skeleton width={180} height={28} />
             <Skeleton shape="block" width={300} height={34} className="cg-skel__seg" />
             {[0, 1, 2].map((i) => <Skeleton key={i} shape="block" height={168} />)}
           </div>
@@ -169,18 +170,19 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
 
   return (
     <div className="cg">
-      <div className="cg__head">
-        <h1>{t("Errors")}</h1>
-        {errors.length > 0 && (
-          <span className="cg__count">
-            {errors.length === 1
+      <ScreenTitle
+        align="content"
+        title={t("Errors")}
+        sub={
+          errors.length === 0
+            ? undefined
+            : errors.length === 1
               ? t("1 error flagged")
               : gameCount === 1
                 ? t("{n} flagged in 1 game", { n: errors.length })
-                : t("{n} flagged across {m} games", { n: errors.length, m: gameCount })}
-          </span>
-        )}
-      </div>
+                : t("{n} flagged across {m} games", { n: errors.length, m: gameCount })
+        }
+      />
 
       {/* Fallo de lectura: se dice, con salida. Enseñar "aún no has marcado
           ningún error" cuando lo que ha pasado es que no se ha podido leer el

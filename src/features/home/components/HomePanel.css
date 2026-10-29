@@ -23,7 +23,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-6);
+  /* A: el título está en la barra, así que arriba no hace falta margen. */
+  padding: 0 var(--space-3) var(--space-3);
   font-variant-numeric: tabular-nums;
 }
 
@@ -35,13 +36,10 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 10px; /* el hueco de A entre paneles */
 }
 
 /* ---------------------------------------------------------------- cabecera */
-.home-head { display: flex; align-items: baseline; gap: var(--space-3); flex-wrap: wrap; }
-.home-h1 { margin: 0; color: var(--text); }
-.home-sub { color: var(--faint); }
 .home-mant { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2); color: var(--cool-ink); }
 .home-spin { animation: spin 1.1s linear infinite; }
 
@@ -103,8 +101,8 @@
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  gap: var(--space-6);
-  padding: var(--space-6);
+  gap: var(--space-5);
+  padding: var(--space-5);
   border-radius: var(--radius-lg);
   /* La aureola: una por pantalla, arriba a la derecha. */
   background: var(--halo), var(--panel);
@@ -122,7 +120,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 .home-hero__id { display: flex; align-items: center; gap: var(--space-5); min-width: 0; }
 .home-hero__portrait {
@@ -189,11 +187,11 @@
 .home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 312px;
-  gap: var(--space-6);
+  gap: 10px;
   align-items: start;
 }
-.home-col { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
-.home-col--side { gap: var(--space-3); }
+.home-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.home-col--side { gap: 10px; }
 .home-sec { display: flex; flex-direction: column; gap: var(--space-3); }
 .home-sec__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 
@@ -299,7 +297,7 @@
   background: color-mix(in srgb, var(--mo-ink) 90%, transparent);
   transition: background-color var(--t-hover) var(--e-color);
 }
-.home-mo__body { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-4); }
+.home-mo__body { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) 14px; }
 .home-mo__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .home-mo__title { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
 .home-mo__why { color: var(--muted); }
@@ -315,7 +313,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
+  padding: 14px var(--space-4);
   margin: 0;
   border: 0;
   font: inherit;
@@ -331,7 +329,7 @@ button.home-sig:focus-visible { outline: 2px solid var(--focus); outline-offset:
 .home-sig__body { color: var(--muted); }
 
 /* -------------------------------------------------------------------- foco */
-.home-focus { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); }
+.home-focus { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
 .home-focus__text { display: flex; flex-direction: column; gap: var(--space-1); }
 .home-focus__title { color: var(--text); }
 .home-focus__why { margin: 0; color: var(--muted); }
@@ -365,7 +363,7 @@ button.home-sig:focus-visible { outline: 2px solid var(--focus); outline-offset:
 .btn.home-focus__train { width: 100%; }
 
 /* --------------------------------------------------------- forma reciente */
-.home-form { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); }
+.home-form { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
 .home-form__wl { color: var(--muted); }
 .home-form__strip {
   display: grid;

@@ -24,6 +24,7 @@ import {
   type CoachPlay,
   type LanePosition,
 } from "../../../core/tauri-ipc";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./ChampSelectPanel.css";
 
 /**
@@ -82,6 +83,7 @@ export const ChampSelectPanel: React.FC = () => {
     return (
       <div className="cs-panel">
         <div className="cs-page cs-page--empty">
+          <ScreenTitle align="content" title={t("Champion select")} />
           <EmptyState
             icon={<Swords size={28} aria-hidden="true" />}
             title={t("Champion select")}
@@ -126,15 +128,19 @@ const Vista: React.FC<{ v: ChampSelectView; ended: boolean }> = ({ v, ended }) =
   return (
     <div className="cs-panel">
       <div className="cs-page">
-        <header className="cs-head">
-          <h1 className="t-page cs-h1">{t("Champion select")}</h1>
+        {/* Título y fase en la barra de título (piel A); aquí, el puesto. */}
+        <ScreenTitle align="content" title={t("Champion select")}>
           {ended ? (
             <Chip tone="outline">{t("Champion select is over")}</Chip>
           ) : (
             phase && <Chip tone="gold" dot>{t(phase)}</Chip>
           )}
-          {v.rift && <RoleSwitch v={v} />}
-        </header>
+        </ScreenTitle>
+        {v.rift && (
+          <header className="cs-head">
+            <RoleSwitch v={v} />
+          </header>
+        )}
 
         {!v.rift ? (
           <section className="cs-card cs-quiet">

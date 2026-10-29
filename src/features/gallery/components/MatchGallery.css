@@ -30,47 +30,29 @@
 
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 10px;
   width: 100%;
-  max-width: calc(var(--content-max) + 2 * var(--space-6));
+  max-width: calc(var(--content-max) + 2 * var(--space-3));
   height: 100%;
   margin: 0 auto;
-  padding: var(--space-6);
+  /* Piel A: el título va en la barra; arriba no hace falta aire. */
+  padding: 0 var(--space-3) var(--space-3);
   box-sizing: border-box;
   min-height: 0;
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Cabecera ---------------------------------------------------------- */
-.lib-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+/* ---- Pie: ayuda de teclado y disco ---------------------------------- */
+.lib-foot {
   flex: none;
-  min-width: 0;
-}
-.lib-head h1 {
-  margin: 0;
-  font-size: var(--fs-28);
-  line-height: var(--lh-28);
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  color: var(--text);
-}
-.lib-head__sub {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  color: var(--faint);
-}
-.lib-head__right {
   display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 32px;
 }
+.lib-foot .lib-keys { min-width: 0; }
 .lib-disk {
   white-space: nowrap;
   font-size: var(--fs-13);
@@ -78,20 +60,12 @@
   color: var(--faint);
 }
 .lib-disk--tight { color: var(--loss); }
-.lib-recording {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  color: var(--signal);
-}
 
 /* ---- Filtros: una fila ------------------------------------------------- */
 .lib-filters {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
   flex: none;
   min-width: 0;
 }
@@ -117,13 +91,13 @@
 /* Búsqueda: el mismo campo hundido. Cede ancho antes que nadie. */
 .lib-search {
   flex: 0 1 220px;
-  min-width: 140px;
+  min-width: 120px;
   height: 32px;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-2) 0 var(--space-3);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: var(--sunken);
   box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
   color: var(--faint);
@@ -156,7 +130,7 @@
   gap: var(--space-2);
   padding: 0 var(--space-3);
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--hair);
   color: var(--muted);
@@ -434,7 +408,7 @@
   display: flex;
   gap: var(--space-1);
   padding: var(--space-1);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
   background: var(--raised);
   box-shadow: inset 0 0 0 1px var(--hair-strong), var(--shadow-1);
   opacity: 0;
@@ -506,7 +480,7 @@
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   background: var(--panel);
   box-shadow: inset 0 0 0 1px var(--hair-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-control);
 }
 .lib-batch__n { font-size: var(--fs-13); line-height: var(--lh-13); color: var(--text); }
 .lib-batch__acts { display: flex; gap: var(--space-2); margin-left: auto; }
@@ -520,12 +494,10 @@
 .lib-skel__board { height: 140px; }
 
 /* ---- Anchos ------------------------------------------------------------ */
-/* Sin panel de detalle (ventana estrecha): la fila de filtros puede partirse. */
-@media (max-width: 1279px) {
+/* La fila de filtros cabe entera en el mínimo de la ventana (1024): cede la
+   búsqueda, y la fila no se parte. Partirse solo hace falta por debajo, que
+   la ventana no deja. Con la piel A ya no hay margen arriba que recortar en
+   las ventanas bajas: el título va en la barra. */
+@media (max-width: 1023px) {
   .lib-filters { flex-wrap: wrap; }
-}
-/* Ventana baja: menos margen arriba y abajo, para que el panel de detalle
-   enseñe los tres momentos sin hacer scroll. */
-@media (max-height: 820px) {
-  .lib { padding-top: var(--space-4); padding-bottom: var(--space-4); }
 }

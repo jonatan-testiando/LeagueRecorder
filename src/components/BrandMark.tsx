@@ -1,15 +1,16 @@
 import React from "react";
 
 /**
- * La marca de la app.
+ * La marca de la app: Wardline.
  *
- * Un marcapáginas: marcar el momento que duele para volver a él. La forma vive
- * también en `assets/brand/mark.svg`, que es de donde se generan el icono de la
- * ventana y el del instalador; si se cambia una, se cambian las dos.
+ * El minimapa reducido a lo que lee el análisis: las dos bases y los tres
+ * carriles (arriba y abajo por el borde, el centro en diagonal), sobre la
+ * baldosa roja. Se eligió en el laboratorio del preview del sistema de diseño
+ * (2026-10-29). La forma vive también en `assets/brand/mark.svg`, que es de
+ * donde se generan el icono de la ventana y el del instalador; si se cambia
+ * una, se cambian las dos.
  *
- * Hereda el color (`currentColor`) a propósito: la marca es de una sola tinta,
- * así que quien la coloca decide si va en oro, en hueso o en el color del texto
- * de al lado. Nunca lleva dos colores.
+ * Son dos colores fijos a propósito: una marca no cambia con el tema.
  */
 export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
   size = 16,
@@ -18,12 +19,21 @@ export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
   <svg
     width={size}
     height={size}
-    viewBox="0 0 64 64"
+    viewBox="0 0 24 24"
     fill="none"
     className={className}
     aria-hidden="true"
     focusable="false"
   >
-    <path d="M15 4 H49 V60 L32 46.5 L15 60 Z" fill="currentColor" />
+    <rect x={1} y={1} width={22} height={22} rx={6.5} fill="#d4002a" />
+    <path
+      d="M6.2 13.5V6.2h7.3M10.5 17.8h7.3v-7.3M9.2 14.8l5.6-5.6"
+      stroke="#f2efe9"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect x={4} y={15.5} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" />
+    <rect x={15.5} y={4} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" />
   </svg>
 );

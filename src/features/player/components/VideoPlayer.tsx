@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { outcome, queueKey, lpDeltas } from "../../../core/matchStats";
 import {
-  ArrowLeft, Eye, EyeOff, Maximize, Play, Pause,
+  ChevronRight, Eye, EyeOff, Maximize, Play, Pause,
   VolumeX, Volume1, Volume2, Scissors, AlertTriangle, Flag, Check, RotateCcw,
   Trash2, FileText, ChevronDown,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
@@ -24,12 +24,14 @@ import { Chip } from "../../../components/ui/Chip";
 import { Segmented } from "../../../components/ui/Segmented";
 import { Tabs } from "../../../components/ui/Tabs";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useVideoPlayback } from "../hooks/useVideoPlayback";
 import { useMouseTrailCanvas } from "../hooks/useMouseTrailCanvas";
 import { useClipExporter } from "../hooks/useClipExporter";
 import {
-  eventMeta, markOf, toneLabelAndIcon, ChampFace, IconFinding, type Tone, type MarkTone,
+  eventMeta, markOf, toneLabelAndIcon, ChampFace, IconFinding, IconKill, IconDeath, IconDragon, IconUltimate,
+  type Tone, type MarkTone,
 } from "./eventMeta";
 import { buildQueue, analyzerFindings, type Moment, type Finding } from "./ReviewQueue";
 import { describeEvent } from "../../../core/eventText";
@@ -47,20 +49,22 @@ import {
   CLIP_AFTER,
 } from "./videoPlayerUtils";
 
-// Marcas de la línea de tiempo (Figma, «Marca de línea de tiempo»). El dibujo
-// mide 10 px (el racimo, 26; con dos cifras, 33) y el botón 24 (auditoría
-// A6). Dos marcas se funden en un racimo con número cuando sus dibujos
-// quedarían a menos de 8 px, y nunca a menos de 20 entre centros: así los
-// botones se pisan 4 px como mucho y cada uno conserva 20 propios. Con 24
-// enteros, en una partida normal casi todo acababa en racimos. Las alturas de
-// las filas viven en VideoPlayer.css (--tl-*): aquí solo hace falta el ancho.
-const MARK_W = 10;
-const CLUSTER_W = 26;
-const CLUSTER_W2 = 33;
-const MARK_AIR = 8;
-const MIN_PITCH = 20;
-/** Medio botón de un racimo (30 px), para no salirse de la pista. */
-const CLUSTER_HALF = 15;
+// Pistas de la línea de tiempo (piel A, «pistas de editor»): una por tipo de
+// suceso, que se encienden y se apagan en los ajustes del transporte, y en
+// cada una una chapa por suceso: el glifo en tinta sobre el color de lo que
+// fue. Dos chapas de la misma pista se funden en una con «×N» cuando quedarían
+// a menos de 4 px, y nunca a menos de 22 entre centros: cada botón conserva
+// sus 22 propios (A6). La colocación se hace en píxeles: el solapamiento es un
+// hecho de pantalla y depende del ancho de la ventana. Las alturas de las
+// filas viven en VideoPlayer.css (--tl-*): aquí solo hace falta el ancho.
+const CHAPA_W = 18;
+/** La chapa con «×N» (y con «×NN»). */
+const CLUSTER_W = 36;
+const CLUSTER_W2 = 42;
+const MARK_AIR = 4;
+const MIN_PITCH = 22;
+/** Medio botón de un racimo, para no salirse de la pista. */
+const CLUSTER_HALF = 21;
 const HIT_HALF = 12;
 /** Cuántos sucesos de un racimo se listan en su etiqueta. */
 const CLUSTER_LIST = 5;
@@ -82,9 +86,44 @@ interface MarkGroup {
   /** Centro, en px desde el borde izquierdo de la pista. */
   x: number;
   tone: MarkTone;
+  /** La pista donde va (en pantalla completa, todas en una). */
+  lane: LaneId;
 }
 
 const toneOfItem = (it: TimelineItem): MarkTone => (it.finding ? "flag" : markOf(it.ev as MatchEvent).tone);
+
+type LaneId = "kills" | "deaths" | "objectives" | "findings" | "ultimates";
+/** Las pistas, de arriba abajo; `label` es la clave de i18n. Las definitivas
+ *  salen apagadas: son muchas y casi nunca son lo que se revisa. El inicio y el
+ *  final de la partida no van en ninguna: son los bordes de la regla. */
+const LANES: { id: LaneId; label: string; icon: React.FC<{ size?: number }>; on: boolean }[] = [
+  { id: "kills", label: "Kills", icon: IconKill, on: true },
+  { id: "deaths", label: "Deaths", icon: IconDeath, on: true },
+  { id: "objectives", label: "Objectives", icon: IconDragon, on: true },
+  { id: "findings", label: "Findings", icon: IconFinding, on: true },
+  { id: "ultimates", label: "Ultimates", icon: IconUltimate, on: false },
+];
+const LANES_KEY = "reviewTimelineLanes";
+const laneOf = (it: TimelineItem): LaneId | null => {
+  if (it.finding) return "findings";
+  switch (eventMeta(it.ev as MatchEvent, 11).category) {
+    case "kills":
+    case "assists":
+      return "kills";
+    case "deaths":
+      return "deaths";
+    case "objectives":
+    case "structures":
+      return "objectives";
+    case "abilities":
+      return "ultimates";
+    default:
+      return null;
+  }
+};
+/** El glifo de una chapa: el mismo que la fila del inspector. */
+const glyphOf = (it: TimelineItem, size: number) =>
+  it.finding ? <IconFinding size={size} /> : eventMeta(it.ev as MatchEvent, size).icon;
 
 /**
  * Menú de velocidad del transporte: un botón «1× velocidad» y la lista encima.
@@ -304,10 +343,12 @@ interface VideoPlayerProps {
    * el reproductor sabe: la duración real del vídeo y el recortador.
    */
   onBack?: () => void;
+  /** El nombre de esa lista, para la miga de la barra de título («Biblioteca › Gwen»). */
+  backLabel?: string;
 }
 
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLabel }) => {
   // El componente pasaba de 2100 líneas con todo dentro; ahora compone tres
   // responsabilidades extraídas a hooks: el transporte (useVideoPlayback), la
   // estela del ratón (useMouseTrailCanvas, más abajo, cuando ya existen los
@@ -362,6 +403,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
   /** La marca o el racimo bajo el ratón (o con el foco): su etiqueta enseña
    *  los sucesos con el retrato, en vez del instante suelto. */
   const [hoverGroup, setHoverGroup] = useState<number | null>(null);
+  // Qué pistas se ven: se recuerda entre partidas.
+  const [lanesOn, setLanesOn] = useState<Record<LaneId, boolean>>(() => {
+    const base = Object.fromEntries(LANES.map((l) => [l.id, l.on])) as Record<LaneId, boolean>;
+    try {
+      const saved = JSON.parse(localStorage.getItem(LANES_KEY) ?? "null");
+      if (saved && typeof saved === "object") return { ...base, ...saved };
+    } catch {
+      /* sin almacenamiento: las de siempre */
+    }
+    return base;
+  });
+  const toggleLane = (id: LaneId) =>
+    setLanesOn((on) => {
+      const next = { ...on, [id]: !on[id] };
+      try {
+        localStorage.setItem(LANES_KEY, JSON.stringify(next));
+      } catch {
+        /* sin almacenamiento: vale para esta sesión */
+      }
+      return next;
+    });
   // La pestana por defecto es la cola de revision, no las estadisticas: al abrir
   // una partida lo que quieres saber es que mirar, no como te fue.
   const { t, lang } = useLang();
@@ -1026,44 +1088,77 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
     // descuadre que veía el usuario al volver del fullscreen.
   }, [isFullscreen]);
 
+  // Cuántos sucesos tiene cada pista: una pista vacía no se pinta.
+  const laneCount = React.useMemo(() => {
+    const n = Object.fromEntries(LANES.map((l) => [l.id, 0])) as Record<LaneId, number>;
+    for (const it of timelineItems) {
+      const l = laneOf(it);
+      if (l) n[l]++;
+    }
+    return n;
+  }, [timelineItems]);
+  // Las pistas con algo, encendidas o no: las apagadas siguen montadas para
+  // cerrarse con su transición en vez de desaparecer de golpe.
+  const lanesWithItems = LANES.filter((l) => laneCount[l.id] > 0);
+  const lanesShown = lanesWithItems.filter((l) => lanesOn[l.id]);
+  /** La fila de una pista: las encendidas que tiene encima. Una apagada se
+   *  cierra donde empieza la siguiente. */
+  const laneRow = (id: LaneId) => {
+    const at = LANES.findIndex((l) => l.id === id);
+    return lanesShown.filter((l) => LANES.findIndex((x) => x.id === l.id) < at).length;
+  };
+
   const markGroups = React.useMemo<MarkGroup[]>(() => {
     if (!isFinite(duration) || duration <= 0) return [];
     const w = trackSize.w || 1000;
-    const drawn = (n: number) => (n === 1 ? MARK_W : n < 10 ? CLUSTER_W : CLUSTER_W2);
+    const drawn = (n: number) => (n === 1 ? CHAPA_W : n < 10 ? CLUSTER_W : CLUSTER_W2);
     const half = (n: number) => (n === 1 ? HIT_HALF : CLUSTER_HALF);
     // Centro de un grupo: la media de sus instantes reales, dentro de la pista.
     const centro = (g: { n: number; sum: number }) =>
       Math.min(w - half(g.n), Math.max(half(g.n), g.sum / g.n));
 
-    // Se funden los vecinos que se tocarían. Fundir corre el centro hacia la
-    // media, que puede tocar al de detrás: por eso se vuelve un paso atrás
-    // tras cada fusión. Cada vuelta quita un grupo, así que acaba. A
-    // diferencia del empuje de antes, ninguna marca se aparta de su instante:
-    // o está en su sitio o está dentro del racimo de su momento.
-    const gs = timelineItems.map((it) => ({ items: [it], n: 1, sum: (it.time / duration) * w }));
-    let i = 0;
-    while (i < gs.length - 1) {
-      const a = gs[i];
-      const b = gs[i + 1];
-      const pitch = Math.max(MIN_PITCH, (drawn(a.n) + drawn(b.n)) / 2 + MARK_AIR);
-      if (centro(b) - centro(a) < pitch) {
-        gs.splice(i, 2, { items: [...a.items, ...b.items], n: a.n + b.n, sum: a.sum + b.sum });
-        i = Math.max(0, i - 1);
-      } else {
-        i++;
+    // En pantalla completa la tira va compacta: una sola pista con lo que esté
+    // encendido. Si no, cada pista funde lo suyo.
+    const rows: LaneId[][] = isFullscreen
+      ? [LANES.filter((l) => lanesOn[l.id] && laneCount[l.id] > 0).map((l) => l.id)]
+      : LANES.map((l) => [l.id]);
+    const out: MarkGroup[] = [];
+    for (const ids of rows) {
+      // Se funden los vecinos que se tocarían. Fundir corre el centro hacia
+      // la media, que puede tocar al de detrás: por eso se vuelve un paso
+      // atrás tras cada fusión. Cada vuelta quita un grupo, así que acaba.
+      // Ninguna chapa se aparta de su instante: o está en su sitio o está
+      // dentro del racimo de su momento.
+      const gs = timelineItems
+        .filter((it) => {
+          const l = laneOf(it);
+          return l !== null && ids.includes(l);
+        })
+        .map((it) => ({ items: [it], n: 1, sum: (it.time / duration) * w }));
+      let i = 0;
+      while (i < gs.length - 1) {
+        const a = gs[i];
+        const b = gs[i + 1];
+        const pitch = Math.max(MIN_PITCH, (drawn(a.n) + drawn(b.n)) / 2 + MARK_AIR);
+        if (centro(b) - centro(a) < pitch) {
+          gs.splice(i, 2, { items: [...a.items, ...b.items], n: a.n + b.n, sum: a.sum + b.sum });
+          i = Math.max(0, i - 1);
+        } else {
+          i++;
+        }
+      }
+      for (const g of gs) {
+        const counts = new Map<MarkTone, number>();
+        for (const it of g.items) {
+          const tone = toneOfItem(it);
+          counts.set(tone, (counts.get(tone) ?? 0) + 1);
+        }
+        const tone = TONE_ORDER.reduce((best, x) => ((counts.get(x) ?? 0) > (counts.get(best) ?? 0) ? x : best));
+        out.push({ items: g.items, x: centro(g), tone, lane: ids[0] });
       }
     }
-
-    return gs.map((g) => {
-      const counts = new Map<MarkTone, number>();
-      for (const it of g.items) {
-        const tone = toneOfItem(it);
-        counts.set(tone, (counts.get(tone) ?? 0) + 1);
-      }
-      const tone = TONE_ORDER.reduce((best, x) => ((counts.get(x) ?? 0) > (counts.get(best) ?? 0) ? x : best));
-      return { items: g.items, x: centro(g), tone };
-    });
-  }, [timelineItems, duration, trackSize.w]);
+    return out;
+  }, [timelineItems, duration, trackSize.w, isFullscreen, lanesOn, laneCount]);
 
   // Si cambia la colocación (otra ventana, otra partida), la etiqueta abierta
   // ya no señala al mismo racimo.
@@ -1139,6 +1234,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
       <div
         className={compact ? "vp-track vp-track--compact" : "vp-track"}
         data-looks={hasLookStrip || undefined}
+        style={{ "--tl-lanes": compact ? (lanesShown.length > 0 ? 1 : 0) : lanesShown.length } as React.CSSProperties}
         ref={progressBarRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1177,56 +1273,58 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           </svg>
         )}
 
-        {/* Sucesos: una marca por suceso o, si se tocarían, un racimo con su
-            número. El dibujo mide 8-10 px y el botón 24 (A6). */}
-        <div className="vp-track__lane">
-          {duration > 0 &&
-            markGroups.map((g, gi) => {
-              const first = g.items[0];
-              const common = {
-                type: "button" as const,
-                "data-tone": g.tone,
-                "data-on": g.items.some((it) => it.time === activeEventTime) || undefined,
-                style: { left: `${g.x}px` },
-                onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
-                onPointerEnter: () => setHoverGroup(gi),
-                onPointerLeave: () => setHoverGroup((h) => (h === gi ? null : h)),
-                onFocus: () => setHoverGroup(gi),
-                onBlur: () => setHoverGroup((h) => (h === gi ? null : h)),
-                // Un racimo salta a su primer suceso: desde ahí, N recorre el resto.
-                onClick: (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  jumpToClip(first.time);
-                },
-              };
-              if (g.items.length > 1) {
-                return (
-                  <button
-                    key={first.key}
-                    {...common}
-                    className="vp-mark vp-mark--cluster"
-                    aria-label={`${t("{n} moments", { n: g.items.length })}: ${g.items.map(itemLabel).join("; ")}`}
-                  >
-                    <span className="vp-mark__cluster">
-                      <i aria-hidden="true" />
-                      {g.items.length}
-                    </span>
-                  </button>
-                );
-              }
-              return (
-                <button
-                  key={first.key}
-                  {...common}
-                  className="vp-mark"
-                  data-shape={first.finding ? "diamond" : markOf(first.ev as MatchEvent).shape}
-                  aria-label={itemLabel(first)}
-                >
-                  <i className="vp-mark__shape" aria-hidden="true" />
-                </button>
-              );
-            })}
-        </div>
+        {/* Sucesos: una pista por tipo y en cada una una chapa por suceso o,
+            si se tocarían, un racimo con su número. La pista apagada sigue
+            montada mientras se cierra (180 ms), sin foco ni clics. */}
+        {(compact ? (lanesShown.length > 0 ? [lanesShown[0]] : []) : lanesWithItems).map((lane) => {
+          const off = !compact && !lanesOn[lane.id];
+          return (
+            <div
+              key={lane.id}
+              className="vp-track__lane"
+              data-off={off || undefined}
+              style={{ "--i": compact ? 0 : laneRow(lane.id) } as React.CSSProperties}
+            >
+              {duration > 0 &&
+                markGroups.map((g, gi) => {
+                  if (g.lane !== lane.id) return null;
+                  const first = g.items[0];
+                  const many = g.items.length > 1;
+                  return (
+                    <button
+                      key={first.key}
+                      type="button"
+                      className={many ? "vp-mark vp-mark--cluster" : "vp-mark"}
+                      data-tone={g.tone}
+                      data-on={g.items.some((it) => it.time === activeEventTime) || undefined}
+                      style={{ left: `${g.x}px` }}
+                      tabIndex={off ? -1 : undefined}
+                      aria-label={
+                        many
+                          ? `${t("{n} moments", { n: g.items.length })}: ${g.items.map(itemLabel).join("; ")}`
+                          : itemLabel(first)
+                      }
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onPointerEnter={() => setHoverGroup(gi)}
+                      onPointerLeave={() => setHoverGroup((h) => (h === gi ? null : h))}
+                      onFocus={() => setHoverGroup(gi)}
+                      onBlur={() => setHoverGroup((h) => (h === gi ? null : h))}
+                      // Un racimo salta a su primer suceso: desde ahí, N recorre el resto.
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        jumpToClip(first.time);
+                      }}
+                    >
+                      <span className="vp-chapa" aria-hidden="true">
+                        {glyphOf(first, 11)}
+                      </span>
+                      {many && <span className="vp-mark__n">×{g.items.length}</span>}
+                    </button>
+                  );
+                })}
+            </div>
+          );
+        })}
 
         {/* Miradas al mapa. Los huecos anchos son exactamente los minutos en
             que no miraste.
@@ -1432,6 +1530,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
             <span>{t("Mouse trail")}</span>
             <input type="checkbox" className="vp-check" checked={showTracker} onChange={() => setShowTracker((v) => !v)} />
           </label>
+          {/* Las pistas de la línea de tiempo: encender o apagar es de vez en
+              cuando, así que va aquí y no en el transporte, que a 1280 ya va
+              justo. Chips y no casillas: cinco filas más sacaban el menú de
+              la ventana. Las que no tienen nada en esta partida, apagadas. */}
+          <div className="tp-pop__row tp-pop__row--stack">
+            <span>{t("Timeline tracks")}</span>
+            <div className="vp-lanes">
+              {LANES.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  className="vp-lanebtn"
+                  aria-pressed={lanesOn[l.id]}
+                  disabled={laneCount[l.id] === 0}
+                  onClick={() => toggleLane(l.id)}
+                >
+                  <span className="vp-chapa vp-chapa--sm" aria-hidden="true">
+                    <l.icon size={10} />
+                  </span>
+                  {t(l.label)}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="tp-pop__row tp-pop__row--stack">
             <span>
               {t("Mouse trail sync")}
@@ -1547,18 +1669,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
 
   return (
     <div className="vp" ref={vpRef}>
-      <header className="vp-top">
-        {onBack && (
-          <button type="button" className="vp-iconbtn" onClick={onBack} title={t("Back")} aria-label={t("Back")}>
-            <ArrowLeft size={18} />
-          </button>
-        )}
-        <span className="vp-top__face">
-          <ChampionAvatar champion={match.champion} size={32} />
-        </span>
-        <div className="vp-top__block">
-          <div className="vp-top__title">
-            <h2>{match.champion}</h2>
+      {/* Quién y cómo acabó, en la barra de título (piel A): la miga vuelve a
+          la lista. El detalle (hora, puesto por impacto) sale en una etiqueta
+          tras 400 ms en reposo, o con el foco del teclado. */}
+      <ScreenTitle
+        title={
+          <span className="crumb">
+            {onBack && (
+              <>
+                <button type="button" className="crumb__back" onClick={onBack}>
+                  {backLabel ?? t("Back")}
+                </button>
+                <ChevronRight size={16} className="crumb__sep" aria-hidden="true" />
+              </>
+            )}
+            <span className="crumb__face">
+              <ChampionAvatar champion={match.champion} size={22} />
+            </span>
+            <span className="crumb__name">{match.champion}</span>
             {resultState && (
               <span className="vp-top__result" data-result={resultState}>
                 {match.is_vod ? t("Imported VOD") : t(isWin ? "Victory" : "Defeat")}
@@ -1569,42 +1697,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 {lpDelta > 0 ? "+" : "−"}{Math.abs(lpDelta)} LP
               </Chip>
             )}
-          </div>
-          {/* El detalle (hora, puesto por impacto) en una etiqueta: aparece
-              tras 400 ms en reposo, o con el foco del teclado. */}
-          <span className="vp-top__meta" tabIndex={0} aria-describedby="vp-top-detail">
-            {metaLine}
           </span>
-          <span className="vp-hint" id="vp-top-detail" role="tooltip">
-            {metaDetail.map((line) => (
-              <span key={line}>{line}</span>
-            ))}
-          </span>
-        </div>
-        <span className="vp-top__fill" />
-        {moments.length > 0 && (
-          <div className="vp-top__progress">
-            <span className="vp-top__progressText">
-              {t("{done} of {total} reviewed", { done: doneCount, total: moments.length })}
+        }
+        sub={
+          <>
+            <span className="vp-top__meta" tabIndex={0} aria-describedby="vp-top-detail">
+              {metaLine}
             </span>
-            <div
-              className="vp-meter"
-              role="progressbar"
-              aria-label={t("Moments reviewed")}
-              aria-valuemin={0}
-              aria-valuemax={moments.length}
-              aria-valuenow={doneCount}
-              style={{ "--p": doneCount / moments.length } as React.CSSProperties}
-            >
-              <div />
-            </div>
-          </div>
-        )}
-        {hasVideo && (
-          <div className="vp-top__actions">
-            {/* Vídeo o Mapa, a la vista y no escondido en la barra de
-                transporte: el Mapa es donde viven las estadísticas de mapa
-                (cada fila de Partida e Impacto lo abre en su momento). */}
+            <span className="vp-hint" id="vp-top-detail" role="tooltip">
+              {metaDetail.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </span>
+          </>
+        }
+      />
+
+      {/* Encima del escenario, solo las herramientas: Vídeo | Mapa a la vista
+          (el Mapa es donde viven las estadísticas de mapa; cada fila de
+          Partida e Impacto lo abre en su momento), cuánto llevas revisado y
+          las dos acciones. */}
+      {(hasVideo || moments.length > 0) && (
+        <header className="vp-top">
+          {hasVideo && (
             <Segmented
               label={t("View")}
               value={stage}
@@ -1622,31 +1737,54 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
                 },
               ]}
             />
-            <Button
-              className="vp-hbtn"
-              icon={<Scissors size={16} aria-hidden="true" />}
-              aria-pressed={isClippingMode && exportType === "clip"}
-              aria-keyshortcuts="C"
-              onClick={() => toggleClipMode("clip", currentTime, duration)}
-              title={`${t("Export video clip")} ([ / ])`}
-            >
-              <span className="vp-hbtn__text">{t("Create clip")}</span>
-              <kbd className="u-kbd">C</kbd>
-            </Button>
-            <Button
-              className="vp-hbtn"
-              icon={<Flag size={16} aria-hidden="true" />}
-              aria-pressed={isClippingMode && exportType === "error"}
-              aria-keyshortcuts="E"
-              onClick={() => toggleClipMode("error", currentTime, duration)}
-              title={t("Mark error")}
-            >
-              <span className="vp-hbtn__text">{t("Mark error")}</span>
-              <kbd className="u-kbd">E</kbd>
-            </Button>
-          </div>
-        )}
-      </header>
+          )}
+          <span className="vp-top__fill" />
+          {moments.length > 0 && (
+            <div className="vp-top__progress">
+              <span className="vp-top__progressText">
+                {t("{done} of {total} reviewed", { done: doneCount, total: moments.length })}
+              </span>
+              <div
+                className="vp-meter"
+                role="progressbar"
+                aria-label={t("Moments reviewed")}
+                aria-valuemin={0}
+                aria-valuemax={moments.length}
+                aria-valuenow={doneCount}
+                style={{ "--p": doneCount / moments.length } as React.CSSProperties}
+              >
+                <div />
+              </div>
+            </div>
+          )}
+          {hasVideo && (
+            <div className="vp-top__actions">
+              <Button
+                className="vp-hbtn"
+                icon={<Scissors size={16} aria-hidden="true" />}
+                aria-pressed={isClippingMode && exportType === "clip"}
+                aria-keyshortcuts="C"
+                onClick={() => toggleClipMode("clip", currentTime, duration)}
+                title={`${t("Export video clip")} ([ / ])`}
+              >
+                <span className="vp-hbtn__text">{t("Create clip")}</span>
+                <kbd className="u-kbd">C</kbd>
+              </Button>
+              <Button
+                className="vp-hbtn"
+                icon={<Flag size={16} aria-hidden="true" />}
+                aria-pressed={isClippingMode && exportType === "error"}
+                aria-keyshortcuts="E"
+                onClick={() => toggleClipMode("error", currentTime, duration)}
+                title={t("Mark error")}
+              >
+                <span className="vp-hbtn__text">{t("Mark error")}</span>
+                <kbd className="u-kbd">E</kbd>
+              </Button>
+            </div>
+          )}
+        </header>
+      )}
 
       {/* El cuerpo es lo que entra en pantalla completa: vídeo y, en la
           rejilla normal, el inspector a su derecha. */}
@@ -1752,10 +1890,28 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack }) => {
           {!isFullscreen && hasVideo && (
             <>
               <section className="vp-tl" data-looks={hasLookStrip || undefined} aria-label={t("Game timeline")}>
-                {/* El nombre de cada fila, a la altura de la suya (--tl-*). */}
-                <div className="vp-tl__gutter" aria-hidden="true">
+                {/* El nombre de cada fila, a la altura de la suya (--tl-*): las
+                    pistas con su chapa y cuántos sucesos tienen. */}
+                <div
+                  className="vp-tl__gutter"
+                  aria-hidden="true"
+                  style={{ "--tl-lanes": lanesShown.length } as React.CSSProperties}
+                >
                   <span className="vp-tl__g" data-row="apm">{t("APM")}</span>
-                  <span className="vp-tl__g" data-row="lane">{t("Events")}</span>
+                  {lanesWithItems.map((l) => (
+                    <span
+                      key={l.id}
+                      className="vp-tl__g vp-tl__lane"
+                      data-off={!lanesOn[l.id] || undefined}
+                      style={{ "--i": laneRow(l.id) } as React.CSSProperties}
+                    >
+                      <span className="vp-chapa vp-chapa--sm">
+                        <l.icon size={10} />
+                      </span>
+                      <span className="vp-tl__name">{t(l.label)}</span>
+                      <span className="vp-tl__n">{laneCount[l.id]}</span>
+                    </span>
+                  ))}
                   {hasLookStrip && <span className="vp-tl__g" data-row="looks">{t("Looks")}</span>}
                 </div>
                 {renderTrack(false)}

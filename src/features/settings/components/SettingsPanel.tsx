@@ -25,6 +25,7 @@ import { useLang } from "../../../core/LanguageProvider";
 import { LANGUAGES, type Language } from "../../../core/i18n";
 import { THEMES, useTheme, type Theme } from "../../../core/ThemeProvider";
 import { Select } from "../../../components/ui/Select";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./SettingsPanel.css";
 
 // Mismos límites que aplica el backend (`storage::MIN_STORAGE_GB` y el clamp de
@@ -1392,10 +1393,11 @@ export const SettingsPanel: React.FC = () => {
       )}
 
       <div className="stg__wrap">
-        <header className="stg__head">
-          <h1>{t("Settings")}</h1>
-          <p className="stg__sub">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
-        </header>
+        {/* El título, en la barra (piel A). La entradilla, aquí, como en
+            Entrenamiento y Análisis: con la columna centrada, en la barra no
+            cabía entera. */}
+        <ScreenTitle align="form" title={t("Settings")} />
+        <p className="stg__sub t-body">{t("What the recorder does, where it saves, and how it talks to Riot.")}</p>
 
         <div className="stg__body">
           <nav className="stg-nav" aria-label={t("Settings categories")}>

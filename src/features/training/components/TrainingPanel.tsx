@@ -13,6 +13,7 @@ import { Segmented } from "../../../components/ui/Segmented";
 import { Button } from "../../../components/ui/Button";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Skeleton, SkeletonLines } from "../../../components/ui/Skeleton";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./TrainingPanel.css";
 
 type Section = "drills" | "awareness" | "setup";
@@ -192,12 +193,12 @@ export const TrainingPanel: React.FC = () => {
   return (
     <div className="trn">
       <div className="trn__col">
-        <header className="trn__head">
-          <h1 className="trn__title t-page">{t("Training")}</h1>
-          <p className="trn__sub t-body">
-            {t("Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.")}
-          </p>
-        </header>
+        {/* El título, en la barra (piel A). La entradilla se queda aquí: en
+            la barra, a una línea, se cortaba por la mitad. */}
+        <ScreenTitle align="form" title={t("Training")} />
+        <p className="trn__sub t-body">
+          {t("Camera keys are not a speed problem. They are a habit, a 400 ms read, and a question you are trying to answer.")}
+        </p>
 
         <Segmented
           label={t("Training")}

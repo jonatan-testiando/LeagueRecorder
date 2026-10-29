@@ -97,6 +97,7 @@ import { CoachFocusCard, coachFocusTramo, coachFocusView } from "./CoachFocusCar
 import { LANE_STATES, courseRates, scoreCalibration, stateRows, useGameStates } from "../../../core/gameStates";
 import type { LaneState } from "../../../core/tauri-ipc";
 import { STATE_LABEL, ScoreCalibrationCard, StateSplitCard } from "./GameStateCards";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./PatternsPanel.css";
 
 /**
@@ -892,9 +893,7 @@ const PatternsBody: React.FC = () => {
     // sitio la pantalla no salta cuando llegan los datos.
     return (
       <>
-        <header className="pp-head">
-          <h1 className="pp-h1">{t("Patterns")}</h1>
-        </header>
+        <ScreenTitle align="content" title={t("Patterns")} />
         {esqueleto && (
           <div className="pp-main" role="status" aria-busy="true" aria-label={t("Loading…")}>
             <Skeleton shape="block" height={560} />
@@ -914,9 +913,7 @@ const PatternsBody: React.FC = () => {
   if (rol === "all" && rango === "all" && estado === "all" && clock.total === 0) {
     return (
       <>
-        <header className="pp-head">
-          <h1 className="pp-h1">{t("Patterns")}</h1>
-        </header>
+        <ScreenTitle align="content" title={t("Patterns")} />
         <EmptyState
           icon={<BarChart3 size={30} color="var(--faint)" />}
           title={t("Not enough games yet")}
@@ -1206,11 +1203,13 @@ const PatternsBody: React.FC = () => {
   return (
     <>
       {/* ------------------------------------------------------ cabecera */}
+      {/* Título y censo en la barra de título (piel A); aquí, los filtros. */}
+      <ScreenTitle
+        align="content"
+        title={t("Patterns")}
+        sub={<>{propias.length} {t("games")} · {clock.total} {t("deaths")} · {t("{w}W {l}L", { w: clock.wins, l: clock.losses })}</>}
+      />
       <header className="pp-head">
-        <h1 className="pp-h1">{t("Patterns")}</h1>
-        <span className="pp-sub">
-          {propias.length} {t("games")} · {clock.total} {t("deaths")} · {t("{w}W {l}L", { w: clock.wins, l: clock.losses })}
-        </span>
         {/* Filtros: cada agregado de abajo se recalcula solo con las partidas
             jugadas en ese puesto Y dentro de esa ventana temporal. El foco
             del Coach no: es de todas tus partidas, como en Hoy. */}
@@ -2251,11 +2250,7 @@ export const PatternsPanel: React.FC = () => {
       <div className="pp-page">
         <ErrorBoundary
           name={t("Patterns")}
-          chrome={
-            <header className="pp-head">
-              <h1 className="pp-h1">{t("Patterns")}</h1>
-            </header>
-          }
+          chrome={<ScreenTitle align="content" title={t("Patterns")} />}
         >
           <PatternsBody />
         </ErrorBoundary>

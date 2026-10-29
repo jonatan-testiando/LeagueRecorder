@@ -1,0 +1,15 @@
+/* Reproductor de errores. Casi todo va en estilos en línea (ErrorPlayer.tsx);
+   aquí solo lo que necesita una consulta: lo que cede cuando la columna del
+   vídeo estrecha, que a 1024 con el cuaderno al lado son 578 px. */
+.ep-left { container: ep-left / inline-size; }
+@container ep-left (max-width: 680px) {
+  /* «Añadir nota» se queda en el icono; el nombre sigue para el lector. */
+  .ep-add__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

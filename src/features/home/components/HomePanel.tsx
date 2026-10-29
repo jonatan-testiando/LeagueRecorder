@@ -38,6 +38,7 @@ import { useCurrentRank } from "../../../core/useCurrentRank";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { ChampionWash } from "../../../components/ChampionWash";
+import { ScreenTitle } from "../../../components/ScreenTitle";
 import { Button } from "../../../components/ui/Button";
 import { Chip } from "../../../components/ui/Chip";
 import { Skeleton } from "../../../components/ui/Skeleton";
@@ -384,18 +385,24 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const textoClave = keyStatus === "missing" ? t("Add your Riot key") : t("Fix your Riot key");
 
   /* ------------------------------------------------------------ cabecera */
+  // Piel A: el título va en la barra de título (ScreenTitle), no en una fila
+  // propia encima del héroe: son 52 px que ahora usa el contenido.
   const cabecera = (
-    <header className="home-head">
-      <h1 className="t-page home-h1">{t("Today")}</h1>
-      <span className="t-small home-sub">
-        {longDate(lang)}
-        {own.length > 0 && (
-          <>
-            {" · "}
-            {hoy === 0 ? t("no games yet today") : hoy === 1 ? t("1 game") : t("{n} games", { n: hoy })}
-          </>
-        )}
-      </span>
+    <ScreenTitle
+      align="content"
+      title={t("Today")}
+      sub={
+        <>
+          {longDate(lang)}
+          {own.length > 0 && (
+            <>
+              {" · "}
+              {hoy === 0 ? t("no games yet today") : hoy === 1 ? t("1 game") : t("{n} games", { n: hoy })}
+            </>
+          )}
+        </>
+      }
+    >
       {/* El mantenimiento de arranque, en voz baja: no se puede pulsar nada y
           termina solo, pero explica por qué la biblioteca se mueve sola. */}
       {mant && (
@@ -405,7 +412,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
           {mant.total > 0 ? ` ${mant.done}/${mant.total}` : ""}
         </span>
       )}
-    </header>
+    </ScreenTitle>
   );
 
   /* ------------------------------------------------------------ cargando */

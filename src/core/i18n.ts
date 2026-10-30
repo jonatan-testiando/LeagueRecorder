@@ -1683,6 +1683,15 @@ const ES: Record<string, string> = {
   "{n} key moments": "{n} momentos clave",
   "Delete games older than 30 days": "Borrar las partidas de hace más de 30 días",
   // Línea de tiempo del reproductor: dos filas con la ventaja de oro en medio.
+  // Reproductor: el Resumen y la hoja de estadísticas.
+  "Summary": "Resumen",
+  "See full stats": "Ver estadísticas completas",
+  "Game stats": "Estadísticas de la partida",
+  "No summary for an imported VOD": "Un VOD importado no tiene resumen",
+  "The summary needs a recorded game synced with Riot; imported VODs have no match data behind them.":
+    "El resumen necesita una partida grabada y sincronizada con Riot; un VOD importado no tiene datos de partida detrás.",
+  "What decided the game, what it cost you and your rival come from Riot's data for the game.":
+    "Lo que decidió la partida, lo que te costó y tu rival salen de los datos de Riot de la partida.",
   "For you": "A favor",
   "Against you": "En contra",
   "Moments to review": "Momentos por revisar",

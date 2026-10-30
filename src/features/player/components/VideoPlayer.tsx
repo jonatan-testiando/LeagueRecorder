@@ -15,8 +15,9 @@ import { clock, relativeDay } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
 import { RouteReplay } from "./RouteReplay";
 import { EsportsPlayerOverlay } from "./EsportsPlayerOverlay";
-import { MatchTab } from "./MatchTab";
+import { MatchTab, type SeccionId } from "./MatchTab";
 import { ImpactTab } from "./ImpactTab";
+import { SummaryTab } from "./SummaryTab";
 import type { MapFocus, OpenMap } from "../mapFocus";
 import { EmptyState } from "../../../components/ui/EmptyState";
 import { Button } from "../../../components/ui/Button";
@@ -395,14 +396,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   // La pestaña por defecto es la de los momentos, no las estadísticas: al abrir
   // una partida lo que quieres saber es qué mirar, no cómo te fue.
   const { t, lang } = useLang();
-  // Tres pestañas: Revisión (los sucesos, la cola y las notas: todo lo que se
-  // hace CON el vídeo), Partida (qué pasó) e Impacto (qué significó). "Eventos"
-  // era una cuarta con la misma lista que la cola de revisión, en otro orden.
-  // Sin vídeo, la revisión no lleva a ningún sitio: se abre por la ficha de la
-  // partida, que es lo único que sí hay.
-  const [tab, setTab] = useState<"review" | "match" | "impact">(
-    match.video_path ? "review" : "match"
-  );
+  // Dos pestañas: Revisión (los sucesos y las notas: todo lo que se hace CON
+  // el vídeo) y Resumen (lo que decidió la partida y lo que te costó, en
+  // frases). Partida e Impacto eran dos pestañas más con tanto dato que no se
+  // podían seguir en 450 px: su detalle vive ahora en la hoja de estadísticas,
+  // que se abre ancha encima del vídeo. Sin vídeo, la revisión no lleva a
+  // ningún sitio: se abre por el Resumen.
+  const [tab, setTab] = useState<"review" | "summary">(match.video_path ? "review" : "summary");
+  /** La hoja de estadísticas abierta, y en qué bloque; `n` hace que pedir dos
+   *  veces el mismo bloque funcione. */
+  const [stats, setStats] = useState<{ focus: SeccionId | null; n: number } | null>(null);
 
 
   // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
@@ -497,6 +500,35 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     },
     [hasVideo, match.video_offset, seekTo]
   );
+
+  // La hoja de estadísticas. Al abrirla el vídeo se para: se lee con él quieto.
+  // Lo que dentro de ella lleva al vídeo o al Mapa la cierra primero, porque
+  // la hoja los tapa.
+  const openStats = useCallback((block?: SeccionId) => {
+    videoRef.current?.pause();
+    setStats((s) => ({ focus: block ?? null, n: (s?.n ?? 0) + 1 }));
+  }, [videoRef]);
+  const closeStats = useCallback(() => setStats(null), []);
+  const sheetSeek = useCallback(
+    (videoSeconds: number, play: boolean) => {
+      setStats(null);
+      seekTo(videoSeconds, play);
+    },
+    [seekTo]
+  );
+  const sheetMap: OpenMap = useCallback(
+    (focus) => {
+      setStats(null);
+      openMap(focus);
+    },
+    [openMap]
+  );
+  // En pantalla completa no hay hoja: se va con el panel de la derecha.
+  useEffect(() => {
+    if (isFullscreen) setStats(null);
+  }, [isFullscreen]);
+  // Otra partida, otra hoja: no se queda abierta la de la anterior.
+  useEffect(() => setStats(null), [match.id]);
 
   /**
    * Un solo reloj en todo el reproductor: el de la PARTIDA, el que se ve en el
@@ -966,6 +998,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
         // había entrado desde el botón sin pasar por su gesto: se dice aquí.
         case "Escape":
           if (document.fullscreenElement) { e.preventDefault(); toggleFullscreen(); }
+          else if (stats) { e.preventDefault(); setStats(null); }
           break;
         // Fotograma a fotograma. A 60 fps son 16 ms; se usa 1/30 para que un
         // toque avance algo visible en cualquier grabación.
@@ -978,7 +1011,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handlePlayPause, seekTo, goToAdjacentEvent, toggleFullscreen, setMuted, setClipBound, toggleClipMode, duration, hasVideo, videoRef, clipEndRef]);
+  }, [handlePlayPause, seekTo, goToAdjacentEvent, toggleFullscreen, setMuted, setClipBound, toggleClipMode, duration, hasVideo, videoRef, clipEndRef, stats]);
 
   // --- Ventaja de oro ------------------------------------------------------
   // Tu equipo menos el rival, minuto a minuto, colocada en tiempo de VÍDEO
@@ -1752,6 +1785,55 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
               {transportBar}
             </>
           )}
+
+          {/* La hoja de estadísticas: ancha, encima del vídeo, la línea de
+              tiempo y el transporte. Los bloques de antes (Ventaja, Muertes,
+              Jungla, Oro, Marcador) y el Impacto entero, con su barra. */}
+          {stats && !isFullscreen && (
+            <section className="vp-sheet" aria-label={t("Game stats")}>
+              <header className="vp-sheet__head">
+                <h2 className="vp-sheet__title">{t("Game stats")}</h2>
+                <span className="vp-sheet__fill" />
+                <button type="button" className="vp-sbtn vp-sbtn--sm" onClick={closeStats} aria-keyshortcuts="Escape">
+                  <X size={14} aria-hidden="true" />
+                  {t("Close")}
+                  <kbd className="u-kbd">Esc</kbd>
+                </button>
+              </header>
+              <MatchTab
+                key={match.id}
+                match={currentMatch}
+                participants={participants}
+                itemPurchases={itemPurchases}
+                ddragonVer={ddragonVer}
+                // Las mismas miradas que cuenta la tira (saltos de cámara +
+                // clics de minimapa): si no, "sin mirar el mapa" diría una
+                // cosa aquí y otra allí.
+                cameraSnaps={allLooks}
+                syncing={syncing}
+                onSync={handleSync}
+                seekTo={sheetSeek}
+                videoTime={currentTime}
+                onOpenMap={sheetMap}
+                showSummary={false}
+                focus={stats.focus ? { id: stats.focus, n: stats.n } : null}
+                extra={{
+                  id: "match-impact",
+                  title: t("Impact"),
+                  node: (
+                    <ImpactTab
+                      match={currentMatch}
+                      participants={participants}
+                      syncing={syncing}
+                      onSync={handleSync}
+                      seekTo={sheetSeek}
+                      onOpenMap={sheetMap}
+                    />
+                  ),
+                }}
+              />
+            </section>
+          )}
         </div>
 
         {/* Inspector: tres pestañas. Revisión reúne los sucesos, la cola y las
@@ -1767,8 +1849,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
             onChange={setTab}
             tabs={[
               { value: "review", label: t("Review") },
-              { value: "match", label: t("Game") },
-              { value: "impact", label: t("Impact") },
+              { value: "summary", label: t("Summary") },
             ]}
           />
 
@@ -1976,34 +2057,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
           );
         })()}
 
-        {/* Partida: qué pasó. Ver MatchTab.tsx. */}
-        {tab === "match" && (
-          <MatchTab
+        {/* Resumen: qué decidió la partida y qué te costó. Ver SummaryTab.tsx. */}
+        {tab === "summary" && (
+          <SummaryTab
             match={currentMatch}
             participants={participants}
-            itemPurchases={itemPurchases}
-            ddragonVer={ddragonVer}
-            // Las mismas miradas que cuenta la cola de Revisión (saltos de
-            // cámara + clics de minimapa): si no, "sin mirar el mapa" diría
-            // una cosa aquí y otra allí.
             cameraSnaps={allLooks}
             syncing={syncing}
             onSync={handleSync}
             seekTo={seekTo}
-            videoTime={currentTime}
             onOpenMap={openMap}
-          />
-        )}
-
-        {/* Impacto: qué significó. Ver ImpactTab.tsx. */}
-        {tab === "impact" && (
-          <ImpactTab
-            match={currentMatch}
-            participants={participants}
-            syncing={syncing}
-            onSync={handleSync}
-            seekTo={seekTo}
-            onOpenMap={openMap}
+            onOpenStats={openStats}
           />
         )}
 

@@ -46,12 +46,18 @@ import "./MatchTab.css";
  * desplazarse. Lo abierto se recuerda en la sesión, no en disco: al volver a
  * la app, otra vez solo la Ventaja.
  *
+ * 2026-10-29: el usuario seguía sin poder seguirlo en un panel de 450 px. Ya no
+ * es una pestaña: es la hoja ancha de estadísticas, que se abre encima del
+ * vídeo desde el Resumen (`SummaryTab`). «Lo que decidió la partida» se queda
+ * en el Resumen (`showSummary={false}` aquí) y el Impacto entero entra como un
+ * bloque más (`extra`).
+ *
  * Un solo reloj en toda la pestaña: el de la PARTIDA, el del HUD del juego.
  * Para saltar al vídeo se suma `video_offset` (vídeo − partida). Las filas que
  * hablan de un sitio (muertes, golpes, invasiones, ganks) abren el Mapa ahí.
  */
 
-type SeccionId = BlockId | "match-scoreboard";
+export type SeccionId = BlockId | "match-scoreboard" | "match-impact";
 
 /** El bloque abierto, para toda la sesión: cambiar de partida o de pestaña no
  *  lo cierra. null es que el usuario los plegó todos. */
@@ -75,10 +81,18 @@ export interface MatchTabProps {
   videoTime: number;
   /** Abrir el Mapa en un momento con lo suyo dibujado. */
   onOpenMap: OpenMap;
+  /** «Lo que decidió la partida» arriba. En la hoja va en el Resumen. */
+  showSummary?: boolean;
+  /** Un bloque más al final de la barra (el Impacto, en la hoja). */
+  extra?: { id: "match-impact"; title: string; node: React.ReactNode };
+  /** El bloque que se pide abrir desde fuera; `n` hace que pedir dos veces el
+   *  mismo funcione. */
+  focus?: { id: SeccionId; n: number } | null;
 }
 
 export const MatchTab: React.FC<MatchTabProps> = ({
   match, participants, itemPurchases, ddragonVer, cameraSnaps, syncing, onSync, seekTo, videoTime, onOpenMap,
+  showSummary = true, extra, focus,
 }) => {
   const t = useT();
   const selfP = participants.find((p) => p.is_self);
@@ -110,6 +124,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         ]
       : []),
     ...(participants.length > 0 ? [{ id: "match-scoreboard" as const, title: t("Scoreboard"), anchor: t("Scoreboard") }] : []),
+    ...(extra ? [{ id: extra.id, title: extra.title, anchor: extra.title }] : []),
   ];
   const ids = secciones.map((s) => s.id);
 
@@ -130,6 +145,11 @@ export const MatchTab: React.FC<MatchTabProps> = ({
     setAbiertoPedido(id);
     setALaVista((r) => ({ id, n: (r?.n ?? 0) + 1, block }));
   }, []);
+  // Lo que se pide desde fuera (una frase del Resumen) abre su bloque arriba.
+  useEffect(() => {
+    if (focus) abrir(focus.id, "start");
+  }, [focus, abrir]);
+
   useEffect(() => {
     if (!aLaVista) return;
     // Se espera a pintarlo abierto: desplazarse antes apunta al bloque
@@ -182,7 +202,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         />
       )}
 
-      {synced && (
+      {synced && showSummary && (
         <MatchSummary
           match={match}
           isJungler={isJungler}
@@ -425,6 +445,8 @@ export const MatchTab: React.FC<MatchTabProps> = ({
             );
           })
         )}
+
+        {extra && seccion(extra.id, extra.node)}
       </div>
 
       {match.is_vod ? (

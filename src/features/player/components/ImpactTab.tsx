@@ -17,14 +17,15 @@ import { fetchAttribution } from "../useMatchData";
 import { InspNotice, SyncNotice } from "./InspNotice";
 import { MatchCost } from "./MatchCost";
 import { PressureEpisodeCard } from "./PressureEpisodeCard";
-import { RivalCard } from "./RivalCard";
+import { RivalCard, findRival } from "./RivalCard";
 import { formatGold, formatSigned } from "./pressureFormat";
 import type { OpenMap } from "../mapFocus";
 import "./ImpactTab.css";
 
 import { withPercent } from "../../../core/benchmarkFormat";
 /**
- * Pestaña Impacto del reproductor: qué significó tu partida. Vivía dentro de
+ * Impacto: qué significó tu partida. Desde el 2026-10-29 no es una pestaña:
+ * es el último bloque de la hoja de estadísticas (ver MatchTab y SummaryTab). Vivía dentro de
  * VideoPlayer.tsx; se separó para poder rehacerla sin tocar el reproductor.
  * Se monta sólo con la pestaña abierta, así que lo que pide lo pide al abrirla.
  *
@@ -199,7 +200,7 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, synci
   };
 
   // `participant_id` es 1..10 en el orden de Riot, el mismo de `participants`.
-  const yoIdx = participants.findIndex((p) => p.is_self);
+  const { meIdx: yoIdx, rivalIdx, role: miRol } = findRival(participants, credits);
   const yo = yoIdx + 1;
   const mios = (pressure ?? [])
     .filter((w) => w.participant_id === yo)
@@ -238,17 +239,8 @@ export const ImpactTab: React.FC<ImpactTabProps> = ({ match, participants, synci
   const creditOf = (pid: number) => credits?.find((c) => c.participant_id === pid);
   const mio = creditOf(yo);
 
-  // El rival directo: el del otro equipo con tu mismo puesto, el criterio de
-  // `rival_de_linea` en el backend (que es de quien salen las curvas). El rol
-  // del marcador manda; el del reparto (mismo DTO de Riot) cubre las partidas
-  // guardadas antes de que el marcador lo trajera. Sin rol no hay tarjeta:
-  // adivinar el rival por el orden de la lista emparejaría a cualquiera.
+  // El rival directo (ver `findRival`): sin rol no hay tarjeta.
   const yoP = yoIdx >= 0 ? participants[yoIdx] : undefined;
-  const rolDe = (i: number) => participants[i]?.role || creditOf(i + 1)?.role || "";
-  const miRol = yoIdx >= 0 ? rolDe(yoIdx) : "";
-  const rivalIdx = yoP && miRol
-    ? participants.findIndex((p, i) => p.team_id !== yoP.team_id && sameRole(rolDe(i), miRol))
-    : -1;
   const rivalP = rivalIdx >= 0 ? participants[rivalIdx] : undefined;
 
   // El aviso único: la causa del primer fallo manda. Si la partida no está

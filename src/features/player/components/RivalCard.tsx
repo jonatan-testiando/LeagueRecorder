@@ -3,7 +3,7 @@ import type { MinuteFrameDto, Participant } from "../../../types";
 import type { PlayerCredit } from "../../../core/tauri-ipc";
 import { useT } from "../../../core/LanguageProvider";
 import { champLabel } from "../../../core/matchEvents";
-import { roleLabel } from "../../../core/roles";
+import { roleLabel, sameRole } from "../../../core/roles";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
 import { PositionIcon, normalizePosition } from "../../../components/PositionIcon";
 import { formatGold, formatNumber, formatSigned } from "./pressureFormat";
@@ -42,6 +42,32 @@ export interface RivalCardProps {
   jungle?: boolean;
   /** Saltar a un minuto de la curva (segundos de PARTIDA). */
   onSeekGame?: (gameSeconds: number) => void;
+  /** Solo la frase del duelo: la versión del Resumen. La tabla y la curva
+   *  viven en la hoja de estadísticas. */
+  compact?: boolean;
+}
+
+/**
+ * Tú y tu rival directo: el del otro equipo con tu mismo puesto, el criterio de
+ * `rival_de_linea` en el backend (que es de quien salen las curvas). El rol
+ * del marcador manda; el del reparto (mismo DTO de Riot) cubre las partidas
+ * guardadas antes de que el marcador lo trajera. Sin rol no hay rival:
+ * adivinarlo por el orden de la lista emparejaría a cualquiera. Los índices son
+ * de `participants` (el `participant_id` de Riot es índice + 1).
+ */
+export function findRival(
+  participants: Participant[],
+  credits: PlayerCredit[] | null | undefined
+): { meIdx: number; rivalIdx: number; role: string } {
+  const creditOf = (pid: number) => credits?.find((c) => c.participant_id === pid);
+  const meIdx = participants.findIndex((p) => p.is_self);
+  const me = meIdx >= 0 ? participants[meIdx] : undefined;
+  const roleOf = (i: number) => participants[i]?.role || creditOf(i + 1)?.role || "";
+  const role = meIdx >= 0 ? roleOf(meIdx) : "";
+  const rivalIdx = me && role
+    ? participants.findIndex((p, i) => p.team_id !== me.team_id && sameRole(roleOf(i), role))
+    : -1;
+  return { meIdx, rivalIdx, role };
 }
 
 /** Por debajo de esto, ni oro ni XP cuentan como ventaja: el mismo umbral con
@@ -95,7 +121,7 @@ interface Row {
 }
 
 export const RivalCard: React.FC<RivalCardProps> = ({
-  me, rival, participants, meCredit, rivalCredit, frames, role, jungle, onSeekGame,
+  me, rival, participants, meCredit, rivalCredit, frames, role, jungle, onSeekGame, compact,
 }) => {
   const t = useT();
   const rivalName = champLabel(rival.champion);
@@ -104,6 +130,15 @@ export const RivalCard: React.FC<RivalCardProps> = ({
 
   const lane = laneSentence(frames, rivalName, t);
   const impact = impactSentence(meCredit, rivalCredit, t);
+  if (compact) {
+    return lane || impact ? (
+      <p className="rv__verdict">
+        {lane}
+        {lane && impact ? " " : ""}
+        {impact}
+      </p>
+    ) : null;
+  }
 
   const teamKills = (team: number) =>
     participants.filter((p) => p.team_id === team).reduce((s, p) => s + p.kills, 0);

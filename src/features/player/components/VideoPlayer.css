@@ -258,6 +258,59 @@
 .vp-sbtn--sm { height: 32px; font-size: 13px; }
 .vp-sbtn--icon { width: 32px; padding: 0; justify-content: center; }
 
+/* --- hoja de estadísticas --------------------------------------------------- */
+/* Encima de toda la columna del vídeo (vídeo, línea de tiempo y transporte):
+   lo que en el panel de 450 px no se podía seguir, aquí con sitio. Entra con
+   un fundido corto que sube 8 px; cerrar es instantáneo. */
+.vp-sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim), var(--shadow-2);
+  overflow: hidden;
+  animation: vp-sheet-in var(--t-base) var(--e-out) both;
+}
+@keyframes vp-sheet-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vp-sheet { animation: none; }
+}
+.vp-sheet__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  box-shadow: inset 0 -1px 0 var(--hair);
+}
+.vp-sheet__title {
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: 700;
+  color: var(--text);
+}
+.vp-sheet__fill { flex: 1; }
+/* El contenido, a un ancho que se lee: una columna centrada en la hoja. */
+.vp-sheet .insp { padding-inline: max(var(--space-4), calc((100% - 1040px) / 2)); }
+/* El Impacto entra como un bloque más, pero es un panel entero (.insp): sin
+   su relleno ni su scroll, que ya pone la hoja. */
+.vp-sheet .insp .insp { padding: 0; overflow: visible; }
+/* Con sitio, los dos equipos del marcador van uno al lado del otro. */
+.vp-sheet #match-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
 /* --- cuerpo --------------------------------------------------------------- */
 .vp-body {
   flex: 1;
@@ -276,6 +329,8 @@
 .vp-body--fs { padding: 0; gap: 0; }
 
 .vp-left {
+  /* Relativa: de aquí cuelga la hoja de estadísticas. */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -619,6 +674,10 @@
 .vp-mark[data-tone="flag"] { --mark: var(--flag); }
 .vp-mark .vp-chapa { --chapa: var(--mark); }
 .vp-mark:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* La regla global de button:active (translateY 1 px) pesa más y le quitaba el
+   centrado: al pulsar, la marca saltaba 12 px y el clic se soltaba fuera, así
+   que el vídeo no iba al suceso salvo pinchando en su esquina. */
+.vp-mark:not(:disabled):active { transform: translate(-50%, -50%); }
 .vp-mark:active .vp-chapa { transform: scale(0.92); }
 .vp-mark__n {
   font-size: var(--fs-12);

@@ -225,9 +225,12 @@ export interface MatchCostProps {
   /** Saltar en el vídeo (segundos de VÍDEO); sin vídeo, undefined. */
   onSeekVideo?: (videoSeconds: number) => void;
   onOpenMap: OpenMap;
+  /** Una línea por jugada, sin etiquetas ni nota: la versión del Resumen. El
+   *  detalle sigue en la hoja de estadísticas. */
+  compact?: boolean;
 }
 
-export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, onSeekVideo, onOpenMap }) => {
+export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, onSeekVideo, onOpenMap, compact }) => {
   const t = useT();
   const startPlaylist = useAppStore((s) => s.startPlaylist);
   const offset = match.video_offset ?? 0;
@@ -436,7 +439,7 @@ export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, on
             <span className="imc__name">{c.titulo}</span>
             <Chip tone="loss">{withPercent(formatSigned(-c.coste * 100))}</Chip>
           </span>
-          {c.chips.length > 0 && (
+          {!compact && c.chips.length > 0 && (
             <span className="imc__tags">
               {c.chips.map((x) => (
                 <Chip key={x.text} tone="outline" title={x.help}>
@@ -445,7 +448,7 @@ export const MatchCost: React.FC<MatchCostProps> = ({ match, selfPid, credit, on
               ))}
             </span>
           )}
-          {c.nota && <span className="imc__note">{c.nota}</span>}
+          {!compact && c.nota && <span className="imc__note">{c.nota}</span>}
         </button>
       ))}
 

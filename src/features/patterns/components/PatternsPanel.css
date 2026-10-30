@@ -196,6 +196,9 @@
     box-shadow var(--t-quick) var(--e-move);
 }
 .pp-dot.is-focus { --dot: var(--brand); width: 10px; height: 10px; z-index: 1; }
+/* Lo mismo que la marca de la línea de tiempo: la regla global de
+   button:active (translateY 1 px) le quitaba el centrado al pulsarlo. */
+.pp-dot:not(:disabled):active { transform: translate(-50%, -50%) scale(1.5); }
 /* Más área que el punto: 8 px no se aciertan con el ratón. */
 .pp-dot::after { content: ""; position: absolute; inset: -5px; border-radius: var(--radius-full); }
 @media (hover: hover) and (pointer: fine) {

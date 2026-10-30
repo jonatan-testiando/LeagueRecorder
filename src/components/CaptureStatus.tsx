@@ -18,7 +18,7 @@ import { ChampionAvatar } from "./ChampionAvatar";
 import { postGameStage } from "./PostGameFlow";
 import { clock } from "../core/time";
 import { formatDuration, outcome } from "../core/matchStats";
-import { reviewProgress } from "../core/review";
+import { buildQueue } from "../features/player/components/ReviewQueue";
 import type { MatchMetadata } from "../types";
 import { withPercent } from "../core/benchmarkFormat";
 
@@ -267,8 +267,9 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
     (m: MatchMetadata) => {
       const res = outcome(m.result);
       const color = res === "victory" ? "var(--win)" : res === "defeat" ? "var(--loss)" : "var(--faint)";
-      const prog = reviewProgress(m, errorClips);
-      const pendientes = Math.max(0, prog.total - prog.done);
+      // Los momentos clave de la partida: la misma lista que el reproductor.
+      // Para contar no hace falta idioma.
+      const momentos = buildQueue(m, errorClips.filter((c) => c.match_id === m.id), (k) => k).length;
       toast({
         tone: res === "victory" ? "success" : "info",
         title: t("Game saved"),
@@ -291,10 +292,10 @@ export function useCaptureStatus(isRecording: boolean): CaptureInfo {
           </>
         ),
         note:
-          pendientes > 0
-            ? pendientes === 1
-              ? t("1 moment ready to review")
-              : t("{n} moments ready to review", { n: pendientes })
+          momentos > 0
+            ? momentos === 1
+              ? t("1 key moment")
+              : t("{n} key moments", { n: momentos })
             : undefined,
         action: {
           label: t("Review now"),

@@ -8,7 +8,7 @@ import { useToast, type ToastOptions } from "./ui/Toaster";
 import { ChampionAvatar } from "./ChampionAvatar";
 import { useAppStore } from "../store/useAppStore";
 import { formatDuration, outcome } from "../core/matchStats";
-import { reviewProgress } from "../core/review";
+import { buildQueue } from "../features/player/components/ReviewQueue";
 import type { PostGameEvent } from "../core/tauri-ipc";
 import type { MatchMetadata } from "../types";
 
@@ -126,7 +126,7 @@ export const PostGameFlow: React.FC = () => {
     [navigate, setSelectedMatch]
   );
 
-  /** Retrato, línea de resultado y momentos por revisar: lo que dice de QUÉ
+  /** Retrato, línea de resultado y momentos clave: lo que dice de QUÉ
    *  partida se habla. */
   const partes = useCallback(
     (m: MatchMetadata | undefined): Pick<ToastOptions, "media" | "body"> => {
@@ -162,10 +162,11 @@ export const PostGameFlow: React.FC = () => {
 
   const momentos = useCallback(
     (m: MatchMetadata): string | undefined => {
-      const prog = reviewProgress(m, useAppStore.getState().errorClips);
-      const n = Math.max(0, prog.total - prog.done);
+      // La misma lista que el reproductor; para contar no hace falta idioma.
+      const suyos = useAppStore.getState().errorClips.filter((c) => c.match_id === m.id);
+      const n = buildQueue(m, suyos, (k) => k).length;
       if (n === 0) return undefined;
-      return n === 1 ? t("1 moment ready to review") : t("{n} moments ready to review", { n });
+      return n === 1 ? t("1 key moment") : t("{n} key moments", { n });
     },
     [t]
   );

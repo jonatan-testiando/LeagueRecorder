@@ -80,17 +80,6 @@ interface AppState {
   setOnboardingDone: (done: boolean | null) => void;
 
   /**
-   * Filtro con el que abrir la biblioteca desde otra pantalla.
-   *
-   * Los "Ver todas" de Hoy llevan a una lista concreta ("por revisar", "las
-   * derrotas"), no a la biblioteca entera: un enlace que te deja delante de 300
-   * partidas es lo mismo que no llevarte a ninguna parte. La galería lo consume
-   * una sola vez y lo pone a null.
-   */
-  libraryFilter: "all" | "unreviewed" | "defeats" | null;
-  setLibraryFilter: (f: "all" | "unreviewed" | "defeats" | null) => void;
-
-  /**
    * Lista de reproducción ENTRE partidas ("Ver las 11 muertes seguidas").
    *
    * Cada ítem es un momento de una partida; pasar de uno a otro abre esa
@@ -215,9 +204,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
     onboardingDone: null,
     setOnboardingDone: (done) => set({ onboardingDone: done }),
-
-    libraryFilter: null,
-    setLibraryFilter: (f) => set({ libraryFilter: f }),
 
     playlist: null,
     startPlaylist: (title, items) => {

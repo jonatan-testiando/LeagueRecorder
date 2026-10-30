@@ -21,17 +21,14 @@
    ========================================================================= */
 
 .vp {
-  /* Las alturas de las filas de la línea de tiempo: regla 16, APM 28, cada
-     pista 22 (la chapa mide 18) y miradas 16, con 6 entre bloques; las pistas
-     van pegadas, con un filo entre ellas. Viven en .vp y no en la tarjeta
-     porque en pantalla completa la tira cuelga del escenario. */
+  /* Las alturas de las filas de la línea de tiempo: regla 16, cada fila de
+     sucesos 24 (la chapa mide 18) y la banda de oro 44 entre las dos, con 6
+     bajo la regla. Viven en .vp y no en la tarjeta porque en pantalla
+     completa la tira cuelga del escenario. */
   --tl-ruler: 16px;
   --tl-gap: 6px;
-  --tl-apm: 28px;
-  --tl-lane: 22px;
-  --tl-looks: 16px;
-  /* Abrir o cerrar una pista: ocasional, 180 ms sin rebote. */
-  --tl-move: 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  --tl-lane: 24px;
+  --tl-gold: 44px;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -176,35 +173,6 @@
 .vp-top__meta:focus-visible + .vp-hint { transition-delay: 0s; }
 
 .vp-top__fill { flex: 1; min-width: var(--space-2); }
-.vp-top__progress {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex: none;
-  font-size: var(--fs-13);
-  line-height: var(--lh-13);
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  white-space: nowrap;
-}
-/* Barra de progreso: el relleno avanza con scaleX, no con el ancho. */
-.vp-meter {
-  width: 96px;
-  height: 4px;
-  border-radius: var(--radius-full);
-  background: var(--sunken);
-  /* Con el filo: en oscuro, el hundido sobre el fondo no se distinguía. */
-  box-shadow: inset 0 0 0 1px var(--hair), var(--inset-sunken);
-  overflow: hidden;
-}
-.vp-meter > div {
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: var(--cool);
-  transform-origin: left;
-  transform: scaleX(var(--p, 0));
-  transition: transform var(--t-base) var(--e-move);
-}
 .vp-top__actions {
   display: flex;
   align-items: center;
@@ -247,12 +215,9 @@
   .vp-top .vp-hbtn:hover:not(:disabled) { background: color-mix(in srgb, var(--text) 6%, var(--raised)); }
 }
 
-/* Lo que cede primero cuando la pantalla estrecha (el rail desplegado): el
-   texto de «revisados» y, después, el de los dos botones, que se quedan en
-   icono y tecla. El nombre sigue ahí para los lectores de pantalla. */
-@container vp (max-width: 1120px) {
-  .vp-top__progressText { display: none; }
-}
+/* Lo que cede cuando la pantalla estrecha (el rail desplegado): el texto de
+   los dos botones, que se quedan en icono y tecla. El nombre sigue ahí para
+   los lectores de pantalla. */
 @container vp (max-width: 980px) {
   .vp-hbtn__text {
     position: absolute;
@@ -462,56 +427,6 @@
   background: var(--cool);
 }
 
-/* --- aviso del analizador sobre el vídeo --------------------------------- */
-.vp-notice {
-  position: absolute;
-  left: var(--space-4);
-  bottom: var(--space-4);
-  z-index: 8;
-  max-width: min(560px, calc(100% - 32px));
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--flag) 16%, var(--glass));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 32%, transparent);
-  -webkit-backdrop-filter: var(--glass-filter);
-  backdrop-filter: var(--glass-filter);
-  color: var(--text);
-  animation: vp-notice-in var(--t-quick) var(--e-out) both;
-}
-.vp-notice--fs {
-  position: static;
-  align-self: flex-start;
-  max-width: min(560px, 100%);
-}
-@keyframes vp-notice-in {
-  from { opacity: 0; transform: translateY(var(--rise)); }
-  to { opacity: 1; transform: none; }
-}
-.vp-notice__icon { flex: none; color: var(--flag); }
-.vp-notice__text { font-size: var(--fs-13); line-height: var(--lh-13); }
-.vp-notice__text b {
-  font-weight: 500;
-  color: color-mix(in srgb, var(--flag) 55%, var(--text));
-}
-.vp-notice__x {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.vp-notice__x:hover { color: var(--text); background: color-mix(in srgb, var(--flag) 18%, transparent); }
-.vp-notice__x:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-
 /* --- pantalla completa ----------------------------------------------------- */
 /* No hay baraja: aviso, tira y transporte flotan juntos sobre el vídeo, con un
    degradado del marino del escenario por debajo. */
@@ -537,9 +452,9 @@
 .vp-fs__track { position: relative; display: block; }
 
 /* --- línea de tiempo ------------------------------------------------------ */
-/* Tarjeta con el nombre de cada fila a la izquierda (56 px) y la pista a la
-   derecha. Las dos columnas comparten las alturas --tl-*. Sin overflow: la
-   etiqueta sube por encima, sobre el escenario. */
+/* Tarjeta con el nombre de cada fila a la izquierda y la tira a la derecha.
+   Las dos columnas comparten las alturas --tl-*. Sin overflow: la etiqueta
+   sube por encima, sobre el escenario. */
 .vp-tl {
   flex: none;
   position: relative;
@@ -552,25 +467,20 @@
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
 
-/* Las filas, de arriba abajo: regla, curva de APM, una pista por tipo de
-   suceso (`--tl-lanes` encendidas, cada una en su `--i`) y miradas. El nombre
-   de cada fila (a la izquierda) y la pista se colocan con las mismas cuentas,
-   así que se mueven juntos al encender o apagar una pista. Sin la curva
-   (pantalla completa) o sin miradas, las filas de debajo suben. */
+/* Las filas, de arriba abajo: regla, «a favor», la banda de oro y «en
+   contra». Sin datos de Riot (o en pantalla completa) no hay banda y las dos
+   filas van pegadas, con un filo entre ellas. El nombre de cada fila y la
+   tira se colocan con las mismas cuentas. */
 .vp-tl__gutter,
 .vp-track {
-  --tl-lanes: 0;
-  --tl-apm-row: calc(var(--tl-apm) + var(--tl-gap));
-  --tl-looks-row: 0px;
-  --tl-lane-top: calc(var(--tl-ruler) + var(--tl-gap) + var(--tl-apm-row));
+  --tl-mid: 0px;
+  --tl-top: calc(var(--tl-ruler) + var(--tl-gap));
   position: relative;
   min-width: 0;
-  height: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-looks-row));
-  transition: height var(--tl-move);
+  height: calc(var(--tl-top) + 2 * var(--tl-lane) + var(--tl-mid));
 }
-.vp-tl[data-looks] .vp-tl__gutter,
-.vp-track[data-looks] { --tl-looks-row: calc(var(--tl-gap) + var(--tl-looks)); }
-.vp-track--compact { --tl-apm-row: 0px; }
+.vp-tl[data-curve] .vp-tl__gutter,
+.vp-track[data-curve] { --tl-mid: var(--tl-gold); }
 .vp-track {
   cursor: pointer;
   touch-action: none;
@@ -592,29 +502,32 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  /* El texto de APM y Miradas, a plomo con el de las pistas (tras su chapa). */
-  padding-left: 22px;
-  transition: top var(--tl-move), opacity var(--tl-move);
 }
-.vp-tl__g[data-row="apm"] { top: calc(var(--tl-ruler) + var(--tl-gap)); height: var(--tl-apm); }
-.vp-tl__g[data-row="looks"] {
-  top: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-gap));
-  height: var(--tl-looks);
+.vp-tl__lane { height: var(--tl-lane); color: var(--muted); }
+.vp-tl__lane[data-side="for"] { top: var(--tl-top); }
+.vp-tl__lane[data-side="against"] { top: calc(var(--tl-top) + var(--tl-lane) + var(--tl-mid)); }
+.vp-tl__g[data-row="gold"] {
+  top: calc(var(--tl-top) + var(--tl-lane));
+  height: var(--tl-mid);
+  /* A plomo con el texto de las filas, tras su punto. */
+  padding-left: 14px;
 }
-.vp-tl__lane {
-  top: calc(var(--tl-lane-top) + var(--i, 0) * var(--tl-lane));
-  height: var(--tl-lane);
-  padding-left: 0;
-  color: var(--muted);
-  box-shadow: inset 0 1px 0 var(--hair);
+.vp-tl__dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--win);
 }
+.vp-tl__lane[data-side="against"] .vp-tl__dot { background: var(--loss); }
 .vp-tl__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .vp-tl__n {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
   color: var(--faint);
 }
-.vp-tl__lane[data-off] { opacity: 0; visibility: hidden; transition: top var(--tl-move), opacity var(--tl-move), visibility 0s linear 180ms; }
+.vp-tl__gold[data-side="up"] { color: var(--win-ink, var(--win)); }
+.vp-tl__gold[data-side="down"] { color: var(--loss-ink, var(--loss)); }
 
 /* Regla: mono de 12 (A3: estaba a 11). */
 .vp-track__ruler {
@@ -633,33 +546,34 @@
 .vp-track__ruler .t-time[data-edge="start"] { transform: none; }
 .vp-track__ruler .t-time[data-edge="end"] { transform: translateX(-100%); }
 
-.vp-track__apm {
-  position: absolute;
-  left: 0;
-  top: calc(var(--tl-ruler) + var(--tl-gap));
-  width: 100%;
-  height: var(--tl-apm);
-  overflow: visible;
-  pointer-events: none;
-}
-
 .vp-track__lane {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(var(--tl-lane-top) + var(--i, 0) * var(--tl-lane));
   height: var(--tl-lane);
-  box-shadow: inset 0 1px 0 var(--hair);
-  transition: top var(--tl-move), opacity var(--tl-move);
 }
-.vp-track--compact .vp-track__lane { box-shadow: none; }
-/* La pista apagada se funde mientras las de debajo suben; luego, ni foco ni
-   clics. */
-.vp-track__lane[data-off] {
-  opacity: 0;
-  visibility: hidden;
-  transition: top var(--tl-move), opacity var(--tl-move), visibility 0s linear 180ms;
+.vp-track__lane[data-side="for"] { top: var(--tl-top); }
+.vp-track__lane[data-side="against"] { top: calc(var(--tl-top) + var(--tl-lane) + var(--tl-mid)); }
+/* Sin banda, el filo entre las dos filas. */
+.vp-track:not([data-curve]) .vp-track__lane[data-side="against"] { box-shadow: inset 0 1px 0 var(--hair); }
+
+/* La banda de oro: el área tenue y la línea en el color del lado, sobre una
+   raya de cero. */
+.vp-track__gold {
+  position: absolute;
+  left: 0;
+  top: calc(var(--tl-top) + var(--tl-lane));
+  width: 100%;
+  height: var(--tl-mid);
+  overflow: visible;
+  pointer-events: none;
 }
+.vp-track__zero { stroke: var(--hair-strong); stroke-width: 1; }
+.vp-track__goldArea[data-side="up"] { fill: color-mix(in srgb, var(--win) 22%, transparent); }
+.vp-track__goldArea[data-side="down"] { fill: color-mix(in srgb, var(--loss) 22%, transparent); }
+.vp-track__goldLine { fill: none; stroke-width: 1.5; stroke-linejoin: round; }
+.vp-track__goldLine[data-side="up"] { stroke: var(--win); }
+.vp-track__goldLine[data-side="down"] { stroke: var(--loss); }
 
 /* Chapa (laboratorio, «tratamiento en chapa»): el glifo en tinta sobre el
    color de lo que fue, así se lee igual sobre la curva y en los dos temas. El
@@ -721,71 +635,6 @@
   .vp-mark:hover .vp-chapa { background: color-mix(in oklab, var(--chapa) 48%, var(--panel)); }
 }
 
-/* Encender y apagar pistas, en los ajustes del transporte: un chip por pista,
-   encendido sobre lámina elevada, apagado en tenue. */
-.vp-lanes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: var(--space-2);
-}
-.vp-lanebtn {
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px 0 6px;
-  border: 0;
-  border-radius: var(--radius-full);
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hair);
-  color: var(--faint);
-  font: inherit;
-  font-size: var(--fs-12);
-  line-height: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 120ms var(--e-out), background-color var(--t-hover) var(--e-color), color var(--t-hover) var(--e-color);
-}
-.vp-lanebtn[aria-pressed="true"] {
-  background: var(--raised);
-  color: var(--text);
-  box-shadow: inset 0 0 0 1px var(--hair-strong), inset 0 1px 0 var(--rim);
-}
-.vp-lanebtn:active:not(:disabled) { transform: scale(0.97); }
-.vp-lanebtn:disabled { opacity: 0.5; cursor: default; }
-.vp-lanebtn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-@media (hover: hover) and (pointer: fine) {
-  .vp-lanebtn:hover:not(:disabled):not([aria-pressed="true"]) { color: var(--muted); }
-}
-
-/* Miradas al mapa: tres filas de 3 px (top, mid, bot) o una sola de 8 si
-   solo hay saltos de cámara sin carril. */
-.vp-track__looks {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(var(--tl-lane-top) + var(--tl-lanes) * var(--tl-lane) + var(--tl-gap));
-  height: var(--tl-looks);
-  transition: top var(--tl-move);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1px;
-  pointer-events: none;
-}
-.vp-track__looksRow { position: relative; height: 3px; }
-.vp-track__looksRow:only-child { height: 8px; }
-.vp-track__looksRow > i {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--cool);
-  opacity: 0.55;
-}
 
 /* Cursor de reproducción en oro, de la regla al pie. Sin transición: lo
    mueven la mano o el vídeo, con latencia cero. */
@@ -862,13 +711,15 @@
   gap: var(--space-3);
   color: var(--text);
 }
-.vp-tip__apm,
+.vp-tip__gold,
 .vp-tip__ev {
   font-size: var(--fs-13);
   line-height: var(--lh-13);
   font-variant-numeric: tabular-nums;
 }
-.vp-tip__apm { color: var(--muted); white-space: nowrap; }
+.vp-tip__gold { white-space: nowrap; }
+.vp-tip__gold[data-side="up"] { color: var(--win); }
+.vp-tip__gold[data-side="down"] { color: var(--loss); }
 .vp-tip__ev {
   display: flex;
   align-items: center;
@@ -1239,11 +1090,6 @@
   background: color-mix(in srgb, var(--raised) 55%, var(--panel));
   box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--rim);
 }
-/* Un hallazgo lleva el brillo violeta del analizador. */
-.vp-feat[data-finding] {
-  background: var(--media-sheen);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--flag) 22%, transparent), inset 0 1px 0 var(--rim);
-}
 .vp-feat__meta {
   display: flex;
   align-items: center;
@@ -1251,7 +1097,6 @@
   min-width: 0;
 }
 .vp-feat__time { font-size: var(--fs-12); color: var(--muted); }
-.vp-feat[data-finding] .vp-feat__time { color: color-mix(in srgb, var(--flag) 55%, var(--text)); }
 .vp-feat__kicker { font-size: var(--fs-12); color: var(--faint); white-space: nowrap; }
 .vp-feat__fill { flex: 1; }
 .vp-feat__name {
@@ -1311,9 +1156,6 @@
   background: var(--raised);
   box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px var(--hair);
 }
-.vp-ev[data-on][data-finding] {
-  box-shadow: inset 0 1px 0 var(--rim), inset 0 0 0 1px color-mix(in srgb, var(--flag) 22%, transparent);
-}
 .vp-ev__main {
   flex: 1;
   min-width: 0;
@@ -1333,7 +1175,6 @@
 .vp-ev__main:focus-visible { outline: 2px solid var(--cool); outline-offset: -2px; }
 .vp-ev__time { width: 40px; flex: none; color: var(--faint); }
 .vp-ev[data-on] .vp-ev__time { color: var(--text); }
-.vp-ev[data-on][data-finding] .vp-ev__time { color: color-mix(in srgb, var(--flag) 55%, var(--text)); }
 .vp-ev__icon { width: 16px; height: 16px; flex: none; display: flex; align-items: center; justify-content: center; }
 .vp-ev__text {
   flex: 1;
@@ -1345,8 +1186,6 @@
   text-overflow: ellipsis;
 }
 .vp-ev[data-on] .vp-ev__text { font-weight: 500; }
-.vp-ev[data-done] .vp-ev__text { color: var(--faint); }
-.vp-ev__done { width: 24px; flex: none; display: flex; align-items: center; }
 
 /* --- Revisión: notas -------------------------------------------------------- */
 .vp-notes {

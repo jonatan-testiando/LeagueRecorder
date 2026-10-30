@@ -322,7 +322,6 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
                         {extra === 1 ? t("1 more note") : t("{n} more notes", { n: extra })}
                       </Chip>
                     )}
-                    {err.reviewed && <Chip tone="win">{t("Checked")}</Chip>}
                   </div>
                 </div>
               </div>

@@ -27,10 +27,11 @@ export const ScreenTitle: React.FC<{
   children?: React.ReactNode;
   /**
    * La pantalla se centra en una columna y el título se alinea con su borde,
-   * no con el raíl: «content» en --content-max (pantallas de datos), «form» en
-   * --form-max (Ajustes, Entrenamiento, Análisis).
+   * no con el raíl: «content» en --content-max (pantallas de datos), «wide» en
+   * --content-wide (Biblioteca), «form» en --form-max (Ajustes, Entrenamiento,
+   * Análisis).
    */
-  align?: "content" | "form";
+  align?: "content" | "wide" | "form";
 }> = ({ title, sub, children, align }) => {
   const slot = useContext(TitleSlotContext);
   const active = useContext(PanelActiveContext);

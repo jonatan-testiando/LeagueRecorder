@@ -1679,6 +1679,12 @@ const ES: Record<string, string> = {
   "The scoreboard of the 10 players appears after syncing with Riot": "El marcador de los 10 jugadores aparece al sincronizar con Riot",
   "Sync now": "Sincronizar ahora",
   "Key moments": "Momentos clave",
+  "1 key moment": "1 momento clave",
+  "{n} key moments": "{n} momentos clave",
+  "Delete games older than 30 days": "Borrar las partidas de hace más de 30 días",
+  // Línea de tiempo del reproductor: dos filas con la ventaja de oro en medio.
+  "For you": "A favor",
+  "Against you": "En contra",
   "Moments to review": "Momentos por revisar",
   "Nothing flagged in this game yet": "Nada señalado en esta partida todavía",
   "Review game": "Revisar partida",
@@ -2388,6 +2394,9 @@ const ES: Record<string, string> = {
   "Loading your games…": "Cargando tus partidas…",
   // Ajustes · Apariencia (rediseño «Ritmo», 3e).
   "Theme": "Tema",
+  "Interface size": "Tamaño de la interfaz",
+  "Scales text and everything else. Automatic grows it on screens wider than 1920 px.":
+    "Escala la letra y todo lo demás. Automático la agranda en pantallas de más de 1920 px.",
   "System follows Windows. Neither theme uses pure black or pure white.":
     "Sistema sigue a Windows. Ningún tema usa negro ni blanco puros.",
   // Clips · reproductor de clips (rediseño «Ritmo», 3f).

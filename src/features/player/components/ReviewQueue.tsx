@@ -4,16 +4,13 @@ import { eventMeta, type Tone } from "./eventMeta";
 import { type ErrorClipMetadata } from "../../../core/tauri-ipc";
 
 /**
- * La cola de revisión: qué momentos de una partida merecen una mirada y cuáles
- * están ya vistos. Aquí vive sólo el cálculo (`buildQueue`); la lista que la
- * pinta es la de la pestaña Revisión del reproductor, donde cada suceso lleva
- * su casilla de "visto". Era un componente aparte con la misma lista en otro
- * orden.
+ * Los momentos clave de una partida: qué merece una mirada. Aquí vive sólo el
+ * cálculo (`buildQueue`); lo pintan el panel de la Biblioteca, la paleta y los
+ * avisos de fin de partida.
  *
- * Revisar una partida es una tarea con final: hay N momentos que mirar y los vas
- * tachando. Antes la pantalla no tenía esa noción, así que no había forma de
- * saber por dónde ibas ni cuándo habías acabado — la diferencia entre un panel y
- * una herramienta.
+ * Hubo un estado de «visto» por momento, con casillas en el reproductor y un
+ * «por revisar» en toda la app. El usuario lo quitó: la lista dice qué mirar,
+ * no lleva la cuenta.
  *
  * No hace falta ningún dato nuevo: la gravedad sale del `tone` que ya calcula
  * `eventMeta`, y los momentos de `events[]` más `camera_snaps`.
@@ -30,8 +27,7 @@ const SEVERITY_OF: Partial<Record<Tone, Severity>> = {
 export interface Moment {
   /**
    * Identidad estable. Antes se identificaba por (tiempo, fuente), y dos clips
-   * de error marcados en el mismo segundo eran el mismo momento: marcar uno
-   * marcaba los dos y el guardado pisaba al otro.
+   * de error marcados en el mismo segundo eran el mismo momento.
    */
   id: string;
   time: number;
@@ -39,12 +35,7 @@ export interface Moment {
   /** Ya traducido: lleva nombres dentro, así que se compone, no se busca. */
   title: string;
   note?: string;
-  reviewed: boolean;
-  /**
-   * De dónde sale el momento. Importa porque el estado "visto" no se guarda en
-   * el mismo sitio: los sucesos viven en el JSON de la partida y los errores
-   * marcados en el JSON de su propio clip.
-   */
+  /** De dónde sale el momento: un suceso de la partida o un error que marcaste. */
   source: "event" | "error";
   /** Ruta del clip, solo para los de tipo `error`. */
   clipPath?: string;
@@ -66,13 +57,13 @@ export function buildQueue(
   t: Translate
 ): Moment[] {
   const out: Moment[] = [];
-  const seen = match.reviewed_moments ?? [];
-  // Igualdad exacta: el segundo que se guarda es EL MISMO número que se leyó de
-  // `events[]`, así que la tolerancia de 50 ms no arreglaba ningún redondeo y sí
-  // hacía que dos sucesos del mismo instante compartieran estado.
-  const isReviewed = (secs: number) => seen.includes(secs);
 
   for (const ev of match.events) {
+    // El fin de partida no es un momento que revisar: en cada derrota entraba
+    // como «Defeat» de gravedad alta (su tono es "throw"), sin traducir y
+    // contando entre los momentos. Los extremos del vídeo quedan fuera, como en
+    // la línea de tiempo y en la paleta (Ctrl K).
+    if (ev.type === "GameStart" || ev.type === "GameEnd") continue;
     const meta = eventMeta(ev);
     const sev = SEVERITY_OF[meta.tone];
     if (!sev) continue;
@@ -82,7 +73,6 @@ export function buildQueue(
       severity: sev,
       title: describeEvent(ev, t),
       note: t(meta.label),
-      reviewed: isReviewed(ev.time),
       source: "event",
     });
   }
@@ -103,7 +93,6 @@ export function buildQueue(
       severity: "high",
       title: (first ? first.text : clip.note) || t("Flagged error"),
       note: first?.category ?? t("you flagged this"),
-      reviewed: clip.reviewed === true,
       source: "error",
       clipPath: clip.path,
     });
@@ -125,7 +114,6 @@ export function buildQueue(
       severity: "low",
       title: t("Camera jump"),
       note: t("detected by the analyzer"),
-      reviewed: isReviewed(secs),
       source: "event",
     });
   }

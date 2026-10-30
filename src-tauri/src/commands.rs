@@ -2561,6 +2561,8 @@ pub struct AppConfigPatch {
     pub auto_prune_days: Option<u32>,
     pub language: Option<String>,
     pub theme: Option<String>,
+    /// 0 = automático; si no, el factor de zoom de la interfaz.
+    pub ui_scale: Option<f64>,
     /// Ausente = no se toca; `null` = automático (lo detectado); un número =
     /// `MinimapScale` forzado. Por eso es un `Option` doble.
     #[serde(deserialize_with = "presente")]
@@ -2582,7 +2584,7 @@ where
 }
 
 #[tauri::command]
-pub fn set_app_config(patch: AppConfigPatch) -> Result<(), String> {
+pub fn set_app_config(app: tauri::AppHandle, patch: AppConfigPatch) -> Result<(), String> {
     let mut config = crate::storage::load_config();
     if let Some(d) = patch.save_directory {
         config.save_directory = d;
@@ -2615,6 +2617,14 @@ pub fn set_app_config(patch: AppConfigPatch) -> Result<(), String> {
             "light" | "system" => t,
             _ => "dark".to_string(),
         };
+    }
+    // Tamaño de la interfaz: se acota aquí y se aplica en cuanto se guarda.
+    let escala_nueva = patch
+        .ui_scale
+        .map(crate::escala::sanear)
+        .filter(|v| *v != config.ui_scale);
+    if let Some(v) = escala_nueva {
+        config.ui_scale = v;
     }
     // Plataforma de Riot: "auto" o una de las conocidas. Al fijarla a mano se
     // olvida la sondeada, que puede ser de otra cuenta.
@@ -2653,7 +2663,11 @@ pub fn set_app_config(patch: AppConfigPatch) -> Result<(), String> {
     }
     // El fallo al escribir sube hasta la UI: guardar en silencio y mentir era
     // peor que no guardar.
-    crate::storage::save_config(&config)
+    crate::storage::save_config(&config)?;
+    if escala_nueva.is_some() {
+        crate::escala::aplicar(&app, false);
+    }
+    Ok(())
 }
 
 /// Progreso de la subida de un clip. Se emite como evento `clip_upload_progress`.

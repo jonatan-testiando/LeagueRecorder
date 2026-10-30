@@ -227,6 +227,29 @@ export function markOf(ev: MatchEvent): { shape: MarkShape; tone: MarkTone } {
 }
 
 /**
+ * De qué lado cae un suceso en la línea de tiempo «a favor / en contra», o
+ * `null` si no va en ninguno. El color del suceso ya dice de quién fue: un
+ * objetivo del rival y una torre tuya caída son rojos; los tuyos, azules u oro.
+ * Las definitivas, las placas y el resto de neutros no son ni a favor ni en
+ * contra: se quedan fuera, como el inicio y el final de la partida. Hoy cuenta
+ * con esto los sucesos que enseña el reproductor.
+ */
+export function sideOfEvent(ev: MatchEvent): "for" | "against" | null {
+  switch (eventMeta(ev, 11).category) {
+    case "kills":
+    case "assists":
+      return "for";
+    case "deaths":
+      return "against";
+    case "objectives":
+    case "structures":
+      return markOf(ev).tone === "loss" ? "against" : "for";
+    default:
+      return null;
+  }
+}
+
+/**
  * `text` es la cadena inglesa, que es la clave de i18n: quien la pinta la pasa
  * por `t()`. Se quedo sin traducir hasta que se vio en pantalla — una columna
  * de palabras en ingles en una interfaz en espanol.

@@ -31,7 +31,6 @@ import {
   wpPoints,
 } from "../../../core/coach";
 import { outcome, formatDuration, computeKDA, kdaRatio, lpDeltas, queueKey, type KDA } from "../../../core/matchStats";
-import { reviewProgress } from "../../../core/review";
 import { laneLabel } from "../../../core/lanes";
 import { rankIcon } from "../../../core/ddragon";
 import { useCurrentRank } from "../../../core/useCurrentRank";
@@ -43,7 +42,7 @@ import { Button } from "../../../components/ui/Button";
 import { Chip } from "../../../components/ui/Chip";
 import { Skeleton } from "../../../components/ui/Skeleton";
 import { useAppStore, useErrorClips } from "../../../store/useAppStore";
-import { Check, ChevronRight, CircleDot, Flag, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
+import { ChevronRight, Flag, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
 import "./HomePanel.css";
 import { usePressureSummary } from "../../player/usePressureSummary";
@@ -52,7 +51,7 @@ import { formatGold, formatSeconds } from "../../player/components/pressureForma
 import { useOnboarding } from "../../onboarding/useOnboarding";
 import { MomentCard } from "./MomentCard";
 import { ChampionTile } from "./ChampionTile";
-import { eventCount, momentWp, pendingMoments, reviewMinutes, teachMoments } from "../moments";
+import { eventCount, keyMoments, momentWp, reviewMinutes, teachMoments } from "../moments";
 import {
   fmtNum,
   impactPhrase,
@@ -75,15 +74,15 @@ import { withPercent } from "../../../core/benchmarkFormat";
  *  1. Si la partida más nueva aún no tiene datos de Riot, una franja de una
  *     línea que lo dice y la sincroniza. No se gasta el héroe en ella.
  *  2. El héroe — la última partida CON DATOS (resultado, LP, rango, cifras, tu
- *     puesto de impacto) y UNA acción: revisar sus momentos clave, o la
- *     siguiente partida por revisar si esta ya está hecha (también con Enter).
+ *     puesto de impacto) y UNA acción: revisar sus momentos clave (también
+ *     con Enter).
  *  3. Los tres momentos que más enseñan — el peor error, el hallazgo del
  *     analizador y la mejor jugada, con lo que movió cada uno tu probabilidad
  *     de victoria cuando es una jugada medida. Cada uno abre el vídeo en su
  *     segundo. Debajo, tres señales en frases.
  *  4. A la derecha, el foco del coach (la categoría × tramo que más te cuesta
  *     por encima de su baremo, `coach.rs`) con sus barras por tramo y el plan
- *     de 10 partidas, y la forma reciente con la cola por revisar.
+ *     de 10 partidas, y la forma reciente.
  *
  * Todo cabe en `--content-max` y se centra: a 1920 el héroe ya no se estira a
  * 1.640 px con un hueco en medio.
@@ -156,7 +155,6 @@ const paso = (i: number) => ({ "--i": i }) as React.CSSProperties;
 export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, onOpenMatch, onGoTraining }) => {
   const { t, lang } = useLang();
   const navigate = useNavigate();
-  const setLibraryFilter = useAppStore((s) => s.setLibraryFilter);
   const refreshMatches = useAppStore((s) => s.refreshMatches);
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
   const startPlaylist = useAppStore((s) => s.startPlaylist);
@@ -260,28 +258,16 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
     return () => { vivo = false; };
   }, [ultimaId]);
 
-  // Una sola definición de "revisada" en toda la app (`core/review.ts`): la cola
-  // de momentos tachada, o notas escritas a mano.
-  const pendientes = useMemo(
-    () => porFecha.filter((m) => !reviewProgress(m, errorClips).reviewed),
-    [porFecha, errorClips]
-  );
-
   /**
-   * La acción oro: revisar los momentos pendientes de la partida del héroe, o,
-   * si ya está revisada (o no tiene vídeo), los de la siguiente partida por
-   * revisar. Mismo criterio de "momento por revisar" que la cola del reproductor.
+   * La acción oro: revisar los momentos clave de la partida del héroe, los
+   * mismos que lista el reproductor. Sin vídeo o sin momentos no hay acción
+   * oro, y el oro pasa a entrenar (columna derecha).
    */
   const objetivo = useMemo(() => {
-    const candidatas = ultima ? [ultima, ...pendientes.filter((m) => m.id !== ultima.id)] : pendientes;
-    for (const m of candidatas) {
-      if (!m.video_path) continue;
-      if (reviewProgress(m, errorClips).reviewed) continue;
-      const mom = pendingMoments(m, errorClips);
-      if (mom.length > 0) return { match: m, moments: mom, next: m.id !== ultima?.id };
-    }
-    return null;
-  }, [ultima, pendientes, errorClips]);
+    if (!ultima?.video_path) return null;
+    const mom = keyMoments(ultima, errorClips);
+    return mom.length > 0 ? { match: ultima, moments: mom } : null;
+  }, [ultima, errorClips]);
 
   const momentos = useMemo(
     () =>
@@ -321,14 +307,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
       pctPrev: hayAnt ? pct(ant) : null,
     };
   }, [porFecha]);
-
-  const verBiblioteca = useCallback(
-    (f: "all" | "unreviewed" | "defeats") => {
-      setLibraryFilter(f);
-      navigate("/review");
-    },
-    [navigate, setLibraryFilter]
-  );
 
   /** Abre una partida en un segundo del vídeo (el reproductor retrocede 5 s solo). */
   const abrirEn = useCallback(
@@ -487,7 +465,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const sinVideo = ultima.video_path === "";
   const sinScoreboard = parts.length === 0;
   const deltaLp = lp.get(ultima.id);
-  const progUltima = reviewProgress(ultima, errorClips);
   const rol = yo?.role ?? null;
   const rolNombre = positionName(rol, t);
   const minutos = ultima.game_duration / 60;
@@ -514,20 +491,13 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const tono = res === "victory" ? "win" : res === "defeat" ? "loss" : "none";
 
   const accionOro = objetivo
-    ? objetivo.next
-      ? {
-          // El campeón va en el tooltip: con él el botón no cabía junto a las
-          // cifras a 1280.
-          label: t("Review next game"),
-          aside: `${reviewMinutes(objetivo.moments.length)} min`,
-        }
-      : {
-          label:
-            objetivo.moments.length === 1
-              ? t("Review 1 key moment")
-              : t("Review {n} key moments", { n: objetivo.moments.length }),
-          aside: `${reviewMinutes(objetivo.moments.length)} min`,
-        }
+    ? {
+        label:
+          objetivo.moments.length === 1
+            ? t("Review 1 key moment")
+            : t("Review {n} key moments", { n: objetivo.moments.length }),
+        aside: `${reviewMinutes(objetivo.moments.length)} min`,
+      }
     : null;
 
   /* ----------------------------------------------------------- señales */
@@ -626,11 +596,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                       <Chip tone={deltaLp > 0 ? "win" : deltaLp < 0 ? "loss" : "neutral"}>
                         {deltaLp > 0 ? "+" : deltaLp < 0 ? "−" : "±"}
                         {Math.abs(deltaLp)} LP
-                      </Chip>
-                    )}
-                    {progUltima.reviewed && (
-                      <Chip tone="outline" icon={<Check size={12} />}>
-                        {t("Game reviewed")}
                       </Chip>
                     )}
                   </div>
@@ -768,11 +733,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                     icon={<Play size={16} />}
                     aria-keyshortcuts="Enter"
                     onClick={() => abrirEn(objetivo.match, objetivo.moments[0].time)}
-                    title={
-                      objetivo.next
-                        ? `${t("This game is reviewed: next up is the most recent one still pending.")} (${objetivo.match.champion})`
-                        : undefined
-                    }
                   >
                     {accionOro.label} · {accionOro.aside}
                     <kbd className="u-kbd home-cta__kbd">Enter</kbd>
@@ -1015,8 +975,9 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                   <p className="t-small home-focus__why">{sinFoco}</p>
                 )}
 
-                {/* Sin nada por revisar, la acción oro de la pantalla pasa a ser
-                    entrenar; con algo por revisar, el oro es del héroe. */}
+                {/* Sin momentos que revisar en la última partida (o sin vídeo),
+                    la acción oro de la pantalla pasa a ser entrenar; con ellos,
+                    el oro es del héroe. */}
                 {!objetivo && (
                   <Button variant="primary" className="home-focus__train" icon={<Target size={16} />} onClick={onGoTraining}>
                     {t("Train camera control")}
@@ -1034,14 +995,13 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                 <div className="home-form__strip">
                   {recientes.map((m, i) => {
                     const r = outcome(m.result);
-                    const rev = !pendientes.some((p) => p.id === m.id);
                     return (
                       <button
                         key={m.id}
                         type="button"
                         className={`home-form__game${i === 0 ? " is-last" : ""}`}
                         onClick={() => onOpenMatch(m)}
-                        title={`${m.champion} · ${r === "victory" ? t("Victory") : r === "defeat" ? t("Defeat") : t("No result")} · ${relativeDay(m.date, t)}${rev ? "" : ` · ${t("to review")}`}`}
+                        title={`${m.champion} · ${r === "victory" ? t("Victory") : r === "defeat" ? t("Defeat") : t("No result")} · ${relativeDay(m.date, t)}`}
                       >
                         <ChampionTile champion={m.champion} size={24} radius={999} fluid />
                         <span className={`home-form__bar home-form__bar--${r}`} />
@@ -1049,25 +1009,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                     );
                   })}
                 </div>
-                {pendientes.length > 0 ? (
-                  <button type="button" className="t-small home-form__queue" onClick={() => verBiblioteca("unreviewed")}>
-                    <span>
-                      {pendientes.length === 1
-                        ? t("1 game to review")
-                        : t("{n} games to review", { n: pendientes.length })}
-                    </span>
-                    <span className="t-small-strong home-form__open">
-                      {t("Open the queue")}
-                      <ChevronRight size={14} />
-                    </span>
-                  </button>
-                ) : (
-                  /* La cola vacía es el estado bueno y merece decirse. */
-                  <p className="t-small home-form__done">
-                    <CircleDot size={14} className="home-win" />
-                    {t("Nothing pending: you went through every recorded game.")}
-                  </p>
-                )}
               </section>
             </aside>
           </div>
@@ -1099,10 +1040,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                       </dd>
                     </div>
                   )}
-                  <div>
-                    <dt>{t("moments reviewed")}</dt>
-                    <dd>{progUltima.done} / {progUltima.total}</dd>
-                  </div>
                   <div>
                     <dt>{t("Riot")}</dt>
                     <dd>

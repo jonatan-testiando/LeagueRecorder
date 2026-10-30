@@ -203,6 +203,9 @@ export interface AppConfig {
   language: string;
   /** Tema de la interfaz: "dark", "light" o "system". Se guarda en disco. */
   theme: string;
+  /** Tamaño de la interfaz (zoom de la ventana): 0 = automático según la
+   *  pantalla, o el factor elegido. Lo aplica el backend al guardarlo. */
+  ui_scale: number;
   /** HEREDADO: factor del minimapa de antes de leer los ajustes del juego. Lo
    *  usan solo las partidas antiguas; ya no se edita desde la UI. */
   minimap_scale: number;
@@ -270,6 +273,11 @@ export interface HudSettings {
  *  encuentra League o no se pueden leer sus ajustes. */
 export const getMinimapDetection = async (): Promise<{ hud: HudSettings | null }> => {
   return await invoke<{ hud: HudSettings | null }>("get_minimap_detection");
+};
+
+/** La escala que daría «Automático» en esta pantalla y la que hay puesta. */
+export const getUiScale = async (): Promise<{ auto: number; efectiva: number }> => {
+  return await invoke<{ auto: number; efectiva: number }>("get_ui_scale");
 };
 
 export const getAppConfig = async (): Promise<AppConfig> => {

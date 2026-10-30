@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
@@ -26,7 +26,6 @@ import { CommandPalette } from "./components/CommandPalette";
 import { PostGameFlow } from "./components/PostGameFlow";
 import { ChampSelectFlow, CHAMP_SELECT_PATH } from "./components/ChampSelectFlow";
 import { useChampSelect } from "./core/useChampSelect";
-import { isReviewed } from "./core/review";
 import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
 import { getVersion } from "@tauri-apps/api/app";
@@ -38,7 +37,7 @@ import {
   type PendingUpdate,
   type UpdateProgress,
 } from "./core/updates";
-import { useAppStore, useErrorClips } from "./store/useAppStore";
+import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
@@ -124,7 +123,6 @@ export const App: React.FC = () => {
   const selectedVod = useAppStore(state => state.selectedVod);
   const setSelectedVod = useAppStore(state => state.setSelectedVod);
   const refreshErrorClips = useAppStore(state => state.refreshErrorClips);
-  const { clips: errorClips } = useErrorClips();
 
   // La paleta de comandos: Ctrl K (Cmd K en Mac) desde cualquier sitio, y el
   // buscador de la barra de título. Durante el asistente de primer arranque no
@@ -212,14 +210,6 @@ export const App: React.FC = () => {
     setNavOrigin(origin);
     navigate(path);
   };
-
-  // Partidas por revisar, junto a «Biblioteca». La MISMA cuenta que «Hoy» y el
-  // filtro de la biblioteca (`core/review.ts`): partidas propias —sin VODs
-  // importados— sin la cola de momentos tachada ni notas.
-  const toReview = useMemo(
-    () => matches.filter((m) => !m.is_vod && !isReviewed(m, errorClips)).length,
-    [matches, errorClips]
-  );
 
   const matchedNav = NAV_ITEMS.find(n => currentPath.startsWith(n.path));
   const activeTabKey: string = matchedNav
@@ -323,7 +313,6 @@ export const App: React.FC = () => {
               <div className="nav-grp" aria-hidden="true">{t(group.label)}</div>
               {group.items.map((item) => {
                 const activo = activeTabKey === item.key;
-                const cuenta = item.key === "review" && toReview > 0 ? toReview : 0;
                 const label = t(item.label);
                 return (
                   <button
@@ -332,14 +321,11 @@ export const App: React.FC = () => {
                     onClick={(e) => goTo(item.path, originOf(e))}
                     className={`nav-btn${activo ? " nav-btn--active" : ""}`}
                     aria-current={activo ? "page" : undefined}
-                    aria-label={cuenta ? `${label} · ${t("{n} to review", { n: cuenta })}` : label}
+                    aria-label={label}
                   >
                     {activo && <motion.span layoutId="rail-activo" className="nav-btn__pill" transition={RAIL_SPRING} />}
                     {item.icon}
                     <span className="nav-btn__label">{label}</span>
-                    {cuenta > 0 && (
-                      <span className="nav-btn__count" aria-hidden="true">{cuenta}</span>
-                    )}
                   </button>
                 );
               })}

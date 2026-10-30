@@ -8,11 +8,9 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { PositionIcon } from "../../../components/PositionIcon";
 import { ROLE_FILTERS, matchRole, type RoleFilter } from "../../../core/patterns";
-import { reviewProgress, type ReviewProgress } from "../../../core/review";
-import { useAppStore, useErrorClips } from "../../../store/useAppStore";
+import { useAppStore } from "../../../store/useAppStore";
 import {
   Check,
-  CircleCheck,
   CloudUpload,
   EyeOff,
   FolderOpen,
@@ -49,12 +47,11 @@ interface DiskSpaceInfo {
   free_bytes?: number;
 }
 
-/** Filtro de estado. "defeats"/"unreviewed" son también los que pide "Hoy". */
-type Filter = "all" | "unreviewed" | "wins" | "defeats";
+/** Filtro de estado. */
+type Filter = "all" | "wins" | "defeats";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
-  { key: "unreviewed", label: "To review" },
   { key: "wins", label: "Wins" },
   { key: "defeats", label: "Losses" },
 ];
@@ -154,43 +151,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const navigate = useNavigate();
   const { restart: abrirAsistente } = useOnboarding();
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
-  // Los errores que marcaste tú también cuentan como momentos a revisar, así
-  // que hacen falta aquí para saber si una partida está revisada.
-  const { clips: errorClips } = useErrorClips();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
-
-  // Filtro pedido desde otra pantalla ("Ver todas" de Hoy). Se consume una vez
-  // y se limpia: si se quedara puesto, volver a la biblioteca por el menú
-  // reaplicaría un filtro que el usuario ya había quitado.
-  const pendingFilter = useAppStore((s) => s.libraryFilter);
-  const setPendingFilter = useAppStore((s) => s.setLibraryFilter);
-  useEffect(() => {
-    if (!pendingFilter) return;
-    setFilter(pendingFilter as Filter);
-    setRoleFilter("all");
-    setQuery("");
-    setPendingFilter(null);
-  }, [pendingFilter, setPendingFilter]);
-
-  /**
-   * El avance de revisión de cada partida, calculado UNA vez.
-   *
-   * `reviewProgress` monta la cola de momentos de la partida (sucesos, saltos
-   * de cámara y errores marcados), así que llamarla por fila y en cada render
-   * era rehacer ese trabajo cientos de veces por scroll. La columna "Revisión"
-   * y la cabecera leen de aquí.
-   */
-  const progreso = useMemo(() => {
-    const out = new Map<string, ReviewProgress>();
-    for (const m of matches) out.set(m.id, reviewProgress(m, errorClips));
-    return out;
-  }, [matches, errorClips]);
-  const revisadas = useMemo(
-    () => new Set([...progreso].filter(([, p]) => p.reviewed).map(([id]) => id)),
-    [progreso]
-  );
 
   /** Abre el explorador con el vídeo de la partida seleccionado. */
   const revelar = async (m: MatchMetadata) => {
@@ -236,7 +199,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     const filtradas = matches.filter((m) => {
       if (filter === "defeats" && outcome(m.result) !== "defeat") return false;
       if (filter === "wins" && outcome(m.result) !== "victory") return false;
-      if (filter === "unreviewed" && revisadas.has(m.id)) return false;
       if (roleFilter !== "all" && matchRole(m) !== roleFilter) return false;
       if (!q) return true;
       const cola = queueKey(m.queue);
@@ -267,32 +229,32 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       });
     }
     return out;
-  }, [matches, query, filter, roleFilter, sort, t, revisadas]);
+  }, [matches, query, filter, roleFilter, sort, t]);
 
   // Cuántas hay de cada estado, para las píldoras. Sobre la biblioteca entera:
   // el número dice cuántas verás al pulsarla, no cuántas quedan en pantalla.
   const counts = useMemo(
     () => ({
       all: matches.length,
-      unreviewed: matches.length - revisadas.size,
       wins: matches.filter((m) => outcome(m.result) === "victory").length,
       defeats: matches.filter((m) => outcome(m.result) === "defeat").length,
     }),
-    [matches, revisadas]
+    [matches]
   );
 
-  // Candidatas de la limpieza rápida: revisadas (con notas) y con más de 30
-  // días. Los VODs importados no entran: los trajo el usuario a mano.
-  const viejasRevisadas = useMemo(() => {
+  // Candidatas de la limpieza rápida: las de más de 30 días. Los VODs
+  // importados no entran: los trajo el usuario a mano. Borrar pide confirmación
+  // con la cuenta delante.
+  const viejas = useMemo(() => {
     const corte = Date.now() - 30 * 24 * 3600 * 1000;
     return matches
-      .filter((m) => !m.is_vod && revisadas.has(m.id))
+      .filter((m) => !m.is_vod)
       .filter((m) => {
         const ms = new Date(m.date.replace(" ", "T")).getTime();
         return Number.isFinite(ms) && ms < corte;
       })
       .map((m) => m.id);
-  }, [matches, revisadas]);
+  }, [matches]);
 
   // LP que dio o quitó cada partida. El cálculo vive en `core/matchStats`: "Hoy"
   // enseña el mismo número para la última partida y no puede ser otra resta.
@@ -533,11 +495,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   // dato, no un aviso, y se pinta apagado.
   const diskTight = pct !== null && pct >= 85;
 
-  // La MISMA definición que usa el reproductor y "Hoy" (ver `core/review.ts`):
-  // la cabecera decía "revisada" con una nota suelta mientras la cola de
-  // revisión de esa partida seguía con veinte momentos sin tachar.
-  const reviewed = revisadas.size;
-  const porRevisar = matches.length - reviewed;
   // Biblioteca leída y vacía: sin filtros ni cabecera de columnas, solo el
   // estado vacío con sus tres salidas (Figma, «Biblioteca vacía»).
   const vacia = !cargando && matches.length === 0;
@@ -565,15 +522,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
       {/* Título y censo en la barra de título (piel A). El disco y su salida
           rápida, en el pie; «Grabando» ya lo dice la barra. */}
       <ScreenTitle
-        align="content"
+        align="wide"
         title={t("Library")}
         sub={
           /* Mientras se lee, sin censo: «0 partidas» era el vacío disfrazado. */
-          cargando
-            ? "—"
-            : vacia
-              ? `${matches.length} ${t("games")}`
-              : <>{matches.length} {t("games")} · {reviewed} {t("reviewed")} · {porRevisar} {t("to review")}</>
+          cargando ? "—" : `${matches.length} ${t("games")}`
         }
       />
 
@@ -588,7 +541,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               value: f.key,
               label: t(f.label),
               count: cargando ? "—" : counts[f.key],
-              countTone: f.key === "unreviewed" ? ("gold" as const) : undefined,
             }))}
           />
 
@@ -686,7 +638,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
               <span>{t("CS")}</span>
               <span className="lib-col-rival">{t("Rival")}</span>
               <span>{t("Impact")}</span>
-              <span />
             </div>
           )}
 
@@ -795,7 +746,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                         selectMode={selectMode}
                         checked={selected.has(match.id)}
                         narrow={!wide}
-                        progress={progreso.get(match.id)}
                         lp={lpDelta.get(match.id)}
                         lang={lang}
                         onClick={(e) => onRowClick(match, e)}
@@ -829,7 +779,6 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
         {wide && current && !cargando && (
           <MatchDetailPanel
             match={current}
-            progress={progreso.get(current.id)}
             lpDelta={lpDelta.get(current.id)}
             onOpen={(seek) => abrir(current, seek)}
             onReveal={() => revelar(current)}
@@ -866,12 +815,11 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
             </div>
           )}
           <span className="lib-grow" aria-hidden />
-          {/* Con el disco ajustado, la salida rápida: lo ya revisado y viejo es
-              lo único que se puede borrar sin perder nada por aprender. */}
-          {diskTight && viejasRevisadas.length > 0 && (
-            <button type="button" className="lib-tool" onClick={() => onDeleteMatches(viejasRevisadas)}>
+          {/* Con el disco ajustado, la salida rápida: lo viejo. */}
+          {diskTight && viejas.length > 0 && (
+            <button type="button" className="lib-tool" onClick={() => onDeleteMatches(viejas)}>
               <Trash2 size={14} aria-hidden />
-              {t("Delete reviewed games older than 30 days")} · {viejasRevisadas.length}
+              {t("Delete games older than 30 days")} · {viejas.length}
             </button>
           )}
           <span
@@ -927,48 +875,15 @@ const LibrarySkeleton: React.FC = () => (
           <Skeleton width={28} />
           <Skeleton width={44} />
         </span>
-        <span />
       </div>
     ))}
   </div>
 );
 
 /* ------------------------------------------------------------------------
-   La marca de revisión: solo lo que se sale de lo normal. Nada si está por
-   revisar (es el estado por defecto y ya es el filtro de arriba), un aro con
-   lo hecho si va a medias y el círculo con la marca si está revisada.
-   ------------------------------------------------------------------------ */
-const ReviewMark: React.FC<{ progress: ReviewProgress | undefined }> = ({ progress }) => {
-  const t = useT();
-  if (!progress) return null;
-  if (progress.reviewed) {
-    return (
-      <span className="lib-mark lib-mark--done" role="img" aria-label={t("Reviewed")} title={t("Reviewed")}>
-        <CircleCheck size={16} aria-hidden />
-      </span>
-    );
-  }
-  if (progress.done === 0 || progress.total === 0) return null;
-  const txt = t("{done} of {total} reviewed", { done: progress.done, total: progress.total });
-  // Aro de 16 (r = 6, trazo 2): lo hecho en jade sobre el filo, empezando
-  // arriba. Nunca lleno (lleno es «revisada», que lleva su propia marca) ni
-  // casi vacío: 1 de 17 eran 2 px de arco y no se veía que estaba empezada.
-  const C = 2 * Math.PI * 6;
-  const hecho = Math.max(0.15, Math.min(0.9, progress.done / progress.total)) * C;
-  return (
-    <span className="lib-mark" role="img" aria-label={txt} title={txt}>
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <circle className="lib-mark__track" cx="8" cy="8" r="6" />
-        <circle className="lib-mark__arc" cx="8" cy="8" r="6" strokeDasharray={`${hecho} ${C}`} />
-      </svg>
-    </span>
-  );
-};
-
-/* ------------------------------------------------------------------------
    Una fila de partida (Figma, Componentes · «Fila de partida», 56 px). Misma
    rejilla que la cabecera de columnas (.lib-grid): barra · retrato · partida ·
-   resultado · KDA · CS · rival · impacto · revisión.
+   resultado · KDA · CS · rival · impacto.
    ------------------------------------------------------------------------ */
 interface RowProps {
   match: MatchMetadata;
@@ -977,7 +892,6 @@ interface RowProps {
   checked: boolean;
   /** Sin panel de detalle: las acciones de fila vuelven a la fila. */
   narrow: boolean;
-  progress: ReviewProgress | undefined;
   lp: number | undefined;
   lang: string;
   onClick: (e: React.MouseEvent) => void;
@@ -992,7 +906,6 @@ const LibraryRow: React.FC<RowProps> = ({
   selectMode,
   checked,
   narrow,
-  progress,
   lp,
   lang,
   onClick,
@@ -1112,8 +1025,6 @@ const LibraryRow: React.FC<RowProps> = ({
         )}
         {nota != null && <span className="lib-sub">{t("Score {n}", { n: nota })}</span>}
       </span>
-
-      <ReviewMark progress={progress} />
 
       {/* Sin panel de detalle, abrir la carpeta y borrar vuelven a la fila, al
           pasar el cursor. */}

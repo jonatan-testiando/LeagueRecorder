@@ -1156,6 +1156,23 @@
     get_jungle_routes: () => [],
     // --- Lo que te costó (ver MUERTES_YO arriba) ----------------------------
     get_match_plays: () => jugadasDePartida(),
+    // La ventaja de oro por minuto de la línea de tiempo: el azul se pone por
+    // delante, se lo dejan remontar a mitad y acaba por detrás.
+    get_minute_series: ({ matchId }) => {
+      const m = window.__MOCK_MATCHES.find((x) => x.id === matchId) ?? window.__MOCK_MATCHES[0];
+      const n = Math.floor((m.game_duration - (m.video_offset ?? 0)) / 60) + 1;
+      const minutes = Array.from({ length: n }, (_, k) => k);
+      const lead = minutes.map((k) => Math.round(2600 * Math.sin(k / 5) - 90 * k));
+      const players = Array.from({ length: 10 }, (_, i) => ({
+        participant_id: i + 1,
+        team_id: i < 5 ? 100 : 200,
+        champion: "",
+        role: "",
+        gold: minutes.map((k, j) => 500 + k * 380 + (i < 5 ? lead[j] / 5 : 0)),
+        xp: [], damage_dealt: [], damage_taken: [],
+      }));
+      return { status: "ok", minutes, players, objectives: [], self_id: 1, rival_id: 6 };
+    },
     get_match_coach: ({ matchId }) => coachDePartida(matchId),
     // --- Coach (ver COACH arriba) ------------------------------------------
     get_coach_summary: () => {

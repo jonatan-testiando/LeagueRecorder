@@ -274,7 +274,8 @@
 
   /* Anchos máximos: dos y nada más. A 1920 nada tenía tope y cada pantalla se
      cortaba en un ancho distinto (Training a 820-1068, Ajustes a 770). */
-  --content-max: 1360px; /* paneles de datos: Hoy, Biblioteca, Patrones, Coach */
+  --content-max: 1360px; /* paneles de datos: Hoy, Patrones, Coach */
+  --content-wide: 1560px; /* Biblioteca: lista y detalle tienen con qué llenarlo */
   --form-max: 960px;     /* formularios: Ajustes, Training, asistente */
 
   /* Altura de la barra de título personalizada. 44 y no 36: ahora lleva el
@@ -1374,13 +1375,27 @@ button.cap:not(:disabled):active { transform: none; }
   gap: 16px;
   min-width: 0;
 }
-/* Relativo: de aquí cuelgan las etiquetas del subtítulo, fuera de su recorte. */
-.screen-title__txt { position: relative; min-width: 0; }
+/* Título y censo en UNA línea, sobre la misma base: apilados en 48 px, el
+   título quedaba pegado al borde de arriba y más alto que el buscador.
+   Relativo: de aquí cuelgan las etiquetas del subtítulo, fuera de su recorte.
+   Si no cabe, cede el censo antes que el título. */
+.screen-title__txt {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.screen-title__txt > .screen-title__h1 { flex: 0 1 auto; }
+.screen-title__txt > .screen-title__sub { flex: 0 1000 auto; min-width: 0; }
 /* Pantallas de datos centradas en --content-max: a partir de ese ancho el
    contenido se separa del raíl y el título lo sigue. Cuenta el relleno de
    12 px de la página, que es también el de la barra. */
 .screen-title--content {
   margin-left: max(0px, calc((100vw - var(--rail-w) - var(--content-max) - 24px) / 2));
+}
+.screen-title--wide {
+  margin-left: max(0px, calc((100vw - var(--rail-w) - var(--content-wide) - 24px) / 2));
 }
 .screen-title--form {
   margin-left: max(0px, calc((100vw - var(--rail-w) - var(--form-max) - 24px) / 2));
@@ -1388,8 +1403,8 @@ button.cap:not(:disabled):active { transform: none; }
 .screen-title__h1 {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 18px;
-  line-height: 22px;
+  font-size: var(--fs-20);
+  line-height: 24px;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -1399,7 +1414,7 @@ button.cap:not(:disabled):active { transform: none; }
 }
 .screen-title__sub {
   margin: 0;
-  font-size: var(--fs-12);
+  font-size: var(--fs-13);
   line-height: 16px;
   color: var(--muted);
   white-space: nowrap;

@@ -252,8 +252,8 @@ export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onC
   }, [open, byDate, t, openMatch]);
 
   /* -------------------------------------------------------------- momentos */
-  // Sin buscar: la cola de revisión de la última partida (lo que queda por
-  // mirar). Buscando: todos los sucesos con frase de las 20 más recientes.
+  // Sin buscar: los momentos clave de la última partida. Buscando: todos los
+  // sucesos con frase de las 20 más recientes.
   const momentsIdle = useMemo<Item[]>(() => {
     if (!open) return [];
     const ultima = byDate.find((m) => !m.is_vod);
@@ -261,7 +261,6 @@ export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onC
     const rel = relativeDay(ultima.date, t);
     const clips = errorClips.filter((c) => c.match_id === ultima.id);
     return buildQueue(ultima, clips, t)
-      .filter((mo) => !mo.reviewed)
       .map((mo) => ({
         id: `moment:${ultima.id}:${mo.id}`,
         group: "moments" as const,

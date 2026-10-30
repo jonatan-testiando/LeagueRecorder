@@ -2,7 +2,7 @@ import type { MatchEvent, MatchMetadata, Participant } from "../../types";
 import type { CameraLook, ErrorClipMetadata, MatchPlays, PressureEpisode } from "../../core/tauri-ipc";
 import { individualEvents } from "../../core/matchEvents";
 import { describeEventFull, nonChampionKiller, type Translate } from "../../core/eventText";
-import { eventMeta } from "../player/components/eventMeta";
+import { eventMeta, sideOfEvent } from "../player/components/eventMeta";
 import { analyzerFindings, buildQueue, type Moment } from "../player/components/ReviewQueue";
 import { laneLabel } from "../../core/lanes";
 import { mmss } from "../../core/time";
@@ -195,7 +195,7 @@ function pickError(
   // 1. Lo que marcaste tú como error: la señal más deliberada que hay.
   const marcados = clips
     .filter((c) => c.match_id === match.id && c.start_time != null)
-    .sort((a, b) => Number(!!a.reviewed) - Number(!!b.reviewed) || (a.start_time ?? 0) - (b.start_time ?? 0));
+    .sort((a, b) => (a.start_time ?? 0) - (b.start_time ?? 0));
   if (marcados.length > 0) {
     const c = marcados[0];
     const first = c.events?.[0];
@@ -646,15 +646,15 @@ export function wpDeltaNumber(d: number, lang: string): string {
 
 /** Cuántos sucesos enseña la lista del reproductor para esta partida. */
 export const eventCount = (match: MatchMetadata): number =>
-  individualEvents(match.events, match.timeline_markers ?? []).length;
+  individualEvents(match.events, match.timeline_markers ?? []).filter((ev) => sideOfEvent(ev) !== null).length;
 
 /**
- * Los momentos por revisar: la MISMA cola que el reproductor y la biblioteca
- * (`buildQueue`, vía `core/review.ts`), sin los ya tachados.
+ * Los momentos clave: la MISMA lista que el reproductor y la biblioteca
+ * (`buildQueue`).
  */
-export function pendingMoments(match: MatchMetadata, errorClips: ErrorClipMetadata[]): Moment[] {
+export function keyMoments(match: MatchMetadata, errorClips: ErrorClipMetadata[]): Moment[] {
   const suyos = errorClips.filter((c) => c.match_id === match.id);
-  return buildQueue(match, suyos, (k) => k).filter((m) => !m.reviewed);
+  return buildQueue(match, suyos, (k) => k);
 }
 
 /** Minutos que lleva revisar N momentos: medio minuto por momento, redondeando arriba. */

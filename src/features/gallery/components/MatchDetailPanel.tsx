@@ -6,7 +6,6 @@ import { rankLabel } from "../../../core/ddragon";
 import { rankText } from "../../home/format";
 import { clock } from "../../../core/time";
 import { getMatchPlays, syncMatchNow, type MatchPlays } from "../../../core/tauri-ipc";
-import { type ReviewProgress } from "../../../core/review";
 import { useLang, useT } from "../../../core/LanguageProvider";
 import { useAppStore, useErrorClips } from "../../../store/useAppStore";
 import { ChampionAvatar } from "../../../components/ChampionAvatar";
@@ -34,14 +33,13 @@ import "./MatchDetailPanel.css";
  * El detalle de la partida seleccionada en la biblioteca.
  *
  * Es la mitad derecha del maestro-detalle: la lista dice "cuál", esto dice
- * "cómo fue y qué te queda por mirar", y acaba en la única acción en oro de la
+ * "cómo fue y qué mirar", y acaba en la única acción en oro de la
  * pantalla, abrirla. Todo sale de datos que la partida ya trae; lo que solo
  * sabe la sincronización con Riot (el marcador y las jugadas con su ΔWP) se
  * pide aquí mismo.
  */
 interface Props {
   match: MatchMetadata;
-  progress: ReviewProgress | undefined;
   /** LP que dio o quitó (la resta con la anterior), si se sabe. */
   lpDelta: number | undefined;
   /** Abre el reproductor; con `seek`, en ese segundo de vídeo. */
@@ -50,8 +48,12 @@ interface Props {
   onDelete: () => void;
 }
 
-/** Cuántos momentos caben en el panel sin hacer scroll a 800 px de alto. */
-const MOMENTOS = 3;
+/**
+ * Cuántos momentos se enseñan. A 800 px de alto caben tres sin scroll; en una
+ * ventana alta, con tres, medio panel se quedaba vacío. El centro del panel ya
+ * hace scroll y funde el borde, así que los que no caben no estorban.
+ */
+const MOMENTOS = 8;
 
 /**
  * La valoración de un momento de la cola, para los que no tienen ΔWP. La cola
@@ -68,7 +70,7 @@ const rating = (m: Moment): { text: string; tone: ChipTone } => {
   return { text, tone: tone === "inaccuracy" ? "gold" : "loss" };
 };
 
-export const MatchDetailPanel: React.FC<Props> = ({ match, progress, lpDelta, onOpen, onReveal, onDelete }) => {
+export const MatchDetailPanel: React.FC<Props> = ({ match, lpDelta, onOpen, onReveal, onDelete }) => {
   const t = useT();
   const { lang } = useLang();
   const { clips } = useErrorClips();
@@ -150,33 +152,28 @@ export const MatchDetailPanel: React.FC<Props> = ({ match, progress, lpDelta, on
     return allies.map((a, i) => ({ ally: a, enemy: enemies[i] }));
   }, [match.participants]);
 
-  // La cola de revisión: la misma que tacha el reproductor.
+  // Los momentos clave: la misma lista que el reproductor.
   const moments = useMemo(
     () => buildQueue(match, clips.filter((c) => c.match_id === match.id), t),
     [match, clips, t]
   );
-  const revisada = progress?.reviewed ?? false;
 
   /**
-   * Los momentos que se enseñan, con su ΔWP. De los que quedan por revisar,
-   * primero los que más te costaron (si se sabe), y luego en el orden de la
-   * partida: tres sitios no dan para la cola entera y el panel tiene que
-   * decir por dónde empezar.
+   * Los momentos que se enseñan, con su ΔWP: los que más te costaron (si se
+   * sabe) y, de ellos, en el orden de la partida. Unos pocos sitios no dan
+   * para la lista entera y el panel tiene que decir por dónde empezar.
    */
   const lista = useMemo(() => {
     const offset = match.video_offset ?? 0;
     const myTeam = yo?.team_id ?? null;
-    const pendientes = moments.filter((m) => !m.reviewed);
-    const base = pendientes.length > 0 ? pendientes : moments;
-    const conWpa = base.map((m) => ({ m, wpa: plays ? momentWpa(m, plays, offset, myTeam) : null }));
+    const conWpa = moments.map((m) => ({ m, wpa: plays ? momentWpa(m, plays, offset, myTeam) : null }));
     const peso = (x: { wpa: number | null }) => (x.wpa == null ? -1 : Math.abs(x.wpa));
     return [...conWpa]
       .sort((a, b) => peso(b) - peso(a) || a.m.time - b.m.time)
       .slice(0, MOMENTOS)
       .sort((a, b) => a.m.time - b.m.time);
   }, [moments, plays, match.video_offset, yo?.team_id]);
-  const hayPendientes = moments.some((m) => !m.reviewed);
-  // Hasta tener las jugadas no se sabe qué tres enseñar (van por coste): se
+  // Hasta tener las jugadas no se sabe cuáles enseñar (van por coste): se
   // guarda el sitio y, si tarda, su esqueleto. Así la lista no se reordena
   // delante del usuario.
   const leyendo = plays === undefined && lista.length > 0;
@@ -299,18 +296,11 @@ export const MatchDetailPanel: React.FC<Props> = ({ match, progress, lpDelta, on
           </div>
         )}
 
-        {/* Lo que queda por mirar, con lo que te costó. Clic: abre en ese
+        {/* Los momentos clave, con lo que te costaron. Clic: abre en ese
             instante. */}
         <div className="mdp-sec">
           <div className="mdp-sec__head">
-            <span>{t(revisada || !hayPendientes ? "Key moments" : "Moments to review")}</span>
-            <span>
-              {revisada
-                ? t("Game reviewed")
-                : progress && progress.total > 0
-                  ? t("{done} of {total} reviewed", { done: progress.done, total: progress.total })
-                  : null}
-            </span>
+            <span>{t("Key moments")}</span>
           </div>
           {lista.length === 0 ? (
             <p className="mdp-none-txt">{t("Nothing flagged in this game yet")}</p>

@@ -3,7 +3,7 @@
    Biblioteca, «Detalle de la partida».
 
    Tarjeta a la derecha de la lista: 336 px y, si sobra ancho (la lista tiene
-   tope), hasta 480. Cabecera con el resultado, tres cifras, los dos equipos o
+   tope), hasta 600. Cabecera con el resultado, tres cifras, los dos equipos o
    cómo conseguirlos, los momentos por revisar con su ΔWP y, abajo del todo,
    la única acción en oro. El centro hace scroll y las acciones se quedan
    quietas: a 720 px de alto no cabe todo.
@@ -14,7 +14,7 @@
 .mdp {
   flex: 1 0 336px;
   min-width: 336px;
-  max-width: 480px;
+  max-width: 600px;
   min-height: 0;
   display: flex;
   flex-direction: column;

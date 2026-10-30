@@ -3,6 +3,7 @@ mod spells;
 mod ajustes_juego;
 mod attribution;
 mod awareness;
+mod escala;
 mod backup;
 mod baselines;
 pub mod benchmarks;
@@ -185,6 +186,9 @@ pub fn run() {
         .manage(cv_analyzer::AnalyzerState::default())
         .manage(app_update::UpdateState::default())
         .setup(move |app| {
+            // Lo primero: el tamaño de la interfaz, antes de que pinte la página.
+            escala::aplicar(app.handle(), true);
+
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
@@ -338,6 +342,7 @@ pub fn run() {
             set_video_settings,
             get_app_config,
             set_app_config,
+            escala::get_ui_scale,
             ajustes_juego::get_minimap_detection,
             get_disk_usage,
             lcu::get_lcu_status,

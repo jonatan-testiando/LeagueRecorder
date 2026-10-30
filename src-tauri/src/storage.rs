@@ -535,6 +535,10 @@ pub struct AppConfig {
     /// misma razón que el idioma: tiene que sobrevivir a cerrar la app.
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Tamaño de la interfaz (el zoom del WebView): 0 = automático según la
+    /// pantalla, o el factor elegido en Ajustes. Ver `escala.rs`.
+    #[serde(default)]
+    pub ui_scale: f64,
     /// HEREDADO. Tamaño del minimapa respecto al rectángulo validado (1.0),
     /// de cuando era la única calibración. Ya no sale en Ajustes; sólo lo usan
     /// las partidas grabadas antes de leer los ajustes del juego, que así se
@@ -605,6 +609,7 @@ impl Default for AppConfig {
             auto_prune_days: 0,
             language: "en".to_string(),
             theme: "dark".to_string(),
+            ui_scale: 0.0,
             minimap_scale: 1.0,
             minimap_scale_override: None,
             riot_platform: "auto".to_string(),

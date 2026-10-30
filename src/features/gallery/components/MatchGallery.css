@@ -7,10 +7,12 @@
    de la partida seleccionada (MatchDetailPanel.css). Cabecera de columnas y
    filas comparten la misma rejilla (.lib-grid): son la misma tabla.
 
-   Ancho (auditoría E2): todo cabe en --content-max y se centra. La columna
+   Ancho (auditoría E2): todo cabe en --content-wide y se centra. La columna
    del nombre llega como mucho a 360 px, así que la lista tiene un ancho
-   máximo y lo que sobra a 1920 se lo queda el panel de detalle (hasta 480) y
-   luego los márgenes, no un hueco de 900 px entre el nombre y las cifras.
+   máximo y lo que sobra se lo queda el panel de detalle (hasta 600) y luego
+   los márgenes, no un hueco de 900 px entre el nombre y las cifras. Va más
+   ancha que el resto de pantallas de datos: en 1360 quedaba una isla con
+   300 px vacíos a cada lado en un monitor de 2560.
 
    Voz sans con cifras tabulares; la mono solo para los atajos (kbd). Solo
    tokens: el tema claro los redefine y aquí no hay colores fijos.
@@ -21,18 +23,22 @@
      cede primero; las cifras tienen su ancho fijo para quedar en columna. */
   /* 320 y no 360: con el rival a 88 px se cortaba «Gangpla…» mientras el
      nombre de la partida dejaba 300 px vacíos. */
-  --lib-name-max: 320px;
+  --lib-name-max: 360px;
+  /* «10 / 7 / 15» no cabía en 68 y salía «10 / 7 / …»; el rival a 136 deja
+     entero «Gangplank» y «Tahm Kench». */
+  --lib-kda: 88px;
+  --lib-rival: 136px;
   --lib-col-gap: var(--space-2);
   --lib-row-pad: var(--space-3);
-  /* Barra · retrato · partida · resultado · KDA · CS · rival · impacto ·
-     revisión: nueve columnas y ocho huecos de 8. */
-  --lib-cols: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px 68px 60px 116px 60px 24px;
+  /* Barra · retrato · partida · resultado · KDA · CS · rival · impacto: ocho
+     columnas y siete huecos de 8. */
+  --lib-cols: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px var(--lib-kda) 60px var(--lib-rival) 60px;
 
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 100%;
-  max-width: calc(var(--content-max) + 2 * var(--space-3));
+  max-width: calc(var(--content-wide) + 2 * var(--space-3));
   height: 100%;
   margin: 0 auto;
   /* Piel A: el título va en la barra; arriba no hace falta aire. */
@@ -186,8 +192,8 @@
    cede su sitio. */
 .lib-card {
   flex: 0 1 calc(
-    var(--result-bar) + 36px + var(--lib-name-max) + 72px + 68px + 60px + 116px + 60px + 24px +
-    8 * var(--lib-col-gap) + var(--lib-row-pad) + 6px + 2 * var(--space-2)
+    var(--result-bar) + 36px + var(--lib-name-max) + 72px + var(--lib-kda) + 60px + var(--lib-rival) + 60px +
+    7 * var(--lib-col-gap) + var(--lib-row-pad) + 6px + 2 * var(--space-2)
   );
   min-width: 0;
   min-height: 0;
@@ -243,7 +249,7 @@
 .lib-th > span { overflow: hidden; text-overflow: ellipsis; }
 
 @container liblist (max-width: 560px) {
-  .lib-grid { grid-template-columns: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px 68px 60px 60px 24px; }
+  .lib-grid { grid-template-columns: var(--result-bar) 36px minmax(0, var(--lib-name-max)) 72px var(--lib-kda) 60px 60px; }
   .lib-col-rival { display: none !important; }
 }
 
@@ -379,27 +385,8 @@
 }
 .lib-nosync svg { flex: none; }
 
-/* La marca de revisión: el círculo con la marca o el aro a medias. */
-.lib-mark {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  color: var(--win);
-}
-.lib-mark__track,
-.lib-mark__arc { fill: none; stroke-width: 2; }
-.lib-mark__track { stroke: var(--hair-strong); }
-.lib-mark__arc {
-  stroke: var(--win);
-  stroke-linecap: round;
-  transform-box: fill-box;
-  transform-origin: center;
-  transform: rotate(-90deg);
-}
-
-/* Acciones de fila (solo sin panel de detalle): encima de la columna de
-   revisión, al pasar el cursor o con el foco dentro. */
+/* Acciones de fila (solo sin panel de detalle): a la derecha de la fila, al
+   pasar el cursor o con el foco dentro. */
 .lib-actions {
   position: absolute;
   right: var(--space-2);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, getUiScale, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
 import { formatDecimal, withPercent } from "../../../core/benchmarkFormat";
 import { queueKey } from "../../../core/matchStats";
 // La lista de regiones se comparte con el asistente de primer arranque.
@@ -114,6 +114,8 @@ const CATEGORY_ALIASES: Record<string, Category> = {
 
 /** El tema en el orden de Figma: el claro primero, que es el que se usa. */
 const THEME_ORDER: Theme[] = ["light", "dark", "system"];
+/** Tamaños de la interfaz; 0 es automático, según la pantalla. */
+const UI_SCALES = [0, 1, 1.15, 1.25, 1.5];
 
 const CATEGORY_STORAGE_KEY = "settingsCategory";
 
@@ -302,6 +304,11 @@ export const SettingsPanel: React.FC = () => {
   const { toast } = useToast();
   const { lang, setLang, t } = useLang();
   const { theme, setTheme } = useTheme();
+  // Lo que daría «Automático» en esta pantalla, para ponerle el número.
+  const [uiScaleAuto, setUiScaleAuto] = useState<number | null>(null);
+  useEffect(() => {
+    getUiScale().then((e) => setUiScaleAuto(e.auto)).catch(() => {});
+  }, []);
   // El asistente de primer arranque, para poder volver a lanzarlo desde aquí.
   const { restart: restartOnboarding } = useOnboarding();
   // Copia de seguridad: se deshabilitan los botones mientras el zip se escribe
@@ -1069,6 +1076,26 @@ export const SettingsPanel: React.FC = () => {
           options={THEME_ORDER.map((code) => ({
             value: code,
             label: t(THEMES.find((th) => th.code === code)?.label ?? code),
+          }))}
+        />
+      </Row>
+
+      <Row
+        label={t("Interface size")}
+        desc={t("Scales text and everything else. Automatic grows it on screens wider than 1920 px.")}
+      >
+        <Segmented
+          label={t("Interface size")}
+          value={config?.ui_scale ?? 0}
+          onChange={(v) => handleSaveConfig({ ui_scale: v }).catch(() => {})}
+          options={[...new Set([...UI_SCALES, config?.ui_scale ?? 0])].map((v) => ({
+            value: v,
+            label:
+              v === 0
+                ? uiScaleAuto
+                  ? `${t("Auto")} · ${withPercent(Math.round(uiScaleAuto * 100))}`
+                  : t("Auto")
+                : withPercent(Math.round(v * 100)),
           }))}
         />
       </Row>

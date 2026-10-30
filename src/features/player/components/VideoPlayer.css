@@ -529,13 +529,17 @@
 .vp-tl__gutter,
 .vp-track {
   --tl-mid: 0px;
+  --tl-ult: 0px;
   --tl-top: calc(var(--tl-ruler) + var(--tl-gap));
   position: relative;
   min-width: 0;
-  height: calc(var(--tl-top) + 2 * var(--tl-lane) + var(--tl-mid));
+  height: calc(var(--tl-top) + 2 * var(--tl-lane) + var(--tl-mid) + var(--tl-ult));
 }
 .vp-tl[data-curve] .vp-tl__gutter,
 .vp-track[data-curve] { --tl-mid: var(--tl-gold); }
+/* La fila de tus definitivas, debajo y algo más baja que las otras. */
+.vp-tl[data-ult] .vp-tl__gutter,
+.vp-track[data-ult] { --tl-ult: 22px; }
 .vp-track {
   cursor: pointer;
   touch-action: none;
@@ -561,6 +565,7 @@
 .vp-tl__lane { height: var(--tl-lane); color: var(--muted); }
 .vp-tl__lane[data-side="for"] { top: var(--tl-top); }
 .vp-tl__lane[data-side="against"] { top: calc(var(--tl-top) + var(--tl-lane) + var(--tl-mid)); }
+.vp-tl__lane[data-side="ult"] { top: calc(var(--tl-top) + 2 * var(--tl-lane) + var(--tl-mid)); height: var(--tl-ult); }
 .vp-tl__g[data-row="gold"] {
   top: calc(var(--tl-top) + var(--tl-lane));
   height: var(--tl-mid);
@@ -575,6 +580,7 @@
   background: var(--win);
 }
 .vp-tl__lane[data-side="against"] .vp-tl__dot { background: var(--loss); }
+.vp-tl__lane[data-side="ult"] .vp-tl__dot { background: var(--faint); }
 .vp-tl__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .vp-tl__n {
   margin-left: auto;
@@ -609,6 +615,11 @@
 }
 .vp-track__lane[data-side="for"] { top: var(--tl-top); }
 .vp-track__lane[data-side="against"] { top: calc(var(--tl-top) + var(--tl-lane) + var(--tl-mid)); }
+.vp-track__lane[data-side="ult"] {
+  top: calc(var(--tl-top) + 2 * var(--tl-lane) + var(--tl-mid));
+  height: var(--tl-ult);
+  box-shadow: inset 0 1px 0 var(--hair);
+}
 /* Sin banda, el filo entre las dos filas. */
 .vp-track:not([data-curve]) .vp-track__lane[data-side="against"] { box-shadow: inset 0 1px 0 var(--hair); }
 
@@ -624,6 +635,37 @@
   pointer-events: none;
 }
 .vp-track__zero { stroke: var(--hair-strong); stroke-width: 1; }
+
+/* Al abrir la partida, la tira se cuenta en el tiempo: la curva se dibuja de
+   izquierda a derecha (600 ms, ease-in-out fuerte: algo que recorre la
+   pantalla) y cada marca aparece cuando la curva pasa por su minuto, desde un
+   0,6 de su tamaño y no desde cero. Es de las veces que se hace al día, no de
+   las cien, y explica algo: la partida tiene un antes y un después. Vuelve a
+   pasar al volver a la pantalla, como la entrada del resto. */
+.vp-track__gold { animation: tl-draw 600ms cubic-bezier(0.77, 0, 0.175, 1) backwards; }
+@keyframes tl-draw {
+  from { clip-path: inset(0 100% 0 0); }
+  to { clip-path: inset(0 0 0 0); }
+}
+.vp-track__lane .vp-chapa {
+  animation: tl-mark-in 240ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
+  animation-delay: calc(var(--d, 0) * 500ms);
+}
+@keyframes tl-mark-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+/* Con el teclado, sin espera; con movimiento reducido, solo el fundido. */
+:root[data-nav="kbd"] .vp-track__gold,
+:root[data-nav="kbd"] .vp-track__lane .vp-chapa { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vp-track__gold { animation: tl-fade 150ms ease backwards; }
+  .vp-track__lane .vp-chapa { animation: tl-fade 150ms ease backwards; animation-delay: 0ms; }
+}
+@keyframes tl-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .vp-track__goldArea[data-side="up"] { fill: color-mix(in srgb, var(--win) 22%, transparent); }
 .vp-track__goldArea[data-side="down"] { fill: color-mix(in srgb, var(--loss) 22%, transparent); }
 .vp-track__goldLine { fill: none; stroke-width: 1.5; stroke-linejoin: round; }

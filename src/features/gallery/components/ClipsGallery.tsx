@@ -570,6 +570,7 @@ export const ClipsGallery: React.FC = () => {
                   selector) la selecciona: no hace falta un clic aparte. */}
               <div
                 className="cg-row"
+                data-enter-item
                 {...(isSelected ? { "data-selected": true } : {})}
                 {...(hideDivider ? { "data-nodivider": true } : {})}
                 onPointerDown={() => setSelectedPath(clip.path)}

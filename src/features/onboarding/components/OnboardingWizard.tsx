@@ -181,17 +181,17 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) =>
   );
 
   return (
-    <div style={styles.veil} role="dialog" aria-modal="true" aria-label={t("Set up LeagueRecorder")}>
+    <div style={styles.veil} role="dialog" aria-modal="true" aria-label={t("Set up Wardline")}>
       <div style={styles.sheet} ref={cajaRef} tabIndex={-1}>
         <header style={styles.head}>
           <span style={{ color: "var(--brand)", display: "flex" }}>
             <BrandMark size={20} />
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={styles.headTitle}>{t("Set up LeagueRecorder")}</div>
+            <div style={styles.headTitle}>{t("Set up Wardline")}</div>
             <div className="u-meta">{t("Step {n} of {total}", { n: paso + 1, total: PASOS })}</div>
           </div>
-          <div style={styles.dots} role="tablist" aria-label={t("Set up LeagueRecorder")}>
+          <div style={styles.dots} role="tablist" aria-label={t("Set up Wardline")}>
             {Array.from({ length: PASOS }, (_, i) => (
               <button
                 key={i}

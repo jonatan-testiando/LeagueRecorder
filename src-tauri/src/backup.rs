@@ -64,7 +64,7 @@ pub struct ImportReport {
 // Exportar
 // ---------------------------------------------------------------------------
 
-/// Escribe `LeagueRecorder-backup-YYYYMMDD-HHMM.zip` en `dest_dir` y devuelve
+/// Escribe `Wardline-backup-YYYYMMDD-HHMM.zip` en `dest_dir` y devuelve
 /// la ruta completa del fichero.
 #[tauri::command]
 pub fn export_backup(dest_dir: String) -> Result<String, String> {
@@ -76,7 +76,7 @@ pub fn export_backup(dest_dir: String) -> Result<String, String> {
         .map_err(|e| format!("Could not create {}: {e}", dir.display()))?;
 
     let ahora = chrono::Local::now();
-    let nombre = format!("LeagueRecorder-backup-{}.zip", ahora.format("%Y%m%d-%H%M"));
+    let nombre = format!("Wardline-backup-{}.zip", ahora.format("%Y%m%d-%H%M"));
     let destino = dir.join(&nombre);
 
     let fichero = std::fs::File::create(&destino)

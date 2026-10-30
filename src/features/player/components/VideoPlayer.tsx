@@ -41,6 +41,7 @@ import { individualEvents, eventChampion, withChampionNames } from "../../../cor
 import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
 import { useMatches } from "../../../store/useAppStore";
+import { useEnterOnChange } from "../../../core/enterMotion";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import {
@@ -95,17 +96,29 @@ interface MarkGroup {
   side: Side;
 }
 
-type Side = "for" | "against";
-/** Las dos filas, de arriba abajo; `label` es la clave de i18n. */
+type Side = "for" | "against" | "ult";
+/** Las filas, de arriba abajo; `label` es la clave de i18n. La de tus
+ *  definitivas va debajo y fina, y solo si las hay: el usuario las echó de
+ *  menos al quitar las pistas (2026-10-30), pero no son ni a favor ni en
+ *  contra. */
 const SIDES: { id: Side; label: string }[] = [
   { id: "for", label: "For you" },
   { id: "against", label: "Against you" },
+  { id: "ult", label: "Your ult" },
 ];
-/** De qué lado cae un elemento (ver `sideOfEvent`); un error marcado, en contra. */
-const sideOf = (it: TimelineItem): Side | null => (it.error ? "against" : sideOfEvent(it.ev as MatchEvent));
-/** El tinte de una chapa: el de su lado; el error marcado, en el suyo. */
-const toneOfItem = (it: TimelineItem): MarkTone =>
-  it.error ? "flag" : sideOf(it) === "against" ? "loss" : markOf(it.ev as MatchEvent).tone === "brand" ? "brand" : "win";
+/** De qué fila es un elemento (ver `sideOfEvent`); un error marcado, en
+ *  contra; tus definitivas, en la suya. */
+const sideOf = (it: TimelineItem): Side | null =>
+  it.error ? "against" : it.ev?.type === "Ultimate" ? "ult" : sideOfEvent(it.ev as MatchEvent);
+/** El tinte de una chapa: el de su lado; el error marcado, en el suyo; la
+ *  definitiva, neutra. */
+const toneOfItem = (it: TimelineItem): MarkTone => {
+  if (it.error) return "flag";
+  const s = sideOf(it);
+  if (s === "ult") return "neutral";
+  if (s === "against") return "loss";
+  return markOf(it.ev as MatchEvent).tone === "brand" ? "brand" : "win";
+};
 /** El glifo de una chapa: el mismo que la fila del inspector. */
 const glyphOf = (it: TimelineItem, size: number) =>
   it.error ? <Flag size={size} /> : eventMeta(it.ev as MatchEvent, size).icon;
@@ -402,7 +415,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   // podían seguir en 450 px: su detalle vive ahora en la hoja de estadísticas,
   // que se abre ancha encima del vídeo. Sin vídeo, la revisión no lleva a
   // ningún sitio: se abre por el Resumen.
-  const [tab, setTab] = useState<"review" | "summary">(match.video_path ? "review" : "summary");
+  const [tab, setTabRaw] = useState<"review" | "summary">(match.video_path ? "review" : "summary");
+  const [tabN, setTabN] = useState(0);
+  const setTab = useCallback((v: "review" | "summary") => {
+    setTabRaw(v);
+    setTabN((n) => n + 1);
+  }, []);
   /** La hoja de estadísticas abierta, y en qué bloque; `n` hace que pedir dos
    *  veces el mismo bloque funcione. */
   const [stats, setStats] = useState<{ focus: SeccionId | null; n: number } | null>(null);
@@ -509,6 +527,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     setStats((s) => ({ focus: block ?? null, n: (s?.n ?? 0) + 1 }));
   }, [videoRef]);
   const closeStats = useCallback(() => setStats(null), []);
+  // Lo de dentro entra escalonado detrás de la hoja, al abrirla o al pedirle
+  // otro bloque desde el Resumen.
+  const sheetRef = useRef<HTMLElement>(null);
+  useEnterOnChange(sheetRef, stats ? stats.n : null);
   const sheetSeek = useCallback(
     (videoSeconds: number, play: boolean) => {
       setStats(null);
@@ -952,7 +974,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   const lpDelta = React.useMemo(() => lpDeltas(library).get(match.id), [library, match.id]);
 
   const goToAdjacentEvent = useCallback((dir: 1 | -1) => {
-    const times = timelineItems.map((it) => it.time);
+    // P y N recorren lo que salió a favor y en contra, no cada definitiva.
+    const times = timelineItems.filter((it) => sideOf(it) !== "ult").map((it) => it.time);
     if (!times.length) return;
     const cur = activeEventTime ?? currentTime;
     let target: number | undefined;
@@ -969,6 +992,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   //   rutas con display:none), así que solo responde si se está viendo. Si no,
   //   la «c» pulsada en otra pantalla abría el recortador aquí, a escondidas.
   const vpRef = useRef<HTMLDivElement>(null);
+  // Abrir una partida es de las veces que se hace al día, no de las cien: lo de
+  // la pantalla entra escalonado (core/enterMotion.ts), y al cambiar de
+  // pestaña, lo de la pestaña.
+  useEnterOnChange(vpRef, match.id);
+  useEnterOnChange(asideRef, tabN > 0 ? tabN : null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -1065,13 +1093,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
 
   // Cuántos sucesos tiene cada fila, para su nombre a la izquierda.
   const sideCount = React.useMemo(() => {
-    const n: Record<Side, number> = { for: 0, against: 0 };
+    const n: Record<Side, number> = { for: 0, against: 0, ult: 0 };
     for (const it of timelineItems) {
       const s = sideOf(it);
       if (s) n[s]++;
     }
     return n;
   }, [timelineItems]);
+  /** Las filas que se pintan: la de las definitivas, solo si las hay. */
+  const sidesShown = SIDES.filter((s) => s.id !== "ult" || sideCount.ult > 0);
 
   const markGroups = React.useMemo<MarkGroup[]>(() => {
     if (!isFinite(duration) || duration <= 0) return [];
@@ -1203,6 +1233,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
       <div
         className={compact ? "vp-track vp-track--compact" : "vp-track"}
         data-curve={(!compact && goldPaths) || undefined}
+        data-ult={sideCount.ult > 0 || undefined}
         ref={progressBarRef}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1253,7 +1284,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
         {/* Los sucesos: arriba lo que salió a favor, abajo lo que salió en
             contra; en cada fila una chapa por suceso o, si se tocarían, un
             racimo con su número. */}
-        {SIDES.map((s) => (
+        {sidesShown.map((s) => (
           <div key={s.id} className="vp-track__lane" data-side={s.id}>
             {duration > 0 &&
               markGroups.map((g, gi) => {
@@ -1267,7 +1298,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
                     className={many ? "vp-mark vp-mark--cluster" : "vp-mark"}
                     data-tone={g.tone}
                     data-on={g.items.some((it) => it.time === activeEventTime) || undefined}
-                    style={{ left: `${g.x}px` }}
+                    // `--d`: dónde cae en la tira (0-1), para aparecer cuando
+                    // la curva pasa por ahí al abrir la partida.
+                    style={{ left: `${g.x}px`, "--d": (g.x / w).toFixed(3) } as React.CSSProperties}
                     aria-label={
                       many
                         ? `${t("{n} moments", { n: g.items.length })}: ${g.items.map(itemLabel).join("; ")}`
@@ -1754,12 +1787,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
               de cada fila. */}
           {!isFullscreen && hasVideo && (
             <>
-              <section className="vp-tl" data-curve={goldPaths ? "" : undefined} aria-label={t("Game timeline")}>
+              <section
+                className="vp-tl"
+                data-curve={goldPaths ? "" : undefined}
+                data-ult={sideCount.ult > 0 || undefined}
+                aria-label={t("Game timeline")}
+              >
                 {/* El nombre de cada fila, a la altura de la suya (--tl-*), con
                     cuántos sucesos tiene; entre las dos, la ventaja de oro en
                     el instante del cursor. */}
                 <div className="vp-tl__gutter" aria-hidden="true">
-                  {SIDES.map((s) => (
+                  {sidesShown.map((s) => (
                     <span key={s.id} className="vp-tl__g vp-tl__lane" data-side={s.id}>
                       <i className="vp-tl__dot" />
                       <span className="vp-tl__name">{t(s.label)}</span>
@@ -1790,7 +1828,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
               tiempo y el transporte. Los bloques de antes (Ventaja, Muertes,
               Jungla, Oro, Marcador) y el Impacto entero, con su barra. */}
           {stats && !isFullscreen && (
-            <section className="vp-sheet" aria-label={t("Game stats")}>
+            <section ref={sheetRef} className="vp-sheet" aria-label={t("Game stats")}>
               <header className="vp-sheet__head">
                 <h2 className="vp-sheet__title">{t("Game stats")}</h2>
                 <span className="vp-sheet__fill" />
@@ -1947,6 +1985,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
                       data-key={r.key}
                       role="listitem"
                       className="vp-ev"
+                      data-enter-item
                       data-on={isActive || undefined}
                     >
                       <button

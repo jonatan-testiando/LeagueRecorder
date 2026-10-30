@@ -74,7 +74,7 @@ fn build(app: &tauri::AppHandle) {
         OVERLAY_LABEL,
         WebviewUrl::App("index.html?overlay=1".into()),
     )
-    .title("LeagueRecorder Overlay")
+    .title("Wardline Overlay")
     .inner_size(OVERLAY_W, OVERLAY_H)
     .transparent(true)
     .decorations(false)

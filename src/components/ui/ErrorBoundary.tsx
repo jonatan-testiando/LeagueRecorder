@@ -94,7 +94,7 @@ const SectionError: React.FC<{
     // fallo, y fuera de Tauri (el arnés) simplemente no está.
     const version = await getVersion().catch(() => "?");
     const details = [
-      `LeagueRecorder v${version}`,
+      `Wardline v${version}`,
       `${scope === "app" ? "App" : name} · ${window.location.hash || "#/"}`,
       // La pila de V8 ya empieza por «TypeError: …»; sin pila, el mensaje.
       error.stack ?? `${error.name}: ${error.message}`,

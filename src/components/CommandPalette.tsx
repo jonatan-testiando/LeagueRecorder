@@ -520,7 +520,7 @@ export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onC
         className="cmdk"
         role="dialog"
         aria-modal="true"
-        aria-label={t("Search LeagueRecorder")}
+        aria-label={t("Search Wardline")}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >

@@ -27,8 +27,11 @@ const kindOf = (ev: MatchEvent): string | null => {
     case "DragonKill":
       return "dragon";
     case "HeraldKill":
-    case "BaronKill":
       return "herald";
+    case "BaronKill":
+      return "baron";
+    case "HordeKill":
+      return "grubs";
     case "TowerKill":
       // Una placa no es la torre: la API en directo no manda placas, así que
       // confundirlas haría desaparecer la placa por culpa de la torre de al lado.
@@ -61,10 +64,18 @@ const fromMarker = (tm: TimelineMarker): MatchEvent | null => {
       return ev("ChampionKill", "assist");
     case "death":
       return ev("ChampionKill", "death");
+    // Hasta el 2026-10-30 el backend guardaba las larvas como "dragon" con la
+    // descripción «Objetivo épico» y el Barón como "herald" con «Barón
+    // Nashor»: salían como dragones y heraldos. Las partidas viejas se leen
+    // por la descripción; las nuevas ya traen su tipo.
     case "dragon":
-      return ev("DragonKill", "ally");
+      return tm.description === "Objetivo épico" ? ev("HordeKill", "ally") : ev("DragonKill", "ally");
     case "herald":
-      return ev("HeraldKill", "ally");
+      return tm.description === "Barón Nashor" ? ev("BaronKill", "ally") : ev("HeraldKill", "ally");
+    case "baron":
+      return ev("BaronKill", "ally");
+    case "grubs":
+      return ev("HordeKill", "ally");
     case "tower":
       return ev("TowerKill", "ally");
     case "plate":

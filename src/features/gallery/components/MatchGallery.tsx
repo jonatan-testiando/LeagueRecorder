@@ -661,7 +661,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   <EmptyState
                     icon={<Library size={20} />}
                     title={t("No games recorded yet")}
-                    text={t("Play one: LeagueRecorder detects the client, records on its own and files the game here when it ends.")}
+                    text={t("Play one: Wardline detects the client, records on its own and files the game here when it ends.")}
                     action={
                       <div className="lib-empty__acts">
                         {/* La prueba vive en Ajustes (lleva la cuenta atrás y el
@@ -707,7 +707,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   if (row.kind === "day") {
                     return (
                       <div key={row.key} className="lib-vrow" data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
-                        <div className="lib-day">
+                        <div className="lib-day" data-enter-item>
                           <span className="lib-day__txt">
                             {row.label} · {row.count} {t(row.count === 1 ? "game" : "games")}
                           </span>
@@ -738,8 +738,9 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
                   const match = row.match;
                   return (
                     <div key={row.key} className="lib-vrow" data-index={virtualRow.index} ref={rowVirtualizer.measureElement} style={wrap} role="presentation">
-                      {/* Sin animación de entrada: esta lista está virtualizada y
-                          se redispararía al hacer scroll. */}
+                      {/* La entrada la lleva la fila de dentro (`data-enter-item`)
+                          y solo al aparecer la pantalla: este envoltorio se mueve
+                          con `transform` y animarlo la descolocaría. */}
                       <LibraryRow
                         match={match}
                         current={current?.id === match.id}
@@ -933,6 +934,7 @@ const LibraryRow: React.FC<RowProps> = ({
   return (
     <div
       className="lib-grid lib-tr"
+      data-enter-item
       data-result={res === "victory" ? "win" : res === "defeat" ? "loss" : undefined}
       data-current={current || undefined}
       data-match-id={match.id}

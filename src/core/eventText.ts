@@ -210,6 +210,9 @@ export function describeEventFull(ev: MatchEvent, t: Translate): EventText {
 
       case "BaronKill":
         return { text: objectiveLine(t, ev.subtype, t("Baron Nashor"), stolen), isLegacy: false };
+
+      case "HordeKill":
+        return { text: objectiveLine(t, ev.subtype, t("Void Grubs"), stolen), isLegacy: false };
     }
   }
 
@@ -221,6 +224,7 @@ export function describeEventFull(ev: MatchEvent, t: Translate): EventText {
     if (ev.type === "BaronKill") return { text: objectiveLine(t, ev.subtype, t("Baron Nashor"), stolen), isLegacy: false };
     if (ev.type === "HeraldKill") return { text: objectiveLine(t, ev.subtype, t("Rift Herald"), stolen), isLegacy: false };
     if (ev.type === "DragonKill") return { text: objectiveLine(t, ev.subtype, t("Dragon"), stolen), isLegacy: false };
+    if (ev.type === "HordeKill") return { text: objectiveLine(t, ev.subtype, t("Void Grubs"), stolen), isLegacy: false };
   }
 
   // Sucesos sin datos que componer: la frase del backend ya está en inglés

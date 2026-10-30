@@ -485,18 +485,8 @@ button.home-sig:focus-visible { outline: 2px solid var(--focus); outline-offset:
 .home-skel .home-skel__focus { height: 220px; border-radius: var(--radius-lg); }
 .home-skel .home-skel__form { height: 132px; border-radius: var(--radius-lg); }
 
-/* ------------------------------------------- primera visita de la sesión */
-/* Héroe, momentos y columna lateral se asientan escalonados (--i): opacidad
-   y --rise, 30 ms entre uno y otro, seis piezas como mucho y 290 ms en total.
-   Solo la primera vez: HomePanel quita la clase al acabar y no la pone al
-   volver a Hoy. Con movimiento reducido --rise es 0 y queda el fundido. */
-.hoy--entrada .home-hero,
-.hoy--entrada .home-mo,
-.hoy--entrada .home-focus,
-.hoy--entrada .home-form {
-  animation: card-in var(--t-base) var(--e-out) both;
-  animation-delay: calc(var(--i, 0) * var(--t-stagger));
-}
+/* La entrada escalonada ya no vive aquí: la hace el envoltorio de cada
+   pantalla en App (core/enterMotion.ts), en cada visita. */
 
 /* ------------------------------------------------------------- respuesta */
 @media (max-width: 1180px) {

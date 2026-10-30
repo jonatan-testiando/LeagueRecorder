@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { MatchMetadata, Participant, ItemPurchase } from "../../../types";
 import { useT } from "../../../core/LanguageProvider";
@@ -24,6 +24,7 @@ import { formatGold } from "./pressureFormat";
 import { formatThousands } from "../../../core/benchmarkFormat";
 import { Chip } from "../../../components/ui/Chip";
 import { titleView, useMatchTitles } from "../../../core/titles";
+import { useEnterOnChange } from "../../../core/enterMotion";
 import "./DeathsSection.css";
 import "./MatchTab.css";
 
@@ -172,6 +173,12 @@ export const MatchTab: React.FC<MatchTabProps> = ({
     return () => cancelAnimationFrame(raf);
   }, [aLaVista]);
 
+  // Cambiar de bloque desde la barra: lo nuevo entra escalonado. Al abrir la
+  // hoja ya entra todo con ella (la entrada de la hoja, en VideoPlayer).
+  const bloquesRef = useRef<HTMLDivElement>(null);
+  const primerBloque = useRef(abierto);
+  useEnterOnChange(bloquesRef, abierto !== primerBloque.current ? abierto : null);
+
   // La puntería se pide al abrirla, no al montar la pestaña.
   const [aimOpen, setAimOpen] = useState(false);
 
@@ -236,7 +243,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         </div>
       )}
 
-      <div className="mt-blocks">
+      <div className="mt-blocks" ref={bloquesRef}>
         {/* ------------------------------------------------------- Ventaja.
             La curva por minuto con modos (oro, XP, daño; contra tu rival, la
             media rival, equipo contra equipo o los diez), la franja de

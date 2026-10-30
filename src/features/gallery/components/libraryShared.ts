@@ -163,6 +163,7 @@ const JUGADA_DE: Record<string, string> = {
   DragonKill: "dragon",
   BaronKill: "baron",
   HeraldKill: "herald",
+  HordeKill: "grubs",
   TowerKill: "tower",
   InhibKill: "inhibitor",
 };

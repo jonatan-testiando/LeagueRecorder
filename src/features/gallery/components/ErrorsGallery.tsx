@@ -269,6 +269,7 @@ export const ErrorsGallery: React.FC<ErrorsGalleryProps> = ({ onSelectError }) =
               <div
                 key={err.path}
                 className="cg-row cg-row--open"
+                data-enter-item
                 {...(i === visible.length - 1 ? { "data-nodivider": true } : {})}
                 onClick={open}
               >

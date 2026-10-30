@@ -107,6 +107,15 @@ export const IconHerald: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </GlyphBase>
 );
 
+/** Larvas del Vacío: tres cuerpos (el mismo dibujo que la gráfica de Ventaja). */
+export const IconGrubs: React.FC<{ size?: number }> = ({ size = 18 }) => (
+  <GlyphBase size={size}>
+    <circle cx="4.6" cy="10" r="2.3" />
+    <circle cx="11.4" cy="10" r="2.3" />
+    <circle cx="8" cy="5.2" r="2.3" />
+  </GlyphBase>
+);
+
 /** Definitiva (R): el destello. */
 export const IconUltimate: React.FC<{ size?: number }> = ({ size = 18 }) => (
   <GlyphBase size={size}>
@@ -164,6 +173,8 @@ export function eventMeta(ev: MatchEvent, iconSize: number = 18): EvMeta {
       return { icon: <IconBaron size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Baron", tone: objTone(ev.subtype), category: "objectives" };
     case "HeraldKill":
       return { icon: <IconHerald size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Herald", tone: objTone(ev.subtype), category: "objectives" };
+    case "HordeKill":
+      return { icon: <IconGrubs size={size} />, color: objColor(ev.subtype, C_OBJECTIVE), label: "Void Grubs", tone: objTone(ev.subtype), category: "objectives" };
     case "TowerKill":
       return { icon: <IconTower size={size} />, color: structColor(ev.subtype), label: "Tower", tone: structTone(ev.subtype), category: "structures" };
     case "InhibKill":

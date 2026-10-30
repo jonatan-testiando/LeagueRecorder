@@ -123,7 +123,7 @@ pub struct ItemPurchase {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TimelineMarker {
     pub time: f64, // segundos en el vídeo
-    pub event_type: String, // "kill", "assist", "death", "dragon", "herald", "tower", "plate", "gank_attempt"
+    pub event_type: String, // "kill", "assist", "death", "dragon", "herald", "baron", "grubs", "atakhan", "tower", "plate", "gank_attempt"
     pub description: String,
     #[serde(default)]
     pub position_x: Option<i32>,

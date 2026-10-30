@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useGallery } from "./features/gallery/useGallery";
 import { MatchGallery } from "./features/gallery/components/MatchGallery";
@@ -41,6 +41,7 @@ import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
+import { useEnterOnChange } from "./core/enterMotion";
 
 import { withPercent } from "./core/benchmarkFormat";
 import { jungleRoutesOnce } from "./features/player/components/matchMoves";
@@ -240,17 +241,17 @@ export const App: React.FC = () => {
   // Envuelve un panel: oculto con display:none en vez de desmontarlo, y sin renderizar
   // su contenido hasta la primera visita.
   //
-  // Al pasar a activo, `.panel-enter` funde el panel en 120 ms, solo opacidad
-  // (movimiento.md). Si la navegación vino del teclado (`<html data-nav="kbd">`)
-  // no se anima: quien navega con el teclado ya sabe adónde va.
+  // Al pasar a activo, sus bloques entran escalonados (`Shown`, ver
+  // core/enterMotion.ts). Si la navegación vino del teclado (`<html
+  // data-nav="kbd">`) no se anima: quien navega con el teclado ya sabe adónde va.
   const panel = (path: Panel, content: React.ReactNode) => {
     const active = activePanel === path;
     return (
-      <div
+      <Shown
         key={path}
-        className={active ? "panel-enter" : undefined}
+        when={active}
+        ready={mountedPanels.has(path)}
         style={{
-          display: active ? "flex" : "none",
           width: "100%",
           height: "100%",
           flexDirection: "column",
@@ -264,7 +265,7 @@ export const App: React.FC = () => {
             <PanelActiveContext.Provider value={active}>{content}</PanelActiveContext.Provider>
           </ErrorBoundary>
         ) : null}
-      </div>
+      </Shown>
     );
   };
 
@@ -449,9 +450,10 @@ export const App: React.FC = () => {
                 virtualizador recolocara todo desde una estimación (fichas
                 pisándose unas a otras un instante) y perdía el scroll. Oculta,
                 su ResizeObserver ya sabe remedir al reaparecer. */}
-            <div
+            <Shown
+              when={!selectedMatch}
+              skipInitial
               style={{
-                display: selectedMatch ? "none" : "flex",
                 flexDirection: "column",
                 flex: 1,
                 minHeight: 0,
@@ -468,7 +470,7 @@ export const App: React.FC = () => {
                   onRetry={refreshMatches}
                 />
               </TitleOff>
-            </div>
+            </Shown>
           </>
         )}
 
@@ -542,4 +544,29 @@ const styles: Record<string, React.CSSProperties> = {
     width: "100%",
     minHeight: 0,
   },
+};
+
+/**
+ * Una caja que se oculta con `display: none` (sin desmontar lo de dentro) y
+ * que, cada vez que vuelve a verse, hace entrar sus bloques escalonados. Es
+ * el envoltorio de cada pantalla y el de la Biblioteca bajo el reproductor.
+ * `ready` espera a que el contenido exista: la primera visita a una pantalla
+ * lo monta un render después de enseñarla.
+ */
+const Shown: React.FC<{
+  when: boolean;
+  ready?: boolean;
+  /** No animar la primera vez: si lo de fuera ya entra con ella (la
+   *  Biblioteca dentro de su pantalla), se sumarían las dos entradas. */
+  skipInitial?: boolean;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}> = ({ when, ready = true, skipInitial = false, style, children }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  useEnterOnChange(ref, when && ready, { skipInitial });
+  return (
+    <div ref={ref} style={{ ...style, display: when ? "flex" : "none" }}>
+      {children}
+    </div>
+  );
 };

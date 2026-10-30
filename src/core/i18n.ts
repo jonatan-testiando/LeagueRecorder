@@ -732,8 +732,8 @@ const ES: Record<string, string> = {
   "No looking anything up. If you do not remember, guess — a wrong answer is the measurement, not a failure.":
     "Sin mirar nada. Si no te acuerdas, adivina — una respuesta errónea es la medición, no un fracaso.",
   "Submit": "Corregir",
-  "Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.":
-    "Juega una partida con LeagueRecorder abierto. Muestrea el estado en vivo para poder preguntarte después qué sabías de verdad.",
+  "Play a game with Wardline running. It samples the live game state so it can ask you afterwards what you actually knew.":
+    "Juega una partida con Wardline abierto. Muestrea el estado en vivo para poder preguntarte después qué sabías de verdad.",
   "checks/min": "miradas/min",
   "metronome": "metrónomo",
   "last quiz": "último quiz",
@@ -1136,8 +1136,8 @@ const ES: Record<string, string> = {
 
   // Primer arranque sin partidas
   "Play a game — it records itself": "Juega una partida: se graba sola",
-  "LeagueRecorder watches for the League client. When a game starts it begins recording, and when it ends it syncs with Riot and files the game here. There is nothing to press.":
-    "LeagueRecorder vigila el cliente de League. Cuando empieza una partida se pone a grabar, y al terminar la sincroniza con Riot y la archiva aquí. No hay nada que pulsar.",
+  "Wardline watches for the League client. When a game starts it begins recording, and when it ends it syncs with Riot and files the game here. There is nothing to press.":
+    "Wardline vigila el cliente de League. Cuando empieza una partida se pone a grabar, y al terminar la sincroniza con Riot y la archiva aquí. No hay nada que pulsar.",
   "Add your Riot key": "Añade tu clave de Riot",
   "Fix your Riot key": "Arregla tu clave de Riot",
   "Import a VOD": "Importar un VOD",
@@ -1197,7 +1197,7 @@ const ES: Record<string, string> = {
     "Nada pendiente: has repasado todas las partidas grabadas.",
 
   // ---- asistente de primer arranque
-  "Set up LeagueRecorder": "Configurar LeagueRecorder",
+  "Set up Wardline": "Configurar Wardline",
   "Step {n} of {total}": "Paso {n} de {total}",
   "Go to step {n}": "Ir al paso {n}",
   "Language & account": "Idioma y cuenta",
@@ -1504,7 +1504,7 @@ const ES: Record<string, string> = {
   "Rank from your last recorded game ({date})": "Rango de tu última partida grabada ({date})",
   "Current rank, from Riot": "Rango actual, según Riot",
   "Search games, champions or moments…": "Buscar partida, campeón o momento…",
-  "Search LeagueRecorder": "Buscar en LeagueRecorder",
+  "Search Wardline": "Buscar en Wardline",
   "Results": "Resultados",
   "Games": "Partidas",
   "Screens": "Pantallas",
@@ -1694,6 +1694,7 @@ const ES: Record<string, string> = {
     "Lo que decidió la partida, lo que te costó y tu rival salen de los datos de Riot de la partida.",
   "For you": "A favor",
   "Against you": "En contra",
+  "Your ult": "Tu definitiva",
   "Moments to review": "Momentos por revisar",
   "Nothing flagged in this game yet": "Nada señalado en esta partida todavía",
   "Review game": "Revisar partida",
@@ -2431,8 +2432,8 @@ const ES: Record<string, string> = {
   "No data": "Sin datos",
   "needs Riot": "falta Riot",
   "CS/min": "CS/min",
-  "Play one: LeagueRecorder detects the client, records on its own and files the game here when it ends.":
-    "Juega una: LeagueRecorder detecta el cliente, graba sola y la archiva aquí al terminar.",
+  "Play one: Wardline detects the client, records on its own and files the game here when it ends.":
+    "Juega una: Wardline detecta el cliente, graba sola y la archiva aquí al terminar.",
   // Pantalla Coach (rediseño «Ritmo», fase 4).
   "Coach": "Coach",
   "How it's calculated": "Cómo se calcula",

@@ -1265,7 +1265,7 @@ export interface ImportReport {
 }
 
 /**
- * Escribe `LeagueRecorder-backup-YYYYMMDD-HHMM.zip` en `destDir` y devuelve la
+ * Escribe `Wardline-backup-YYYYMMDD-HHMM.zip` en `destDir` y devuelve la
  * ruta del fichero. Sin vídeos: sólo los JSON (notas, comentarios, momentos
  * revisados, entrenamiento y ajustes SIN la clave de Riot).
  */

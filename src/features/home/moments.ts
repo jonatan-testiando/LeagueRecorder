@@ -128,6 +128,7 @@ function playKind(e: MatchEvent): string | null {
     case "DragonKill": return "dragon";
     case "BaronKill": return "baron";
     case "HeraldKill": return "herald";
+    case "HordeKill": return "grubs";
     case "TowerKill": return "tower";
     case "InhibKill": return "inhibitor";
     default: return null;

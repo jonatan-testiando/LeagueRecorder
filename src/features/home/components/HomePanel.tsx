@@ -120,23 +120,6 @@ export interface HomePanelProps {
 /** Retratos de la forma reciente. */
 const FORM_GAMES = 10;
 
-/** La primera visita de la sesión entra escalonada; las siguientes, no. */
-const VISTO_KEY = "hoy-visto";
-const yaVisto = (): boolean => {
-  try {
-    return sessionStorage.getItem(VISTO_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
-const marcarVisto = () => {
-  try {
-    sessionStorage.setItem(VISTO_KEY, "1");
-  } catch {
-    /* sin almacenamiento: se vuelve a escalonar, que no rompe nada */
-  }
-};
-
 /** El KDA guardado ("9/3/12") o el contado de los eventos: el mismo criterio que la biblioteca. */
 const kdaOf = (m: MatchMetadata): KDA => {
   if (m.kda) {
@@ -149,8 +132,6 @@ const kdaOf = (m: MatchMetadata): KDA => {
 /** Tiene datos de Riot: el mismo criterio que la píldora de captura. */
 const sincronizada = (m: MatchMetadata): boolean => !!m.riot_match_id || (m.participants?.length ?? 0) > 0;
 
-/** El índice de la entrada escalonada, como variable CSS. */
-const paso = (i: number) => ({ "--i": i }) as React.CSSProperties;
 
 export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, onOpenMatch, onGoTraining }) => {
   const { t, lang } = useLang();
@@ -176,10 +157,6 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const [syncError, setSyncError] = useState<string | null>(null);
   const [looks, setLooks] = useState<CameraLook[]>([]);
   const [plays, setPlays] = useState<MatchPlays | null>(null);
-  // Se decide al montar: volver a Hoy en la misma sesión no repite la entrada.
-  // Y se apaga al acabar, para que lo que monte después (una tarjeta que llega
-  // con las miradas, la franja tras sincronizar) no entre escalonado.
-  const [entrada, setEntrada] = useState(() => !yaVisto());
 
   useEffect(() => {
     let vivo = true;
@@ -333,15 +310,8 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
     }
   }, [aSincronizar, refreshMatches]);
 
-  // La entrada escalonada se pinta una vez por sesión, cuando hay algo que
-  // pintar (no el esqueleto).
+  // Con algo que pintar (no el esqueleto).
   const listo = !loading && !esqueleto;
-  useEffect(() => {
-    if (!listo) return;
-    marcarVisto();
-    const id = window.setTimeout(() => setEntrada(false), 600);
-    return () => window.clearTimeout(id);
-  }, [listo]);
 
   // Enter revisa lo que dice el botón oro, como Enter en la Biblioteca abre la
   // fila. Solo con nada enfocado: Enter sobre un botón o un campo es suyo.
@@ -413,7 +383,9 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
 
   // Primera visita: escalonado de héroe, momentos y columna lateral, sin el
   // fundido de navegación encima (serían dos movimientos a la vez).
-  const raiz = entrada ? "home-panel hoy--entrada" : "panel-enter home-panel";
+  // La entrada escalonada la hace el envoltorio de la pantalla en App
+  // (core/enterMotion.ts), en cada visita y esperando al contenido.
+  const raiz = "home-panel";
 
   /* --------------------------------------------------------- sin partidas */
   if (own.length === 0 || !ultima) {
@@ -422,11 +394,11 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
         <div className="home-page">
           <div className="home-wrap">
             {cabecera}
-            <section className="home-hero home-hero--empty" style={paso(0)}>
+            <section className="home-hero home-hero--empty">
               <div className="home-empty">
                 <h2 className="t-section home-empty__title">{t("Play a game — it records itself")}</h2>
                 <p className="t-body home-prose">
-                  {t("LeagueRecorder watches for the League client. When a game starts it begins recording, and when it ends it syncs with Riot and files the game here. There is nothing to press.")}
+                  {t("Wardline watches for the League client. When a game starts it begins recording, and when it ends it syncs with Riot and files the game here. There is nothing to press.")}
                 </p>
                 <div className="home-empty__actions">
                   <Button variant="primary" icon={<Wand2 size={16} />} onClick={() => { abrirAsistente().catch(console.error); }}>
@@ -579,7 +551,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
           )}
 
           {/* ================================================== héroe */}
-          <section className={`home-hero home-hero--${tono}`} aria-labelledby="home-hero-lbl" style={paso(0)}>
+          <section className={`home-hero home-hero--${tono}`} aria-labelledby="home-hero-lbl">
             <ChampionWash champion={ultima.champion} intensity={0.3} />
             <div className="home-hero__main">
               <div className="home-hero__id">
@@ -875,7 +847,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
 
             {/* ============================================== columna derecha */}
             <aside className="home-col home-col--side">
-              <section className="home-card home-focus" aria-labelledby="home-focus-lbl" style={paso(2)}>
+              <section className="home-card home-focus" aria-labelledby="home-focus-lbl">
                 <div className="home-card__head">
                   <span id="home-focus-lbl" className="t-label home-card__label">
                     {planAqui ? t("Your focus · {n}-game plan", { n: planActivo!.target }) : t("Your focus")}
@@ -985,7 +957,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                 )}
               </section>
 
-              <section className="home-card home-form" aria-labelledby="home-form-lbl" style={paso(3)}>
+              <section className="home-card home-form" aria-labelledby="home-form-lbl">
                 <div className="home-card__head">
                   <span id="home-form-lbl" className="t-label home-card__label">{t("Recent form")}</span>
                   <span className="t-small home-form__wl">

@@ -276,7 +276,7 @@ export const AwarenessQuiz: React.FC = () => {
           text={
             samplingOff
               ? t("Post-game quiz sampling is off, so no game state is being recorded. Turn it on in Setup and play a game.")
-              : t("Play a game with LeagueRecorder running. It samples the live game state so it can ask you afterwards what you actually knew.")
+              : t("Play a game with Wardline running. It samples the live game state so it can ask you afterwards what you actually knew.")
           }
         />
       </div>

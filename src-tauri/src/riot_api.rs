@@ -1935,12 +1935,19 @@ fn process_timeline_full(
                     {
                         let pos_x = ev.position.as_ref().map(|p| p.x);
                         let pos_y = ev.position.as_ref().map(|p| p.y);
+                        // Cada monstruo con su tipo. Las larvas (HORDE) caían en
+                        // el `_` como "dragon" y el Barón como "herald": en la
+                        // línea de tiempo salían dragones y heraldos de más. Las
+                        // partidas guardadas así las corrige el frontend por la
+                        // descripción (`fromMarker` en matchEvents.ts).
                         let mtype = ev.monsterType.as_deref().unwrap_or("Objetivo");
                         let (etype, desc) = match mtype {
                             "DRAGON" => ("dragon", "Dragón abatido"),
                             "RIFTHERALD" | "HERALD" => ("herald", "Heraldo del Vacío"),
-                            "BARON_NASHOR" => ("herald", "Barón Nashor"),
-                            _ => ("dragon", "Objetivo épico"),
+                            "BARON_NASHOR" => ("baron", "Barón Nashor"),
+                            "HORDE" => ("grubs", "Larvas del Vacío"),
+                            "ATAKHAN" => ("atakhan", "Atakhan"),
+                            _ => ("epic", "Objetivo épico"),
                         };
                         timeline_markers.push(marker(sec, etype, desc, pos_x, pos_y));
                     }

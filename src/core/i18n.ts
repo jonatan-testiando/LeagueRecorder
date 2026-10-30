@@ -2402,6 +2402,10 @@ const ES: Record<string, string> = {
   "Copied": "Copiado",
   // Carga de la biblioteca (Hoy y Biblioteca).
   "Loading your games…": "Cargando tus partidas…",
+  // Bienvenida al abrir la app (BootSplash).
+  "Welcome back": "Bienvenido de vuelta",
+  "1 game ready": "1 partida lista",
+  "{n} games ready": "{n} partidas listas",
   // Ajustes · Apariencia (rediseño «Ritmo», 3e).
   "Theme": "Tema",
   "Interface size": "Tamaño de la interfaz",

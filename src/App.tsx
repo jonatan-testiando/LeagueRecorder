@@ -42,6 +42,7 @@ import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
 import { useEnterOnChange } from "./core/enterMotion";
+import { BootSplash } from "./components/BootSplash";
 
 import { withPercent } from "./core/benchmarkFormat";
 import { jungleRoutesOnce } from "./features/player/components/matchMoves";
@@ -206,6 +207,9 @@ export const App: React.FC = () => {
   // después (tras borrar, al acabar una partida) ya tienen lista que enseñar.
   const matchesLoaded = useAppStore(state => state.matchesLoaded);
   const firstLoad = matchesLoading && !matchesLoaded;
+  // La bienvenida del arranque (BootSplash): mientras está, las pantallas no
+  // hacen su entrada escalonada, que pasaría debajo sin verse; la hacen al irse.
+  const [splash, setSplash] = useState(true);
 
   const goTo = (path: string, origin: NavOrigin = "ptr") => {
     setNavOrigin(origin);
@@ -250,7 +254,7 @@ export const App: React.FC = () => {
       <Shown
         key={path}
         when={active}
-        ready={mountedPanels.has(path)}
+        ready={mountedPanels.has(path) && !splash}
         style={{
           width: "100%",
           height: "100%",
@@ -283,6 +287,13 @@ export const App: React.FC = () => {
 
   return (
     <TitleSlotContext.Provider value={titleSlot}>
+      {splash && (
+        <BootSplash
+          ready={matchesLoaded || !!matchesError}
+          games={matches.length}
+          onGone={() => setSplash(false)}
+        />
+      )}
       <div className="app-body" style={styles.appContainer}>
       {/* Raíl de A: sube hasta arriba con la marca y solo lleva iconos, siempre
           (ya no se pliega con el reproductor: mide lo mismo que plegado). El

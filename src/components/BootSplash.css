@@ -1,0 +1,171 @@
+/* =========================================================================
+   Bienvenida al abrir la app (BootSplash.tsx).
+
+   Es de las veces que se ven pocas al día, así que se permite algo de
+   ceremonia, pero corta y sin rebote: la baldosa se asienta (de 0,92, nunca
+   de cero), los tres carriles se dibujan (600 ms, ease-in-out: algo que
+   recorre), las bases aparecen al final y el texto sube detrás. Salir es más
+   rápido que entrar: 280 ms, un fundido con un leve aumento, como una puerta
+   que se abre hacia la app.
+
+   Solo tokens, salvo la marca, que tiene sus dos colores fijos.
+   ========================================================================= */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(60% 50% at 50% 42%, color-mix(in srgb, #d4002a 9%, transparent), transparent 70%),
+    var(--ground);
+  cursor: default;
+  animation: boot-in 200ms var(--e-out) both;
+}
+.boot[data-out] { animation: boot-out 280ms cubic-bezier(0.23, 1, 0.32, 1) forwards; pointer-events: none; }
+@keyframes boot-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes boot-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.02); }
+}
+
+.boot__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+/* --- la marca ------------------------------------------------------------ */
+.boot__mark { overflow: visible; margin-bottom: var(--space-2); }
+.boot__mark .bm-tile {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bm-tile-in 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.boot__mark .bm-lanes {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  /* `both` y opacidad 0 al empezar: Chrome reinicia el trazo en cada carril,
+     y los extremos redondeados de un trazo de largo cero asomaban como tres
+     puntos. Se dejan ver cuando ya son rayas cortas. */
+  animation: bm-draw 600ms cubic-bezier(0.77, 0, 0.175, 1) 220ms both;
+}
+.boot__mark .bm-base {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bm-base-in 260ms cubic-bezier(0.23, 1, 0.32, 1) 700ms both;
+}
+@keyframes bm-tile-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes bm-draw {
+  0% { stroke-dashoffset: 1; opacity: 0; }
+  20% { opacity: 0; }
+  32% { opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+@keyframes bm-base-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* --- el texto ------------------------------------------------------------ */
+.boot__name,
+.boot__hello,
+.boot__state { animation: boot-rise 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards; }
+.boot__name { animation-delay: 380ms; }
+.boot__hello { animation-delay: 460ms; }
+.boot__state { animation-delay: 540ms; }
+@keyframes boot-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.boot__name {
+  margin: 0;
+  font-size: var(--fs-28);
+  line-height: var(--lh-28);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.boot__hello {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  color: var(--muted);
+}
+.boot__rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+.boot__rank::before { content: "·"; color: var(--faint); font-weight: 400; margin-right: 2px; }
+.boot__rank img { width: 22px; height: 22px; }
+
+/* Lo que está cargando: una barra fina que recorre mientras lee y se llena
+   al acabar, y la frase. */
+.boot__state {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.boot__bar {
+  position: relative;
+  width: 160px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  overflow: hidden;
+}
+.boot__bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: #d4002a;
+  animation: boot-scan 1100ms cubic-bezier(0.77, 0, 0.175, 1) infinite;
+}
+.boot__bar[data-done]::after {
+  width: 100%;
+  animation: none;
+  transform: none;
+  transition: width 240ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes boot-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+.boot__stateTxt {
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Movimiento reducido: entra y sale con fundidos, sin dibujo ni subidas. */
+@media (prefers-reduced-motion: reduce) {
+  .boot__mark .bm-tile,
+  .boot__mark .bm-base,
+  .boot__name,
+  .boot__hello,
+  .boot__state { animation: boot-in 200ms ease both; }
+  .boot__mark .bm-lanes { animation: none; stroke-dashoffset: 0; }
+  .boot__bar::after { animation: none; width: 100%; opacity: 0.5; }
+  .boot[data-out] { animation: boot-in 200ms ease reverse forwards; }
+}

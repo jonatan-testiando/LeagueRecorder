@@ -11,10 +11,14 @@ import React from "react";
  * una, se cambian las dos.
  *
  * Son dos colores fijos a propósito: una marca no cambia con el tema.
+ *
+ * `animated` pone las clases de la bienvenida (BootSplash.css): la baldosa se
+ * asienta, los carriles se dibujan y las bases aparecen al final.
  */
-export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
+export const BrandMark: React.FC<{ size?: number; className?: string; animated?: boolean }> = ({
   size = 16,
   className,
+  animated = false,
 }) => (
   <svg
     width={size}
@@ -25,15 +29,17 @@ export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
     aria-hidden="true"
     focusable="false"
   >
-    <rect x={1} y={1} width={22} height={22} rx={6.5} fill="#d4002a" />
+    <rect x={1} y={1} width={22} height={22} rx={6.5} fill="#d4002a" className={animated ? "bm-tile" : undefined} />
     <path
       d="M6.2 13.5V6.2h7.3M10.5 17.8h7.3v-7.3M9.2 14.8l5.6-5.6"
       stroke="#f2efe9"
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
+      className={animated ? "bm-lanes" : undefined}
+      pathLength={animated ? 1 : undefined}
     />
-    <rect x={4} y={15.5} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" />
-    <rect x={15.5} y={4} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" />
+    <rect x={4} y={15.5} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" className={animated ? "bm-base" : undefined} />
+    <rect x={15.5} y={4} width={4.5} height={4.5} rx={1.3} fill="#f2efe9" className={animated ? "bm-base" : undefined} />
   </svg>
 );

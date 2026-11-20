@@ -1605,14 +1605,13 @@ fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCach
         game_duration: details.info.gameDuration,
     };
     if let Ok(s) = serde_json::to_string(&c) {
-        let _ = std::fs::write(&ruta, s);
+        let _ = crate::storage::escribir_atomico(&ruta, s.as_bytes());
     }
     Some(c)
 }
 
-#[tauri::command]
-pub async fn get_pressure_summary() -> PressureSummary {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_pressure_summary");
+/// El cálculo de [`get_pressure_summary`], sin memo.
+pub async fn calcular_pressure_summary() -> PressureSummary {
     let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0,
         with_gains: 0, without_gains: 0, deaths: 0, enemy_seconds: 0.0, net_gold: 0.0,
         farm_denied: 0.0, own_farm_lost: 0.0, local_gold: 0.0, team_elsewhere: 0.0,
@@ -1651,6 +1650,14 @@ pub async fn get_pressure_summary() -> PressureSummary {
     }
     sum.episodes.sort_by(|a, b| b.date.cmp(&a.date).then(a.game_start.total_cmp(&b.game_start)));
     sum
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_pressure_summary() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_pressure_summary");
+    crate::indice::memo_async("pressure_summary", calcular_pressure_summary).await
 }
 
 fn pressure_video_clock(w: &mut crate::pressure::PressureWindow, offset: f64) {

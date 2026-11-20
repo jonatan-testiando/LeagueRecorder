@@ -551,9 +551,8 @@ pub async fn get_hits_taken(match_id: String) -> GolpesReport {
 const PARTIDAS_HISTORIAL: usize = 10;
 
 /// Lo mismo sobre tus últimas partidas con el HUD leído.
-#[tauri::command]
-pub async fn get_hits_taken_career() -> GolpesReport {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_hits_taken_career");
+/// El cálculo de [`get_hits_taken_career`], sin memo.
+pub async fn calcular_hits_taken_career() -> GolpesReport {
     tokio::task::spawn_blocking(|| {
         let cal = crate::camera_input::Calibracion::actual();
         let mut total = GolpesReport { status: "no_hud".into(), ..Default::default() };
@@ -594,6 +593,14 @@ pub async fn get_hits_taken_career() -> GolpesReport {
     })
     .await
     .unwrap_or_else(|_| estado("no_riot"))
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_hits_taken_career() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hits_taken_career");
+    crate::indice::memo_async("hits_taken_career", calcular_hits_taken_career).await
 }
 
 #[cfg(test)]

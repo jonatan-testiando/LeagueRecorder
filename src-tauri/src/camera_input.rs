@@ -320,7 +320,7 @@ pub fn write_report(m: &MatchMetadata, looks: &[Look]) {
         "stills_skipped": 0,
     });
     if let Ok(txt) = serde_json::to_string(&informe) {
-        let _ = std::fs::write(crate::camera_snaps::report_path(&m.id), txt);
+        let _ = crate::storage::escribir_atomico(&crate::camera_snaps::report_path(&m.id), txt.as_bytes());
     }
 }
 
@@ -465,7 +465,7 @@ fn marcar_visto(id: &str, previo: Option<crate::camera_snaps::SnapReport>) {
     });
     r.from_input_v = BACKFILL_V;
     if let Ok(txt) = serde_json::to_string(&r) {
-        let _ = std::fs::write(crate::camera_snaps::report_path(id), txt);
+        let _ = crate::storage::escribir_atomico(&crate::camera_snaps::report_path(id), txt.as_bytes());
     }
 }
 

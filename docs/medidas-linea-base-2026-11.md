@@ -112,3 +112,24 @@ Arranque real ya migrado:
 | Lista visible | 0,9 s → 0,59 s | 2,8 s → 0,63 s |
 | Home completa | 1,2 s → 0,70 s | 6,0 s → 1,5 s |
 | Mantenimiento terminado | 1,1 s → 0,41 s | 7,1 s → 1,1 s |
+
+## Tras la fase 3 (2026-11-19): resúmenes guardados en SQLite
+
+Lo que quedaba (perfil con 1.000 partidas, resumen de presión): ~0,8 s de llamadas al sistema de ficheros para comprobar fechas de las cachés de cada partida y ~0,6 s de leer y parsear 28 MB de esas cachés, en cada petición. Pasar la lógica a SQL no lo arreglaba: el coste no era agregar, era recalcular desde cero cada vez.
+
+Qué cambió: `indice.db` (rusqlite con SQLite incluido, WAL, junto a la config) guarda cada resumen ya calculado (presión, coach, punto ciego, estados de partida, rutas de jungla, dieta de hechizos, historial de cámara, golpes, oleadas, manos) con la firma de la biblioteca con la que se calculó. La firma es un solo listado de carpetas: versión de la app, configuración, y nombre y fecha de cada carpeta de partida; todo lo que la app escribe en ellas ya es atómico (temporal + renombrado), así que cualquier cambio cambia la fecha de su carpeta. Si la firma coincide, el comando devuelve el JSON guardado tal cual (`RawValue`), sin recalcular ni re-serializar. Solo se guarda si la firma es la misma antes y después de calcular. El índice es desechable (se rehace solo si falta o está dañado) y Ajustes → Almacenamiento → «Resúmenes guardados» lo vacía a mano.
+
+| Resumen (estado estable) | 300 fase 2 | 300 fase 3 | 1.000 fase 2 | 1.000 fase 3 |
+|---|---|---|---|---|
+| `get_pressure_summary` | 359 ms | 4 ms | 1,23 s | 9 ms |
+| `get_coach_summary` | 490 ms | 2 ms | 1,66 s | 2 ms* |
+| `get_blind_spot` | 190 ms | 1 ms | 620 ms | 2 ms |
+| `get_game_states` | 420 ms | 1 ms | 1,04 s | 2 ms |
+| `get_jungle_routes` | 328 ms | 3 ms | 1,10 s | 10 ms |
+| `get_spell_diet` | 410 ms | 1 ms* | 1,34 s | 1 ms* |
+
+\* En el banco la 2.ª ejecución aún recalcula estos porque el propio banco comenta una partida en la pasada anterior: la primera petición tras un cambio reescribe la caché de esa partida, la firma cambia por el camino y no se guarda; la siguiente sí. Comprobado con el test `que_cambia_al_calcular`.
+
+Arranque real, 300 partidas, biblioteca sin cambios: los tres resúmenes de Home salen del índice en 5-9 ms a los 0,74 s del arranque; Home completa en ~0,85 s (fase 2: 1,5 s; fase 0: 6,0 s).
+
+Lo siguiente que pesa: `get_recorded_matches` manda la biblioteca entera al WebView en JSON (6 MB con 300, 20 MB con 1.000) y el plan de 10 partidas (`get_coach_plan`, 100-150 ms) no está en el índice porque depende de las sesiones guardadas en `%APPDATA%`.

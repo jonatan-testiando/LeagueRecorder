@@ -71,7 +71,7 @@ pub(crate) fn de_partida(meta: &crate::storage::MatchMetadata) -> Result<MatchPl
         curve,
     };
     if let Ok(texto) = serde_json::to_string(&out) {
-        let _ = std::fs::write(&cache, texto);
+        let _ = crate::storage::escribir_atomico(&cache, texto.as_bytes());
     }
     Ok(out)
 }

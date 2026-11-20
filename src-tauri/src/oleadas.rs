@@ -583,9 +583,8 @@ pub async fn get_waves(app: tauri::AppHandle, match_id: String) -> WavesReport {
 const PARTIDAS_HISTORIAL: usize = 15;
 
 /// Lo mismo sobre tus últimas partidas con las oleadas leídas, sin la serie.
-#[tauri::command]
-pub async fn get_waves_career() -> WavesReport {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_waves_career");
+/// El cálculo de [`get_waves_career`], sin memo.
+pub async fn calcular_waves_career() -> WavesReport {
     tokio::task::spawn_blocking(|| {
         let mut total = estado("no_waves");
         for m in crate::storage::load_all_matches().into_iter().filter(|m| !m.is_vod) {
@@ -609,6 +608,14 @@ pub async fn get_waves_career() -> WavesReport {
     })
     .await
     .unwrap_or_else(|_| estado("no_riot"))
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_waves_career() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_waves_career");
+    crate::indice::memo_async("waves_career", calcular_waves_career).await
 }
 
 #[cfg(test)]

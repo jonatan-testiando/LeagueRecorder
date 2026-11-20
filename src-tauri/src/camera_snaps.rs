@@ -259,7 +259,7 @@ pub async fn analyze_camera_snaps(
         from_input_v: 0,
     };
     if let Ok(json) = serde_json::to_string(&report) {
-        let _ = std::fs::write(report_path(&match_id), json);
+        let _ = crate::storage::escribir_atomico(&report_path(&match_id), json.as_bytes());
     }
 
     // El timeline solo necesita los tiempos: van en la metadata de la partida.
@@ -466,9 +466,8 @@ pub struct ZoneHistoryRow {
 /// `get_blind_spot` responde "¿cuál es mi punto ciego?"; esto responde la
 /// pregunta que le sigue: "¿está mejorando?". La foto agregada no distingue
 /// mejorar de empeorar.
-#[tauri::command]
-pub async fn get_camera_zone_history() -> Vec<ZoneHistoryRow> {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_zone_history");
+/// El cálculo de [`get_camera_zone_history`], sin memo.
+pub async fn calcular_camera_zone_history() -> Vec<ZoneHistoryRow> {
     let mut out: Vec<ZoneHistoryRow> = Vec::new();
     for m in crate::storage::load_all_matches() {
         if m.is_vod {
@@ -496,9 +495,16 @@ pub async fn get_camera_zone_history() -> Vec<ZoneHistoryRow> {
     out
 }
 
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
 #[tauri::command]
-pub async fn get_blind_spot() -> Option<BlindSpot> {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_blind_spot");
+pub async fn get_camera_zone_history() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_zone_history");
+    crate::indice::memo_async("camera_zone_history", calcular_camera_zone_history).await
+}
+
+/// El cálculo de [`get_blind_spot`], sin memo.
+pub async fn calcular_blind_spot() -> Option<BlindSpot> {
     let mut peor_por_partida: Vec<(String, String, f64)> = Vec::new(); // (partida, carril, hueco)
     let mut huecos: std::collections::HashMap<String, Vec<f64>> = Default::default();
     let mut partidas = 0usize;
@@ -557,6 +563,14 @@ pub async fn get_blind_spot() -> Option<BlindSpot> {
         lane: carril,
         games: partidas,
     })
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_blind_spot() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_blind_spot");
+    crate::indice::memo_async("blind_spot", calcular_blind_spot).await
 }
 
 #[tauri::command]

@@ -3,6 +3,7 @@ mod spells;
 mod ajustes_juego;
 mod medida;
 mod estela;
+mod indice;
 #[cfg(test)]
 mod medida_banco;
 mod attribution;
@@ -381,6 +382,7 @@ pub fn run() {
             storage::get_vod_reviews,
             storage::get_match_details,
             storage::get_match_trail,
+            indice::rebuild_index,
             cv_analyzer::process_vod,
             cv_analyzer::cancel_vod,
             training::get_training_config,

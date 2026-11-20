@@ -21,7 +21,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["raw_value"] }
 tokio = { version = "1", features = ["full"] }
 # `stream`: la subida de clips va por cuerpo troceado (`Body::wrap_stream`) en
 # vez de meter el fichero entero en memoria — un recorte de 200 MB lo era.
@@ -49,6 +49,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # árbol (las mismas versiones que usa reqwest 0.11), no se descarga nada nuevo.
 rustls = "0.21"
 rustls-pemfile = "1"
+rusqlite = { version = "0.43", features = ["bundled"] }
 
 # Solo para pruebas: el corpus de partidas se guarda comprimido y los ajustes
 # (percentiles por rol, pesos de objetivos) se recalculan desde ahi. No viaja en

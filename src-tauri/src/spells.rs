@@ -485,9 +485,8 @@ pub async fn get_spell_autopsy(match_id: String) -> Result<SpellReport, String> 
 ///
 /// Sólo mira lo que hay en disco, así que no gasta cuota de API y responde
 /// aunque no haya clave configurada.
-#[tauri::command]
-pub async fn get_spell_diet() -> Result<SpellReport, String> {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_spell_diet");
+/// El cálculo de [`get_spell_diet`], sin memo.
+pub async fn calcular_spell_diet() -> Result<SpellReport, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let mut total = SpellReport::default();
         for m in crate::storage::load_all_matches() {
@@ -505,6 +504,14 @@ pub async fn get_spell_diet() -> Result<SpellReport, String> {
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_spell_diet() -> Result<Box<serde_json::value::RawValue>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_spell_diet");
+    crate::indice::memo_result_async("spell_diet", calcular_spell_diet).await
 }
 
 /// Versión de la caché por partida. Súbela si cambia `analyze` o `SpellReport`.

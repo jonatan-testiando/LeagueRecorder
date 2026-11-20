@@ -251,3 +251,40 @@ fn medida_banco() {
     println!("{:<48} {:>9.1} {:>9.1}", "TOTAL", total1, total2);
     let _ = std::fs::remove_dir_all(&appdata);
 }
+
+/// Diagnóstico del índice: qué ficheros de la biblioteca cambia calcular el
+/// coach y la dieta de hechizos. Si alguno cambia en CADA cálculo, la firma de
+/// la biblioteca nunca se estabiliza y ese resumen no se guarda nunca.
+#[test]
+#[ignore]
+fn que_cambia_al_calcular() {
+    let Ok(biblioteca) = std::env::var("MEDIR_BIBLIOTECA") else { return };
+    let appdata = std::env::temp_dir().join(format!("wardline-cambia-{}", std::process::id()));
+    std::fs::create_dir_all(appdata.join("LeagueRecorder")).unwrap();
+    std::fs::write(appdata.join("LeagueRecorder").join("config.json"), serde_json::to_vec(&serde_json::json!({"save_directory": biblioteca})).unwrap()).unwrap();
+    std::env::set_var("APPDATA", &appdata);
+    let foto = || -> std::collections::BTreeMap<String, std::time::SystemTime> {
+        let mut m = std::collections::BTreeMap::new();
+        for e in std::fs::read_dir(&biblioteca).unwrap().flatten() {
+            if let Ok(rd) = std::fs::read_dir(e.path()) {
+                for f in rd.flatten() {
+                    if let Ok(t) = f.metadata().and_then(|x| x.modified()) {
+                        m.insert(f.path().to_string_lossy().to_string(), t);
+                    }
+                }
+            }
+        }
+        m
+    };
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    for nombre in ["coach", "spells"] {
+        for vuelta in 0..2 {
+            let a = foto();
+            if nombre == "coach" { rt.block_on(crate::coach::calcular_coach_summary()); } else { let _ = rt.block_on(crate::spells::calcular_spell_diet()); }
+            let b = foto();
+            let cambios: Vec<_> = b.iter().filter(|(k, v)| a.get(*k) != Some(v)).map(|(k, _)| k.rsplit(|c: char| c == '/' || c == std::path::MAIN_SEPARATOR).take(2).collect::<Vec<_>>().join(" < ")).collect();
+            println!("{nombre} vuelta {vuelta}: {} cambios {:?}", cambios.len(), cambios.iter().take(5).collect::<Vec<_>>());
+        }
+    }
+    let _ = std::fs::remove_dir_all(&appdata);
+}

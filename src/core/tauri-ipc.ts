@@ -1336,6 +1336,11 @@ export interface ImportReport {
  * ruta del fichero. Sin vídeos: sólo los JSON (notas, comentarios, momentos
  * revisados, entrenamiento y ajustes SIN la clave de Riot).
  */
+/** Vacía el índice de resúmenes (Home, Coach, Patrones): se recalculan al pedirlos. */
+export const rebuildIndex = async (): Promise<void> => {
+  return await invoke<void>("rebuild_index");
+};
+
 export const exportBackup = async (destDir: string): Promise<string> => {
   return await invoke<string>("export_backup", { destDir });
 };

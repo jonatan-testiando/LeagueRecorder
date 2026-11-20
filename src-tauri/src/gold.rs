@@ -50,7 +50,7 @@ pub fn write(dir: &Path, samples: &[(f64, f64)]) {
     }
     let f = Fichero { v: 1, samples: samples.to_vec() };
     if let Ok(s) = serde_json::to_string(&f) {
-        if let Err(e) = std::fs::write(dir.join(FICHERO), s) {
+        if let Err(e) = crate::storage::escribir_atomico(&dir.join(FICHERO), s.as_bytes()) {
             eprintln!("No se pudo guardar el oro de la partida: {e}");
         }
     }

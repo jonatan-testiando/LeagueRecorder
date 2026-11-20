@@ -215,9 +215,8 @@ pub struct EstadoPartidas {
 
 /// El estado y el rumbo de todas tus partidas del coach, con las líneas del
 /// corpus. Patrones agrega lo que le toque según sus filtros.
-#[tauri::command]
-pub async fn get_game_states() -> EstadoPartidas {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_game_states");
+/// El cálculo de [`get_game_states`], sin memo.
+pub async fn calcular_game_states() -> EstadoPartidas {
     let games = tokio::task::spawn_blocking(|| {
         crate::storage::load_all_matches()
             .iter()
@@ -228,6 +227,14 @@ pub async fn get_game_states() -> EstadoPartidas {
     .await
     .unwrap_or_default();
     EstadoPartidas { games, corpus: linea_corpus() }
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_game_states() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_game_states");
+    crate::indice::memo_async("game_states", calcular_game_states).await
 }
 
 #[cfg(test)]

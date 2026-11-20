@@ -1325,6 +1325,12 @@ const ES: Record<string, string> = {
     "Apúntala a una carpeta de OneDrive o Google Drive y cada nota y cada estadística se sincronizan solas.",
   "Not set": "Sin configurar",
   "Turn the mirror off": "Apagar el espejo",
+  "Saved summaries": "Resúmenes guardados",
+  "Home, Coach and Patterns keep their totals ready and only redo them when your library changes. If a number looks out of date, recalculate them.":
+    "Hoy, Coach y Patrones guardan sus totales ya calculados y solo los rehacen cuando cambia tu biblioteca. Si alguna cifra parece desfasada, recalcúlalos.",
+  "Recalculate": "Recalcular",
+  "Recalculating…": "Recalculando…",
+  "Summaries will be recalculated": "Los resúmenes se recalcularán",
   "Clear": "Quitar",
   // Mantenimiento de la biblioteca al arrancar. Las fases llegan por variable.
   "Updating library: {phase} {done}/{total}": "Actualizando la biblioteca: {phase} {done}/{total}",

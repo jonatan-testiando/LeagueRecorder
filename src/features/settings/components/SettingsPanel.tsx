@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, getUiScale, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
+import { getRecorderStatus, startManualRecording, stopManualRecording, getAudioStatus, getVideoSettings, setVideoSettings, getAppConfig, setAppConfig, getUiScale, checkRiotKey, getDiskUsage, getHotkeys, setHotkeys, exportBackup, importBackup, rebuildIndex, getMinimapDetection, getLcuStatus, AppConfig, type DiskSpaceInfo, type HotkeyConfig, type HudSettings, type LcuStatus, type MaintenanceProgress } from "../../../core/tauri-ipc";
 import { formatDecimal, withPercent } from "../../../core/benchmarkFormat";
 import { queueKey } from "../../../core/matchStats";
 // La lista de regiones se comparte con el asistente de primer arranque.
@@ -313,7 +313,7 @@ export const SettingsPanel: React.FC = () => {
   const { restart: restartOnboarding } = useOnboarding();
   // Copia de seguridad: se deshabilitan los botones mientras el zip se escribe
   // o se lee, que puede tardar unos segundos con la biblioteca llena.
-  const [backupBusy, setBackupBusy] = useState<"export" | "import" | null>(null);
+  const [backupBusy, setBackupBusy] = useState<"export" | "import" | "index" | null>(null);
   /**
    * Mantenimiento de la biblioteca al arrancar (evento `library_maintenance`).
    *
@@ -531,6 +531,25 @@ export const SettingsPanel: React.FC = () => {
       });
     } catch (e) {
       showError(t("Couldn't export the backup: {msg}", { msg: String(e) }));
+    } finally {
+      setBackupBusy(null);
+    }
+  };
+
+  /**
+   * Vacía el índice de resúmenes. Los totales de Home, Coach y Patrones se
+   * guardan ya calculados y solo se rehacen cuando cambia algo de la
+   * biblioteca; esto es la salida por si alguno se quedara viejo.
+   */
+  const handleRebuildIndex = async () => {
+    setBackupBusy("index");
+    try {
+      await rebuildIndex();
+      // Que los resúmenes montados se pidan de nuevo ya.
+      useAppStore.setState((s) => ({ analisis: s.analisis + 1 }));
+      toast({ title: t("Summaries will be recalculated"), tone: "success" });
+    } catch (e) {
+      showError(String(e));
     } finally {
       setBackupBusy(null);
     }
@@ -1053,6 +1072,21 @@ export const SettingsPanel: React.FC = () => {
           >
             <X size={13} />
             {t("Clear")}
+          </button>
+        </Row>
+
+        <Row
+          label={t("Saved summaries")}
+          desc={t("Home, Coach and Patterns keep their totals ready and only redo them when your library changes. If a number looks out of date, recalculate them.")}
+          wrap
+        >
+          <button
+            onClick={handleRebuildIndex}
+            className="btn btn--ghost btn--sm"
+            disabled={backupBusy !== null}
+          >
+            <RefreshCw size={13} />
+            {backupBusy === "index" ? t("Recalculating…") : t("Recalculate")}
           </button>
         </Row>
       </section>

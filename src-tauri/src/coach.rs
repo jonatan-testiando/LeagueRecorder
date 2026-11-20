@@ -677,7 +677,7 @@ pub(crate) fn cacheada(meta: &crate::storage::MatchMetadata) -> Option<PartidaCo
     }
     let p = analizar(meta)?;
     if let Ok(texto) = serde_json::to_string(&p) {
-        let _ = std::fs::write(&cache, texto);
+        let _ = crate::storage::escribir_atomico(&cache, texto.as_bytes());
     }
     Some(p)
 }
@@ -944,10 +944,17 @@ pub fn resumen(partidas: &[PartidaCoach]) -> Resumen {
 }
 
 /// Las categorías, los tramos y el foco sobre todas tus partidas grabadas.
-#[tauri::command]
-pub async fn get_coach_summary() -> Resumen {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_coach_summary");
+/// El cálculo de [`get_coach_summary`], sin memo.
+pub async fn calcular_coach_summary() -> Resumen {
     tokio::task::spawn_blocking(|| resumen(&tus_partidas())).await.unwrap_or_else(|_| resumen(&[]))
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_coach_summary() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_coach_summary");
+    crate::indice::memo_async("coach_summary", calcular_coach_summary).await
 }
 
 /// Las jugadas del coach en una partida: «Lo que te costó esta partida» enseña

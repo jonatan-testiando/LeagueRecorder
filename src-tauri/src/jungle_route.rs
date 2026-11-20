@@ -566,9 +566,8 @@ pub struct RouteGame {
 
 /// Todas las partidas de jungla con ruta, de la más reciente a la más vieja.
 /// Los filtros (periodo, puesto) los aplica Patrones, como con el resto.
-#[tauri::command]
-pub async fn get_jungle_routes() -> Vec<RouteGame> {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_jungle_routes");
+/// El cálculo de [`get_jungle_routes`], sin memo.
+pub async fn calcular_jungle_routes() -> Vec<RouteGame> {
     tokio::task::spawn_blocking(|| {
         let mut out: Vec<RouteGame> = crate::storage::load_all_matches()
             .into_iter()
@@ -583,6 +582,14 @@ pub async fn get_jungle_routes() -> Vec<RouteGame> {
     })
     .await
     .unwrap_or_default()
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_jungle_routes() -> Box<serde_json::value::RawValue> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_jungle_routes");
+    crate::indice::memo_async("jungle_routes", calcular_jungle_routes).await
 }
 
 #[cfg(test)]

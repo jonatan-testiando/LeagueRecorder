@@ -415,9 +415,8 @@ const PARTIDAS_HISTORIAL: usize = 10;
 /// (el que se descuenta es el de la primera) y se pasa el mismo `analyze`. Cada
 /// partida se desplaza en el tiempo para que ningún par de clics cruce de una
 /// a otra.
-#[tauri::command]
-pub async fn get_hand_career() -> Result<HandReport, String> {
-    let _medida = crate::medida::Tramo::nuevo("cmd/get_hand_career");
+/// El cálculo de [`get_hand_career`], sin memo.
+pub async fn calcular_hand_career() -> Result<HandReport, String> {
     tokio::task::spawn_blocking(|| {
         let cal = Calibracion::actual();
         let mut base: Option<MatchMetadata> = None;
@@ -458,6 +457,14 @@ pub async fn get_hand_career() -> Result<HandReport, String> {
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Guardado en el índice (`crate::indice`): si la biblioteca no ha cambiado
+/// desde la última vez, se devuelve sin recalcular.
+#[tauri::command]
+pub async fn get_hand_career() -> Result<Box<serde_json::value::RawValue>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hand_career");
+    crate::indice::memo_result_async("hand_career", calcular_hand_career).await
 }
 
 #[cfg(test)]

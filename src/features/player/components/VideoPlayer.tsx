@@ -9,7 +9,7 @@ import {
   Trash2, FileText, ChevronDown,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
 } from "lucide-react";
-import { getAllErrorClips, getCameraLooks, getMatchDetails, getMinuteSeries, saveMatchComments, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinuteSeries } from "../../../core/tauri-ipc";
+import { getAllErrorClips, getCameraLooks, getMatchDetails, getMatchTrail, getMinuteSeries, saveMatchComments, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinuteSeries } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock, relativeDay } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
@@ -600,12 +600,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
           // El detalle manda en todo menos en los comentarios: si viene sin ellos conservamos los
           // del listado en vez de vaciar la pestaña.
           setCurrentMatch({ ...full, comments: full.comments ?? match.comments });
-          if (full.mouse_events) setMouseEvents(full.mouse_events);
           if (full.participants) setParticipants(full.participants);
           if (full.item_purchases) setItemPurchases(full.item_purchases);
         }
       })
       .catch(() => {});
+    // La estela llega aparte y en binario (ver getMatchTrail).
+    getMatchTrail(match.id)
+      .then((eventos) => {
+        if (!cancelled) setMouseEvents(eventos);
+      })
+      .catch(console.error);
     return () => { cancelled = true; };
   }, [match.id]);
 

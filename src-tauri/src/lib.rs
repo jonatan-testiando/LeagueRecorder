@@ -2,6 +2,7 @@ mod riot_live_api;
 mod spells;
 mod ajustes_juego;
 mod medida;
+mod estela;
 #[cfg(test)]
 mod medida_banco;
 mod attribution;
@@ -126,6 +127,18 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
         {
             let _t = crate::medida::Tramo::nuevo("arranque/migrate_storage_layout");
             crate::storage::migrate_storage_layout();
+        }
+
+        // La estela del ratón sale del JSON a su fichero (`estela.bin`). Va
+        // antes que las miradas porque esas leen la estela entera. Una vez por
+        // partida: las ya pasadas se saltan sin leer nada.
+        {
+            let _t = crate::medida::Tramo::nuevo("arranque/migrar_estelas");
+            let app2 = app.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                crate::storage::migrar_estelas(|i, n| commands::emit_maintenance(&app2, "trail", i, n))
+            })
+            .await;
         }
 
         // Las miradas al mapa salen de los clics ya grabados: las partidas de
@@ -367,6 +380,7 @@ pub fn run() {
             set_hotkeys,
             storage::get_vod_reviews,
             storage::get_match_details,
+            storage::get_match_trail,
             cv_analyzer::process_vod,
             cv_analyzer::cancel_vod,
             training::get_training_config,

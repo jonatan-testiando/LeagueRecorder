@@ -577,6 +577,8 @@ fn fuentes_de(id: &str) -> Vec<std::path::PathBuf> {
         "hud_vida.json".to_string(),
         "barras.json".to_string(),
         format!("{id}.json"),
+        // Los golpes que te comes salen de la estela (teclas y clics).
+        crate::estela::FICHERO.to_string(),
     ]
     .into_iter()
     .map(|f| dir.join(f))

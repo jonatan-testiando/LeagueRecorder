@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { MatchMetadata, AudioStatus, VideoSettings, Comment } from "../types";
+import { MatchMetadata, AudioStatus, VideoSettings, Comment, MouseEventData } from "../types";
 
 export const getRecordedMatches = async (): Promise<MatchMetadata[]> => {
   return await invoke<MatchMetadata[]>("get_recorded_matches");
@@ -329,11 +329,56 @@ export const cancelVod = async (): Promise<void> => {
   return await invoke<void>("cancel_vod");
 };
 
-// Detalle completo de una partida/VOD (incluye mouse_events). El listado los
-// omite por rendimiento; el reproductor los pide aquí bajo demanda.
+// Detalle de una partida/VOD. Ya NO trae la estela del ratón (mouse_events):
+// esa llega aparte y en binario con `getMatchTrail`.
 export const getMatchDetails = async (id: string): Promise<MatchMetadata | null> => {
   return await invoke<MatchMetadata | null>("get_match_details", { id });
 };
+
+/**
+ * La estela del ratón de una partida, decodificada de `estela.bin`.
+ *
+ * Llega como bytes (formato en src-tauri/src/estela.rs): cabecera con la tabla
+ * de tipos de evento y luego las columnas t, x, y en f64 alineadas a 8 y el
+ * índice del tipo en u8. Antes viajaba como 2 MB de JSON dentro del detalle.
+ */
+export const getMatchTrail = async (matchId: string): Promise<MouseEventData[]> => {
+  const crudo = await invoke<ArrayBuffer | Uint8Array | number[]>("get_match_trail", { matchId });
+  const buf =
+    crudo instanceof ArrayBuffer
+      ? crudo
+      : crudo instanceof Uint8Array
+        ? crudo.slice().buffer
+        : new Uint8Array(crudo).buffer;
+  return decodificarEstela(buf);
+};
+
+export function decodificarEstela(buf: ArrayBuffer): MouseEventData[] {
+  const v = new DataView(buf);
+  const firma = String.fromCharCode(v.getUint8(0), v.getUint8(1), v.getUint8(2), v.getUint8(3));
+  if (firma !== "WDES") throw new Error("no es un fichero de estela");
+  const version = v.getUint32(4, true);
+  if (version !== 1) throw new Error(`versión de estela desconocida: ${version}`);
+  const nTipos = v.getUint32(8, true);
+  let pos = 12;
+  const tipos: string[] = [];
+  const dec = new TextDecoder();
+  for (let i = 0; i < nTipos; i++) {
+    const n = v.getUint8(pos);
+    tipos.push(dec.decode(new Uint8Array(buf, pos + 1, n)));
+    pos += 1 + n;
+  }
+  const n = v.getUint32(pos, true);
+  pos += 4;
+  pos += (8 - (pos % 8)) % 8;
+  const t = new Float64Array(buf, pos, n);
+  const x = new Float64Array(buf, pos + 8 * n, n);
+  const y = new Float64Array(buf, pos + 16 * n, n);
+  const evt = new Uint8Array(buf, pos + 24 * n, n);
+  const out: MouseEventData[] = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = { t: t[i], x: x[i], y: y[i], evt: tipos[evt[i]] ?? "" };
+  return out;
+}
 
 // Persiste los comentarios (con marca de tiempo) de una partida en su JSON.
 export const saveMatchComments = async (matchId: string, comments: Comment[]): Promise<void> => {
@@ -1308,7 +1353,7 @@ export const importBackup = async (zipPath: string): Promise<ImportReport> => {
  * `library_maintenance`. Se puede ignorar: el trabajo corre igual por detrás.
  */
 export interface MaintenanceProgress {
-  /** "migration" | "camera" | "impact" | "done". */
+  /** "migration" | "trail" | "camera" | "impact" | "done". */
   phase: string;
   done: number;
   total: number;

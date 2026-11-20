@@ -18,6 +18,7 @@ import cv2
 import os
 import sys
 import json
+import estela  # estela.bin, ver python_scripts/estela.py
 import glob
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -46,7 +47,7 @@ def process_match(video, js_path, out_dir, tracker, cfg,
         d = json.load(open(js_path, encoding="utf-8"))
     except Exception:
         return 0
-    me = d.get("mouse_events", [])
+    me = estela.de_metadata(js_path, d)
     if not me:
         return 0
 

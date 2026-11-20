@@ -117,6 +117,11 @@ fn medida_banco() {
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
     let mut filas = Vec::new();
 
+    // ── Migración de la estela a estela.bin (solo trabaja la primera vez) ─────
+    filas.push(paso(&rt, "migrar_estelas (arranque)", || async {
+        format!("{} migradas", crate::storage::migrar_estelas(|_, _| {}))
+    }));
+
     // ── Lo que hace el arranque y la Home ──────────────────────────────────────
     filas.push(paso(&rt, "load_all_matches (cada barrido del arranque)", || async {
         format!("{} partidas", crate::storage::load_all_matches().len())
@@ -171,6 +176,17 @@ fn medida_banco() {
         let i = i.clone();
         async move { ipc(&crate::storage::get_match_details(i).await) }
     }));
+    {
+        let i = id.clone();
+        filas.push(paso(&rt, "Abrir: get_match_trail (binario)", || {
+            let i = i.clone();
+            async move {
+                let ok = crate::storage::get_match_trail(i.clone()).await.is_ok();
+                let kb = crate::estela::bytes(&crate::storage::get_match_dir(&i)).map(|b| b.len() / 1024).unwrap_or(0);
+                format!("ok={ok} ipc={kb} KB")
+            }
+        }));
+    }
     macro_rules! abrir {
         ($nombre:literal, $llamada:expr) => {{
             let i = id.clone();

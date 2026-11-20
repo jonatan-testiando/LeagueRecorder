@@ -28,6 +28,7 @@ import sys
 import glob
 import json
 
+import estela  # estela.bin, ver python_scripts/estela.py
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # --- ground truth para EVALUAR (NO el filtro de entreno) ----------------------
@@ -77,7 +78,7 @@ def resolve_video(path):
 def gt_clicks(js_path, fw, fh, sync, t_max):
     """Clics reales del JSON en TIEMPO DE VÍDEO, filtrados y espaciados."""
     d = json.load(open(js_path, encoding="utf-8"))
-    me = d.get("mouse_events", [])
+    me = estela.de_metadata(js_path, d)
     y_max = fh * Y_MAX_FRAC
     out = []
     last = -99.0

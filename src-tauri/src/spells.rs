@@ -539,6 +539,7 @@ fn huella(m: &crate::storage::MatchMetadata) -> u64 {
     mezclar(mtime(dir.join("riot_timeline.json")));
     mezclar(mtime(dir.join("riot_match.json")));
     mezclar(mtime(dir.join(format!("{}.json", m.id))));
+    mezclar(mtime(crate::estela::ruta(&dir)));
     for b in format!("{:?}", crate::camera_input::Calibracion::actual()).bytes() {
         mezclar(b as u64);
     }

@@ -1331,6 +1331,7 @@ const ES: Record<string, string> = {
   "migration": "migración",
   "camera": "cámara",
   "impact": "impacto",
+  "trail": "estela del ratón",
 
   // ---- volver a lanzar el asistente de primer arranque
   "First-run setup": "Asistente de primer arranque",

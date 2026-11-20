@@ -176,13 +176,16 @@ pub struct MatchMetadata {
     /// APM por minuto de juego (para el gráfico tipo Outplayed).
     #[serde(default)]
     pub apm_series: Vec<f64>,
-    /// Movimientos y clics del ratón.
+    /// Movimientos, clics y teclas del ratón: la estela.
     ///
-    /// Es con diferencia el campo más grande del fichero (decenas de miles de
-    /// puntos por partida) y **casi nadie lo quiere**: sólo el reproductor, que
-    /// lo pide partida a partida con `get_match_details`. Ver
-    /// [`sin_estela`] para el porqué del `deserialize_with`.
-    #[serde(default, deserialize_with = "estela")]
+    /// Vive en `estela.bin` (ver `crate::estela`), NO en el JSON: nunca se
+    /// serializa, ni al disco ni al frontend (que la pide en binario con
+    /// `get_match_trail`). Solo se lee aquí para las partidas guardadas antes
+    /// de la separación, que la llevan dentro; la migración del arranque las
+    /// pasa a su fichero. Ver [`sin_estela`] para el porqué del
+    /// `deserialize_with`. La rellenan `load_match_by_id` y
+    /// `get_match_metadata_con_estela`.
+    #[serde(default, deserialize_with = "estela", skip_serializing)]
     pub mouse_events: Vec<MouseEventData>,
     /// Resolución del escritorio en la que se capturaron `mouse_events`.
     ///
@@ -825,25 +828,28 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
     let dir = get_match_dir(&metadata.id);
     let file_path = dir.join(format!("{}.json", metadata.id));
 
-    // Salvaguarda de la estela. `load_all_matches` ya no la parsea (ver
-    // `sin_estela`), así que un metadata que venga de ahí la trae vacía;
-    // escribirlo tal cual borraría del disco decenas de miles de puntos que
-    // nadie pidió borrar, y los backfills del arranque lo harían en TODA la
-    // biblioteca de una sentada. Si en memoria no hay estela pero en disco sí,
-    // manda la del disco: nunca se pierde por omisión, sólo por borrado
-    // explícito de la partida.
-    let mut metadata = std::borrow::Cow::Borrowed(metadata);
-    if metadata.mouse_events.is_empty() {
+    // La estela va a su fichero, ANTES que el JSON: si algo se corta entre los
+    // dos, queda la estela nueva con el JSON viejo, y al leer manda el fichero.
+    //
+    // Salvaguarda: un metadata leído sin estela (el listado, `modificar`,
+    // casi todos los comandos) la trae vacía, y eso no significa «bórrala».
+    // Con la estela ya en su fichero basta con no tocarlo. En una partida aún
+    // sin migrar la estela sigue DENTRO del JSON viejo, y escribir el nuevo
+    // (que ya no la lleva) la perdería: se rescata de ahí primero.
+    let ruta_estela = crate::estela::ruta(&dir);
+    if !metadata.mouse_events.is_empty() {
+        crate::estela::guardar(&dir, &metadata.mouse_events)
+            .map_err(|e| format!("Could not write the mouse trail: {e}"))?;
+    } else if !ruta_estela.exists() {
         let previa = estela_en_disco(&file_path);
         if !previa.is_empty() {
-            metadata.to_mut().mouse_events = previa;
+            crate::estela::guardar(&dir, &previa)
+                .map_err(|e| format!("Could not write the mouse trail: {e}"))?;
         }
     }
 
-    // Compacto: con sangría el fichero pesaba casi el doble (la estela son
-    // decenas de miles de objetos de cuatro campos) y todo lo que lista la
-    // biblioteca tiene que tokenizarlo entero.
-    let json_content = serde_json::to_string(metadata.as_ref())
+    // Compacto, y ya sin la estela (`skip_serializing`): unos 20-30 KB.
+    let json_content = serde_json::to_string(metadata)
         .map_err(|e| format!("Could not serialize the match data: {e}"))?;
 
     escribir_atomico(&file_path, json_content.as_bytes())
@@ -900,8 +906,96 @@ pub fn sidecars_de(dir: &Path) -> Vec<String> {
     entries
         .flatten()
         .filter_map(|e| e.file_name().to_str().map(|s| s.to_string()))
-        .filter(|n| n == "camera_snaps.json" || (n.contains("_error_") && n.ends_with(".json")))
+        .filter(|n| {
+            n == "camera_snaps.json"
+                || n == crate::estela::FICHERO
+                || (n.contains("_error_") && n.ends_with(".json"))
+        })
         .collect()
+}
+
+/// Pasa la estela de las partidas viejas (dentro del JSON) a `estela.bin`.
+///
+/// Una vez por partida: las ya pasadas tienen su fichero y se saltan sin leer
+/// nada. Para cada una se escribe la estela, se relee y se compara punto a
+/// punto con la original, y SOLO entonces se reescribe el JSON sin ella; si la
+/// comparación falla, el fichero nuevo se borra y el JSON se queda como estaba.
+///
+/// `progreso(hecho, total)` para la línea de mantenimiento de la Home.
+/// Devuelve cuántas partidas se pasaron.
+pub fn migrar_estelas(mut progreso: impl FnMut(usize, usize)) -> usize {
+    let _tramo = crate::medida::Tramo::nuevo("migrar_estelas");
+    let mut pendientes: Vec<String> = Vec::new();
+    for base in [get_videos_dir(), get_reviews_dir()] {
+        let Ok(entradas) = fs::read_dir(&base) else { continue };
+        for e in entradas.flatten() {
+            if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let Some(id) = e.file_name().to_str().map(|s| s.to_string()) else { continue };
+            let dir = e.path();
+            if crate::estela::ruta(&dir).exists() {
+                continue;
+            }
+            let json = dir.join(format!("{id}.json"));
+            // Sin parsear: basta con saber si la clave sigue ahí.
+            if fs::read_to_string(&json).map(|t| t.contains("\"mouse_events\"")).unwrap_or(false) {
+                pendientes.push(id);
+            }
+        }
+    }
+
+    let total = pendientes.len();
+    let mut hechas = 0;
+    for (i, id) in pendientes.iter().enumerate() {
+        progreso(i + 1, total);
+        let c = candado(id);
+        let _g = c.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = get_match_dir(id);
+        let json = dir.join(format!("{id}.json"));
+        let fecha = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
+        let fecha_original = fecha(&json);
+        let Some(full) = load_match_by_id(id) else { continue };
+        // Si al leerla se realineó, ya se guardó con datos nuevos: esa fecha
+        // nueva es la buena y no hay que devolverle la vieja.
+        let realineada = fecha(&json) != fecha_original;
+        if !full.mouse_events.is_empty() {
+            if crate::estela::guardar(&dir, &full.mouse_events).is_err() {
+                continue;
+            }
+            let releida = crate::estela::cargar(&dir).unwrap_or_default();
+            let igual = releida.len() == full.mouse_events.len()
+                && releida.iter().zip(&full.mouse_events).all(|(a, b)| {
+                    a.t.to_bits() == b.t.to_bits()
+                        && a.x.to_bits() == b.x.to_bits()
+                        && a.y.to_bits() == b.y.to_bits()
+                        && a.evt == b.evt
+                });
+            if !igual {
+                eprintln!("estela: la copia de {id} no coincide; se deja el JSON como estaba");
+                let _ = fs::remove_file(crate::estela::ruta(&dir));
+                continue;
+            }
+        }
+        // Reescribe el JSON ya sin la estela (y sin la clave, si estaba vacía).
+        if save_match_metadata(&full).is_err() {
+            continue;
+        }
+        // Mismos datos en otro formato: se les devuelve la fecha de antes. Las
+        // cachés por partida (coach, hechizos, presión) se dan por frescas
+        // comparando fechas, y sin esto la migración las invalidaba todas a la
+        // vez: el primer Coach tras actualizar tardaba 9 s con 300 partidas y
+        // 29 s con 1.000 en recalcular lo mismo que ya tenía.
+        if let (Some(f), false) = (fecha_original, realineada) {
+            for p in [json.clone(), crate::estela::ruta(&dir)] {
+                if let Ok(fichero) = fs::OpenOptions::new().write(true).open(&p) {
+                    let _ = fichero.set_modified(f);
+                }
+            }
+        }
+        hechas += 1;
+    }
+    hechas
 }
 
 /// Un candado por partida para las modificaciones de [`modificar`].
@@ -1312,9 +1406,17 @@ pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
         get_videos_dir()
     };
     let mut tramo = crate::medida::Tramo::nuevo("load_match_by_id");
-    let file = base.join(id).join(format!("{}.json", id));
+    let dir = base.join(id);
+    let file = dir.join(format!("{}.json", id));
     let content = fs::read_to_string(file).ok()?;
-    let mut metadata = serde_json::from_str::<MatchMetadata>(&content).ok()?;
+    // Con la estela en su fichero no hace falta construir la que pudiera
+    // quedar dentro de un JSON viejo: manda la del fichero.
+    let tiene_fichero = crate::estela::ruta(&dir).exists();
+    let parse = || serde_json::from_str::<MatchMetadata>(&content).ok();
+    let mut metadata = if tiene_fichero { sin_estela(parse)? } else { parse()? };
+    if tiene_fichero {
+        metadata.mouse_events = crate::estela::cargar(&dir).unwrap_or_default();
+    }
     crate::medida::contar(&crate::medida::BYTES_RECORRIDOS, content.len() as u64);
     if crate::medida::activa() {
         let n = crate::medida::contar(&crate::medida::APERTURAS_CON_ESTELA, 1);
@@ -1330,8 +1432,31 @@ pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
 /// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).
 #[tauri::command]
 pub async fn get_match_details(id: String) -> Option<MatchMetadata> {
+    // Sin la estela: ya no viaja en JSON (ver `get_match_trail`).
     let _medida = crate::medida::Tramo::nuevo("cmd/get_match_details");
-    load_match_by_id(&id)
+    tauri::async_runtime::spawn_blocking(move || load_match_ligera(&id)).await.ok().flatten()
+}
+
+/// La estela del ratón de una partida, en binario (formato en `crate::estela`).
+///
+/// Llega al reproductor como `ArrayBuffer`: antes viajaba dentro del detalle
+/// como 2 MB de JSON que el WebView tenía que parsear entero. Si la partida
+/// aún no tiene `estela.bin` (sin migrar todavía, o un VOD viejo), se codifica
+/// al vuelo desde el JSON.
+#[tauri::command]
+pub async fn get_match_trail(match_id: String) -> Result<tauri::ipc::Response, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_trail");
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = ruta_metadata(&match_id).parent().map(Path::to_path_buf).unwrap_or_default();
+        if let Some(b) = crate::estela::bytes(&dir) {
+            return Ok(b);
+        }
+        let m = load_match_by_id(&match_id).ok_or_else(|| "Match not found".to_string())?;
+        Ok(crate::estela::codificar(&m.mouse_events))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map(tauri::ipc::Response::new)
 }
 
 /// Carpeta donde viven los recortes cuya partida ya no existe.

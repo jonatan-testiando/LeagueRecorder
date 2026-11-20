@@ -90,3 +90,25 @@ Banco, estado estable (2ª ejecución):
 Abrir una partida: la estela se parsea 4 veces en vez de 13 (detalle, manos, autopsia de hechizos y puntería), y guardar un comentario escribe 2,0 MB en vez de 3,6.
 
 Arranque real, 300 partidas: lista visible 2,8 → 2,3 s, Home completa 6,0 → 3,3 s, mantenimiento terminado 7,1 → 3,0 s. Con 29 apenas cambia (~1,2 s), porque ahí pesa el resto del arranque.
+
+## Tras la fase 2 (2026-11-19): la estela en `estela.bin`
+
+Qué cambió: la estela del ratón sale del metadata a `estela.bin` (formato en `src-tauri/src/estela.rs`: tabla de tipos de evento y columnas `f64` alineadas a 8, sin perder un bit respecto al JSON). El metadata queda en ~20-30 KB. El reproductor recibe la estela en binario con `get_match_trail` (`ArrayBuffer`, ~1 MB) en vez de 2 MB de JSON dentro del detalle. La migración corre en el mantenimiento del arranque, una vez por partida: escribe, relee y compara punto a punto antes de reescribir el JSON, y devuelve a los ficheros su fecha original para no invalidar las cachés (coach, hechizos, presión). La copia de seguridad y el espejo llevan `estela.bin`; los scripts de Python que leían la estela usan `python_scripts/estela.py`.
+
+Verificado con una copia de la biblioteca real (29 partidas, 1.051.379 puntos): todas las estelas coinciden bit a bit con lo que la app leía antes. Frente al JSON original hay 19 números en 2 partidas que difieren en 1 ULP: no es la migración, es que `serde_json` (sin `float_roundtrip`) ya los leía así.
+
+| | antes (fase 0) | fase 1 | fase 2 |
+|---|---|---|---|
+| Primer listado tras arrancar, 300 | 1,39 s | 1,39 s | 113 ms |
+| Primer listado tras arrancar, 1.000 | 4,9 s | 4,7 s | 383 ms |
+| Abrir partida: detalle por IPC | 2,0 MB | 2,0 MB | 0,03 MB + 1 MB binario |
+| Guardar un comentario | 3,6 MB | 2,0 MB | ~25 KB |
+| Migración (una vez) | — | — | 0,9 s con 29 · 9,5 s con 300 · 24 s con 1.000 |
+
+Arranque real ya migrado:
+
+| | 29 | 300 |
+|---|---|---|
+| Lista visible | 0,9 s → 0,59 s | 2,8 s → 0,63 s |
+| Home completa | 1,2 s → 0,70 s | 6,0 s → 1,5 s |
+| Mantenimiento terminado | 1,1 s → 0,41 s | 7,1 s → 1,1 s |

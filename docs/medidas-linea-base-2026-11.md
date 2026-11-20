@@ -258,3 +258,24 @@ Qué cambió:
 El punto de grabación se midió metiendo el mismo elemento con su clase en la barra de título, no grabando una partida. Con el Mapa reproduciendo, sigue dibujando una vez por fotograma (240 por segundo), y en pausa, ninguna. Vuelta a verse, con capturas de pantalla del rectángulo de la ventana (2026-11-20): con solo el sondeo y el evento de foco de Tauri, traerla delante tardó una vez 343 ms en volver a `visible` y Windows enseñaba entretanto un rectángulo blanco (al volver, el foco va directo a WebView2 y la ventana principal no recibe el evento). Con los avisos de Windows: traerla delante, visible en 26 ms y la captura a los 36 ms ya es la app entera; restaurarla, 6 ms; minimizarla, oculta en 9 ms.
 
 No medido: lo que gasta el motor de grabación (libobs) durante una partida real.
+
+## Grabar: el ritmo de la captura WGC (2026-11-20)
+
+El servidor de grabación (`leaguerec-obs`, sobre OBS 32.1.2) captura el monitor con Windows Graphics Capture y recorta la ventana de League. OBS 32.1.2 no limita el ritmo de esa captura: Windows le entrega un fotograma por cada recomposición del escritorio (240 por segundo en un monitor de 240 Hz con el juego sin tope de FPS) y OBS copia cada uno aunque el lienzo vaya a 60.
+
+Parche (`leaguerec-obs/scripts/parche-wgc.ps1`, lo aplica `build-obs.ps1` tras clonar OBS, también en el flujo de release): `GraphicsCaptureSession.MinUpdateInterval` al doble de los FPS del lienzo (8,33 ms a 60 fps) en las dos sesiones de `libobs-winrt/winrt-capture.cpp`. Solo existe en Windows 11 24H2 o posterior; antes no se toca nada. El servidor lo deja en el registro: `[leaguerec] WGC: un fotograma como mucho cada 8.33 ms`.
+
+Medido con el servidor en modo de prueba (`--source monitor`, 2560×1440 a 60 fps, AV1 NVENC), 25 s con un cuadrado de 48 px cambiando de color en cada repintado (el escritorio se recompone a 240 Hz, como con el juego delante). Tres parejas alternadas, mismo servidor, solo cambia `libobs-winrt.dll`:
+
+| | sin parche | con parche |
+|---|---|---|
+| CPU del servidor (de un núcleo) | 15,5 / 12,5 / 15,0 % (media 14,3) | 14,4 / 11,7 / 11,7 % (media 12,6) |
+| GPU 3D y copias del servidor | 2,6 / 2,3 / 2,7 % | 2,7 / 2,4 / 2,6 % |
+| Codificador NVENC | 32-34 % | 32-34 % |
+| Fotogramas repetidos en la zona animada | 10 / 11 / 19 de 1.501 | 0 / 0 / 0 |
+
+O sea: un 12 % menos de CPU del servidor, la GPU igual, y la grabación sin fotogramas repetidos (con 240 entregas por segundo, OBS se saltaba alguna). El compositor de Windows (dwm) sube de ~3,8 % a ~5 % de GPU al grabar, con parche o sin él.
+
+Trampa de la medida: el servidor del runtime local anterior (1 de septiembre) ignoraba `--width/--height` en el modo de prueba y grababa a 1080p; comparado con uno nuevo a 1440p, el codificador parecía trabajar el doble por culpa del parche. Comparar siempre con el mismo `leaguerec-obs.exe`. Y con `OBS_RUNDIR` en forma corta (`ALEJAN~1`) y el directorio de trabajo en forma larga, `same_dir` no ve que son la misma carpeta y los plugins se cargan dos veces (solo en pruebas; la app pasa las dos largas).
+
+Sin medir con League de verdad: cuántos FPS del juego cuesta grabar. La captura de juego (`game_capture`, gancho en el propio juego) sigue apagada: nuestro `graphics-hook64.dll` está compilado por nosotros y sin la firma de OBS, y meter una DLL sin firmar en un juego con Vanguard puede bloquearse o marcar la cuenta.

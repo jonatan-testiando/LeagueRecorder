@@ -68,6 +68,9 @@ if (Test-Path $pluginsCMake) {
   Write-Host "Plugin win-dshow excluido (ATL)." -ForegroundColor DarkGray
 }
 
+# Ritmo de la captura WGC: como mucho el doble de los FPS del lienzo (ver parche-wgc.ps1).
+& (Join-Path $PSScriptRoot "parche-wgc.ps1") -ObsDir $ObsDir
+
 # OBS 31/32 fija en el preset la versión exacta del Windows SDK (10.0.22621.0). Si esta máquina
 # tiene otra (p.ej. 10.0.26100.0), el generador falla. Reescribimos la versión pinneada a la instalada.
 $presets = Join-Path $ObsDir "CMakePresets.json"

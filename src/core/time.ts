@@ -1,3 +1,4 @@
+import { dateFormat } from "./intl";
 /**
  * Segundos → texto de reloj.
  *
@@ -63,7 +64,7 @@ export const relativeDay = (
   if (dias <= 0) return t("today");
   if (dias === 1) return t("yesterday");
   if (dias < 7) return t("{d}d ago", { d: dias });
-  return new Intl.DateTimeFormat(uiLocale(), {
+  return dateFormat(uiLocale(), {
     weekday: "long",
     day: "numeric",
     month: "short",

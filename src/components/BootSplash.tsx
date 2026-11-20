@@ -21,7 +21,12 @@ import "./BootSplash.css";
  * la bienvenida encima, esa entrada pasaba sin verse.
  */
 
-const MIN_MS = 2000;
+// 1 s desde que se VE (el primer fotograma, no el montaje: en un arranque en
+// frío entre uno y otro pasan ~250 ms). La coreografía (BootSplash.css) acaba a
+// los ~960 ms —la base de la marca entra a los 700 y dura 260—, así que se ve
+// entera. Eran 2 s desde el montaje, y medido el 2026-11-19 los datos de Hoy ya
+// estaban pintados debajo a los ~0,8 s: más de un segundo de espera solo por esto.
+const MIN_MS = 1000;
 const MAX_MS = 6000;
 /** Lo que dura la salida (BootSplash.css, `boot-out`). */
 const SALIDA_MS = 280;
@@ -36,7 +41,12 @@ export const BootSplash: React.FC<{
 }> = ({ ready, games, onGone }) => {
   const t = useT();
   const rank = useCurrentRank();
-  const [desde] = useState(() => performance.now());
+  // Cuándo se vio por primera vez: el fotograma siguiente al montaje.
+  const [desde, setDesde] = useState<number | null>(null);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDesde(performance.now()));
+    return () => cancelAnimationFrame(id);
+  }, []);
   const [saliendo, setSaliendo] = useState(false);
   const fuera = useRef(onGone);
   fuera.current = onGone;
@@ -52,7 +62,7 @@ export const BootSplash: React.FC<{
   // Lista y con el mínimo cumplido; o el máximo, pase lo que pase.
   useEffect(() => {
     const max = window.setTimeout(salir, MAX_MS);
-    if (!ready) return () => window.clearTimeout(max);
+    if (!ready || desde === null) return () => window.clearTimeout(max);
     const resto = Math.max(0, MIN_MS - (performance.now() - desde));
     const min = window.setTimeout(salir, resto);
     return () => {

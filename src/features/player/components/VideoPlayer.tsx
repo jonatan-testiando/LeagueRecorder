@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, useLayoutEffect } from "react";
 import { MatchMetadata, MatchEvent, MouseEventData, Comment as MatchComment, Participant, ItemPurchase } from "../../../types";
 import { listen } from "@tauri-apps/api/event";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -41,7 +41,7 @@ import { individualEvents, eventChampion, withChampionNames } from "../../../cor
 import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
 import { useMatches } from "../../../store/useAppStore";
-import { useEnterOnChange } from "../../../core/enterMotion";
+import { movimientoReducido, useCambio } from "../../../core/movimiento";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import {
@@ -526,11 +526,29 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     videoRef.current?.pause();
     setStats((s) => ({ focus: block ?? null, n: (s?.n ?? 0) + 1 }));
   }, [videoRef]);
-  const closeStats = useCallback(() => setStats(null), []);
-  // Lo de dentro entra escalonado detrás de la hoja, al abrirla o al pedirle
-  // otro bloque desde el Resumen.
+  const closeStats = useCallback(() => {
+    const el = sheetRef.current;
+    if (!el || cerrandoHoja.current || document.documentElement.dataset.nav === "kbd" || movimientoReducido() || typeof el.animate !== "function") {
+      setStats(null);
+      return;
+    }
+    cerrandoHoja.current = true;
+    const a = el.animate([{ transform: "none" }, { transform: "translateY(100%)" }], {
+      duration: 200,
+      easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+      fill: "forwards",
+    });
+    a.onfinish = a.oncancel = () => {
+      cerrandoHoja.current = false;
+      setStats(null);
+    };
+  }, []);
+  // La hoja sube como un cajón (VideoPlayer.css) y baja en 200 ms: la salida,
+  // más corta. Con el teclado (Esc) se cierra al momento. Si se le pide otro
+  // bloque estando abierta, lo de dentro cambia con un fundido corto.
   const sheetRef = useRef<HTMLElement>(null);
-  useEnterOnChange(sheetRef, stats ? stats.n : null);
+  const cerrandoHoja = useRef(false);
+  useCambio(sheetRef, stats && stats.n > 1 ? stats.n : null, ":scope > :not(.vp-sheet__head)");
   const sheetSeek = useCallback(
     (videoSeconds: number, play: boolean) => {
       setStats(null);
@@ -1003,11 +1021,30 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   //   rutas con display:none), así que solo responde si se está viendo. Si no,
   //   la «c» pulsada en otra pantalla abría el recortador aquí, a escondidas.
   const vpRef = useRef<HTMLDivElement>(null);
-  // Abrir una partida es de las veces que se hace al día, no de las cien: lo de
-  // la pantalla entra escalonado (core/enterMotion.ts), y al cambiar de
-  // pestaña, lo de la pestaña.
-  useEnterOnChange(vpRef, match.id);
-  useEnterOnChange(asideRef, tabN > 0 ? tabN : null);
+  // Abrir una partida: la View Transition del store (el retrato vuela de la
+  // fila a la miga) y, dentro, el panel de la derecha entra 18 px con la curva
+  // de los cajones. Al cambiar de pestaña, lo de la pestaña se funde.
+  useLayoutEffect(() => {
+    const el = asideRef.current;
+    if (!el || typeof el.animate !== "function" || document.documentElement.dataset.nav === "kbd") return;
+    // El reproductor entero se funde (una capa: el vídeo va dentro sin que
+    // nada se repinte) mientras el retrato vuela a la miga.
+    vpRef.current?.animate(
+      [
+        { opacity: 0, transform: movimientoReducido() ? "none" : "scale(0.99)" },
+        { opacity: 1, transform: "none" },
+      ],
+      { duration: 240, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "backwards" }
+    );
+    el.animate(
+      [
+        { opacity: 0, transform: movimientoReducido() ? "none" : "translateX(18px)" },
+        { opacity: 1, transform: "none" },
+      ],
+      { duration: 320, delay: 40, easing: "cubic-bezier(0.32, 0.72, 0, 1)", fill: "backwards" }
+    );
+  }, [match.id]);
+  useCambio(asideRef, tabN > 0 ? tabN : null, ":scope > :not(.vp-resize):not(.tabs)");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
@@ -1614,7 +1651,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
                 <ChevronRight size={16} className="crumb__sep" aria-hidden="true" />
               </>
             )}
-            <span className="crumb__face">
+            <span className="crumb__face" data-retrato-destino="">
               <ChampionAvatar champion={match.champion} size={22} />
             </span>
             <span className="crumb__name">{match.champion}</span>

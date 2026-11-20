@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../core/navegar";
 import { listen } from "@tauri-apps/api/event";
 import { HardDrive, KeyRound, Play, VolumeOff } from "lucide-react";
 import {
@@ -21,6 +21,7 @@ import { formatDuration, outcome } from "../core/matchStats";
 import { buildQueue } from "../features/player/components/ReviewQueue";
 import type { MatchMetadata } from "../types";
 import { withPercent } from "../core/benchmarkFormat";
+import { fixedDigits } from "../core/intl";
 
 /**
  * Estado de captura: qué hace el grabador, en la barra de título.
@@ -81,10 +82,7 @@ const gb = (bytes: number) => bytes / 1024 ** 3;
  *  desde 10, con uno por debajo, que es donde importa. */
 export const formatGb = (v: number, lang: string): string => {
   const dec = v >= 10 ? 0 : 1;
-  return v.toLocaleString(lang === "es" ? "es-ES" : "en-US", {
-    minimumFractionDigits: dec,
-    maximumFractionDigits: dec,
-  });
+  return fixedDigits(v, lang === "es" ? "es-ES" : "en-US", dec);
 };
 
 export interface CaptureInfo {

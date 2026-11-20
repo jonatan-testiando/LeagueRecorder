@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { Brain, Flag, Info, Library, Play, TrendingDown, TrendingUp, TriangleAlert, Zap } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
 import { useCoachSummary } from "../../../core/useCoachSummary";
@@ -37,6 +37,7 @@ import type {
 } from "../../../core/tauri-ipc";
 import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./CoachPanel.css";
+import { dateFormat } from "../../../core/intl";
 
 /**
  * Coach: el plan de 10 partidas y de dónde sale (§2.4-2.5 de
@@ -87,7 +88,7 @@ function shortDate(iso: string | null | undefined, lang: string): string {
   if (!iso) return "";
   const d = new Date(iso.replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return iso.split(" ")[0];
-  return new Intl.DateTimeFormat(lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "short" }).format(d);
+  return dateFormat(lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "short" }).format(d);
 }
 
 /* ------------------------------------------------------------ textos */

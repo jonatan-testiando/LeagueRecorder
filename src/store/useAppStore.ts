@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { MatchMetadata } from '../types';
 import { ErrorClipMetadata, getAllErrorClips, getRecordedMatchesDelta } from '../core/tauri-ipc';
+import { conTransicion, retratoDelReproductor, retratoVisible } from '../core/movimiento';
 
 /** Versión (fecha y tamaño de su JSON) de cada partida que ya tiene la lista. */
 const versiones: Record<string, string> = {};
@@ -155,7 +156,8 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ pendingSeek: seek });
       return;
     }
-    set({ selectedMatch: m, pendingSeek: null });
+    if (get().selectedMatch) set({ selectedMatch: m, pendingSeek: null });
+    else conTransicion('open', () => set({ selectedMatch: m, pendingSeek: null }), { origen: retratoVisible(m.id), destino: retratoDelReproductor });
     saltoAplazado = setTimeout(() => {
       saltoAplazado = null;
       if (get().selectedMatch?.id === m.id) set({ pendingSeek: seek });
@@ -184,6 +186,7 @@ export const useAppStore = create<AppState>((set, get) => {
         d.orden.length === previas.length &&
         d.orden.every((id, i) => previas[i]?.id === id);
       if (igual && get().matchesLoaded) return;
+      if (!get().matchesLoaded) performance.mark("wl:lista-recibida");
       const matches = d.orden.map((id) => porId.get(id)).filter((m): m is MatchMetadata => !!m);
       set({ matches, matchesLoaded: true });
     },
@@ -192,18 +195,51 @@ export const useAppStore = create<AppState>((set, get) => {
     // Abrir a mano otra partida (o cerrar el reproductor) termina la lista: la
     // barra diría "3 de 11" encima de algo que no es el ítem 3. La propia lista
     // cambia de partida con `set` directo, sin pasar por aquí.
-    setSelectedMatch: (match) =>
-      set((s) => {
-        const pl = s.playlist;
-        const sigue = !!pl && !!match && pl.items[pl.index]?.matchId === match.id;
-        return pl && !sigue ? { selectedMatch: match, playlist: null } : { selectedMatch: match };
-      }),
+    //
+    // Abrir y cerrar el reproductor va dentro de una View Transition
+    // (core/movimiento.ts): el retrato de la fila (o el de Hoy) vuela hasta la
+    // miga del reproductor, y al cerrar, de vuelta. Pasar de una partida a
+    // otra con el reproductor abierto (la lista de reproducción) no se anima.
+    setSelectedMatch: (match) => {
+      const prev = get().selectedMatch;
+      const aplicar = () =>
+        set((s) => {
+          const pl = s.playlist;
+          const sigue = !!pl && !!match && pl.items[pl.index]?.matchId === match.id;
+          return pl && !sigue ? { selectedMatch: match, playlist: null } : { selectedMatch: match };
+        });
+      if (!prev === !match) {
+        aplicar();
+        return;
+      }
+      conTransicion(
+        match ? 'open' : 'back',
+        aplicar,
+        match
+          ? { origen: retratoVisible(match.id), destino: retratoDelReproductor }
+          : { origen: retratoDelReproductor(), destino: () => retratoVisible(prev?.id) }
+      );
+    },
 
     selectedVod: null,
-    setSelectedVod: (match) => set({ selectedVod: match }),
+    setSelectedVod: (match) => {
+      const prev = get().selectedVod;
+      if (!prev === !match) {
+        set({ selectedVod: match });
+        return;
+      }
+      conTransicion(match ? 'open' : 'back', () => set({ selectedVod: match }));
+    },
 
     selectedError: null,
-    setSelectedError: (err) => set({ selectedError: err }),
+    setSelectedError: (err) => {
+      const prev = get().selectedError;
+      if (!prev === !err) {
+        set({ selectedError: err });
+        return;
+      }
+      conTransicion(err ? 'open' : 'back', () => set({ selectedError: err }));
+    },
 
     playingClip: null,
     setPlayingClip: (path) => set({ playingClip: path }),

@@ -27,7 +27,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useLang, useT } from "../../../core/LanguageProvider";
 import { useOnboarding } from "../../onboarding/useOnboarding";
@@ -951,7 +951,7 @@ const LibraryRow: React.FC<RowProps> = ({
       <span className="lib-bar" aria-hidden />
 
       {/* Retrato; en modo lote, la casilla encima. */}
-      <span className="lib-avatar">
+      <span className="lib-avatar" data-retrato={match.id}>
         <ChampionAvatar champion={match.champion} size={36} />
         {selectMode && (
           <span className={`lib-check${checked ? " lib-check--on" : ""}`} aria-hidden>

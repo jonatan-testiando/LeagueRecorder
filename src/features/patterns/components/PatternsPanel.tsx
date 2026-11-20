@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { usePressureSummary } from "../../player/usePressureSummary";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { MatchEvent, MatchMetadata } from "../../../types";
 import {
   deathClock,

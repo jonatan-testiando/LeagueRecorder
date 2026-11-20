@@ -3,6 +3,7 @@ import { type KDA } from "../../../core/matchStats";
 import type { Translate } from "../../../core/eventText";
 import type { MatchPlays, Play } from "../../../core/tauri-ipc";
 import type { Moment } from "../../player/components/ReviewQueue";
+import { dateFormat, fixedDigits } from "../../../core/intl";
 
 /**
  * Lo que la lista de la biblioteca y su panel de detalle leen igual de una
@@ -42,10 +43,7 @@ export const lpText = (n: number): string =>
 
 /** Cifra con los decimales y la coma del idioma: "4,67" en español. */
 export const fmtDec = (x: number, digits: number, lang: string): string =>
-  x.toLocaleString(lang === "es" ? "es-ES" : "en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  fixedDigits(x, lang === "es" ? "es-ES" : "en-US", digits);
 
 /**
  * Tono del ratio KDA: jade desde 4, texto normal entre 3 y 4, apagado por
@@ -113,7 +111,7 @@ export const dayLabel = (iso: string, t: Translate, lang: string): string => {
   if (n <= 0) return cap(t("today"));
   if (n === 1) return cap(t("yesterday"));
   return cap(
-    new Intl.DateTimeFormat(localeOf(lang), {
+    dateFormat(localeOf(lang), {
       weekday: "long",
       day: "numeric",
       month: "short",
@@ -135,7 +133,7 @@ export const shortDay = (iso: string, t: Translate, lang: string): string => {
     const dia = t(n <= 0 ? "today" : "yesterday");
     return hora ? `${dia} ${hora}` : dia;
   }
-  return new Intl.DateTimeFormat(localeOf(lang), {
+  return dateFormat(localeOf(lang), {
     weekday: "short",
     day: "numeric",
     month: "short",

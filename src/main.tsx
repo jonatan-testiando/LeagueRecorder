@@ -13,6 +13,11 @@ import { Titlebar } from "./components/Titlebar";
 import "./fonts.css";
 import "./index.css";
 
+// Hitos del arranque, para medirlo desde fuera (Performance → marcas "wl:*").
+// Este es el primero: el paquete ya está descargado y compilado y empieza a
+// ejecutarse.
+performance.mark("wl:js-inicio");
+
 // La ventana del overlay in-game carga el mismo bundle con ?overlay=1. Es una
 // ventana transparente y click-through, así que no monta la app entera: solo el
 // aviso del metrónomo.
@@ -34,7 +39,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
               del router: llegan aunque la ruta cambie. */}
           <ToastProvider>
             <RecorderAlerts />
-            <HashRouter>
+            {/* Sin transiciones de React en los cambios de ruta: el cambio va dentro de
+                una View Transition (core/navegar.ts) y tiene que aplicarse ya. */}
+            <HashRouter useTransitions={false}>
               {/* La red de debajo: cada panel lleva la suya (App.tsx), esta
                   recoge lo que pete fuera de ellos (rail, barra, paleta). */}
               <ErrorBoundary

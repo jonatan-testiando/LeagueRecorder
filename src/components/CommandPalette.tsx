@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../core/navegar";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   ChartNoAxesColumn,

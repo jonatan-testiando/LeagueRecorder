@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { listen } from "@tauri-apps/api/event";
 import { MatchMetadata } from "../../../types";
 import {
@@ -222,6 +222,18 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   // largo sin mirar un carril, uno de los hallazgos candidatos. Y sus jugadas
   // con la probabilidad de victoria, para el ΔWP de cada momento.
   const ultimaId = ultima?.id ?? null;
+  // «Más sobre esta partida» no se monta hasta abrirlo (ver el <details>).
+  const [masAbierto, setMasAbierto] = useState(false);
+  // Partidas por id: los episodios de presión buscaban la suya recorriendo la
+  // lista entera, uno por uno.
+  const porId = useMemo(() => new Map(matches.map((m) => [m.id, m])), [matches]);
+
+  // Hito del arranque: la Home ya enseña una partida (ver main.tsx). El rAF
+  // espera al fotograma en que se pinta.
+  useEffect(() => {
+    if (!ultimaId || performance.getEntriesByName("wl:hoy-pintada").length) return;
+    requestAnimationFrame(() => performance.mark("wl:hoy-pintada"));
+  }, [ultimaId]);
   useEffect(() => {
     if (!ultimaId) return;
     let vivo = true;
@@ -557,7 +569,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
             <ChampionWash champion={ultima.champion} intensity={0.3} />
             <div className="home-hero__main">
               <div className="home-hero__id">
-                <div className="home-hero__portrait">
+                <div className="home-hero__portrait" data-retrato={ultima.id}>
                   <ChampionAvatar champion={ultima.champion} size={72} />
                 </div>
                 <div className="home-hero__who">
@@ -988,8 +1000,13 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
           </div>
 
           {/* ======================= lo que no cabe en la lectura principal */}
-          <details className="home-more">
+          {/* Plegado de serie: su contenido (con la lista entera de episodios de
+              presión, cientos con una biblioteca grande) no se monta hasta que
+              se abre. Medido: pintarlo escondido era buena parte del primer
+              render de Hoy. Una vez abierto se queda montado. */}
+          <details className="home-more" onToggle={(e) => { if (e.currentTarget.open) setMasAbierto(true); }}>
             <summary className="t-small">{t("More about this game and your signals")}</summary>
+            {masAbierto && (
             <div className="home-more__body">
               <div className="home-more__col">
                 <h3 className="t-body-strong home-h3">{t("Performance details")}</h3>
@@ -1117,7 +1134,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                   <h3 className="t-body-strong home-h3">{t("Pressure evidence · {n} episodes", { n: presion.windows })}</h3>
                   <div className="home-episodes">
                     {presion.episodes.map((episode) => {
-                      const recorded = matches.find((m) => m.id === episode.match_id);
+                      const recorded = porId.get(episode.match_id);
                       return (
                         <PressureEpisodeCard
                           key={episode.match_id + ":" + episode.game_start}
@@ -1133,6 +1150,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                 </div>
               )}
             </div>
+            )}
           </details>
         </div>
       </div>

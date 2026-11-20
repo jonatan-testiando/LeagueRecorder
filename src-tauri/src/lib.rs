@@ -213,8 +213,12 @@ pub fn run() {
         .manage(cv_analyzer::AnalyzerState::default())
         .manage(app_update::UpdateState::default())
         .setup(move |app| {
+            let _t_setup = crate::medida::Tramo::nuevo("arranque/setup");
             // Lo primero: el tamaño de la interfaz, antes de que pinte la página.
-            escala::aplicar(app.handle(), true);
+            {
+                let _t = crate::medida::Tramo::nuevo("arranque/escala");
+                escala::aplicar(app.handle(), true);
+            }
 
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let show_i = MenuItem::with_id(app, "show", "Open Recorder", true, None::<&str>)?;
@@ -436,6 +440,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::Ready = event {
+                crate::medida::anotar("arranque/bucle_listo", 0.0, "");
+            }
             // Al cerrar la app, apagamos el servidor de grabación (cierra el proceso hijo libobs).
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app_handle.try_state::<Arc<RecorderState>>() {

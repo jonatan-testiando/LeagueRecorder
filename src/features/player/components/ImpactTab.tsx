@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { listen } from "@tauri-apps/api/event";
 import { KeyRound, RefreshCw } from "lucide-react";
 import type { MatchMetadata, Participant } from "../../../types";

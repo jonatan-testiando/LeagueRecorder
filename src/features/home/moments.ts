@@ -6,6 +6,7 @@ import { eventMeta, sideOfEvent } from "../player/components/eventMeta";
 import { analyzerFindings, buildQueue, type Moment } from "../player/components/ReviewQueue";
 import { laneLabel } from "../../core/lanes";
 import { mmss } from "../../core/time";
+import { fixedDigits } from "../../core/intl";
 
 /**
  * «Los 3 momentos que más te enseñan» de una partida: el peor error, el
@@ -638,10 +639,7 @@ export function momentWp(
 export function wpDeltaNumber(d: number, lang: string): string {
   const p = Math.abs(d) * 100;
   const digits = p < 1 ? 1 : 0;
-  const n = p.toLocaleString(lang === "es" ? "es-ES" : "en-US", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  const n = fixedDigits(p, lang === "es" ? "es-ES" : "en-US", digits);
   return `${d < 0 ? "−" : "+"}${n}`;
 }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { AlertTriangle, Library, RefreshCw, Trash2 } from "lucide-react";
 import { ErrorClipMetadata, deleteErrorClip } from "../../../core/tauri-ipc";
 import { MatchMetadata } from "../../../types";

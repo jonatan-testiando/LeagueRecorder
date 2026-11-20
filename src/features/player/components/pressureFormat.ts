@@ -1,3 +1,4 @@
+import { fixedDigits, numberFormat } from "../../../core/intl";
 /**
  * Formato de las cifras de presión absorbida, compartido por la tarjeta de
  * episodio, Hoy y Patrones: si cada pantalla redondea a su manera, el mismo
@@ -16,7 +17,7 @@ export function formatNumber(n: number): string {
   // `useGrouping: "always"`: en es-ES las cifras de cuatro dígitos salen sin
   // punto por norma (4256, pero 14.256), y en la misma columna se leía "4256"
   // al lado de "1.584". El tipo de TS aún sólo acepta booleano.
-  return Math.abs(Math.round(n)).toLocaleString(locale(), { useGrouping: "always" } as unknown as Intl.NumberFormatOptions);
+  return numberFormat(locale(), { useGrouping: "always" } as unknown as Intl.NumberFormatOptions).format(Math.abs(Math.round(n)));
 }
 
 /** "+708", "−1.250", "0". Con `sign`, los positivos llevan "+". */
@@ -33,7 +34,7 @@ export function formatGold(n: number, sign = false): string {
 export function formatSigned(n: number, digits = 1): string {
   const f = Math.pow(10, digits);
   const r = Math.round(n * f) / f;
-  const abs = Math.abs(r).toLocaleString(locale(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const abs = fixedDigits(Math.abs(r), locale(), digits);
   if (r < 0) return `−${abs}`;
   if (r > 0) return `+${abs}`;
   return abs;

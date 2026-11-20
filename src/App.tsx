@@ -1,23 +1,12 @@
-import React, { useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { useNavigate } from "./core/navegar";
 import { useGallery } from "./features/gallery/useGallery";
-import { MatchGallery } from "./features/gallery/components/MatchGallery";
-import { ClipsGallery } from "./features/gallery/components/ClipsGallery";
-import { PatternsPanel } from "./features/patterns/components/PatternsPanel";
 import { PlaylistBar } from "./features/patterns/components/PlaylistBar";
 import { HomePanel } from "./features/home/components/HomePanel";
-import { ErrorsGallery } from "./features/gallery/components/ErrorsGallery";
-import { VodGallery } from "./features/vod/components/VodGallery";
-import { VideoPlayer } from "./features/player/components/VideoPlayer";
-import { ErrorPlayer } from "./features/player/components/ErrorPlayer";
-import { SettingsPanel } from "./features/settings/components/SettingsPanel";
-import { TrainingPanel } from "./features/training/components/TrainingPanel";
-import { CoachPanel } from "./features/coach/components/CoachPanel";
-import { ChampSelectPanel } from "./features/champselect/components/ChampSelectPanel";
 import { Titlebar } from "./components/Titlebar";
 import { BrandMark } from "./components/BrandMark";
 import { PanelActiveContext, TitleOff, TitleSlotContext } from "./components/ScreenTitle";
-import { motion } from "framer-motion";
 import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap, Swords } from "lucide-react";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
@@ -26,7 +15,6 @@ import { CommandPalette } from "./components/CommandPalette";
 import { PostGameFlow } from "./components/PostGameFlow";
 import { ChampSelectFlow, CHAMP_SELECT_PATH } from "./components/ChampSelectFlow";
 import { useChampSelect } from "./core/useChampSelect";
-import { OnboardingWizard } from "./features/onboarding/components/OnboardingWizard";
 import { useOnboarding } from "./features/onboarding/useOnboarding";
 import { getVersion } from "@tauri-apps/api/app";
 import {
@@ -37,11 +25,40 @@ import {
   type PendingUpdate,
   type UpdateProgress,
 } from "./core/updates";
+import { perezoso, precargarEnReposo } from "./core/perezoso";
+
+// Las pantallas que no se ven al arrancar van en su propio trozo de JS (ver
+// core/perezoso.tsx). Hoy, el raíl y la barra van en el principal.
+const MatchGallery = perezoso(() => import("./features/gallery/components/MatchGallery").then((m) => m.MatchGallery));
+const ClipsGallery = perezoso(() => import("./features/gallery/components/ClipsGallery").then((m) => m.ClipsGallery));
+const PatternsPanel = perezoso(() => import("./features/patterns/components/PatternsPanel").then((m) => m.PatternsPanel));
+const ErrorsGallery = perezoso(() => import("./features/gallery/components/ErrorsGallery").then((m) => m.ErrorsGallery));
+const VodGallery = perezoso(() => import("./features/vod/components/VodGallery").then((m) => m.VodGallery));
+const VideoPlayer = perezoso(() => import("./features/player/components/VideoPlayer").then((m) => m.VideoPlayer));
+const ErrorPlayer = perezoso(() => import("./features/player/components/ErrorPlayer").then((m) => m.ErrorPlayer));
+const SettingsPanel = perezoso(() => import("./features/settings/components/SettingsPanel").then((m) => m.SettingsPanel));
+const TrainingPanel = perezoso(() => import("./features/training/components/TrainingPanel").then((m) => m.TrainingPanel));
+const CoachPanel = perezoso(() => import("./features/coach/components/CoachPanel").then((m) => m.CoachPanel));
+const ChampSelectPanel = perezoso(() => import("./features/champselect/components/ChampSelectPanel").then((m) => m.ChampSelectPanel));
+const OnboardingWizard = perezoso(() => import("./features/onboarding/components/OnboardingWizard").then((m) => m.OnboardingWizard));
+
+/** Qué trozo necesita cada sección del raíl, para precargarlo al pasar por encima. */
+const TROZOS: Record<string, Array<{ precargar: () => Promise<unknown> }>> = {
+  "/review": [MatchGallery, VideoPlayer],
+  "/clips": [ClipsGallery],
+  "/errors": [ErrorsGallery, ErrorPlayer],
+  "/patterns": [PatternsPanel],
+  "/coach": [CoachPanel],
+  "/vod": [VodGallery, VideoPlayer],
+  "/training": [TrainingPanel],
+  "/settings": [SettingsPanel],
+  "/champ-select": [ChampSelectPanel],
+};
 import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { originOf, setNavOrigin, type NavOrigin } from "./core/navOrigin";
-import { useEnterOnChange } from "./core/enterMotion";
+import { useEntradaPrimeraVez } from "./core/movimiento";
 import { BootSplash } from "./components/BootSplash";
 
 import { withPercent } from "./core/benchmarkFormat";
@@ -211,6 +228,32 @@ export const App: React.FC = () => {
   // hacen su entrada escalonada, que pasaría debajo sin verse; la hacen al irse.
   const [splash, setSplash] = useState(true);
 
+  // La píldora del raíl. Antes era un `layoutId` de framer-motion, que mide el
+  // layout de la página al montar (~30 ms en el arranque, medido) y metía
+  // framer en el paquete principal. Ahora es un solo elemento que se mueve con
+  // `transform` (lo anima el compositor, sin JS por fotograma) hasta el botón
+  // activo; la curva de muelle sin rebote está en CSS (`.rail__pill`).
+  const railNavRef = useRef<HTMLDivElement>(null);
+  const pildoraRef = useRef<HTMLSpanElement>(null);
+  const pildoraColocada = useRef(false);
+  const colocarPildora = useCallback((animar: boolean) => {
+    const nav = railNavRef.current;
+    const pildora = pildoraRef.current;
+    if (!nav || !pildora) return;
+    const activo = nav.querySelector<HTMLElement>(".nav-btn--active");
+    if (!activo) {
+      pildora.style.opacity = "0";
+      return;
+    }
+    // La primera vez (y al cambiar el tamaño del raíl) aparece en su sitio,
+    // sin viajar desde la esquina.
+    pildora.style.transition = animar && pildoraColocada.current ? "" : "none";
+    pildora.style.width = `${activo.offsetWidth}px`;
+    pildora.style.height = `${activo.offsetHeight}px`;
+    pildora.style.transform = `translate3d(${activo.offsetLeft}px, ${activo.offsetTop}px, 0)`;
+    pildora.style.opacity = "1";
+    pildoraColocada.current = true;
+  }, []);
   const goTo = (path: string, origin: NavOrigin = "ptr") => {
     setNavOrigin(origin);
     navigate(path);
@@ -245,9 +288,103 @@ export const App: React.FC = () => {
   // Envuelve un panel: oculto con display:none en vez de desmontarlo, y sin renderizar
   // su contenido hasta la primera visita.
   //
-  // Al pasar a activo, sus bloques entran escalonados (`Shown`, ver
-  // core/enterMotion.ts). Si la navegación vino del teclado (`<html
-  // data-nav="kbd">`) no se anima: quien navega con el teclado ya sabe adónde va.
+  // El cambio de pantalla lo anima una View Transition (core/navegar.ts). La
+  // primera vez que se ve, además, sus bloques entran escalonados (`Shown`,
+  // core/movimiento.ts). Con el teclado no se anima nada.
+  // El contenido de cada pantalla, memorizado. App se vuelve a pintar en cada
+  // navegación (cambia la ruta) y, con los elementos creados de nuevo, React
+  // volvía a pintar TODAS las pantallas ya montadas: 23 ms medidos en cada
+  // cambio, con la pantalla congelada mientras tanto. Con el mismo elemento,
+  // React se las salta.
+  const cSettings = useMemo(() => <SettingsPanel />, []);
+  const cTraining = useMemo(() => <TrainingPanel />, []);
+  const cClips = useMemo(() => <ClipsGallery />, []);
+  const cPatterns = useMemo(() => <PatternsPanel />, []);
+  const cCoach = useMemo(() => <CoachPanel />, []);
+  const cChamp = useMemo(() => <ChampSelectPanel />, []);
+  const cHome = useMemo(
+    () => (
+      <HomePanel
+        matches={matches}
+        loading={firstLoad}
+        isRecording={isRecording}
+        onOpenMatch={(m) => { setSelectedMatch(m); navigate("/review"); }}
+        onGoTraining={() => navigate("/training")}
+      />
+    ),
+    [matches, firstLoad, isRecording, setSelectedMatch, navigate]
+  );
+  const cVod = useMemo(
+    () =>
+      selectedVod ? (
+        <div style={styles.playerWrapper}>
+          {/* La cabecera (campeón, resultado, clip y error) la pinta el
+              propio reproductor: es quien sabe la duración real del vídeo
+              y tiene el recortador a mano. */}
+          <VideoPlayer match={selectedVod} onBack={() => setSelectedVod(null)} backLabel={t("Video analysis")} />
+        </div>
+      ) : (
+        <VodGallery onSelectMatch={setSelectedVod} />
+      ),
+    [selectedVod, setSelectedVod, t]
+  );
+  const cErrors = useMemo(
+    () =>
+      selectedError ? (
+        <ErrorPlayer
+          clip={selectedError}
+          // Era `() => {}`, así que guardar una nota no refrescaba nada: la
+          // nota estaba en disco y en pantalla seguía sin aparecer. Ahora
+          // relee los errores al store, que además vuelve a apuntar el clip
+          // abierto a su versión fresca.
+          onUpdate={() => { refreshErrorClips().catch(console.error); }}
+          onClose={() => setSelectedError(null)}
+        />
+      ) : (
+        <ErrorsGallery onSelectError={setSelectedError} />
+      ),
+    [selectedError, refreshErrorClips, setSelectedError]
+  );
+  const cReview = useMemo(
+    () => (
+      <>
+        {selectedMatch && (
+          <div style={styles.playerWrapper}>
+            <VideoPlayer match={selectedMatch} onBack={() => setSelectedMatch(null)} backLabel={t("Library")} />
+          </div>
+        )}
+        {/* La galería NO se desmonta al abrir una partida: se oculta, igual
+            que las rutas. Montarla de cero al volver hacía que el
+            virtualizador recolocara todo desde una estimación (fichas
+            pisándose unas a otras un instante) y perdía el scroll. Oculta,
+            su ResizeObserver ya sabe remedir al reaparecer. */}
+        <Shown
+          when={!selectedMatch}
+          skipInitial
+          fundirAlVolver
+          style={{
+            flexDirection: "column",
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
+          <TitleOff off={selectedMatch != null}>
+            <MatchGallery
+              matches={matches}
+              loading={firstLoad}
+              onSelectMatch={setSelectedMatch}
+              onDeleteMatch={deleteMatch}
+              onDeleteMatches={deleteMatches}
+              loadError={matchesError}
+              onRetry={refreshMatches}
+            />
+          </TitleOff>
+        </Shown>
+      </>
+    ),
+    [selectedMatch, setSelectedMatch, t, matches, firstLoad, deleteMatch, deleteMatches, matchesError, refreshMatches]
+  );
+
   const panel = (path: Panel, content: React.ReactNode) => {
     const active = activePanel === path;
     return (
@@ -273,6 +410,21 @@ export const App: React.FC = () => {
     );
   };
 
+  // La píldora sigue a la sección activa (ver `colocarPildora`). Antes del
+  // `return` del asistente: los hooks no pueden ir detrás de un return
+  // condicional.
+  useLayoutEffect(() => {
+    colocarPildora(true);
+  }, [activeTabKey, onChampSelect, champSelect, colocarPildora, onboarding.done]);
+  useEffect(() => {
+    const nav = railNavRef.current;
+    if (!nav || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => colocarPildora(false));
+    ro.observe(nav);
+    return () => ro.disconnect();
+    // Tras el asistente aparece el raíl: hay que engancharse a él entonces.
+  }, [colocarPildora, onboarding.done]);
+
   // Primer arranque: en lugar de los paneles, el asistente. La barra de título
   // sigue puesta (hay que poder mover y cerrar la ventana), y al terminar se
   // guarda `onboarding_done` y aparece la app ya configurada.
@@ -285,13 +437,20 @@ export const App: React.FC = () => {
     );
   }
 
+
   return (
     <TitleSlotContext.Provider value={titleSlot}>
       {splash && (
         <BootSplash
           ready={matchesLoaded || !!matchesError}
           games={matches.length}
-          onGone={() => setSplash(false)}
+          onGone={() => {
+            performance.mark("wl:bienvenida-fuera");
+            setSplash(false);
+            // Con Hoy ya a la vista y su entrada en marcha, el resto de
+            // pantallas se cargan en ratos ociosos: la primera visita no espera.
+            precargarEnReposo([MatchGallery, VideoPlayer, PatternsPanel, CoachPanel, ErrorsGallery, ErrorPlayer, ClipsGallery, SettingsPanel, TrainingPanel, VodGallery, ChampSelectPanel]);
+          }}
         />
       )}
       <div className="app-body" style={styles.appContainer}>
@@ -302,7 +461,10 @@ export const App: React.FC = () => {
         <div className="rail__brand" data-tauri-drag-region>
           <BrandMark size={30} />
         </div>
-        <div className="rail__nav">
+        <div className="rail__nav" ref={railNavRef}>
+          {/* El círculo de la sección activa: uno solo que se desplaza hasta el
+              botón activo (ver `colocarPildora`). */}
+          <span ref={pildoraRef} className="rail__pill" aria-hidden="true" />
           {(!!champSelect || onChampSelect) && (
             <>
               <div className="nav-grp" aria-hidden="true">{t("Now")}</div>
@@ -313,7 +475,6 @@ export const App: React.FC = () => {
                 aria-current={onChampSelect ? "page" : undefined}
                 aria-label={t(CHAMP_SELECT_ITEM.label)}
               >
-                {onChampSelect && <motion.span layoutId="rail-activo" className="nav-btn__pill" transition={RAIL_SPRING} />}
                 {CHAMP_SELECT_ITEM.icon}
                 <span className="nav-btn__label">{t(CHAMP_SELECT_ITEM.label)}</span>
                 {!!champSelect && <span className="nav-btn__live" aria-hidden="true" />}
@@ -331,11 +492,11 @@ export const App: React.FC = () => {
                     key={item.key}
                     type="button"
                     onClick={(e) => goTo(item.path, originOf(e))}
+                    onPointerEnter={() => TROZOS[item.path]?.forEach((x) => { x.precargar().catch(() => {}); })}
                     className={`nav-btn${activo ? " nav-btn--active" : ""}`}
                     aria-current={activo ? "page" : undefined}
                     aria-label={label}
                   >
-                    {activo && <motion.span layoutId="rail-activo" className="nav-btn__pill" transition={RAIL_SPRING} />}
                     {item.icon}
                     <span className="nav-btn__label">{label}</span>
                   </button>
@@ -395,95 +556,24 @@ export const App: React.FC = () => {
         status={<CaptureStatus isRecording={isRecording} />}
         slotRef={setTitleSlot}
       />
-      <main style={styles.mainContent}>
+      <main className="app-main" style={styles.mainContent}>
         <RiotKeyBanner />
-        {panel("/settings", <SettingsPanel />)}
+        {panel("/settings", cSettings)}
 
-        {panel("/training", <TrainingPanel />)}
+        {panel("/training", cTraining)}
 
-        {panel("/clips", <ClipsGallery />)}
-        {panel("/patterns", <PatternsPanel />)}
-        {panel("/coach", <CoachPanel />)}
-        {panel("/champ-select", <ChampSelectPanel />)}
+        {panel("/clips", cClips)}
+        {panel("/patterns", cPatterns)}
+        {panel("/coach", cCoach)}
+        {panel("/champ-select", cChamp)}
 
-        {panel(
-          "/home",
-          <HomePanel
-            matches={matches}
-            loading={firstLoad}
-            isRecording={isRecording}
-            onOpenMatch={(m) => { setSelectedMatch(m); navigate("/review"); }}
-            onGoTraining={() => navigate("/training")}
-          />
-        )}
+        {panel("/home", cHome)}
 
-        {panel(
-          "/vod",
-          selectedVod ? (
-            <div style={styles.playerWrapper}>
-              {/* La cabecera (campeón, resultado, clip y error) la pinta el
-                  propio reproductor: es quien sabe la duración real del vídeo
-                  y tiene el recortador a mano. */}
-              <VideoPlayer match={selectedVod} onBack={() => setSelectedVod(null)} backLabel={t("Video analysis")} />
-            </div>
-          ) : (
-            <VodGallery onSelectMatch={setSelectedVod} />
-          )
-        )}
+        {panel("/vod", cVod)}
 
-        {panel(
-          "/errors",
-          selectedError ? (
-            <ErrorPlayer
-              clip={selectedError}
-              // Era `() => {}`, así que guardar una nota no refrescaba nada: la
-              // nota estaba en disco y en pantalla seguía sin aparecer. Ahora
-              // relee los errores al store, que además vuelve a apuntar el clip
-              // abierto a su versión fresca.
-              onUpdate={() => { refreshErrorClips().catch(console.error); }}
-              onClose={() => setSelectedError(null)}
-            />
-          ) : (
-            <ErrorsGallery onSelectError={setSelectedError} />
-          )
-        )}
+        {panel("/errors", cErrors)}
 
-        {panel(
-          "/review",
-          <>
-            {selectedMatch && (
-              <div style={styles.playerWrapper}>
-                <VideoPlayer match={selectedMatch} onBack={() => setSelectedMatch(null)} backLabel={t("Library")} />
-              </div>
-            )}
-            {/* La galería NO se desmonta al abrir una partida: se oculta, igual
-                que las rutas. Montarla de cero al volver hacía que el
-                virtualizador recolocara todo desde una estimación (fichas
-                pisándose unas a otras un instante) y perdía el scroll. Oculta,
-                su ResizeObserver ya sabe remedir al reaparecer. */}
-            <Shown
-              when={!selectedMatch}
-              skipInitial
-              style={{
-                flexDirection: "column",
-                flex: 1,
-                minHeight: 0,
-              }}
-            >
-              <TitleOff off={selectedMatch != null}>
-                <MatchGallery
-                  matches={matches}
-                  loading={firstLoad}
-                  onSelectMatch={setSelectedMatch}
-                  onDeleteMatch={deleteMatch}
-                  onDeleteMatches={deleteMatches}
-                  loadError={matchesError}
-                  onRetry={refreshMatches}
-                />
-              </TitleOff>
-            </Shown>
-          </>
-        )}
+        {panel("/review", cReview)}
 
         {/* Lista de reproducción entre partidas ("las 11 muertes seguidas"),
             flotando abajo sobre el reproductor. La pinta Patrones; aquí solo
@@ -526,8 +616,6 @@ export const App: React.FC = () => {
   );
 };
 
-/** El indicador de la sección activa salta de icono a icono: rápido y sin rebote (Emil). */
-const RAIL_SPRING = { type: "spring", duration: 0.22, bounce: 0 } as const;
 
 const styles: Record<string, React.CSSProperties> = {
   appContainer: {
@@ -537,6 +625,8 @@ const styles: Record<string, React.CSSProperties> = {
   mainContent: {
     // Relativo: es el marco de la lista de reproducción flotante.
     position: "relative",
+    // Lo que anima la View Transition al cambiar de pantalla (index.css).
+    viewTransitionName: "pantalla",
     flex: 1,
     minWidth: 0,
     height: "100%",
@@ -559,10 +649,11 @@ const styles: Record<string, React.CSSProperties> = {
 
 /**
  * Una caja que se oculta con `display: none` (sin desmontar lo de dentro) y
- * que, cada vez que vuelve a verse, hace entrar sus bloques escalonados. Es
- * el envoltorio de cada pantalla y el de la Biblioteca bajo el reproductor.
- * `ready` espera a que el contenido exista: la primera visita a una pantalla
- * lo monta un render después de enseñarla.
+ * que, la PRIMERA vez que se ve, hace entrar sus bloques escalonados. Al
+ * volver, solo la transición de pantalla: lo que se ve decenas de veces al
+ * día no hace esperar. Es el envoltorio de cada pantalla y el de la
+ * Biblioteca bajo el reproductor. `ready` espera a que el contenido exista:
+ * la primera visita a una pantalla lo monta un render después de enseñarla.
  */
 const Shown: React.FC<{
   when: boolean;
@@ -570,11 +661,21 @@ const Shown: React.FC<{
   /** No animar la primera vez: si lo de fuera ya entra con ella (la
    *  Biblioteca dentro de su pantalla), se sumarían las dos entradas. */
   skipInitial?: boolean;
+  /** Fundido corto cada vez que vuelve a verse (la Biblioteca al cerrar el
+   *  reproductor: mientras, el retrato vuelve volando a su fila). */
+  fundirAlVolver?: boolean;
   style?: React.CSSProperties;
   children: React.ReactNode;
-}> = ({ when, ready = true, skipInitial = false, style, children }) => {
+}> = ({ when, ready = true, skipInitial = false, fundirAlVolver = false, style, children }) => {
   const ref = useRef<HTMLDivElement>(null);
-  useEnterOnChange(ref, when && ready, { skipInitial });
+  useEntradaPrimeraVez(ref, when && ready, { saltarPrimera: skipInitial });
+  const antes = useRef(when);
+  useLayoutEffect(() => {
+    const volvio = when && !antes.current;
+    antes.current = when;
+    if (!volvio || !fundirAlVolver || document.documentElement.dataset.nav === "kbd") return;
+    ref.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "backwards" });
+  }, [when, fundirAlVolver]);
   return (
     <div ref={ref} style={{ ...style, display: when ? "flex" : "none" }}>
       {children}

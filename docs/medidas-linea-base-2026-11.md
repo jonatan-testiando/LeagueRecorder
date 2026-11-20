@@ -151,3 +151,52 @@ Qué cambió:
 | `load_all_matches` en caliente (banco) | 144 ms | 34 ms |
 
 Con 300: lista completa 97 ms y refresco sin cambios ~35 ms antes de quitar el `stat` (no repetido después).
+
+## Arranque visual y frontend (2026-11-19)
+
+Medido en la app de release con CDP: marcas `performance.mark("wl:*")` (main.tsx, useAppStore, HomePanel, App) alineadas con el registro de Rust por la hora de reloj (`epoch_ms` en la línea «arranque»). Perfiles de CPU de una recarga traducidos con el sourcemap de `vite build --sourcemap`.
+
+Antes, con 29 partidas: el WebView empieza a cargar a ~0,4-0,5 s del arranque del proceso (Windows, Tauri y WebView2; nuestro `setup` son 25 ms); JS de 1,16 MB en un solo fichero; ~130 ms de primer render antes de la primera llamada al backend; `get_audio_status` síncrono (50-80 ms en el hilo principal) retrasaba la lista; datos de Hoy pintados a ~0,81 s; la bienvenida, con un mínimo de 2 s desde que se monta, dejaba ver Hoy a ~2,6-2,9 s. En el perfil, ~78 ms de ~200 ms de JS se iban en crear formateadores `Intl` (uno nuevo por cifra o fecha), Hoy montaba escondida la sección plegada (4.357 nodos, la mitad del DOM) y framer-motion medía el layout para la píldora del raíl (~31 ms en `scrollLeft`).
+
+Qué cambió:
+- `core/intl.ts`: formateadores `Intl` creados una vez por idioma y opciones.
+- Hoy: «Más sobre esta partida» no se monta hasta abrirla; los episodios buscan su partida en un `Map`.
+- La píldora del raíl es un solo elemento movido con `transform` y una curva de muelle sin rebote en CSS (`linear()`); el fundido del título de pantalla también es CSS. framer-motion solo queda en el reproductor de errores.
+- `get_audio_status` fuera del hilo principal.
+- Las pantallas que no se ven al arrancar van en su propio trozo (`core/perezoso.tsx`, sin `React.lazy` para que no haya un fotograma vacío que se coma la entrada) y se precargan en reposo al irse la bienvenida y al pasar el ratón por el raíl. JS principal 1,19 MB → 599 KB; CSS principal 224 → 95 KB.
+- Bienvenida: mínimo de 1 s contado desde que se ve (su coreografía acaba a los ~960 ms), en vez de 2 s desde que se monta.
+
+| 29 partidas | antes | ahora |
+|---|---|---|
+| Hoy visible (sale la bienvenida) | 2,6-2,9 s | ~1,95 s |
+| JS de la app en el perfil de una recarga | ~200 ms | ~35 ms |
+| Recarga en caliente: Hoy pintada | 217 ms | 137 ms |
+| Nodos del DOM en Hoy | 8.938 | ~4.600 |
+
+Lo que queda por debajo de eso es de WebView2: ~0,45 s hasta empezar a cargar la página y ~250 ms entre que el JS empieza y el primer fotograma en un arranque en frío (en una recarga en caliente son ~5 ms), que es la puesta en marcha del compositor, no nuestro código.
+
+## Movimiento (2026-11-19/20)
+
+El usuario: las animaciones «van a tirones». Medido con clics de ratón reales por CDP en la app de release, pantalla de 240 Hz (4,2 ms por fotograma). Dos medidas: fotogramas del hilo principal (`requestAnimationFrame`) y fotogramas que presenta o pierde el compositor (`PipelineReporter` en una traza del navegador; solo esta dice lo que ve el ojo en las animaciones que corren en el compositor).
+
+Causa de los tirones: `core/enterMotion.ts` recorría el árbol con `getComputedStyle`/`getBoundingClientRect` en el mismo fotograma en que React montaba la pantalla y animaba hasta 23 piezas, cada una en su capa; la animación arrancaba con el hilo principal ocupado.
+
+Qué cambió (`core/movimiento.ts`, `core/navegar.ts`):
+- Cambiar de pantalla con View Transitions (90 ms la que se va, 220 ms la que llega, 10 px según la dirección del raíl; el título de la barra cruza con desenfoque). Todas las navegaciones pasan por `useNavigate` de `core/navegar.ts`, que va directo al navegador del router: el de react-router se suscribe a la ruta y repintaba en cada cambio todas las pantallas que lo usan. `HashRouter useTransitions={false}`: si no, el cambio de ruta va en `startTransition` y `flushSync` no lo aplica dentro de la transición.
+- El contenido de cada pantalla, memorizado en App: antes se repintaban todas las pantallas montadas en cada navegación (23 ms).
+- Entrada escalonada solo en la primera visita, ≤5 bloques (`data-e` o los hijos del primer contenedor con varios), sin medir nada.
+- Abrir/cerrar partida: vuela el retrato (fila o Hoy → miga del reproductor); el reproductor se funde y el panel entra 18 px con la curva de los cajones; la Biblioteca se funde al volver.
+- Segmentados con `clip-path` sobre una copia activa (el texto cambia de color a la vez que el fondo); indicadores con muelle `linear()`.
+- Hoja de estadísticas: sube como un cajón (320 ms) y baja en 200 ms; pestañas y bloques cambian con un fundido de 160 ms con desenfoque.
+- Con el teclado no se anima nada; movimiento reducido = solo fundidos.
+
+| Interacción (hilo principal, `requestAnimationFrame`) | antes | ahora |
+|---|---|---|
+| Abrir la hoja de estadísticas | tirón de 46 ms | máx. 8 ms |
+| Pestaña Resumen del reproductor | tirón de 25 ms | máx. 8 ms |
+| Pestaña de la hoja | 12,5 ms | máx. 8 ms |
+| Abrir partida | hasta 50 ms | hasta 54 ms |
+
+Cambio de pantalla, compositor: tras el clic hay ~20 ms con la pantalla quieta (5 fotogramas a 240 Hz: la captura de la transición y el render) y después la animación de 220 ms no pierde ningún fotograma. El render dentro de la transición bajó de 23 ms a ~13 ms con las pantallas memorizadas y el `useNavigate` propio.
+
+Queda: abrir una partida sigue costando ~47 ms de montaje del reproductor antes de la animación (el cuerpo de `VideoPlayer` ~11 ms, el layout de todo el reproductor que fuerzan las medidas de `useIndicator` ~17 ms, y sus efectos después) y la primera visita a la Biblioteca (lista virtualizada) pierde ~20 fotogramas. Eso es el coste del reproductor, no de la animación.

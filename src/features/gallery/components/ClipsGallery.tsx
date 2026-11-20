@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import {
   Film, UploadCloud, Check, Copy, ExternalLink, RotateCcw, Heart,
   FolderOpen, PlaySquare, Trash2,

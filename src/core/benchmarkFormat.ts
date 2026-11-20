@@ -16,6 +16,7 @@
 
 import { roleLabel } from "./roles";
 import type { MetricComparison } from "./tauri-ipc";
+import { fixedDigits } from "./intl";
 
 /**
  * Los tres tramos del baremo, con la etiqueta que se enseña.
@@ -99,10 +100,7 @@ export const metricShort = (metric: string): string =>
  * cifras parecen de sitios distintos aunque no lo sean.
  */
 export const formatDecimal = (value: number, digits = 1): string =>
-  value.toLocaleString(document.documentElement.lang === "en" ? "en-US" : "es-ES", {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  fixedDigits(value, document.documentElement.lang === "en" ? "en-US" : "es-ES", digits);
 
 /**
  * Una cifra con su %: «50 %» en español (espacio duro, como hace `translate`)

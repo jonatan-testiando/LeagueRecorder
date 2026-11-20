@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { useNavigate } from "../core/navegar";
 import { getCurrentWindow, UserAttentionType } from "@tauri-apps/api/window";
 import { Swords } from "lucide-react";
 import { useT } from "../core/LanguageProvider";

@@ -68,7 +68,13 @@ pub fn anotar(que: &str, ms: f64, detalle: &str) {
 /// Marca el arranque de la app (la cuenta de «ms desde el arranque»).
 pub fn arranque() {
     if activa() {
-        anotar("arranque", 0.0, "");
+        // La hora de reloj del arranque, para alinear este registro con el
+        // `performance.timeOrigin` del WebView.
+        let epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        anotar("arranque", 0.0, &format!("epoch_ms={epoch}"));
     }
 }
 

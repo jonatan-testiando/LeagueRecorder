@@ -1,6 +1,5 @@
 import React, { createContext, useContext } from "react";
 import { createPortal } from "react-dom";
-import { motion } from "framer-motion";
 
 /**
  * El hueco de la barra de título donde cada pantalla pinta su título (piel A).
@@ -37,18 +36,15 @@ export const ScreenTitle: React.FC<{
   const active = useContext(PanelActiveContext);
   if (!slot || !active) return null;
   return createPortal(
-    <motion.div
-      className={align ? `screen-title screen-title--${align}` : "screen-title"}
-      initial={{ opacity: 0.4 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.12, ease: "easeOut" }}
-    >
+    // El fundido de entrada (0,4 → 1 en 120 ms) es CSS (`.screen-title`):
+    // antes era framer-motion solo para esto.
+    <div className={align ? `screen-title screen-title--${align}` : "screen-title"}>
       <div className="screen-title__txt">
         <h1 className="screen-title__h1">{title}</h1>
         {sub && <p className="screen-title__sub">{sub}</p>}
       </div>
       {children && <div className="screen-title__extra">{children}</div>}
-    </motion.div>,
+    </div>,
     slot,
   );
 };

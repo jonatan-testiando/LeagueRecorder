@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "../../../core/navegar";
 import { Ban, Flag, Info, Play, Skull, Swords } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
 import { setChampSelectRole, useChampSelect } from "../../../core/useChampSelect";
@@ -26,6 +26,7 @@ import {
 } from "../../../core/tauri-ipc";
 import { ScreenTitle } from "../../../components/ScreenTitle";
 import "./ChampSelectPanel.css";
+import { dateFormat } from "../../../core/intl";
 
 /**
  * La selección de campeón (§4 de `docs/coach-de-macro-diseno.md`), en la
@@ -69,7 +70,7 @@ const laneName = (l: LanePosition | null | undefined, t: Translate) => (l ? t(PO
 function shortDate(iso: string, lang: string): string {
   const d = new Date(iso.replace(" ", "T"));
   if (Number.isNaN(d.getTime())) return iso.split(" ")[0] ?? "";
-  return new Intl.DateTimeFormat(lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "short" }).format(d);
+  return dateFormat(lang === "es" ? "es-ES" : "en-US", { day: "numeric", month: "short" }).format(d);
 }
 
 /* ============================================================ panel */

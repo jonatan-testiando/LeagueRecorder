@@ -1,5 +1,6 @@
 import type { CoachPlan, CoachPlay, CoachRow, CoachSummary } from "./tauri-ipc";
 import { champLabel } from "./matchEvents";
+import { fixedDigits } from "./intl";
 
 /**
  * Lo que la UI necesita para contar el coach (`coach.rs`): nombres de las
@@ -66,7 +67,7 @@ export const isOwnBaseline = (row: CoachRow): boolean => row.baseline === "own";
 export function wpPoints(x: number, lang: string): string {
   const p = Math.abs(x) * 100;
   const d = p < 10 ? 1 : 0;
-  return p.toLocaleString(lang === "es" ? "es-ES" : "en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  return fixedDigits(p, lang === "es" ? "es-ES" : "en-US", d);
 }
 
 /** "Muertes al jungla rival entre el minuto 7 y el 14". */

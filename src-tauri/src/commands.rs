@@ -719,8 +719,18 @@ pub fn set_video_settings(
 ///   2. si aún no se ha grabado nada, si el sistema tiene siquiera un dispositivo
 ///      de reproducción — sin salida de audio no hay loopback posible.
 #[tauri::command]
-pub fn get_audio_status(state: State<'_, Arc<RecorderState>>) -> AudioStatus {
+pub async fn get_audio_status(state: State<'_, Arc<RecorderState>>) -> Result<AudioStatus, String> {
     let _medida = crate::medida::Tramo::nuevo("cmd/get_audio_status");
+    // Fuera del hilo principal: preguntar al servidor y buscar el dispositivo
+    // de audio tarda 50-80 ms (medido al arrancar), y como comando síncrono
+    // retenía detrás las demás peticiones del arranque, la lista incluida.
+    let estado = Arc::clone(state.inner());
+    tauri::async_runtime::spawn_blocking(move || estado_del_audio(&estado))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+fn estado_del_audio(state: &Arc<RecorderState>) -> AudioStatus {
     // Mientras hay algo grabando se le pregunta al servidor; si no, vale la
     // última respuesta que dio (con la tubería parada la fuente de audio no
     // existe, así que preguntar entonces siempre diría "no" y sería mentira).

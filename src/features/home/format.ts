@@ -1,6 +1,7 @@
 import type { Translate } from "../../core/eventText";
 import type { Language } from "../../core/i18n";
 import { normalizePosition } from "../../components/PositionIcon";
+import { dateFormat, fixedDigits } from "../../core/intl";
 
 /**
  * Frases y cifras de «Hoy». Cada texto pasa por `t()` con la clave LITERAL (no
@@ -11,7 +12,7 @@ const locale = (lang: Language) => (lang === "es" ? "es-ES" : "en-US");
 
 /** Cifra con los decimales fijos y la coma del idioma ("2,33" / "2.33"). */
 export const fmtNum = (n: number, lang: Language, digits = 0): string =>
-  n.toLocaleString(locale(lang), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  fixedDigits(n, locale(lang), digits);
 
 /** "7th" / "7.º". */
 export function ordinal(n: number, lang: Language): string {
@@ -24,7 +25,7 @@ export function ordinal(n: number, lang: Language): string {
 
 /** "Monday, September 22" / "Lunes, 22 de septiembre". */
 export function longDate(lang: Language, d = new Date()): string {
-  const s = d.toLocaleDateString(locale(lang), { weekday: "long", day: "numeric", month: "long" });
+  const s = dateFormat(locale(lang), { weekday: "long", day: "numeric", month: "long" }).format(d);
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 

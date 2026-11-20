@@ -24,6 +24,19 @@ if ($txt.Contains("leaguerec_limitar_ritmo")) {
 }
 $nl = if ($txt.Contains("`r`n")) { "`r`n" } else { "`n" }
 
+# `MinUpdateInterval` solo existe en las cabeceras C++/WinRT del SDK 10.0.26100
+# en adelante. OBS compila con el SDK más nuevo instalado (build-obs.ps1 lo fija
+# en el preset): si ese no lo trae, el parche no compilaría y se tumbaría la
+# release entera. Sin él se graba igual, solo que sin el tope de ritmo.
+$sdk = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -Directory -ErrorAction SilentlyContinue |
+       Where-Object { $_.Name -match '^10\.' } | Sort-Object { [version]$_.Name } -Descending |
+       Select-Object -First 1
+$cab = if ($sdk) { Join-Path $sdk.FullName "cppwinrt\winrt\impl\windows.graphics.capture.0.h" } else { $null }
+if (-not $cab -or -not (Test-Path $cab) -or -not (Select-String -Path $cab -SimpleMatch "MinUpdateInterval" -Quiet)) {
+  Write-Warning "Parche WGC NO aplicado: el SDK de Windows ($($sdk.Name)) no trae MinUpdateInterval."
+  return
+}
+
 $ayuda = @'
 /* [leaguerec] Ritmo de la captura WGC: como mucho el doble de los FPS del
  * lienzo (ver leaguerec-obs/scripts/parche-wgc.ps1). Sin esto Windows entrega

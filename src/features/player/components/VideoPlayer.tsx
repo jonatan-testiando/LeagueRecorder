@@ -42,6 +42,7 @@ import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
 import { useErrorClips, useMatches } from "../../../store/useAppStore";
 import { movimientoReducido, useCambio } from "../../../core/movimiento";
+import { CabezaTira, HoverTira, type HoverTiraApi } from "./TiraEnVivo";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
 import {
@@ -417,7 +418,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   const progressBarRef = useRef<HTMLDivElement>(null);
 
   const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [hoverPct, setHoverPct] = useState<number | null>(null);
+  /** La línea y la etiqueta bajo el ratón viven en HoverTira (TiraEnVivo.tsx):
+   *  moverse por la tira no repinta el reproductor. */
+  const hoverApi = useRef<HoverTiraApi>(null);
   const [showTracker, setShowTracker] = useState<boolean>(true);
   const {
     isClippingMode,
@@ -668,7 +671,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
       if (!rect) return;
       const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
       const pct = x / rect.width;
-      setHoverPct(pct);
+      hoverApi.current?.set(pct);
 
       if (clipDragThumb) {
         dragThumbTo(pct * duration);
@@ -685,11 +688,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     } else if (isDragging) {
       setIsDragging(false);
     }
-    setHoverPct(null);
+    hoverApi.current?.set(null);
   };
 
   const handlePointerLeave = () => {
-    if (!isDragging) setHoverPct(null);
+    if (!isDragging) hoverApi.current?.set(null);
   };
 
   const handleThumbPointerDown = (e: React.PointerEvent<HTMLDivElement>, type: "start" | "end") => {
@@ -832,7 +835,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     () => individualEvents(match.events, match.timeline_markers ?? []),
     [match.events, match.timeline_markers]
   );
-  const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   // Marcas del eje temporal adaptadas a la duración real del vídeo (antes fijas a 30 min).
   // Elegimos un paso "redondo" para tener ~4-6 marcas legibles.
@@ -1326,13 +1328,32 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     return [`${gclock(ev.time)} · ${t(eventMeta(ev, 12).label)}`, desc].filter(Boolean).join(" – ");
   };
 
+  /** La etiqueta del instante bajo el ratón: la hora y la ventaja de oro. */
+  const etiquetaHover = useCallback(
+    (p: number) => {
+      const segundos = p * duration;
+      const d = leadAt(segundos);
+      return (
+        <div className="vp-tip__head">
+          <span className="t-time">{gclock(segundos)}</span>
+          {d != null && (
+            <span className="vp-tip__gold" data-side={d >= 0 ? "up" : "down"}>
+              {t("{n} gold", { n: goldShort(d) })}
+            </span>
+          )}
+        </div>
+      );
+    },
+    [duration, leadAt, gclock, t]
+  );
+
   const renderTrack = (compact: boolean) => {
     const w = trackSize.w || 1000;
     const group = hoverGroup !== null ? markGroups[hoverGroup] : undefined;
-    // La etiqueta: la del racimo bajo el ratón (o con el foco) o, si no, la
-    // del instante bajo el ratón. Pegada a un borde no cabe centrada: se ancla
-    // por el lado que tiene sitio.
-    const tipX = group ? group.x : hoverPct !== null ? hoverPct * w : null;
+    // La etiqueta del racimo bajo el ratón (o con el foco); la del instante
+    // bajo el ratón la pone HoverTira. Pegada a un borde no cabe centrada: se
+    // ancla por el lado que tiene sitio.
+    const tipX = group ? group.x : null;
     const tipAlign = tipX === null || (tipX >= 120 && tipX <= w - 120) ? undefined : tipX < 120 ? "start" : "end";
     return (
       <div
@@ -1433,34 +1454,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
         ))}
 
         {/* Cursor de reproducción, en oro. Lo mueven la mano o el vídeo: va
-            sin transición, también en los saltos (latencia cero). */}
-        <div className="vp-track__head" style={{ left: `${progressPct}%` }} />
-        {hoverPct !== null && <div className="vp-track__hover" style={{ left: `${hoverPct * 100}%` }} />}
+            sin transición, también en los saltos (latencia cero), y sigue al
+            vídeo fotograma a fotograma sin pasar por React (TiraEnVivo.tsx). */}
+        <CabezaTira videoRef={videoRef} duration={duration} />
+        <HoverTira ref={hoverApi} ancho={w} oculta={!!group} etiqueta={etiquetaHover} />
 
         {/* Etiqueta. Cuelga de la propia tira, que es a lo que se refiere: en
             `position: fixed` con una altura a fuego flotaba en mitad del vídeo
             en pantalla completa. */}
-        {tipX !== null && (
+        {group && tipX !== null && (
           <div className="vp-tip" data-align={tipAlign} style={{ left: `${tipX}px` }}>
-            {group ? (
-              <>
-                {group.items.slice(0, CLUSTER_LIST).map(tipRow)}
-                {group.items.length > CLUSTER_LIST && (
-                  <span className="vp-tip__more">{t("+{n} more", { n: group.items.length - CLUSTER_LIST })}</span>
-                )}
-              </>
-            ) : (
-              <div className="vp-tip__head">
-                <span className="t-time">{gclock((hoverPct ?? 0) * duration)}</span>
-                {(() => {
-                  const d = leadAt((hoverPct ?? 0) * duration);
-                  return d == null ? null : (
-                    <span className="vp-tip__gold" data-side={d >= 0 ? "up" : "down"}>
-                      {t("{n} gold", { n: goldShort(d) })}
-                    </span>
-                  );
-                })()}
-              </div>
+            {group.items.slice(0, CLUSTER_LIST).map(tipRow)}
+            {group.items.length > CLUSTER_LIST && (
+              <span className="vp-tip__more">{t("+{n} more", { n: group.items.length - CLUSTER_LIST })}</span>
             )}
           </div>
         )}

@@ -743,6 +743,9 @@
    mueven la mano o el vídeo, con latencia cero. */
 .vp-track__head {
   position: absolute;
+  /* Lo coloca CabezaTira con transform (en su capa), no con left. */
+  left: 0;
+  will-change: transform;
   top: var(--tl-ruler);
   bottom: 0;
   width: 2px;

@@ -279,3 +279,21 @@ O sea: un 12 % menos de CPU del servidor, la GPU igual, y la grabación sin foto
 Trampa de la medida: el servidor del runtime local anterior (1 de septiembre) ignoraba `--width/--height` en el modo de prueba y grababa a 1080p; comparado con uno nuevo a 1440p, el codificador parecía trabajar el doble por culpa del parche. Comparar siempre con el mismo `leaguerec-obs.exe`. Y con `OBS_RUNDIR` en forma corta (`ALEJAN~1`) y el directorio de trabajo en forma larga, `same_dir` no ve que son la misma carpeta y los plugins se cargan dos veces (solo en pruebas; la app pasa las dos largas).
 
 Sin medir con League de verdad: cuántos FPS del juego cuesta grabar. La captura de juego (`game_capture`, gancho en el propio juego) sigue apagada: nuestro `graphics-hook64.dll` está compilado por nosotros y sin la firma de OBS, y meter una DLL sin firmar en un juego con Vanguard puede bloquearse o marcar la cuenta.
+
+## El reproductor: cursor y ratón sobre la tira (2026-11-20)
+
+Medido en release con eventos de ratón reales por CDP: el ratón cruza la tira en 1 s (un movimiento cada 4 ms, como un ratón rápido a 240 Hz) y 3 s de vídeo en marcha.
+
+Antes, la posición del ratón en la tira (`hoverPct`) y el cursor de reproducción (`left` a partir de `currentTime`) eran estado de VideoPlayer: cada movimiento del ratón repintaba el reproductor entero, y el cursor avanzaba a saltos, cuatro veces por segundo (lo que dura cada `timeupdate`).
+
+Ahora (`components/TiraEnVivo.tsx`):
+- `CabezaTira`: el cursor sigue al vídeo con `requestAnimationFrame` mientras se reproduce y se coloca una vez al buscar o cargar; se mueve con `transform` en su capa, sin React.
+- `HoverTira`: la línea y la etiqueta del instante bajo el ratón tienen su propio estado; VideoPlayer les pasa la posición con `set` (sin repintarse). La etiqueta de un racimo de marcas sigue en VideoPlayer (cambia al entrar o salir de una marca).
+
+| Ratón cruzando la tira (1 s) | antes | ahora |
+|---|---|---|
+| JavaScript en el hilo principal | 277-350 ms | 44-52 ms |
+| Llamada más larga | 3,4 ms | 0,3 ms |
+| Maquetación + pintado | 64-95 ms | 65-70 ms |
+
+Reproduciendo, el JavaScript queda igual (16-33 ms por segundo); el cursor pasa de 4 a 240 posiciones por segundo. Comprobado con el ratón por CDP: el cursor cae donde toca (466,4 px esperado y real), la etiqueta del instante dice la hora y el oro, la de un racimo lista sus sucesos sin la del instante, fuera de la tira no queda nada y un clic en el 70 % busca el 70 %.

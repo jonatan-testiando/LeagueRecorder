@@ -200,7 +200,8 @@
   border-radius: var(--radius-full);
   background: var(--signal);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 22%, transparent);
-  animation: stg-rec 1.4s ease-in-out infinite;
+  /* Tres latidos y quieto (ver .cap__dot--rec en index.css). */
+  animation: stg-rec 1.4s ease-in-out 3;
 }
 @keyframes stg-rec { 50% { opacity: 0.45; } }
 @media (prefers-reduced-motion: reduce) {

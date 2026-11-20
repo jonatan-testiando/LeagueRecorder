@@ -2376,7 +2376,12 @@ button.cap:not(:disabled):active { transform: none; }
   background: var(--signal);
 }
 /* El halo se expande con transform y se apaga con opacidad: animar
-   box-shadow repintaba el punto en cada fotograma, siempre, mientras graba. */
+   box-shadow repintaba el punto en cada fotograma, siempre, mientras graba.
+   Tres latidos al empezar y quieto: un bucle infinito, aunque sea de 8 px y
+   en el compositor, obliga a recomponer y presentar la ventana entera a la
+   frecuencia del monitor durante toda la partida (medido: 22 % de un núcleo y
+   6 % de la GPU a 240 Hz). Que sigue grabando lo dice el cronómetro de al
+   lado, que cambia cada segundo. */
 .rec-dot::after,
 .cap__dot--rec::after {
   content: "";
@@ -2384,7 +2389,7 @@ button.cap:not(:disabled):active { transform: none; }
   inset: 0;
   border-radius: 50%;
   background: var(--signal);
-  animation: rec-ring 2s var(--e-out) infinite;
+  animation: rec-ring 2s var(--e-out) 3;
   pointer-events: none;
 }
 @keyframes rec-ring {
@@ -3104,7 +3109,9 @@ button.cap:not(:disabled):active { transform: none; }
   border-radius: var(--radius-full);
   background: var(--brand);
   flex: none;
-  animation: updpill-lat 1.6s ease-in-out infinite;
+  /* Unos latidos al aparecer y quieto: la actualización puede esperar días y
+     un bucle infinito recompone la ventana a la frecuencia del monitor. */
+  animation: updpill-lat 1.6s ease-in-out 3;
 }
 @keyframes updpill-lat { 50% { opacity: 0.35; } }
 

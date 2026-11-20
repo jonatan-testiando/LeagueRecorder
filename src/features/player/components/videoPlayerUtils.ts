@@ -34,6 +34,11 @@ export const spellIcon = (ver: string, id: number): string | null => {
 };
 
 /** Segundos que un clip de error coge antes y después del instante marcado. */
+/** Lo que mueve el instante del <video> (o lo que se ve de él): con esto
+ *  despiertan los lienzos que solo dibujan cuando hace falta (la estela del
+ *  ratón, el Mapa). No burbujean: se escuchan en la captura del documento. */
+export const EVENTOS_VIDEO = ["play", "playing", "pause", "seeking", "seeked", "timeupdate", "loadeddata", "ratechange"];
+
 export const CLIP_BEFORE = 5;
 export const CLIP_AFTER = 10;
 

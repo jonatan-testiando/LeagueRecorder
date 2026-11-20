@@ -23,6 +23,7 @@ import {
   type Vista,
 } from "../mapDraw";
 import { EpisodeStrip } from "./EpisodeStrip";
+import { EVENTOS_VIDEO } from "./videoPlayerUtils";
 import { Segmented } from "../../../components/ui/Segmented";
 import "./RouteReplay.css";
 
@@ -286,7 +287,10 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
   const paleta = useRef<Paleta | null>(null);
   useEffect(() => {
     paleta.current = leerPaleta();
-    const mo = new MutationObserver(() => { paleta.current = leerPaleta(); });
+    const mo = new MutationObserver(() => {
+      paleta.current = leerPaleta();
+      pedirDibujo.current?.();
+    });
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class"] });
     return () => mo.disconnect();
   }, []);
@@ -351,6 +355,13 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
   }, [focus]);
 
   // ---------------------------------------------------- pintado
+  // Se dibuja cuando algo cambia: mientras el vídeo avanza, un fotograma tras
+  // otro; parado, una vez al buscar, al cargar, al cambiar de tamaño, de tema o
+  // de opciones (cada render de React pide uno, abajo). Antes el bucle de
+  // requestAnimationFrame no paraba: con el vídeo en pausa, el Mapa costaba un
+  // 25 % de un núcleo y un 4,5 % de la GPU, y seguía dibujando oculto en otra
+  // pantalla o con la ventana minimizada (medido).
+  const pedirDibujo = useRef<(() => void) | null>(null);
   useEffect(() => {
     let raf = 0;
     let ultimo = -1;
@@ -358,7 +369,7 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
     // Se reutiliza en cada fotograma: los rótulos se pintan al final, encima
     // de todos los trazos.
     const rotulos: Rotulo[] = [];
-    const tick = () => {
+    const pintar = () => {
       const v = videoRef.current;
       const c = lienzo.current;
       const cx = c?.getContext("2d");
@@ -501,11 +512,36 @@ export const RouteReplay: React.FC<Props> = ({ matchId, videoRef, focus, onClear
         dibujarRotulos(cx, vista, pal, rotulos);
         cx.globalAlpha = 1;
       }
-      raf = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    const bucle = () => {
+      raf = 0;
+      pintar();
+      const v = videoRef.current;
+      if (v && !v.paused && !v.ended && !document.hidden) raf = requestAnimationFrame(bucle);
+    };
+    const despertar = () => {
+      if (!raf) raf = requestAnimationFrame(bucle);
+    };
+    pedirDibujo.current = despertar;
+    const alVideo = (e: Event) => {
+      if (e.target === videoRef.current) despertar();
+    };
+    for (const ev of EVENTOS_VIDEO) document.addEventListener(ev, alVideo, true);
+    const ro = new ResizeObserver(despertar);
+    if (lienzo.current) ro.observe(lienzo.current);
+    despertar();
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      for (const ev of EVENTOS_VIDEO) document.removeEventListener(ev, alVideo, true);
+      if (pedirDibujo.current === despertar) pedirDibujo.current = null;
+    };
   }, [videoRef, tr]);
+  // Las opciones, el foco y el desfase viajan en refs que se ponen al pintar
+  // React: tras cada render, un dibujo (si ya había uno pedido, no se suma).
+  useEffect(() => {
+    pedirDibujo.current?.();
+  });
 
   const seg = <K extends string>(opts: [K, string][], val: K, set: (k: K) => void, label: string) => (
     <Segmented size="sm" label={label} value={val} onChange={set} options={opts.map(([k, l]) => ({ value: k, label: t(l) }))} />

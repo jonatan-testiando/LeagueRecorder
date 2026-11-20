@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MatchMetadata, MouseEventData } from "../../../types";
-import { mouseSpace } from "../components/videoPlayerUtils";
+import { EVENTOS_VIDEO, mouseSpace } from "../components/videoPlayerUtils";
 
 /**
  * La estela del ratón sobre el vídeo: un canvas que se pinta por
@@ -52,9 +52,6 @@ function tokensDelTema(): ReturnType<typeof readTokens> {
   if (!colores || colores.tema !== tema) colores = { tema, tokens: readTokens() };
   return colores.tokens;
 }
-
-/** Lo que mueve el instante del vídeo (o lo que se ve de él). */
-const EVENTOS_VIDEO = ["play", "playing", "pause", "seeking", "seeked", "timeupdate", "loadeddata", "ratechange"];
 
 /** Primer índice con `t >= t0` en un array ordenado por `t`. */
 function desde(eventos: MouseEventData[], t0: number): number {

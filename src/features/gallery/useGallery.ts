@@ -123,9 +123,18 @@ export const useGallery = () => {
       refreshMatches().catch(() => {});
     }, 5 * 60 * 1000);
 
+    // Con la ventana minimizada o el juego delante, la página está oculta
+    // (visibilidad.rs) y sus temporizadores van al ralentí: al volver a verse
+    // se pregunta al momento, sin esperar al siguiente sondeo.
+    const alVolver = () => {
+      if (!document.hidden) checkStatus();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+
     return () => {
       clearInterval(statusInterval);
       clearInterval(listInterval);
+      document.removeEventListener("visibilitychange", alVolver);
     };
   }, [fetchMatches, checkStatus]);
 

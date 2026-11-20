@@ -230,3 +230,31 @@ Qué cambió:
 La primera apertura de la sesión pierde 20 (JavaScript aún sin optimizar: 21 ms dentro de la transición). Cerrar pierde 2-4, todos en la pausa inicial. Con una partida abierta y el vídeo en pausa, `requestAnimationFrame` pasa de 240 llamadas por segundo a 0; reproduciendo, una por fotograma.
 
 Lo que queda en la pausa inicial es inevitable con View Transitions: capturar la pantalla de antes (~10 ms) y montar y maquetar el reproductor (~12 ms).
+
+## Lo que gasta la app sin que la mires (2026-11-20)
+
+Medido en release, CPU y GPU de todo el árbol de procesos (tauri-app y los de WebView2) durante 8-10 s en cada situación: `TotalProcessorTime` de cada proceso y el contador `\GPU Engine(*)\Utilization Percentage` de sus PID. Pantalla de 240 Hz, 16 hilos.
+
+Qué se encontró:
+- **WebView2 nunca se enteraba de que la ventana no se veía.** wry solo le pasa `IsVisible` al crearla; minimizada, en la bandeja o con otra ventana delante, la página seguía en `visible` y todo lo que se anima seguía a 240 fotogramas por segundo.
+- **Cualquier animación infinita recompone la ventana entera a la frecuencia del monitor**, aunque sea de 8 px y vaya por el compositor. El punto pulsante de «Grabando» costaba un 22 % de un núcleo y un 6 % de la GPU durante toda la partida; también el punto de «actualización lista», que puede quedarse días.
+- **El Mapa del reproductor dibujaba en cada fotograma sin parar**: 25 % de un núcleo y 4,5 % de GPU con el vídeo en pausa, y 7 % oculto en otra pantalla o minimizada.
+
+Qué cambió:
+- `visibilidad.rs`: los avisos de Windows (`SetWinEventHook`: cambia la ventana activa; se minimiza o restaura la nuestra), los eventos de la ventana (enfocar, mover, esconder) y un sondeo de respaldo cada 400 ms deciden si la ventana principal se ve, y si no, `SetIsVisible(false)` en el controlador de WebView2: la página pasa a `document.hidden` y deja de pintar y animar. No se ve si está minimizada, escondida o si la ventana activa es de otro programa, está encima y la tapa entera (el juego sin bordes delante); en otro monitor o tapada a medias sigue viva. El overlay del metrónomo es otra ventana y no se toca. `WARDLINE_SIN_VISIBILIDAD=1` lo apaga, para medir la página «a la vista» con otra ventana delante.
+- Al volver a verse, la Biblioteca pregunta al momento por el estado de la grabadora (sus sondeos van al ralentí mientras está oculta).
+- Los puntos de «Grabando», de actualización y el de Ajustes laten tres veces al aparecer y se quedan quietos; el cronómetro de al lado ya dice que sigue grabando.
+- El Mapa dibuja solo cuando cambia algo (el vídeo avanza, se busca, cambia el tamaño, el tema o las opciones), como la estela del ratón.
+
+| Situación | antes (CPU de un núcleo / GPU) | ahora |
+|---|---|---|
+| Hoy, sin hacer nada | 0,6-0,9 % / 0 % | 0,5-1,4 % / 0 % |
+| Mapa abierto, vídeo en pausa | 24,9 % / 4,5 % | 2,6 % / 0 % |
+| Mapa abierto y en otra pantalla | 6,9 % / 0,1 % | 0,6 % / 0 % |
+| Punto de «Grabando» (pasados sus 6 s de latidos) | 21,7 % / 6,0 % | 1,0 % / 0 % |
+| Con una animación infinita, tapada por la ventana activa | 25,0 % / 5,1 % | 1,4 % / 0 % |
+| Con una animación infinita, minimizada | 7,1 % / 0,1 % (Mapa) | 0,3 % / 0 % |
+
+El punto de grabación se midió metiendo el mismo elemento con su clase en la barra de título, no grabando una partida. Con el Mapa reproduciendo, sigue dibujando una vez por fotograma (240 por segundo), y en pausa, ninguna. Vuelta a verse, con capturas de pantalla del rectángulo de la ventana (2026-11-20): con solo el sondeo y el evento de foco de Tauri, traerla delante tardó una vez 343 ms en volver a `visible` y Windows enseñaba entretanto un rectángulo blanco (al volver, el foco va directo a WebView2 y la ventana principal no recibe el evento). Con los avisos de Windows: traerla delante, visible en 26 ms y la captura a los 36 ms ya es la app entera; restaurarla, 6 ms; minimizarla, oculta en 9 ms.
+
+No medido: lo que gasta el motor de grabación (libobs) durante una partida real.

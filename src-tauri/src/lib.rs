@@ -57,6 +57,7 @@ mod training;
 mod ultimate;
 mod winprob;
 mod winsys;
+mod visibilidad;
 mod zonas;
 
 use commands::{
@@ -286,14 +287,31 @@ pub fn run() {
             // La actualización se descarga sola por detrás mientras usas la app, para
             // que pulsar "instalar" no sea esperar a que bajen 100 MB.
             app_update::spawn_background_check(app.handle().clone());
+
+            // Que WebView2 sepa cuándo la ventana no se ve (minimizada, en la
+            // bandeja o con el juego delante) y deje de pintar y animar.
+            visibilidad::vigilar(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| match event {
+            // Con el foco, se ve; al perderlo, restaurarla o moverla se mira al
+            // momento (visibilidad.rs además escucha a Windows directamente).
+            tauri::WindowEvent::Focused(true) if window.label() == "main" => {
+                visibilidad::al_enfocar(window.app_handle());
+            }
+            tauri::WindowEvent::Focused(false) | tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_)
+                if window.label() == "main" =>
+            {
+                visibilidad::revisar(window.app_handle());
+            }
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 // Si esconderla falla, se deja cerrar: mejor eso que un pánico en
                 // el hilo de eventos con la ventana a medio camino.
                 match window.hide() {
-                    Ok(()) => api.prevent_close(),
+                    Ok(()) => {
+                        api.prevent_close();
+                        visibilidad::revisar(window.app_handle());
+                    }
                     Err(e) => eprintln!("No se pudo esconder la ventana en la bandeja: {e}"),
                 }
             }

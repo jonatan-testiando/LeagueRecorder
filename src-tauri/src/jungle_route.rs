@@ -495,12 +495,11 @@ pub struct RouteResponse {
 
 fn calcular(id: &str) -> RouteResponse {
     let resp = |status: &str, route: Option<Route>| RouteResponse { status: status.to_string(), route };
-    let (Some(raw), Some(raw_tl)) = (crate::storage::load_raw_match(id), crate::storage::load_raw_timeline(id)) else {
-        return resp("no_riot", None);
-    };
-    let Some(pos) = Positions::load(id) else {
-        return resp("no_minimap", None);
-    };
+    // La caché primero: su huella son las fechas de los crudos de Riot y del
+    // minimapa, así que si falta alguno ya no coincide y se cae al camino de
+    // abajo, que da el estado correcto. Antes se leían y parseaban los tres
+    // ficheros (unos 2 MB) para luego encontrar la ruta ya guardada: 5 s con
+    // 1.000 partidas al abrir Patrones.
     let stamp = crate::riot_api::huella_de_fuentes(id);
     let ruta_cache = crate::storage::get_match_dir(id).join("jungle_route_v1.json");
     if let Some(c) = std::fs::read_to_string(&ruta_cache)
@@ -510,6 +509,12 @@ fn calcular(id: &str) -> RouteResponse {
     {
         return resp(&c.status, c.route);
     }
+    let (Some(raw), Some(raw_tl)) = (crate::storage::load_raw_match(id), crate::storage::load_raw_timeline(id)) else {
+        return resp("no_riot", None);
+    };
+    let Some(pos) = Positions::load(id) else {
+        return resp("no_minimap", None);
+    };
     let (Ok(m), Ok(tl)) = (
         serde_json::from_str::<crate::riot_api::MatchDto>(&raw),
         serde_json::from_str::<TimelineDto>(&raw_tl),
@@ -526,7 +531,7 @@ fn calcular(id: &str) -> RouteResponse {
     };
     let c = RouteCache { v: ROUTE_CACHE_V, stamp, route, status: status.to_string() };
     if let Ok(s) = serde_json::to_string(&c) {
-        let _ = std::fs::write(&ruta_cache, s);
+        let _ = crate::storage::escribir_atomico(&ruta_cache, s.as_bytes());
     }
     resp(status, c.route)
 }
@@ -543,6 +548,7 @@ pub fn ruta_de_partida(id: &str) -> Option<Route> {
 /// La ruta de jungla de una partida.
 #[tauri::command]
 pub async fn get_jungle_route(match_id: String) -> RouteResponse {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_jungle_route");
     tokio::task::spawn_blocking(move || calcular(&match_id))
         .await
         .unwrap_or(RouteResponse { status: "no_riot".into(), route: None })
@@ -562,6 +568,7 @@ pub struct RouteGame {
 /// Los filtros (periodo, puesto) los aplica Patrones, como con el resto.
 #[tauri::command]
 pub async fn get_jungle_routes() -> Vec<RouteGame> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_jungle_routes");
     tokio::task::spawn_blocking(|| {
         let mut out: Vec<RouteGame> = crate::storage::load_all_matches()
             .into_iter()

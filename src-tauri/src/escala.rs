@@ -104,6 +104,7 @@ pub struct Escala {
 /// Para el selector de Ajustes: «Automático (135 %)» necesita saber el número.
 #[tauri::command]
 pub fn get_ui_scale(app: AppHandle) -> Escala {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_ui_scale");
     match app.get_webview_window("main") {
         Some(w) => Escala { auto: automatica(&w), efectiva: efectiva(&w) },
         None => Escala { auto: 1.0, efectiva: 1.0 },

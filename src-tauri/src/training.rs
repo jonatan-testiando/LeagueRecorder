@@ -482,6 +482,7 @@ pub fn key_name(k: rdev::Key) -> Option<String> {
 
 #[tauri::command]
 pub async fn get_training_config() -> TrainingConfig {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_training_config");
     load_config()
 }
 
@@ -491,6 +492,7 @@ pub async fn set_training_config(
     state: tauri::State<'_, std::sync::Arc<TrainingState>>,
     config: TrainingConfig,
 ) -> Result<TrainingConfig, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_training_config");
     // Rechazamos teclas que el listener no sabría reconocer: si no, el usuario
     // configuraría algo que nunca dispara y parecería que el overlay está roto.
     let mut config = config;
@@ -514,6 +516,7 @@ pub async fn set_training_config(
 
 #[tauri::command]
 pub async fn get_drill_sessions(limit: Option<usize>) -> Vec<DrillSession> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_drill_sessions");
     let mut all = load_sessions();
     all.reverse(); // más recientes primero
     if let Some(n) = limit {
@@ -524,6 +527,7 @@ pub async fn get_drill_sessions(limit: Option<usize>) -> Vec<DrillSession> {
 
 #[tauri::command]
 pub async fn save_drill_session(session: DrillSession) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/save_drill_session");
     append_session(session)
 }
 

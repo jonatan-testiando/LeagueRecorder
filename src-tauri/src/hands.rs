@@ -397,7 +397,8 @@ pub fn analyze(m: &MatchMetadata, cal: Calibracion) -> HandReport {
 /// registrar, y el detector de clics por vídeo no distingue botón.
 #[tauri::command]
 pub async fn get_hand_report(match_id: String) -> Result<HandReport, String> {
-    let m = crate::storage::get_match_metadata(&match_id)?;
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hand_report");
+    let m = crate::storage::get_match_metadata_con_estela(&match_id)?;
     Ok(analyze(&m, Calibracion::actual()))
 }
 
@@ -416,6 +417,7 @@ const PARTIDAS_HISTORIAL: usize = 10;
 /// a otra.
 #[tauri::command]
 pub async fn get_hand_career() -> Result<HandReport, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hand_career");
     tokio::task::spawn_blocking(|| {
         let cal = Calibracion::actual();
         let mut base: Option<MatchMetadata> = None;
@@ -428,7 +430,7 @@ pub async fn get_hand_career() -> Result<HandReport, String> {
             if n >= PARTIDAS_HISTORIAL || i > PARTIDAS_HISTORIAL * 3 {
                 break;
             }
-            let Ok(m) = crate::storage::get_match_metadata(&ligera.id) else { continue };
+            let Ok(m) = crate::storage::get_match_metadata_con_estela(&ligera.id) else { continue };
             if m.mouse_events.is_empty() || m.mouse_space_w == 0 {
                 continue;
             }

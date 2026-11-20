@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { MatchMetadata } from "../types";
 import { getGameStates, type GameState, type GameStateCorpus, type GameStates, type LaneState } from "./tauri-ipc";
 import { computeKDA } from "./matchStats";
-import { useAppStore } from "../store/useAppStore";
+import { useLibraryKey } from "../store/useAppStore";
 
 /**
  * Por delante, igualada o por detrás; tiradas y remontadas; y la nota frente
@@ -18,12 +18,13 @@ export const LANE_STATES: LaneState[] = ["ahead", "even", "behind"];
 const INDICE: Record<LaneState, number> = { ahead: 0, even: 1, behind: 2 };
 
 /** El estado y el rumbo de tus partidas. Como `useCoachSummary`: se vuelve a
- *  pedir al refrescarse la biblioteca; `undefined` mientras carga y `null` si
- *  falló. */
+ *  pedir cuando cambia la firma de la biblioteca; `undefined` mientras carga y
+ *  `null` si falló. */
 export function useGameStates(): GameStates | null | undefined {
-  const matches = useAppStore((s) => s.matches);
+  const biblioteca = useLibraryKey();
   const [data, setData] = useState<GameStates | null | undefined>(undefined);
   useEffect(() => {
+    if (biblioteca === null) return;
     let vivo = true;
     getGameStates()
       .then((d) => vivo && setData(d))
@@ -31,7 +32,7 @@ export function useGameStates(): GameStates | null | undefined {
     return () => {
       vivo = false;
     };
-  }, [matches]);
+  }, [biblioteca]);
   return data;
 }
 

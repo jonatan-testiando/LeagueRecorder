@@ -140,6 +140,7 @@ pub fn build(tl: &TimelineDto, m: &MatchDto, pos: &Positions) -> Option<Track> {
 /// El recorrido de una partida, si su minimapa está medido.
 #[tauri::command]
 pub async fn get_match_track(match_id: String) -> TrackResponse {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_track");
     tokio::task::spawn_blocking(move || {
         let resp = |s: &str, t| TrackResponse { status: s.to_string(), track: t };
         let (Some(raw), Some(raw_tl)) = (
@@ -340,6 +341,7 @@ pub async fn export_route_video(
     to: f64,
     trail: String,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/export_route_video");
     use std::io::{BufRead, BufReader};
     use tauri::Emitter;
     tokio::task::spawn_blocking(move || {

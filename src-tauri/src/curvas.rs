@@ -207,6 +207,7 @@ fn de_partida(match_id: &str) -> Curvas {
 /// Las curvas por minuto de los diez y los objetivos de una partida.
 #[tauri::command]
 pub async fn get_minute_series(match_id: String) -> Curvas {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_minute_series");
     tokio::task::spawn_blocking(move || de_partida(&match_id))
         .await
         .unwrap_or_else(|_| Curvas { status: "no_riot".into(), ..Default::default() })

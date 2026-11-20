@@ -103,7 +103,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onDone }) =>
     setKeyMsg("");
     try {
       await guardar({ riot_api_key: clave });
-      await checkRiotKey();
+      await checkRiotKey({ fresh: true });
       setKeyState("ok");
     } catch (e) {
       setKeyState("bad");

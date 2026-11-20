@@ -358,6 +358,7 @@ pub fn cancelar_todo() {
 /// Lee el HUD de una sola partida desde el reproductor, sin bloquear.
 #[tauri::command]
 pub async fn read_match_hud(app: tauri::AppHandle, match_id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/read_match_hud");
     if !falta(&app, &match_id) && !ruta(&match_id).exists() {
         return Err("Esta partida no tiene con qué: falta el vídeo o los datos de Riot.".into());
     }

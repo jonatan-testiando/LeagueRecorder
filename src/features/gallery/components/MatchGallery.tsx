@@ -8,7 +8,7 @@ import { EmptyState } from "../../../components/ui/EmptyState";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { PositionIcon } from "../../../components/PositionIcon";
 import { ROLE_FILTERS, matchRole, type RoleFilter } from "../../../core/patterns";
-import { useAppStore } from "../../../store/useAppStore";
+import { useAppStore, useLibraryKey } from "../../../store/useAppStore";
 import {
   Check,
   CloudUpload,
@@ -151,6 +151,7 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
   const navigate = useNavigate();
   const { restart: abrirAsistente } = useOnboarding();
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
+  const biblioteca = useLibraryKey();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const parentRef = useRef<HTMLDivElement>(null);
@@ -477,11 +478,13 @@ export const MatchGallery: React.FC<MatchGalleryProps> = ({
     });
   }, [current]);
 
+  // Con la firma y no con el array: el refresco periódico trae un array nuevo
+  // con las mismas partidas y el uso de disco recorre todas las carpetas.
   useEffect(() => {
     invoke<DiskSpaceInfo>("get_disk_usage")
       .then(setDiskSpace)
       .catch(console.error);
-  }, [matches]);
+  }, [biblioteca]);
 
   const GB = 1024 * 1024 * 1024;
   const usedGb = diskSpace ? (diskSpace.used_bytes / GB).toFixed(0) : "—";

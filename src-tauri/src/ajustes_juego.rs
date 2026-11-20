@@ -244,6 +244,7 @@ pub struct MinimapDetection {
 /// Los ajustes del minimapa que se usarían si empezara una partida ahora.
 #[tauri::command]
 pub fn get_minimap_detection() -> MinimapDetection {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_minimap_detection");
     MinimapDetection { hud: detectar() }
 }
 

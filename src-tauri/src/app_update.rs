@@ -154,6 +154,7 @@ async fn check_and_download(app: &AppHandle) -> Result<Option<String>, String> {
 /// Qué hay descargado y esperando, si es que hay algo.
 #[tauri::command]
 pub fn get_pending_update(state: tauri::State<'_, UpdateState>) -> Option<PendingInfo> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_pending_update");
     state.pending.lock().unwrap().as_ref().map(|p| PendingInfo {
         version: p.update.version.clone(),
         notes: p.update.body.clone(),
@@ -164,6 +165,7 @@ pub fn get_pending_update(state: tauri::State<'_, UpdateState>) -> Option<Pendin
 /// instalador y mata el proceso; la `/R` de NSIS relanza la app al acabar.
 #[tauri::command]
 pub fn install_pending_update(app: AppHandle) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/install_pending_update");
     let pending = app
         .state::<UpdateState>()
         .pending
@@ -188,6 +190,7 @@ pub fn install_pending_update(app: AppHandle) -> Result<(), String> {
 /// lista para instalar, o `None` si ya estás al día.
 #[tauri::command]
 pub async fn check_for_update_now(app: AppHandle) -> Result<Option<PendingInfo>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/check_for_update_now");
     check_and_download(&app).await?;
     Ok(get_pending_update(app.state::<UpdateState>()))
 }

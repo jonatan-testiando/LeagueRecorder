@@ -1,6 +1,9 @@
 mod riot_live_api;
 mod spells;
 mod ajustes_juego;
+mod medida;
+#[cfg(test)]
+mod medida_banco;
 mod attribution;
 mod awareness;
 mod escala;
@@ -120,15 +123,24 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
         // antiguas que guardaban los ficheros sueltos en la raíz. Corre una sola
         // vez por directorio (deja su propia marca en disco).
         commands::emit_maintenance(&app, "migration", 0, 0);
-        crate::storage::migrate_storage_layout();
+        {
+            let _t = crate::medida::Tramo::nuevo("arranque/migrate_storage_layout");
+            crate::storage::migrate_storage_layout();
+        }
 
         // Las miradas al mapa salen de los clics ya grabados: las partidas de
         // antes también las tienen, sólo que nadie las había leído.
-        camera_input::backfill(&app).await;
+        {
+            let _t = crate::medida::Tramo::nuevo("arranque/camera_input::backfill");
+            camera_input::backfill(&app).await;
+        }
 
         // Puesto de impacto de las partidas que se analizaron antes de que se
         // guardara: se calcula de lo que ya hay en disco, sin pedir nada.
-        riot_api::impact_backfill(&app).await;
+        {
+            let _t = crate::medida::Tramo::nuevo("arranque/impact_backfill");
+            riot_api::impact_backfill(&app).await;
+        }
 
         commands::emit_maintenance(&app, "done", 0, 0);
     });
@@ -136,6 +148,7 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    crate::medida::arranque();
     // Inicializar estados compartidos
     let recorder_state = Arc::new(RecorderState::default());
     let active_match_state = Arc::new(ActiveMatchState::default());

@@ -30,7 +30,7 @@
 
 use std::collections::HashMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::riot_api::{ParticipantDto, TimelineDto};
 
@@ -58,7 +58,7 @@ const QUIETO_SECS: f64 = 1.5;
 const GIRO_ESQUIVA: f64 = 45.0;
 
 /// Un hechizo que te comes, agregado.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpellHit {
     /// Nombre interno del hechizo tal cual lo da Riot (`AhriOrbofDeception`).
     pub spell: String,
@@ -88,7 +88,7 @@ pub struct SpellHit {
 }
 
 /// Qué hizo la mano en los segundos previos a una muerte.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HandWindow {
     /// Órdenes de movimiento en los [`VENTANA_SECS`] previos.
     pub orders: usize,
@@ -109,7 +109,7 @@ pub struct HandWindow {
 }
 
 /// Una muerte, abierta en canal.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeathAutopsy {
     /// Segundos de partida.
     pub t_game: f64,
@@ -128,7 +128,7 @@ pub struct DeathAutopsy {
 }
 
 /// Una línea del desglose de una muerte.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TopSpell {
     pub spell: String,
     pub slot: i32,
@@ -138,7 +138,7 @@ pub struct TopSpell {
 }
 
 /// La dieta de hechizos de una partida (o de todo el historial).
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SpellReport {
     /// Partidas que han entrado en el agregado. 1 en el informe de una partida.
     pub matches: usize,
@@ -473,6 +473,7 @@ fn desde_cache(m: &crate::storage::MatchMetadata, con_estela: bool) -> Option<Sp
 /// Qué te comiste en esta partida, muerte a muerte.
 #[tauri::command]
 pub async fn get_spell_autopsy(match_id: String) -> Result<SpellReport, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_spell_autopsy");
     let m = crate::storage::get_match_metadata(&match_id)?;
     desde_cache(&m, true).ok_or_else(|| {
         "Esta partida aún no tiene la timeline de Riot descargada. Sincronízala y vuelve."
@@ -486,19 +487,86 @@ pub async fn get_spell_autopsy(match_id: String) -> Result<SpellReport, String> 
 /// aunque no haya clave configurada.
 #[tauri::command]
 pub async fn get_spell_diet() -> Result<SpellReport, String> {
-    let mut total = SpellReport::default();
-    for m in crate::storage::load_all_matches() {
-        if m.riot_match_id.is_none() {
-            continue;
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_spell_diet");
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut total = SpellReport::default();
+        for m in crate::storage::load_all_matches() {
+            if m.riot_match_id.is_none() {
+                continue;
+            }
+            if let Some(r) = de_partida_cacheada(&m) {
+                fundir(&mut total, r);
+            }
         }
-        if let Some(r) = desde_cache(&m, true) {
-            fundir(&mut total, r);
+        // `fundir` suma `matches` sobre un informe que nació vacío, así que la
+        // cuenta ya es la de partidas fundidas y no hay que tocarla.
+        reparto(&mut total);
+        total
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Versión de la caché por partida. Súbela si cambia `analyze` o `SpellReport`.
+const CACHE_V: u32 = 1;
+const CACHE_FICHERO: &str = "spells_v1.json";
+
+#[derive(Serialize, Deserialize)]
+struct Cacheada {
+    v: u32,
+    stamp: u64,
+    report: SpellReport,
+}
+
+/// Huella de todo lo que entra en el informe de una partida: los crudos de
+/// Riot, el metadata (de él sale la estela, y con ella las órdenes) y la
+/// calibración del minimapa, que decide qué clics cuentan como órdenes.
+fn huella(m: &crate::storage::MatchMetadata) -> u64 {
+    let dir = crate::storage::get_match_dir(&m.id);
+    let mtime = |p: std::path::PathBuf| -> u64 {
+        std::fs::metadata(p)
+            .and_then(|md| md.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0)
+    };
+    let mut h: u64 = 1469598103934665603; // FNV-1a de 64 bits
+    let mut mezclar = |x: u64| {
+        h ^= x;
+        h = h.wrapping_mul(1099511628211);
+    };
+    mezclar(mtime(dir.join("riot_timeline.json")));
+    mezclar(mtime(dir.join("riot_match.json")));
+    mezclar(mtime(dir.join(format!("{}.json", m.id))));
+    for b in format!("{:?}", crate::camera_input::Calibracion::actual()).bytes() {
+        mezclar(b as u64);
+    }
+    h
+}
+
+/// El informe de una partida para el agregado del historial, de la caché o
+/// recalculado y guardado.
+///
+/// Sin esto, abrir Patrones parseaba la timeline, el detalle y la partida
+/// entera, estela incluida, de TODAS las partidas sincronizadas: 5 s con 300
+/// partidas y 18 s con 1.000 (medido, ver docs/medidas-linea-base-2026-11.md).
+fn de_partida_cacheada(m: &crate::storage::MatchMetadata) -> Option<SpellReport> {
+    let stamp = huella(m);
+    let ruta = crate::storage::get_match_dir(&m.id).join(CACHE_FICHERO);
+    if let Ok(texto) = std::fs::read_to_string(&ruta) {
+        if let Ok(c) = serde_json::from_str::<Cacheada>(&texto) {
+            if c.v == CACHE_V && c.stamp == stamp {
+                return Some(c.report);
+            }
         }
     }
-    // `fundir` suma `matches` sobre un informe que nació vacío, así que la
-    // cuenta ya es la de partidas fundidas y no hay que tocarla.
-    reparto(&mut total);
-    Ok(total)
+    let report = desde_cache(m, true)?;
+    let c = Cacheada { v: CACHE_V, stamp, report };
+    if let Ok(texto) = serde_json::to_string(&c) {
+        let _ = crate::storage::escribir_atomico(&ruta, texto.as_bytes());
+    }
+    Some(c.report)
 }
 
 #[cfg(test)]

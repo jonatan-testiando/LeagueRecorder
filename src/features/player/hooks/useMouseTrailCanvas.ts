@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MatchMetadata, MouseEventData } from "../../../types";
 import { mouseSpace } from "../components/videoPlayerUtils";
 
@@ -43,6 +43,18 @@ function readTokens(): Record<"old" | "recent" | "click" | "core", Rgb> {
   };
 }
 
+/** Primer índice con `t >= t0` en un array ordenado por `t`. */
+function desde(eventos: MouseEventData[], t0: number): number {
+  let lo = 0;
+  let hi = eventos.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (eventos[mid].t < t0) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 const lerp = (a: Rgb, b: Rgb, k: number): string =>
   `${Math.round(a[0] + (b[0] - a[0]) * k)}, ${Math.round(a[1] + (b[1] - a[1]) * k)}, ${Math.round(a[2] + (b[2] - a[2]) * k)}`;
 
@@ -53,6 +65,18 @@ export function useMouseTrailCanvas(
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
+
+  // Ordenada por tiempo, una vez: cada fotograma busca la ventana del rastro
+  // por bisección en vez de filtrar las ~36.000 muestras de la partida. La
+  // grabación ya llega ordenada; solo se copia y ordena si no lo está.
+  const ordenados = useMemo(() => {
+    for (let i = 1; i < mouseEvents.length; i++) {
+      if (mouseEvents[i].t < mouseEvents[i - 1].t) {
+        return [...mouseEvents].sort((a, b) => a.t - b.t);
+      }
+    }
+    return mouseEvents;
+  }, [mouseEvents]);
 
   const [mouseSync, setMouseSync] = useState<number>(() => {
     return parseFloat(localStorage.getItem("mouseSyncOffset") || "1.0");
@@ -85,7 +109,7 @@ export function useMouseTrailCanvas(
 
       const ct = v.currentTime;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (mouseEvents.length === 0) return;
+      if (ordenados.length === 0) return;
 
       // Las coordenadas del ratón vienen de rdev y están en el espacio del
       // ESCRITORIO, no del vídeo. Escalar por las dimensiones del vídeo desplazaba
@@ -115,7 +139,12 @@ export function useMouseTrailCanvas(
 
       const TRAIL_DURATION = 1.0;
       const adjustedCt = ct - mouseSync;
-      const recentEvents = mouseEvents.filter(e => e.t <= adjustedCt && e.t >= adjustedCt - TRAIL_DURATION);
+      const recentEvents: MouseEventData[] = [];
+      for (let i = desde(ordenados, adjustedCt - TRAIL_DURATION); i < ordenados.length; i++) {
+        const e = ordenados[i];
+        if (e.t > adjustedCt) break;
+        recentEvents.push(e);
+      }
       if (recentEvents.length === 0) return;
       const moves = recentEvents.filter(e => e.evt === "move");
       if (moves.length > 1) {
@@ -173,7 +202,7 @@ export function useMouseTrailCanvas(
     // `match` solo importa aquí a través de mouseSpace (resolución del
     // escritorio grabado); cambia junto con mouseEvents, que sí está.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mouseEvents, mouseSync]);
+  }, [ordenados, mouseSync]);
 
   const updateMouseSync = (val: number) => {
     setMouseSync(val);

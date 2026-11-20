@@ -207,6 +207,7 @@ pub struct DiskSpaceInfo {
 
 #[tauri::command]
 pub async fn get_disk_usage() -> DiskSpaceInfo {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_disk_usage");
     // El total es la CUOTA CONFIGURADA, no un 100 fijo: la barra, el aviso de
     // "disco ajustado" (>=85%) y la limpieza rápida de la biblioteca calculan
     // el porcentaje contra este número, y con el límite inventado mentían.
@@ -228,6 +229,7 @@ pub async fn get_disk_usage() -> DiskSpaceInfo {
 /// Atajos globales configurables. Fichero propio, ver `storage::HotkeyConfig`.
 #[tauri::command]
 pub fn get_hotkeys() -> crate::storage::HotkeyConfig {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hotkeys");
     crate::storage::load_hotkeys()
 }
 
@@ -236,6 +238,7 @@ pub fn set_hotkeys(
     replay: String,
     ult_state: State<'_, Arc<UltState>>,
 ) -> Result<crate::storage::HotkeyConfig, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_hotkeys");
     let escrito = replay.trim().to_uppercase();
     // Una tecla que el listener no sabe parsear dejaría el atajo muerto sin decir
     // nada: se rechaza aquí, que es donde el usuario puede corregirlo.
@@ -313,6 +316,7 @@ impl Default for ActiveMatchState {
 
 #[tauri::command]
 pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_recorded_matches");
     // El listado NO necesita la estela del ratón (arrays enormes). El reproductor
     // la carga aparte vía `get_match_details`. `load_all_matches` ya ni siquiera
     // la parsea (ver `storage::sin_estela`): antes se construían cientos de
@@ -320,8 +324,8 @@ pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
     load_all_matches()
 }
 
-#[tauri::command]
-pub fn delete_match(id: String) -> Result<(), String> {
+pub fn delete_match_bloqueante(id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/delete_match");
     // El registro de entrenamiento vive fuera de la carpeta de la partida: hay que
     // borrarlo aparte para no dejar huérfanos en %APPDATA%.
     awareness::delete_record(&id);
@@ -330,11 +334,20 @@ pub fn delete_match(id: String) -> Result<(), String> {
     r
 }
 
+/// Comando de [`delete_match_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn delete_match(id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/delete_match");
+    tauri::async_runtime::spawn_blocking(move || delete_match_bloqueante(id)).await.map_err(|e| e.to_string())?
+}
+
 /// Borrado por lotes en UNA llamada: en serie (dos borrados en paralelo pueden
 /// pisarse al mudar clips a `recortes/`) y con un solo refresco de la caché de
 /// disco al final. Devuelve los ids que no se pudieron borrar.
-#[tauri::command]
-pub fn delete_matches(ids: Vec<String>) -> Vec<String> {
+pub fn delete_matches_bloqueante(ids: Vec<String>) -> Vec<String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/delete_matches");
     let mut fallidos = Vec::new();
     for id in &ids {
         awareness::delete_record(id);
@@ -346,8 +359,18 @@ pub fn delete_matches(ids: Vec<String>) -> Vec<String> {
     fallidos
 }
 
+/// Comando de [`delete_matches_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn delete_matches(ids: Vec<String>) -> Vec<String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/delete_matches");
+    tauri::async_runtime::spawn_blocking(move || delete_matches_bloqueante(ids)).await.unwrap_or_default()
+}
+
 #[tauri::command]
 pub fn get_recorder_status(state: State<'_, Arc<RecorderState>>) -> bool {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_recorder_status");
     is_recording(&state)
 }
 
@@ -361,6 +384,7 @@ pub fn save_replay_clip(
     app: tauri::AppHandle,
     state: State<'_, Arc<RecorderState>>,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/save_replay_clip");
     match crate::recorder::save_replay(&state) {
         Ok(path) => {
             emit_recorder_alert(&app, "replay_saved", "Replay clip saved", Some(path.clone()));
@@ -379,12 +403,21 @@ pub fn save_replay_clip(
 }
 
 /// Persiste los comentarios (con marca de tiempo) de una partida en su JSON.
-#[tauri::command]
-pub fn save_match_comments(
+pub fn save_match_comments_bloqueante(
     match_id: String,
     comments: Vec<crate::storage::Comment>,
 ) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/save_match_comments");
     crate::storage::save_comments(&match_id, comments)
+}
+
+/// Comando de [`save_match_comments_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn save_match_comments(match_id: String, comments: Vec<crate::storage::Comment>) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/save_match_comments");
+    tauri::async_runtime::spawn_blocking(move || save_match_comments_bloqueante(match_id, comments)).await.map_err(|e| e.to_string())?
 }
 
 /// Marca o desmarca un suceso como revisado, para la cola de revisión.
@@ -392,15 +425,25 @@ pub fn save_match_comments(
 /// Se guarda en el propio JSON de la partida, junto a los comentarios: revisar
 /// una partida es una tarea con estado, y ese estado tiene que sobrevivir a
 /// cerrar la app.
-#[tauri::command]
-pub fn set_event_reviewed(match_id: String, time: f64, reviewed: bool) -> Result<(), String> {
+pub fn set_event_reviewed_bloqueante(match_id: String, time: f64, reviewed: bool) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/set_event_reviewed");
     crate::storage::set_event_reviewed(&match_id, time, reviewed)
+}
+
+/// Comando de [`set_event_reviewed_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn set_event_reviewed(match_id: String, time: f64, reviewed: bool) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_event_reviewed");
+    tauri::async_runtime::spawn_blocking(move || set_event_reviewed_bloqueante(match_id, time, reviewed)).await.map_err(|e| e.to_string())?
 }
 
 /// Rellena el scoreboard (10 jugadores) de una partida ya sincronizada con Riot. Devuelve la
 /// metadata actualizada. Para partidas antiguas sin `participants`.
 #[tauri::command]
 pub async fn sync_match_now(match_id: String) -> Result<crate::storage::MatchMetadata, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/sync_match_now");
     crate::riot_api::backfill_participants(&match_id).await
 }
 
@@ -414,6 +457,7 @@ pub async fn sync_match_now(match_id: String) -> Result<crate::storage::MatchMet
 /// bien desde el primer segundo.
 #[tauri::command]
 pub async fn check_riot_key(app: tauri::AppHandle) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/check_riot_key");
     crate::riot_api::set_app_handle(app);
     let config = crate::storage::load_config();
     // Con proxy la clave la pone el servidor: no hay nada que comprobar aquí.
@@ -438,6 +482,7 @@ pub async fn check_riot_key(app: tauri::AppHandle) -> Result<(), String> {
 pub async fn get_match_attribution(
     match_id: String,
 ) -> Result<Vec<crate::attribution::PlayerCredit>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_attribution");
     crate::riot_api::attribution_for(&match_id).await
 }
 
@@ -452,6 +497,7 @@ pub async fn get_match_attribution(
 /// ventana negra mataba el trabajo antes de que escribiera nada.
 #[tauri::command]
 pub async fn process_match_minimap(app: tauri::AppHandle, match_id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/process_match_minimap");
     crate::minimap::spawn_processing(&app, &match_id)
 }
 
@@ -468,6 +514,7 @@ pub async fn get_minimap_status(
     app: tauri::AppHandle,
     match_id: String,
 ) -> Result<MinimapStatus, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_minimap_status");
     Ok(MinimapStatus {
         state: crate::minimap::estado(&app, &match_id),
         saved_progress: crate::minimap::avance_guardado(&match_id),
@@ -495,6 +542,7 @@ pub struct MinimapBatchStatus {
 
 #[tauri::command]
 pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStatus, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_minimap_batch");
     let desactualizadas = crate::minimap::desactualizadas(&app);
     Ok(MinimapBatchStatus {
         pending: crate::minimap::pendientes(&app).len(),
@@ -518,17 +566,20 @@ pub async fn get_minimap_batch(app: tauri::AppHandle) -> Result<MinimapBatchStat
 /// de cada partida por `minimap_progress`, como siempre).
 #[tauri::command]
 pub async fn process_missing_minimaps(app: tauri::AppHandle) -> Result<crate::minimap::Lote, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/process_missing_minimaps");
     crate::minimap::lanzar_lote(&app)
 }
 
 #[tauri::command]
 pub async fn cancel_missing_minimaps() -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/cancel_missing_minimaps");
     crate::minimap::parar_lote();
     Ok(())
 }
 
 #[tauri::command]
 pub async fn cancel_match_minimap(match_id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/cancel_match_minimap");
     crate::minimap::cancelar(&match_id);
     Ok(())
 }
@@ -540,6 +591,7 @@ pub async fn cancel_match_minimap(match_id: String) -> Result<(), String> {
 pub async fn get_match_pressure(
     match_id: String,
 ) -> Result<Vec<crate::pressure::PressureWindow>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_pressure");
     crate::riot_api::pressure_for(&match_id).await
 }
 
@@ -579,6 +631,7 @@ impl Default for VideoSettings {
 
 #[tauri::command]
 pub fn get_video_settings(state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>) -> VideoSettings {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_video_settings");
     state.lock().unwrap().clone()
 }
 
@@ -591,6 +644,7 @@ pub fn set_video_settings(
     resolution: Option<String>,
     state: State<'_, Arc<std::sync::Mutex<VideoSettings>>>,
 ) -> VideoSettings {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_video_settings");
     let mut s = state.lock().unwrap();
     s.fps = fps;
     s.quality = quality;
@@ -616,6 +670,7 @@ pub fn set_video_settings(
 ///      de reproducción — sin salida de audio no hay loopback posible.
 #[tauri::command]
 pub fn get_audio_status(state: State<'_, Arc<RecorderState>>) -> AudioStatus {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_audio_status");
     // Mientras hay algo grabando se le pregunta al servidor; si no, vale la
     // última respuesta que dio (con la tubería parada la fuente de audio no
     // existe, así que preguntar entonces siempre diría "no" y sería mentira).
@@ -646,6 +701,7 @@ pub async fn start_manual_recording(
     active_match: State<'_, Arc<ActiveMatchState>>,
     video_settings: State<'_, Arc<std::sync::Mutex<VideoSettings>>>,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/start_manual_recording");
     let settings = video_settings.lock().unwrap().clone();
     let path = start_recording(&id, &state, &settings)?;
 
@@ -667,6 +723,7 @@ pub async fn stop_manual_recording(
     state: State<'_, Arc<RecorderState>>,
     active_match: State<'_, Arc<ActiveMatchState>>,
 ) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/stop_manual_recording");
     // El error de `stop` no aborta el guardado: la grabación de prueba puede
     // haber quedado en disco igualmente y, si no, el metadata con `video_path`
     // vacío es justo lo que explica por qué no hay vídeo.
@@ -2035,6 +2092,7 @@ pub async fn export_clip(
     start_time: f64,
     duration: f64,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/export_clip");
     let dir = crate::storage::get_match_dir(&match_id);
     let clip_id = format!(
         "{}_clip_{}",
@@ -2150,6 +2208,7 @@ fn borrar_recorte(path: &str, marca: &str) -> Result<(), String> {
 /// Borra un recorte guardado (`<partida>_clip_N.mp4`) y su JSON.
 #[tauri::command]
 pub fn delete_clip(path: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/delete_clip");
     borrar_recorte(&path, "_clip_")
 }
 
@@ -2157,11 +2216,13 @@ pub fn delete_clip(path: String) -> Result<(), String> {
 /// los sucesos que llevara dentro.
 #[tauri::command]
 pub fn delete_error_clip(path: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/delete_error_clip");
     borrar_recorte(&path, "_error_")
 }
 
 #[tauri::command]
 pub async fn get_all_clips() -> Vec<ClipMetadata> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_all_clips");
     let mut clips = Vec::new();
     let root_dir = crate::storage::get_videos_dir();
 
@@ -2232,6 +2293,7 @@ pub async fn get_all_clips() -> Vec<ClipMetadata> {
 
 #[tauri::command]
 pub async fn toggle_clip_favorite(path: String) -> Result<bool, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/toggle_clip_favorite");
     let mp4_path = std::path::Path::new(&path);
     let json_path = mp4_path.with_extension("json");
 
@@ -2307,6 +2369,7 @@ pub async fn export_error_clip(
     duration: f64,
     note: String,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/export_error_clip");
     let dir = crate::storage::get_match_dir(&match_id);
     let error_id = format!(
         "{}_error_{}",
@@ -2334,6 +2397,7 @@ pub async fn export_error_clip(
 
 #[tauri::command]
 pub async fn get_all_error_clips() -> Vec<ErrorClipMetadata> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_all_error_clips");
     let mut errors = Vec::new();
     // Los dos directorios NO son un apaño heredado: los VOD analizados (`vod_*`) viven en
     // VODsReviews y las partidas grabadas en la raíz de vídeos (ver `get_match_dir`).
@@ -2447,6 +2511,7 @@ async fn write_clip_meta(
 /// Marca o desmarca un clip de error como revisado, para la cola de revision.
 #[tauri::command]
 pub async fn set_error_clip_reviewed(path: String, reviewed: bool) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_error_clip_reviewed");
     let mp4_path = std::path::Path::new(&path);
     let mut meta = load_clip_meta(mp4_path).await?;
     meta.reviewed = if reviewed { Some(true) } else { None };
@@ -2455,6 +2520,7 @@ pub async fn set_error_clip_reviewed(path: String, reviewed: bool) -> Result<(),
 
 #[tauri::command]
 pub async fn update_error_note(path: String, note: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/update_error_note");
     let mp4_path = std::path::Path::new(&path);
     let mut meta = load_or_init_clip_meta(mp4_path).await;
     meta.note = note;
@@ -2468,6 +2534,7 @@ pub async fn add_error_event(
     text: String,
     category: String,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/add_error_event");
     let mp4_path = std::path::Path::new(&path);
     let mut meta = load_or_init_clip_meta(mp4_path).await;
 
@@ -2489,6 +2556,7 @@ pub async fn add_error_event(
 
 #[tauri::command]
 pub async fn delete_error_event(path: String, event_id: String) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/delete_error_event");
     let mp4_path = std::path::Path::new(&path);
     let mut meta = load_clip_meta(mp4_path).await?;
 
@@ -2515,6 +2583,7 @@ pub async fn edit_error_event(
     category: String,
     time: Option<f64>,
 ) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/edit_error_event");
     let mp4_path = std::path::Path::new(&path);
     let mut meta = load_clip_meta(mp4_path).await?;
 
@@ -2541,6 +2610,7 @@ pub async fn edit_error_event(
 
 #[tauri::command]
 pub fn get_app_config() -> crate::storage::AppConfig {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_app_config");
     crate::storage::load_config()
 }
 
@@ -2585,6 +2655,7 @@ where
 
 #[tauri::command]
 pub fn set_app_config(app: tauri::AppHandle, patch: AppConfigPatch) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/set_app_config");
     let mut config = crate::storage::load_config();
     if let Some(d) = patch.save_directory {
         config.save_directory = d;
@@ -2703,6 +2774,7 @@ pub async fn upload_clip(
     path: String,
     expiry: String,
 ) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/upload_clip");
     use futures_util::StreamExt;
 
     let file = tokio::fs::File::open(&path)
@@ -2912,10 +2984,10 @@ fn metricas_de_partida(
 /// menos: en `deaths_per_game` un 90 significa "mueres más que el 90%". La
 /// inversión la hace la UI mirando `lower_is_better`, para que el signo se vea
 /// donde se pinta y no quede escondido dentro de una tabla.
-#[tauri::command]
-pub fn get_match_benchmarks(
+pub fn get_match_benchmarks_bloqueante(
     match_id: String,
 ) -> Result<Vec<crate::benchmarks::MetricComparison>, String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/get_match_benchmarks");
     let mut metadata = crate::storage::get_match_metadata(&match_id)?;
 
     // `cs_diff_15` no existía cuando se sincronizaron las partidas viejas. Se
@@ -2924,7 +2996,7 @@ pub fn get_match_benchmarks(
     if metadata.cs_diff_15.is_none() {
         if let Some(nuevo) = cs_diff_15_cacheado(&metadata) {
             metadata.cs_diff_15 = Some(nuevo);
-            let _ = crate::storage::save_match_metadata(&metadata);
+            let _ = crate::storage::modificar(&match_id, |m| m.cs_diff_15 = Some(nuevo));
         }
     }
 
@@ -2940,6 +3012,15 @@ pub fn get_match_benchmarks(
         &rol,
         &valores,
     ))
+}
+
+/// Comando de [`get_match_benchmarks_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn get_match_benchmarks(match_id: String) -> Result<Vec<crate::benchmarks::MetricComparison>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_benchmarks");
+    tauri::async_runtime::spawn_blocking(move || get_match_benchmarks_bloqueante(match_id)).await.map_err(|e| e.to_string())?
 }
 
 /// `cs_diff_15` de una partida vieja, de su timeline cacheada. `None` si no la

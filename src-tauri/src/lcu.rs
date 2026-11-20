@@ -786,6 +786,7 @@ pub fn spawn_monitor(app: tauri::AppHandle) {
 
 #[tauri::command]
 pub fn get_lcu_status() -> LcuStatus {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_lcu_status");
     status()
 }
 

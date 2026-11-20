@@ -197,6 +197,7 @@ fn de_partida(match_id: &str, from: f64, to: f64) -> EpisodeStrip {
 /// La franja de un tramo `[from, to]` en segundos de PARTIDA.
 #[tauri::command]
 pub async fn get_episode_strip(match_id: String, from: f64, to: f64) -> EpisodeStrip {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_episode_strip");
     tokio::task::spawn_blocking(move || de_partida(&match_id, from, to))
         .await
         .unwrap_or_else(|_| estado("no_riot"))

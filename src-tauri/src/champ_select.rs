@@ -616,6 +616,7 @@ pub fn armar(
 /// rol que el usuario haya puesto a mano en la pantalla.
 #[tauri::command]
 pub async fn get_champ_select(role: Option<String>) -> Option<Vista> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_champ_select");
     let sel = crate::lcu::seleccion()?;
     let st = crate::lcu::status();
     tokio::task::spawn_blocking(move || {
@@ -642,6 +643,7 @@ pub fn solape(a: (i32, i32, i32, i32), b: (i32, i32, i32, i32)) -> f64 {
 /// elección a nadie) o "failed".
 #[tauri::command]
 pub fn champ_select_bring_forward(window: tauri::WebviewWindow) -> String {
+    let _medida = crate::medida::Tramo::nuevo("cmd/champ_select_bring_forward");
     #[cfg(target_os = "windows")]
     {
         match window.hwnd() {

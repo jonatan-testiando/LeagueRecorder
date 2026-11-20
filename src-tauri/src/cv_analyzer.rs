@@ -139,6 +139,7 @@ pub async fn process_vod(
     state: tauri::State<'_, AnalyzerState>,
     video_path: String,
 ) -> Result<ProcessVodResponse, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/process_vod");
     if state.is_running.swap(true, Ordering::SeqCst) {
         return Ok(ProcessVodResponse {
             success: false,
@@ -426,6 +427,7 @@ pub async fn process_vod(
 /// No-op si no hay ninguno corriendo.
 #[tauri::command]
 pub fn cancel_vod(state: tauri::State<'_, AnalyzerState>) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/cancel_vod");
     if !state.is_running.load(Ordering::SeqCst) {
         return Ok(());
     }

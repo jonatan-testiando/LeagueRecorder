@@ -501,7 +501,7 @@ fn de_partida(match_id: &str, cal: crate::camera_input::Calibracion) -> GolpesRe
     let (Some(raw), Some(raw_tl), Ok(meta)) = (
         crate::storage::load_raw_match(match_id),
         crate::storage::load_raw_timeline(match_id),
-        crate::storage::get_match_metadata(match_id),
+        crate::storage::get_match_metadata_con_estela(match_id),
     ) else {
         return estado("no_riot");
     };
@@ -540,6 +540,7 @@ pub(crate) fn aperturas(match_id: &str) -> Vec<f64> {
 /// Las peleas que te empezaron en una partida.
 #[tauri::command]
 pub async fn get_hits_taken(match_id: String) -> GolpesReport {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hits_taken");
     tokio::task::spawn_blocking(move || {
         con_iconos(de_partida(&match_id, crate::camera_input::Calibracion::actual()))
     })
@@ -552,6 +553,7 @@ const PARTIDAS_HISTORIAL: usize = 10;
 /// Lo mismo sobre tus últimas partidas con el HUD leído.
 #[tauri::command]
 pub async fn get_hits_taken_career() -> GolpesReport {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_hits_taken_career");
     tokio::task::spawn_blocking(|| {
         let cal = crate::camera_input::Calibracion::actual();
         let mut total = GolpesReport { status: "no_hud".into(), ..Default::default() };

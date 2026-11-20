@@ -228,6 +228,7 @@ fn calcular(match_id: &str) -> Result<Vec<Titulo>, String> {
 /// de menos de 15 minutos, que no se compara con el baremo.
 #[tauri::command]
 pub async fn get_match_titles(match_id: String) -> Result<Vec<Titulo>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_titles");
     tokio::task::spawn_blocking(move || calcular(&match_id)).await.map_err(|e| e.to_string())?
 }
 

@@ -344,7 +344,7 @@ pub fn spawn_regenerate_all(cal: Calibracion) {
             if m.is_vod {
                 continue;
             }
-            let Ok(full) = crate::storage::get_match_metadata(&m.id) else {
+            let Ok(full) = crate::storage::get_match_metadata_con_estela(&m.id) else {
                 continue;
             };
             if full.mouse_events.is_empty() {
@@ -357,9 +357,7 @@ pub fn spawn_regenerate_all(cal: Calibracion) {
             // suelen ser los mismos: no hay por qué reescribir megas de
             // metadata para dejarlos igual.
             if full.camera_snaps != nuevos {
-                let mut meta = full;
-                meta.camera_snaps = nuevos;
-                let _ = crate::storage::save_match_metadata(&meta);
+                let _ = crate::storage::modificar(&full.id, |m| m.camera_snaps = nuevos);
             }
             hechas += 1;
         }
@@ -429,7 +427,7 @@ fn procesar_una(id: &str, cal: Calibracion) {
         .unwrap_or(false);
 
     // `load_all_matches` no trae la estela: hay que leer la partida entera.
-    let Ok(full) = crate::storage::get_match_metadata(id) else {
+    let Ok(full) = crate::storage::get_match_metadata_con_estela(id) else {
         return;
     };
 
@@ -450,9 +448,7 @@ fn procesar_una(id: &str, cal: Calibracion) {
     // Nunca reescribir un fichero cuyo contenido no ha cambiado: el metadata de
     // una partida son megas (la estela), y esto corría en cada arranque.
     if full.camera_snaps != nuevos {
-        let mut meta = full;
-        meta.camera_snaps = nuevos;
-        let _ = crate::storage::save_match_metadata(&meta);
+        let _ = crate::storage::modificar(id, |m| m.camera_snaps = nuevos);
     }
 }
 

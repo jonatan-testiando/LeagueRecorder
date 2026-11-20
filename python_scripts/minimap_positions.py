@@ -452,7 +452,12 @@ def main():
     nombre = os.path.basename(d.rstrip("/\\"))
     vid = os.path.join(d, nombre + ".mp4")
     meta = None
-    for f in os.listdir(d):
+    # El metadata se llama como la carpeta. Se mira primero: el barrido de
+    # respaldo coge el primer JSON con `champion`, y por orden alfabético ese
+    # solía ser una caché (`coach_v2.json`) y no la partida.
+    canonico = nombre + ".json"
+    candidatos = sorted(os.listdir(d), key=lambda f: f != canonico)
+    for f in candidatos:
         if f.endswith(".json") and not f.startswith("riot_") and not f.startswith("minimap_"):
             j = json.load(open(os.path.join(d, f), encoding="utf-8"))
             if isinstance(j, dict) and j.get("champion"):

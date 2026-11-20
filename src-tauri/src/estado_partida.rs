@@ -217,6 +217,7 @@ pub struct EstadoPartidas {
 /// corpus. Patrones agrega lo que le toque según sus filtros.
 #[tauri::command]
 pub async fn get_game_states() -> EstadoPartidas {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_game_states");
     let games = tokio::task::spawn_blocking(|| {
         crate::storage::load_all_matches()
             .iter()

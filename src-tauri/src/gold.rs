@@ -194,6 +194,7 @@ pub struct GoldResponse {
 /// El oro de una partida, si se grabó con la captura de oro.
 #[tauri::command]
 pub async fn get_gold_report(match_id: String) -> GoldResponse {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_gold_report");
     tokio::task::spawn_blocking(move || {
         let resp = |s: &str, r| GoldResponse { status: s.to_string(), report: r };
         let Some(serie) = load(&match_id) else { return resp("no_series", None) };

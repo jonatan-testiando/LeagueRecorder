@@ -134,9 +134,29 @@ export const exportErrorClip = async (matchId: string, videoPath: string, startT
   return await invoke<string>("export_error_clip", { matchId, videoPath, startTime, duration, note });
 };
 
-export const getAllErrorClips = async (): Promise<ErrorClipMetadata[]> => {
-  return await invoke<ErrorClipMetadata[]>("get_all_error_clips");
-};
+/**
+ * Comparte la petición en vuelo: si varias pantallas preguntan lo mismo a la
+ * vez (al arrancar lo hacían tres), sale una sola llamada y todas reciben su
+ * respuesta. `fresh` fuerza una llamada nueva: para justo después de cambiar
+ * algo, cuando una respuesta que ya estaba en camino podría ser de antes.
+ */
+function compartida<T>(fn: () => Promise<T>): (fresh?: boolean) => Promise<T> {
+  let enVuelo: Promise<T> | null = null;
+  return (fresh = false) => {
+    if (enVuelo && !fresh) return enVuelo;
+    const p = fn().finally(() => {
+      if (enVuelo === p) enVuelo = null;
+    });
+    enVuelo = p;
+    return p;
+  };
+}
+
+const errorClipsCompartida = compartida(() => invoke<ErrorClipMetadata[]>("get_all_error_clips"));
+
+/** Recorre la carpeta de cada partida: las llamadas simultáneas se comparten. */
+export const getAllErrorClips = (opts?: { fresh?: boolean }): Promise<ErrorClipMetadata[]> =>
+  errorClipsCompartida(opts?.fresh);
 
 export const updateErrorNote = async (path: string, note: string): Promise<void> => {
   return await invoke<void>("update_error_note", { path, note });
@@ -442,9 +462,11 @@ export const champSelectBringForward = async (): Promise<string> => {
 
 // Comprueba la clave de Riot ya guardada. Resuelve si sirve, y rechaza con el
 // motivo si no.
-export const checkRiotKey = async (): Promise<void> => {
-  return await invoke<void>("check_riot_key");
-};
+// Al arrancar la preguntan tres sitios a la vez (banner, Hoy y la píldora de
+// captura): se comparte la llamada en vuelo. Tras guardar una clave nueva hay
+// que pasar `fresh`, o podría llegar la respuesta de la clave anterior.
+const riotKeyCompartida = compartida(() => invoke<void>("check_riot_key"));
+export const checkRiotKey = (opts?: { fresh?: boolean }): Promise<void> => riotKeyCompartida(opts?.fresh);
 
 // Una muerte concreta y lo que costó: en tiempo fuera de la partida y en
 // probabilidad de victoria (`muertes.rs`).

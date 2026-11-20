@@ -567,6 +567,7 @@ fn de_partida(match_id: &str) -> WavesReport {
 /// (son segundos) antes de contestar.
 #[tauri::command]
 pub async fn get_waves(app: tauri::AppHandle, match_id: String) -> WavesReport {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_waves");
     tokio::task::spawn_blocking(move || {
         if falta(&app, &match_id) {
             if let Err(e) = procesar(&app, &match_id) {
@@ -584,6 +585,7 @@ const PARTIDAS_HISTORIAL: usize = 15;
 /// Lo mismo sobre tus últimas partidas con las oleadas leídas, sin la serie.
 #[tauri::command]
 pub async fn get_waves_career() -> WavesReport {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_waves_career");
     tokio::task::spawn_blocking(|| {
         let mut total = estado("no_waves");
         for m in crate::storage::load_all_matches().into_iter().filter(|m| !m.is_vod) {

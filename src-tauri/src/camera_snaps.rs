@@ -12,7 +12,7 @@
 //! incluidas las de antes de instalar el entrenamiento.
 
 use crate::cv_analyzer::{python_command, resolve_resource, AnalyzerState};
-use crate::storage::{get_match_dir, load_match_by_id, save_match_metadata};
+use crate::storage::{get_match_dir, load_match_by_id};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -112,6 +112,7 @@ pub async fn analyze_camera_snaps(
     state: tauri::State<'_, AnalyzerState>,
     match_id: String,
 ) -> Result<SnapAnalysisResult, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/analyze_camera_snaps");
     // Compartimos el cerrojo con el analizador de VOD: los dos saturan la CPU y
     // lanzarlos a la vez solo consigue que ambos vayan lentos.
     if state.is_running.swap(true, Ordering::SeqCst) {
@@ -130,7 +131,7 @@ pub async fn analyze_camera_snaps(
         state.child_pid.store(0, Ordering::SeqCst);
     };
 
-    let mut meta = match load_match_by_id(&match_id) {
+    let meta = match load_match_by_id(&match_id) {
         Some(m) => m,
         None => {
             finish(&state);
@@ -262,8 +263,9 @@ pub async fn analyze_camera_snaps(
     }
 
     // El timeline solo necesita los tiempos: van en la metadata de la partida.
-    meta.camera_snaps = times.clone();
-    let _ = save_match_metadata(&meta);
+    // Por `modificar`: el análisis tarda minutos y `meta` es de antes de
+    // empezarlo; guardarla tal cual borraría lo que se escribiera entretanto.
+    let _ = crate::storage::modificar(&meta.id, |m| m.camera_snaps = times.clone());
 
     finish(&state);
     let _ = app.emit("snaps_progress", "Done.");
@@ -306,6 +308,7 @@ pub struct RecallFrame {
 /// Reúne todos los fotogramas extraídos de todas las partidas ya analizadas.
 #[tauri::command]
 pub async fn list_recall_frames() -> Vec<RecallFrame> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/list_recall_frames");
     let mut out = Vec::new();
     for m in crate::storage::load_all_matches() {
         let Some(report) = load_report(&m.id) else {
@@ -362,6 +365,7 @@ pub struct CameraLook {
 /// Tus miradas en orden, cada una con el carril al que fue.
 #[tauri::command]
 pub async fn get_camera_looks(match_id: String) -> Vec<CameraLook> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_looks");
     let Some(r) = load_report(&match_id) else {
         return Vec::new();
     };
@@ -387,6 +391,7 @@ pub async fn get_camera_looks(match_id: String) -> Vec<CameraLook> {
 /// Devuelve vacío en ese caso, en vez de inventarse un reparto.
 #[tauri::command]
 pub async fn get_camera_zones(match_id: String) -> Vec<ZoneStat> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_zones");
     match load_report(&match_id) {
         Some(r) => zonas_de(&r),
         None => Vec::new(),
@@ -463,6 +468,7 @@ pub struct ZoneHistoryRow {
 /// mejorar de empeorar.
 #[tauri::command]
 pub async fn get_camera_zone_history() -> Vec<ZoneHistoryRow> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_zone_history");
     let mut out: Vec<ZoneHistoryRow> = Vec::new();
     for m in crate::storage::load_all_matches() {
         if m.is_vod {
@@ -492,6 +498,7 @@ pub async fn get_camera_zone_history() -> Vec<ZoneHistoryRow> {
 
 #[tauri::command]
 pub async fn get_blind_spot() -> Option<BlindSpot> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_blind_spot");
     let mut peor_por_partida: Vec<(String, String, f64)> = Vec::new(); // (partida, carril, hueco)
     let mut huecos: std::collections::HashMap<String, Vec<f64>> = Default::default();
     let mut partidas = 0usize;
@@ -554,6 +561,7 @@ pub async fn get_blind_spot() -> Option<BlindSpot> {
 
 #[tauri::command]
 pub async fn get_camera_snap_summary(match_id: String) -> SnapSummary {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_camera_snap_summary");
     match load_report(&match_id) {
         Some(r) => {
             let times: Vec<f64> = r.snaps.iter().map(|s| s.t).collect();

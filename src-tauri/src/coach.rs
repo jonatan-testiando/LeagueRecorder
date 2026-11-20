@@ -944,6 +944,7 @@ pub fn resumen(partidas: &[PartidaCoach]) -> Resumen {
 /// Las categorías, los tramos y el foco sobre todas tus partidas grabadas.
 #[tauri::command]
 pub async fn get_coach_summary() -> Resumen {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_coach_summary");
     tokio::task::spawn_blocking(|| resumen(&tus_partidas())).await.unwrap_or_else(|_| resumen(&[]))
 }
 
@@ -951,6 +952,7 @@ pub async fn get_coach_summary() -> Resumen {
 /// con ellas los objetivos rivales que se hicieron sin ti.
 #[tauri::command]
 pub async fn get_match_coach(match_id: String) -> Result<Option<PartidaCoach>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_coach");
     tokio::task::spawn_blocking(move || {
         let meta = crate::storage::get_match_metadata(&match_id)?;
         Ok(de_la_partida(&meta))

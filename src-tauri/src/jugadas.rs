@@ -79,6 +79,7 @@ pub(crate) fn de_partida(meta: &crate::storage::MatchMetadata) -> Result<MatchPl
 /// Jugadas y curva de probabilidad de una partida ya sincronizada.
 #[tauri::command]
 pub async fn get_match_plays(match_id: String) -> Result<MatchPlays, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_plays");
     tokio::task::spawn_blocking(move || cargar_o_calcular(&match_id))
         .await
         .map_err(|e| e.to_string())?

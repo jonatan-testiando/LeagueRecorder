@@ -1160,10 +1160,12 @@ pub async fn impact_backfill(app: &tauri::AppHandle) {
         // `impacto` si algo cambia; si no cambió nada, `impacto` no guarda y el
         // sello se escribe aquí. Son una o dos escrituras la primera vez y
         // ninguna a partir de entonces, que es lo que se quería.
-        let mut meta = m;
-        meta.impact_backfill_v = IMPACT_BACKFILL_V;
-        impacto(&mut meta, &tl, &details.info);
-        let _ = crate::storage::save_match_metadata(&meta);
+        // Por `modificar`: la copia `m` es de cuando empezó el barrido, y el
+        // usuario puede haber comentado o marcado algo desde entonces.
+        let _ = crate::storage::modificar(&m.id, |meta| {
+            meta.impact_backfill_v = IMPACT_BACKFILL_V;
+            impacto(meta, &tl, &details.info);
+        });
         hechas += 1;
     }
     if hechas > 0 {
@@ -1204,14 +1206,15 @@ pub async fn impact_backfill(app: &tauri::AppHandle) {
         return;
     };
     let cuantas = sin_rango.len();
-    for mut m in sin_rango {
-        if m.tier_bucket.is_none() {
-            m.tier_bucket = RiotApiClient::tramo_de(&tier);
-        }
-        m.rank_tier = Some(tier.clone());
-        m.rank_division = Some(division.clone());
-        m.rank_lp = Some(lp);
-        let _ = crate::storage::save_match_metadata(&m);
+    for m in sin_rango {
+        let _ = crate::storage::modificar(&m.id, |m| {
+            if m.tier_bucket.is_none() {
+                m.tier_bucket = RiotApiClient::tramo_de(&tier);
+            }
+            m.rank_tier = Some(tier.clone());
+            m.rank_division = Some(division.clone());
+            m.rank_lp = Some(lp);
+        });
     }
     log::info!("rango: {tier} {division} ({lp} LP) estampado en {cuantas} partidas sin rango");
 }
@@ -1337,6 +1340,7 @@ pub struct CurrentRank {
 /// la escalada, a la vez. Una sola llamada a league-v4, guardada 5 minutos.
 #[tauri::command]
 pub async fn get_current_rank() -> Result<Option<CurrentRank>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_current_rank");
     static CACHE: std::sync::Mutex<Option<(std::time::Instant, Option<CurrentRank>)>> =
         std::sync::Mutex::new(None);
     if let Some((t, r)) = CACHE.lock().unwrap().as_ref() {
@@ -1364,6 +1368,7 @@ pub async fn get_current_rank() -> Result<Option<CurrentRank>, String> {
 
 #[tauri::command]
 pub async fn get_season_form() -> Result<SeasonForm, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_season_form");
     let config = crate::storage::load_config();
     if sin_credencial(&config) {
         return Err("no_key: Configura tu Riot API Key en Ajustes".to_string());
@@ -1607,6 +1612,7 @@ fn pressure_de_partida(m: &crate::storage::MatchMetadata) -> Option<PressureCach
 
 #[tauri::command]
 pub async fn get_pressure_summary() -> PressureSummary {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_pressure_summary");
     let mut sum = PressureSummary { games: 0, windows: 0, wpa: 0.0, towers: 0, gold: 0.0,
         with_gains: 0, without_gains: 0, deaths: 0, enemy_seconds: 0.0, net_gold: 0.0,
         farm_denied: 0.0, own_farm_lost: 0.0, local_gold: 0.0, team_elsewhere: 0.0,

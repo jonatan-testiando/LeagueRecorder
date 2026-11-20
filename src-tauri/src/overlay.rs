@@ -45,6 +45,7 @@ pub fn hide(app: &tauri::AppHandle) {
 /// a una partida real (que es justo lo que hace difícil probarlo).
 #[tauri::command]
 pub async fn preview_metronome_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/preview_metronome_overlay");
     use tauri::Emitter;
 
     show(&app);

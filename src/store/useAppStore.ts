@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { MatchMetadata } from '../types';
 import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from '../core/tauri-ipc';
@@ -18,6 +19,14 @@ interface AppState {
   /** Relee del disco y publica. Quien borra o graba llama aquí y todas las
    *  pantallas se enteran a la vez. */
   refreshMatches: () => Promise<void>;
+
+  /**
+   * Sube cada vez que termina un análisis de vídeo (minimapa, HUD, oleadas,
+   * barras) o el mantenimiento del arranque. Entra en la firma de la
+   * biblioteca: esos análisis cambian el coach y la presión sin tocar nada de
+   * lo que la firma mira en las partidas.
+   */
+  analisis: number;
 
   /** Partida abierta en la pestaña Games. */
   selectedMatch: MatchMetadata | null;
@@ -56,7 +65,7 @@ interface AppState {
    * versión fresca: es lo que hace que la nota recién guardada se vea sin salir
    * y volver a entrar.
    */
-  refreshErrorClips: () => Promise<void>;
+  refreshErrorClips: (opts?: { fresh?: boolean }) => Promise<void>;
 
   /**
    * Segundo de vídeo al que saltar cuando el reproductor abra la partida
@@ -153,6 +162,7 @@ export const useAppStore = create<AppState>((set, get) => {
   return {
     matches: [],
     matchesLoaded: false,
+    analisis: 0,
     refreshMatches: async () => {
       const data = await getRecordedMatches();
       set({ matches: data, matchesLoaded: true });
@@ -181,9 +191,11 @@ export const useAppStore = create<AppState>((set, get) => {
     errorClips: [],
     errorClipsLoaded: false,
     errorClipsError: null,
-    refreshErrorClips: async () => {
+    // Por defecto pide una lectura nueva: casi siempre se llama justo después de
+    // crear, borrar o anotar un clip. La carga inicial comparte la que esté en vuelo.
+    refreshErrorClips: async (opts) => {
       try {
-        const data = await getAllErrorClips();
+        const data = await getAllErrorClips({ fresh: opts?.fresh ?? true });
         const abierto = get().selectedError;
         const fresco = abierto ? data.find((e) => e.path === abierto.path) ?? null : null;
         set({
@@ -249,6 +261,66 @@ export function useMatches(): { matches: MatchMetadata[]; loaded: boolean } {
 }
 
 /**
+ * Firma de la biblioteca: cambia cuando hay partidas nuevas, borradas o
+ * recién sincronizadas con Riot, y NO cuando el refresco periódico trae lo
+ * mismo de siempre en un array nuevo.
+ *
+ * Los resúmenes de Home (coach, plan, presión, punto ciego) dependían de la
+ * identidad de `matches`: se pedían con la lista vacía, otra vez al llegar y
+ * otra en cada refresco de 5 min o sondeo del post-partida, y cada petición
+ * recorre la biblioteca entera en el backend. Entra lo que cambia el resultado
+ * de esos cálculos: qué partidas hay y si ya tienen los datos de Riot.
+ */
+export function firmaBiblioteca(matches: MatchMetadata[]): string {
+  let h = 0;
+  for (const m of matches) {
+    const s = `${m.id}|${m.riot_match_id ?? ""}|${m.queue ?? ""}|${m.participants?.length ?? 0}|${
+      m.minute_frames?.length ?? 0
+    }|${m.impact_rank ?? ""}|${m.rank_tier ?? ""}|${m.video_offset ?? ""}`;
+    for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  }
+  return `${matches.length}:${h >>> 0}`;
+}
+
+/**
+ * La firma de la biblioteca, o `null` hasta que se haya cargado una vez: así
+ * quien depende de ella no dispara con la lista vacía del arranque. Devuelve
+ * una cadena, de modo que el componente solo se re-renderiza si cambia.
+ */
+export function useLibraryKey(): string | null {
+  escucharAnalisis();
+  return useAppStore((s) => (s.matchesLoaded ? `${firmaBiblioteca(s.matches)}#${s.analisis}` : null));
+}
+
+/**
+ * Engancha UNA vez los eventos de progreso de los análisis de vídeo y sube
+ * `analisis` cuando llevan un rato callados, es decir, al terminar una tanda.
+ * Los eventos llegan muchas veces por segundo mientras se procesa: subir el
+ * contador con cada uno pediría el coach otras tantas veces.
+ */
+let escuchando = false;
+function escucharAnalisis() {
+  if (escuchando) return;
+  escuchando = true;
+  let espera: ReturnType<typeof setTimeout> | undefined;
+  const avisar = () => {
+    clearTimeout(espera);
+    espera = setTimeout(() => {
+      useAppStore.setState((s) => ({ analisis: s.analisis + 1 }));
+    }, 3000);
+  };
+  for (const evento of ['minimap_progress', 'minimap_batch', 'hud_progress']) {
+    listen(evento, avisar).catch(console.error);
+  }
+  // El mantenimiento del arranque puede estampar impacto o rango en partidas
+  // viejas: al acabar se relee la biblioteca y, si algo cambió, la firma ya lo
+  // recoge. Si no cambió nada, no se pide ningún resumen otra vez.
+  listen<{ phase: string }>('library_maintenance', (e) => {
+    if (e.payload?.phase === 'done') useAppStore.getState().refreshMatches().catch(console.error);
+  }).catch(console.error);
+}
+
+/**
  * Los errores marcados, compartidos igual que la biblioteca.
  *
  * Al compartirlos, marcar un error en el reproductor y guardar una nota se ven
@@ -266,7 +338,7 @@ export function useErrorClips(): {
   const refresh = useAppStore((s) => s.refreshErrorClips);
   useEffect(() => {
     if (!useAppStore.getState().errorClipsLoaded) {
-      refresh().catch(console.error);
+      refresh({ fresh: false }).catch(console.error);
     }
   }, [refresh]);
   return { clips, loaded, error, refresh };

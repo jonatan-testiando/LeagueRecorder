@@ -66,8 +66,8 @@ pub struct ImportReport {
 
 /// Escribe `Wardline-backup-YYYYMMDD-HHMM.zip` en `dest_dir` y devuelve
 /// la ruta completa del fichero.
-#[tauri::command]
-pub fn export_backup(dest_dir: String) -> Result<String, String> {
+pub fn export_backup_bloqueante(dest_dir: String) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/export_backup");
     let dir = PathBuf::from(dest_dir.trim());
     if dir.as_os_str().is_empty() {
         return Err("No destination folder was given for the backup".to_string());
@@ -139,6 +139,15 @@ pub fn export_backup(dest_dir: String) -> Result<String, String> {
     Ok(destino.to_string_lossy().to_string())
 }
 
+/// Comando de [`export_backup_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn export_backup(dest_dir: String) -> Result<String, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/export_backup");
+    tauri::async_runtime::spawn_blocking(move || export_backup_bloqueante(dest_dir)).await.map_err(|e| e.to_string())?
+}
+
 /// Todos los ficheros bajo `raiz`, con su ruta relativa en formato ZIP.
 fn ficheros_de(raiz: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
@@ -169,8 +178,8 @@ fn ficheros_de(raiz: &Path) -> Vec<(String, PathBuf)> {
 // ---------------------------------------------------------------------------
 
 /// Restaura una copia. Aditiva: nunca pisa un dato local que ya tenga algo.
-#[tauri::command]
-pub fn import_backup(zip_path: String) -> Result<ImportReport, String> {
+pub fn import_backup_bloqueante(zip_path: String) -> Result<ImportReport, String> {
+    let _medida = crate::medida::Tramo::nuevo("bloqueante/import_backup");
     let fichero = std::fs::File::open(zip_path.trim())
         .map_err(|e| format!("Could not open the backup file: {e}"))?;
     let mut zip = zip::ZipArchive::new(fichero)
@@ -272,6 +281,15 @@ pub fn import_backup(zip_path: String) -> Result<ImportReport, String> {
         informe.skipped
     );
     Ok(informe)
+}
+
+/// Comando de [`import_backup_bloqueante`] fuera del hilo principal: en Tauri 2 un
+/// comando síncrono corre en el hilo de la ventana y la congela mientras
+/// toca disco.
+#[tauri::command]
+pub async fn import_backup(zip_path: String) -> Result<ImportReport, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/import_backup");
+    tauri::async_runtime::spawn_blocking(move || import_backup_bloqueante(zip_path)).await.map_err(|e| e.to_string())?
 }
 
 /// `matches/<id>/<id>.json` → `<id>`.

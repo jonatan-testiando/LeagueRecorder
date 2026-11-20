@@ -626,7 +626,7 @@ export const SettingsPanel: React.FC = () => {
     setKeyMsg("");
     try {
       await handleSaveConfig({ riot_api_key: config.riot_api_key });
-      await checkRiotKey();
+      await checkRiotKey({ fresh: true });
       setKeyState("ok");
     } catch (e) {
       setKeyState("bad");

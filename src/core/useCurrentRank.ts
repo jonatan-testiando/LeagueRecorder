@@ -82,8 +82,11 @@ export function useCurrentRank(): RankNow | null | undefined {
   // no quiere decir «sin rango».
   const [asked, setAsked] = useState(ultimo != null);
 
-  // Se vuelve a preguntar cuando llega una partida nueva: es cuando cambia.
+  // Se vuelve a preguntar cuando llega una partida nueva: es cuando cambia. No
+  // antes de la primera carga: con la lista aún vacía salía una pregunta de más.
+  const cuantas = loaded ? matches.length : null;
   useEffect(() => {
+    if (cuantas === null) return;
     let vivo = true;
     pedir().then((r) => {
       if (!vivo) return;
@@ -93,7 +96,7 @@ export function useCurrentRank(): RankNow | null | undefined {
     return () => {
       vivo = false;
     };
-  }, [matches.length]);
+  }, [cuantas]);
 
   const guardado = useMemo(() => {
     const m = matches

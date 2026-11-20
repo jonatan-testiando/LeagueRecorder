@@ -757,6 +757,7 @@ fn abandonar_ahora() -> Result<Panorama, String> {
 /// El plan en curso, los acabados y, sin plan, el foco que se propone.
 #[tauri::command]
 pub async fn get_coach_plan() -> Result<Panorama, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_coach_plan");
     tokio::task::spawn_blocking(ver).await.map_err(|e| e.to_string())?
 }
 
@@ -764,11 +765,13 @@ pub async fn get_coach_plan() -> Result<Panorama, String> {
 /// coach (el de Hoy).
 #[tauri::command]
 pub async fn start_coach_plan(category: Option<String>, tramo: Option<usize>) -> Result<Panorama, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/start_coach_plan");
     tokio::task::spawn_blocking(move || empezar_ahora(category, tramo)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 pub async fn abandon_coach_plan() -> Result<Panorama, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/abandon_coach_plan");
     tokio::task::spawn_blocking(abandonar_ahora).await.map_err(|e| e.to_string())?
 }
 

@@ -499,6 +499,7 @@ pub async fn generate_awareness_quiz(
     count: Option<usize>,
     regenerate: Option<bool>,
 ) -> Result<QuizPayload, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/generate_awareness_quiz");
     let mut record = load_record(&match_id)
         .ok_or_else(|| "This match has no awareness data recorded.".to_string())?;
 
@@ -538,6 +539,7 @@ pub async fn submit_awareness_quiz(
     match_id: String,
     answers: std::collections::HashMap<String, String>,
 ) -> Result<QuizResult, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/submit_awareness_quiz");
     let mut record = load_record(&match_id)
         .ok_or_else(|| "This match has no awareness data recorded.".to_string())?;
     let pending = record
@@ -595,6 +597,7 @@ pub struct AwarenessSummary {
 
 #[tauri::command]
 pub async fn list_awareness_records() -> Vec<AwarenessSummary> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/list_awareness_records");
     let mut out = Vec::new();
     if let Ok(entries) = fs::read_dir(awareness_dir()) {
         for e in entries.flatten() {
@@ -657,6 +660,7 @@ pub struct RoleChampion {
 /// rol, que es como funciona la cabeza en partida ("Nautilus", no "support").
 #[tauri::command]
 pub async fn get_champion_pool() -> Vec<RoleChampion> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_champion_pool");
     let mut seen: Vec<(String, String)> = Vec::new();
     let Ok(entries) = fs::read_dir(awareness_dir()) else {
         return Vec::new();

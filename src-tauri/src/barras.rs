@@ -340,7 +340,7 @@ pub fn procesar(app: &tauri::AppHandle, match_id: &str) -> Result<(), String> {
         return Ok(());
     }
     let script = script(app).ok_or("Esta instalación no trae el lector de barras.")?;
-    let meta = crate::storage::get_match_metadata(match_id).map_err(|_| "No se encuentra la partida.")?;
+    let meta = crate::storage::get_match_metadata_con_estela(match_id).map_err(|_| "No se encuentra la partida.")?;
     let aperturas = crate::golpes::aperturas(match_id);
     let v = ventanas(&aperturas, &meta);
     let dir = crate::storage::get_match_dir(match_id);
@@ -388,8 +388,9 @@ pub fn pendientes(app: &tauri::AppHandle) -> Vec<String> {
 /// La puntería de una partida.
 #[tauri::command]
 pub async fn get_aim(match_id: String) -> AimReport {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_aim");
     tokio::task::spawn_blocking(move || {
-        let Ok(meta) = crate::storage::get_match_metadata(&match_id) else {
+        let Ok(meta) = crate::storage::get_match_metadata_con_estela(&match_id) else {
             return AimReport { status: "no_match".into(), ..Default::default() };
         };
         if !meta.mouse_events.iter().any(|e| e.evt.starts_with("key_")) {
@@ -470,7 +471,7 @@ mod tests {
             if !crate::hud::ruta(&m.id).exists() {
                 continue;
             }
-            let Ok(meta) = crate::storage::get_match_metadata(&m.id) else { continue };
+            let Ok(meta) = crate::storage::get_match_metadata_con_estela(&m.id) else { continue };
             let v = ventanas(&crate::golpes::aperturas(&m.id), &meta);
             let f = crate::storage::get_match_dir(&m.id).join("barras_ventanas.json");
             std::fs::write(&f, serde_json::to_string(&v).unwrap()).unwrap();

@@ -630,13 +630,32 @@ pub fn get_config_path() -> PathBuf {
     dir.join("config.json")
 }
 
+/// La config ya leída, con la ruta de la que salió.
+///
+/// `load_config` se llama en cada `get_videos_dir()`, es decir, en cada
+/// `get_match_dir`, en cada petición de rango del vídeo y en cada guardado:
+/// releer y parsear el fichero cada vez era trabajo tirado. Solo `save_config`
+/// escribe el fichero, así que basta con refrescar la copia ahí. La ruta va en
+/// la clave porque `APPDATA` puede cambiar en los tests y en el banco de medidas.
+static CONFIG: std::sync::RwLock<Option<(PathBuf, AppConfig)>> = std::sync::RwLock::new(None);
+
 pub fn load_config() -> AppConfig {
-    if let Ok(content) = fs::read_to_string(get_config_path()) {
-        if let Ok(cfg) = serde_json::from_str(&content) {
-            return cfg;
+    let ruta = get_config_path();
+    if let Ok(g) = CONFIG.read() {
+        if let Some((r, cfg)) = g.as_ref() {
+            if *r == ruta {
+                return cfg.clone();
+            }
         }
     }
-    AppConfig::default()
+    let cfg: AppConfig = fs::read_to_string(&ruta)
+        .ok()
+        .and_then(|c| serde_json::from_str(&c).ok())
+        .unwrap_or_default();
+    if let Ok(mut g) = CONFIG.write() {
+        *g = Some((ruta, cfg.clone()));
+    }
+    cfg
 }
 
 /// Guarda la config. Devuelve el error en vez de tragárselo: antes un disco
@@ -645,8 +664,36 @@ pub fn load_config() -> AppConfig {
 pub fn save_config(cfg: &AppConfig) -> Result<(), String> {
     let content = serde_json::to_string_pretty(cfg)
         .map_err(|e| format!("Could not serialize the settings: {e}"))?;
-    fs::write(get_config_path(), content)
-        .map_err(|e| format!("Could not write the settings file: {e}"))
+    let ruta = get_config_path();
+    escribir_atomico(&ruta, content.as_bytes())
+        .map_err(|e| format!("Could not write the settings file: {e}"))?;
+    if let Ok(mut g) = CONFIG.write() {
+        *g = Some((ruta, cfg.clone()));
+    }
+    Ok(())
+}
+
+/// Escribe un fichero sin dejarlo nunca a medias.
+///
+/// `fs::write` trunca y luego escribe: si la app se cierra en medio (o se va la
+/// luz), queda un JSON cortado y con él las notas del usuario. Aquí se escribe
+/// a un temporal al lado y se renombra encima, que en NTFS es atómico.
+///
+/// Si el renombrado falla (otro proceso tiene el destino abierto sin permitir
+/// borrarlo: un antivirus, el sidecar de Python leyéndolo) se cae a la
+/// escritura directa de antes: peor garantía, pero el dato se guarda.
+pub fn escribir_atomico(ruta: &Path, datos: &[u8]) -> std::io::Result<()> {
+    let nombre = ruta.file_name().and_then(|s| s.to_str()).unwrap_or("fichero");
+    let tmp = ruta.with_file_name(format!(".{nombre}.{}.tmp", std::process::id()));
+    fs::write(&tmp, datos)?;
+    match fs::rename(&tmp, ruta) {
+        Ok(()) => Ok(()),
+        Err(_) => {
+            let r = fs::write(ruta, datos);
+            let _ = fs::remove_file(&tmp);
+            r
+        }
+    }
 }
 
 pub fn get_videos_dir() -> PathBuf {
@@ -688,12 +735,14 @@ pub fn get_timeline_path(id: &str) -> PathBuf {
 }
 
 pub fn save_raw_timeline(id: &str, raw: &str) -> Result<(), String> {
-    fs::write(get_timeline_path(id), raw)
+    escribir_atomico(&get_timeline_path(id), raw.as_bytes())
         .map_err(|e| format!("Error guardando timeline: {}", e))
 }
 
 pub fn load_raw_timeline(id: &str) -> Option<String> {
-    fs::read_to_string(get_timeline_path(id)).ok()
+    let raw = fs::read_to_string(get_timeline_path(id)).ok()?;
+    crate::medida::contar(&crate::medida::BYTES_CRUDOS, raw.len() as u64);
+    Some(raw)
 }
 
 /// Detalle crudo de la partida. Se cachea por lo mismo que el timeline: el
@@ -704,11 +753,13 @@ pub fn get_raw_match_path(id: &str) -> PathBuf {
 }
 
 pub fn save_raw_match(id: &str, raw: &str) -> Result<(), String> {
-    fs::write(get_raw_match_path(id), raw).map_err(|e| format!("Error guardando partida: {}", e))
+    escribir_atomico(&get_raw_match_path(id), raw.as_bytes()).map_err(|e| format!("Error guardando partida: {}", e))
 }
 
 pub fn load_raw_match(id: &str) -> Option<String> {
-    fs::read_to_string(get_raw_match_path(id)).ok()
+    let raw = fs::read_to_string(get_raw_match_path(id)).ok()?;
+    crate::medida::contar(&crate::medida::BYTES_CRUDOS, raw.len() as u64);
+    Some(raw)
 }
 
 /// Resumen mínimo de una ranked de la TEMPORADA (grabada o no) para la forma
@@ -745,7 +796,7 @@ pub fn load_season_form_cache() -> Vec<SeasonGame> {
 
 pub fn save_season_form_cache(games: &[SeasonGame]) {
     if let Ok(s) = serde_json::to_string(games) {
-        let _ = fs::write(season_form_cache_path(), s);
+        let _ = escribir_atomico(&season_form_cache_path(), s.as_bytes());
     }
 }
 
@@ -770,6 +821,7 @@ fn estela_en_disco(file_path: &Path) -> Vec<MouseEventData> {
 /// Aquí cuelgan dos cosas que tienen que pasar SIEMPRE, y por eso están aquí y
 /// no en cada llamante: la salvaguarda de la estela y la copia al espejo.
 pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
+    let mut tramo = crate::medida::Tramo::nuevo("save_match_metadata");
     let dir = get_match_dir(&metadata.id);
     let file_path = dir.join(format!("{}.json", metadata.id));
 
@@ -788,11 +840,19 @@ pub fn save_match_metadata(metadata: &MatchMetadata) -> Result<(), String> {
         }
     }
 
-    let json_content = serde_json::to_string_pretty(metadata.as_ref())
+    // Compacto: con sangría el fichero pesaba casi el doble (la estela son
+    // decenas de miles de objetos de cuatro campos) y todo lo que lista la
+    // biblioteca tiene que tokenizarlo entero.
+    let json_content = serde_json::to_string(metadata.as_ref())
         .map_err(|e| format!("Could not serialize the match data: {e}"))?;
 
-    fs::write(&file_path, &json_content)
+    escribir_atomico(&file_path, json_content.as_bytes())
         .map_err(|e| format!("Could not write the match file: {e}"))?;
+    if crate::medida::activa() {
+        let n = crate::medida::contar(&crate::medida::ESCRITURAS_METADATA, 1);
+        crate::medida::contar(&crate::medida::BYTES_ESCRITOS, json_content.len() as u64);
+        tramo.con(format!("escritura={n} id={} mb={:.2}", metadata.id, json_content.len() as f64 / 1048576.0));
+    }
 
     mirror_match(&metadata.id, &json_content);
     Ok(())
@@ -814,7 +874,7 @@ fn mirror_match(id: &str, json_content: &str) {
         log::warn!("espejo de copia: no se pudo crear {}: {e}", dir.display());
         return;
     }
-    if let Err(e) = fs::write(dir.join(format!("{id}.json")), json_content) {
+    if let Err(e) = escribir_atomico(&dir.join(format!("{id}.json")), json_content.as_bytes()) {
         log::warn!("espejo de copia: no se pudo escribir el metadata de {id}: {e}");
         return;
     }
@@ -844,11 +904,41 @@ pub fn sidecars_de(dir: &Path) -> Vec<String> {
         .collect()
 }
 
-/// Actualiza SOLO los comentarios de una partida (lee su JSON, reemplaza comments, reescribe).
+/// Un candado por partida para las modificaciones de [`modificar`].
+fn candado(id: &str) -> std::sync::Arc<std::sync::Mutex<()>> {
+    #[allow(clippy::type_complexity)]
+    static CANDADOS: std::sync::Mutex<Option<std::collections::HashMap<String, std::sync::Arc<std::sync::Mutex<()>>>>> =
+        std::sync::Mutex::new(None);
+    let mut g = CANDADOS.lock().unwrap_or_else(|e| e.into_inner());
+    g.get_or_insert_with(Default::default)
+        .entry(id.to_string())
+        .or_default()
+        .clone()
+}
+
+/// Lee, cambia y guarda una partida sin pisar a nadie.
+///
+/// Los barridos del arranque guardaban copias tomadas al empezar el bucle:
+/// si mientras tanto el usuario escribía un comentario o marcaba un suceso,
+/// el guardado del barrido lo borraba con la copia vieja. Aquí la lectura es
+/// la de ese mismo momento y, con el candado, nadie más que pase por aquí
+/// escribe esa partida entre la lectura y el guardado.
+///
+/// Lee SIN la estela (la conserva la salvaguarda de [`save_match_metadata`]):
+/// `f` no debe tocar `mouse_events`.
+pub fn modificar(id: &str, f: impl FnOnce(&mut MatchMetadata)) -> Result<MatchMetadata, String> {
+    let c = candado(id);
+    let _g = c.lock().unwrap_or_else(|e| e.into_inner());
+    let mut m = leer_ligera(id).ok_or_else(|| "Match not found".to_string())?;
+    realign_to_video_time(&mut m);
+    f(&mut m);
+    save_match_metadata(&m)?;
+    Ok(m)
+}
+
+/// Actualiza SOLO los comentarios de una partida.
 pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
-    let mut m = load_match_by_id(id).ok_or_else(|| "Match not found".to_string())?;
-    m.comments = comments;
-    save_match_metadata(&m)
+    modificar(id, |m| m.comments = comments).map(|_| ())
 }
 
 /// Marca (o desmarca) un suceso como revisado.
@@ -857,16 +947,17 @@ pub fn save_comments(id: &str, comments: Vec<Comment>) -> Result<(), String> {
 /// tiene: no hay ids de evento. Se compara con tolerancia porque los tiempos son
 /// `f64` y vienen de restas en coma flotante.
 pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), String> {
-    let mut m = load_match_by_id(id).ok_or_else(|| "Match not found".to_string())?;
     let same = |a: f64, b: f64| (a - b).abs() < 0.05;
-    if reviewed {
-        if !m.reviewed_moments.iter().any(|t| same(*t, time)) {
-            m.reviewed_moments.push(time);
+    modificar(id, |m| {
+        if reviewed {
+            if !m.reviewed_moments.iter().any(|t| same(*t, time)) {
+                m.reviewed_moments.push(time);
+            }
+        } else {
+            m.reviewed_moments.retain(|t| !same(*t, time));
         }
-    } else {
-        m.reviewed_moments.retain(|t| !same(*t, time));
-    }
-    save_match_metadata(&m)
+    })
+    .map(|_| ())
 }
 
 /// La metadata que hay dentro de una carpeta de partida.
@@ -883,7 +974,9 @@ pub fn set_event_reviewed(id: &str, time: f64, reviewed: bool) -> Result<(), Str
 /// del listado sería mucho peor que leer de más.
 fn metadata_en_carpeta(dir: &Path) -> Option<MatchMetadata> {
     let leer = |ruta: &Path| -> Option<MatchMetadata> {
-        serde_json::from_str(&fs::read_to_string(ruta).ok()?).ok()
+        let texto = fs::read_to_string(ruta).ok()?;
+        crate::medida::contar(&crate::medida::BYTES_RECORRIDOS, texto.len() as u64);
+        serde_json::from_str(&texto).ok()
     };
 
     if let Some(nombre) = dir.file_name().and_then(|s| s.to_str()) {
@@ -912,30 +1005,106 @@ pub fn metadata_ligera(id: &str) -> Option<MatchMetadata> {
 /// Todas las partidas de la biblioteca, **sin la estela del ratón** (ver
 /// [`sin_estela`]). Ningún camino que liste la biblioteca la necesita; el que
 /// la quiere pide una partida concreta con [`load_match_by_id`].
+/// Caché del listado: por cada `{id}.json`, su (fecha de modificación, tamaño)
+/// y el metadata ya parseado sin estela. Si el fichero no ha cambiado no se
+/// vuelve a leer: el listado pasa de parsear toda la biblioteca a hacer un
+/// `stat` por carpeta. Cualquier guardado cambia la fecha y la invalida sola.
+#[allow(clippy::type_complexity)]
+static LISTADO: std::sync::Mutex<
+    Option<(
+        PathBuf,
+        std::collections::HashMap<PathBuf, ((std::time::SystemTime, u64), MatchMetadata)>,
+        // Carpetas sin metadata de partida, con su fecha de modificación.
+        std::collections::HashMap<PathBuf, std::time::SystemTime>,
+    )>,
+> = std::sync::Mutex::new(None);
+
 pub fn load_all_matches() -> Vec<MatchMetadata> {
+    let mut tramo = crate::medida::Tramo::nuevo("load_all_matches");
+    let bytes_antes = crate::medida::BYTES_RECORRIDOS.load(std::sync::atomic::Ordering::Relaxed);
     let dir = get_videos_dir();
     let mut matches = Vec::new();
 
+    // Un solo listado a la vez: si llegan varios juntos (el arranque pide unos
+    // trece en el primer segundo), los demás esperan y se llevan la caché ya
+    // llena en vez de parsear todos la biblioteca a la vez.
+    let mut guard = LISTADO.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.as_ref().map(|(d, _, _)| *d != dir).unwrap_or(true) {
+        *guard = Some((dir.clone(), Default::default(), Default::default()));
+    }
+    let (_, cache, no_partidas) = guard.as_mut().expect("recién puesto");
+    let mut vistos = std::collections::HashSet::new();
+    let mut no_vistas = std::collections::HashSet::new();
+    let mut parseadas = 0usize;
+
     // Una carpeta por partida. Los sueltos en la raíz ya no se contemplan: `migrate_flat_layout`
     // los recoloca al arrancar.
-    if let Ok(entries) = fs::read_dir(dir) {
+    if let Ok(entries) = fs::read_dir(&dir) {
         for entry in entries.flatten() {
+            // `file_type` y `metadata` de una entrada de `read_dir` salen gratis
+            // en Windows (vienen en la misma enumeración); `path.is_dir()`
+            // costaba una llamada al sistema por carpeta.
+            if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(m) = sin_estela(|| metadata_en_carpeta(&path)) {
-                    matches.push(m);
+            // Carpetas que no son partidas (`recortes`, `dataset`, `VODsReviews`):
+            // se recuerdan con la fecha de la carpeta para no volver a abrirlas y
+            // recorrer sus ficheros en cada listado.
+            let fecha_carpeta = entry.metadata().and_then(|m| m.modified()).ok();
+            if let (Some(f), Some(prev)) = (fecha_carpeta, no_partidas.get(&path)) {
+                if *prev == f {
+                    no_vistas.insert(path);
+                    continue;
                 }
+            }
+            let canonico = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(|n| path.join(format!("{n}.json")));
+            let firma = canonico
+                .as_ref()
+                .and_then(|f| fs::metadata(f).ok())
+                .and_then(|md| Some((md.modified().ok()?, md.len())));
+            if let (Some(f), Some(firma)) = (&canonico, firma) {
+                if let Some((guardada, m)) = cache.get(f) {
+                    if *guardada == firma {
+                        matches.push(m.clone());
+                        vistos.insert(f.clone());
+                        continue;
+                    }
+                }
+            }
+            parseadas += 1;
+            if let Some(m) = sin_estela(|| metadata_en_carpeta(&path)) {
+                if let (Some(f), Some(firma)) = (canonico, firma) {
+                    cache.insert(f.clone(), (firma, m.clone()));
+                    vistos.insert(f);
+                }
+                matches.push(m);
+            } else if let Some(f) = fecha_carpeta {
+                no_partidas.insert(path.clone(), f);
+                no_vistas.insert(path);
             }
         }
     }
+    cache.retain(|f, _| vistos.contains(f));
+    no_partidas.retain(|p, _| no_vistas.contains(p));
+    drop(guard);
 
     // Ordenar de más reciente a más antiguo
     matches.sort_by(|a, b| b.date.cmp(&a.date));
+    if crate::medida::activa() {
+        let n = crate::medida::contar(&crate::medida::RECORRIDOS, 1);
+        let bytes = crate::medida::BYTES_RECORRIDOS.load(std::sync::atomic::Ordering::Relaxed) - bytes_antes;
+        tramo.con(format!("recorrido={n} partidas={} parseadas={parseadas} mb={:.1}", matches.len(), bytes as f64 / 1048576.0));
+    }
     matches
 }
 
 #[tauri::command]
 pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_vod_reviews");
     let dir = get_reviews_dir();
     let mut matches = Vec::new();
 
@@ -969,11 +1138,31 @@ pub async fn get_vod_reviews() -> Vec<MatchMetadata> {
     matches
 }
 
+/// Una partida **sin la estela del ratón**, realineada como al abrirla.
+///
+/// Es lo que quieren casi todos los comandos de una partida (coach, jugadas,
+/// títulos, curvas, oro, HUD, oleadas, minimapa…): antes abrían la partida
+/// entera, y al abrir una en el reproductor la estela (3-5 MB de JSON) se
+/// parseaba una vez por comando. Quien la necesita (manos, golpes, barras,
+/// miradas) llama a [`get_match_metadata_con_estela`].
 pub fn get_match_metadata(match_id: &str) -> Result<MatchMetadata, String> {
+    if let Some(m) = load_match_ligera(match_id) {
+        return Ok(m);
+    }
+    buscar_en_listado(match_id)
+}
+
+/// La partida entera, estela incluida.
+pub fn get_match_metadata_con_estela(match_id: &str) -> Result<MatchMetadata, String> {
     // Por la ruta normal (una carpeta por partida) para que pase la realineación.
     if let Some(m) = load_match_by_id(match_id) {
         return Ok(m);
     }
+    buscar_en_listado(match_id)
+}
+
+/// Respaldo para carpetas que no siguen la convención de nombre.
+fn buscar_en_listado(match_id: &str) -> Result<MatchMetadata, String> {
     let matches = load_all_matches();
     for m in matches {
         if m.id == match_id {
@@ -1091,15 +1280,46 @@ pub fn migrate_storage_layout() {
 ///
 /// Solo mira la disposición actual (`<base>/<id>/<id>.json`): de los sueltos antiguos en la raíz
 /// se encarga `migrate_flat_layout` al arrancar.
+/// Ruta del metadata de una partida, sin crear carpetas (`get_match_dir` las crea).
+fn ruta_metadata(id: &str) -> PathBuf {
+    let base = if id.starts_with("vod_") { get_reviews_dir() } else { get_videos_dir() };
+    base.join(id).join(format!("{id}.json"))
+}
+
+/// El metadata tal cual está en disco, sin estela ni realineación.
+fn leer_ligera(id: &str) -> Option<MatchMetadata> {
+    let content = fs::read_to_string(ruta_metadata(id)).ok()?;
+    crate::medida::contar(&crate::medida::BYTES_RECORRIDOS, content.len() as u64);
+    sin_estela(|| serde_json::from_str::<MatchMetadata>(&content).ok())
+}
+
+/// Como [`load_match_by_id`] pero sin la estela: lee y realinea igual.
+pub fn load_match_ligera(id: &str) -> Option<MatchMetadata> {
+    let _tramo = crate::medida::Tramo::nuevo("load_match_ligera");
+    let mut metadata = leer_ligera(id)?;
+    // Guardar sin estela es seguro: la salvaguarda de `save_match_metadata`
+    // conserva la del disco.
+    if realign_to_video_time(&mut metadata) {
+        let _ = save_match_metadata(&metadata);
+    }
+    Some(metadata)
+}
+
 pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
     let base = if id.starts_with("vod_") {
         get_reviews_dir()
     } else {
         get_videos_dir()
     };
+    let mut tramo = crate::medida::Tramo::nuevo("load_match_by_id");
     let file = base.join(id).join(format!("{}.json", id));
     let content = fs::read_to_string(file).ok()?;
     let mut metadata = serde_json::from_str::<MatchMetadata>(&content).ok()?;
+    crate::medida::contar(&crate::medida::BYTES_RECORRIDOS, content.len() as u64);
+    if crate::medida::activa() {
+        let n = crate::medida::contar(&crate::medida::APERTURAS_CON_ESTELA, 1);
+        tramo.con(format!("apertura={n} id={id} mb={:.2}", content.len() as f64 / 1048576.0));
+    }
     // Las grabaciones anteriores al arreglo del desfase se realinean al abrirlas.
     if realign_to_video_time(&mut metadata) {
         let _ = save_match_metadata(&metadata);
@@ -1110,6 +1330,7 @@ pub fn load_match_by_id(id: &str) -> Option<MatchMetadata> {
 /// Comando: detalle completo de UNA partida (para el reproductor: estela del ratón).
 #[tauri::command]
 pub async fn get_match_details(id: String) -> Option<MatchMetadata> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_match_details");
     load_match_by_id(&id)
 }
 

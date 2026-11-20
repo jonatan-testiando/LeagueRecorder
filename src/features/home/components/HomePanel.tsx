@@ -41,7 +41,7 @@ import { ScreenTitle } from "../../../components/ScreenTitle";
 import { Button } from "../../../components/ui/Button";
 import { Chip } from "../../../components/ui/Chip";
 import { Skeleton } from "../../../components/ui/Skeleton";
-import { useAppStore, useErrorClips } from "../../../store/useAppStore";
+import { useAppStore, useErrorClips, useLibraryKey } from "../../../store/useAppStore";
 import { ChevronRight, Flag, KeyRound, Loader2, Play, RefreshCw, Target, Wand2 } from "lucide-react";
 import { useLang } from "../../../core/LanguageProvider";
 import "./HomePanel.css";
@@ -137,6 +137,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   const { t, lang } = useLang();
   const navigate = useNavigate();
   const refreshMatches = useAppStore((s) => s.refreshMatches);
+  const biblioteca = useLibraryKey();
   const setPendingSeek = useAppStore((s) => s.setPendingSeek);
   const startPlaylist = useAppStore((s) => s.startPlaylist);
   const { clips: errorClips } = useErrorClips();
@@ -188,12 +189,13 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
   // El punto ciego se pide al backend porque sale de los informes de miradas de
   // TODAS las partidas, no de la metadata que ya está en memoria.
   useEffect(() => {
+    if (biblioteca === null) return;
     let vivo = true;
     getBlindSpot()
       .then((b) => { if (vivo) { setCiego(b); setCiegoFallo(false); } })
       .catch(() => { if (vivo) { setCiego(null); setCiegoFallo(true); } });
     return () => { vivo = false; };
-  }, [matches.length]);
+  }, [biblioteca]);
 
   const own = useMemo(() => matches.filter((m) => !m.is_vod), [matches]);
   // El foco lo elige el coach (`coach.rs`), sin ventana de tiempo: por eso la

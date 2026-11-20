@@ -624,8 +624,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
 
   useEffect(() => {
     setParticipants(match.participants ?? []);
+  }, [match.id, match.participants, match.objectives]);
+
+  // Las compras de objetos ya no vienen en la lista (solo en el detalle): al
+  // cambiar de partida se vacían y las pone el detalle. Depender de
+  // `match.item_purchases` las borraría cada vez que se refresca la lista.
+  useEffect(() => {
     setItemPurchases(match.item_purchases ?? []);
-  }, [match.id, match.participants, match.objectives, match.item_purchases]);
+  }, [match.id]);
 
   const jumpToClip = useCallback((eventTime: number) => {
     jumpToClipAt(eventTime, CLIP_BEFORE, CLIP_AFTER);

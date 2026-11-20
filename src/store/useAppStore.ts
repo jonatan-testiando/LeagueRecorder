@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { create } from 'zustand';
 import { MatchMetadata } from '../types';
-import { ErrorClipMetadata, getAllErrorClips, getRecordedMatches } from '../core/tauri-ipc';
+import { ErrorClipMetadata, getAllErrorClips, getRecordedMatchesDelta } from '../core/tauri-ipc';
+
+/** Versión (fecha y tamaño de su JSON) de cada partida que ya tiene la lista. */
+const versiones: Record<string, string> = {};
 
 interface AppState {
   /**
@@ -164,8 +167,25 @@ export const useAppStore = create<AppState>((set, get) => {
     matchesLoaded: false,
     analisis: 0,
     refreshMatches: async () => {
-      const data = await getRecordedMatches();
-      set({ matches: data, matchesLoaded: true });
+      // Solo lo que cambió: el backend compara las versiones que ya tenemos.
+      // Las partidas que no cambian conservan su objeto, y si no cambió nada
+      // la lista ni se toca (nadie se vuelve a pintar).
+      const d = await getRecordedMatchesDelta(versiones);
+      const previas = get().matches;
+      const porId = new Map(previas.map((m) => [m.id, m]));
+      for (const e of d.cambiadas) {
+        porId.set(e.m.id, e.m);
+        versiones[e.m.id] = e.v;
+      }
+      const vigentes = new Set(d.orden);
+      for (const id of Object.keys(versiones)) if (!vigentes.has(id)) delete versiones[id];
+      const igual =
+        d.cambiadas.length === 0 &&
+        d.orden.length === previas.length &&
+        d.orden.every((id, i) => previas[i]?.id === id);
+      if (igual && get().matchesLoaded) return;
+      const matches = d.orden.map((id) => porId.get(id)).filter((m): m is MatchMetadata => !!m);
+      set({ matches, matchesLoaded: true });
     },
 
     selectedMatch: null,

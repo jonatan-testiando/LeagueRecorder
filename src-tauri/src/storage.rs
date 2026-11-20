@@ -694,6 +694,15 @@ pub fn escribir_atomico(ruta: &Path, datos: &[u8]) -> std::io::Result<()> {
         Err(_) => {
             let r = fs::write(ruta, datos);
             let _ = fs::remove_file(&tmp);
+            // Escribir encima no cambia la fecha de la carpeta, y el listado y
+            // el índice (`crate::indice`) se fían de ella para saber si algo
+            // cambió dentro. Crear y borrar un fichero vacío sí la cambia.
+            if let Some(dir) = ruta.parent() {
+                let marca = dir.join(format!(".toque.{}", std::process::id()));
+                if fs::write(&marca, b"").is_ok() {
+                    let _ = fs::remove_file(&marca);
+                }
+            }
             r
         }
     }
@@ -1099,6 +1108,11 @@ pub fn metadata_ligera(id: &str) -> Option<MatchMetadata> {
 /// Todas las partidas de la biblioteca, **sin la estela del ratón** (ver
 /// [`sin_estela`]). Ningún camino que liste la biblioteca la necesita; el que
 /// la quiere pide una partida concreta con [`load_match_by_id`].
+fn version_de((fecha, tam): (std::time::SystemTime, u64)) -> String {
+    let ns = fecha.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    format!("{ns:x}-{tam:x}")
+}
+
 /// Caché del listado: por cada `{id}.json`, su (fecha de modificación, tamaño)
 /// y el metadata ya parseado sin estela. Si el fichero no ha cambiado no se
 /// vuelve a leer: el listado pasa de parsear toda la biblioteca a hacer un
@@ -1110,10 +1124,32 @@ static LISTADO: std::sync::Mutex<
         std::collections::HashMap<PathBuf, ((std::time::SystemTime, u64), MatchMetadata)>,
         // Carpetas sin metadata de partida, con su fecha de modificación.
         std::collections::HashMap<PathBuf, std::time::SystemTime>,
+        // Fecha de cada carpeta de partida en el último listado.
+        std::collections::HashMap<PathBuf, std::time::SystemTime>,
     )>,
 > = std::sync::Mutex::new(None);
 
 pub fn load_all_matches() -> Vec<MatchMetadata> {
+    listado_con_versiones().into_iter().map(|(_, m)| m).collect()
+}
+
+/// El listado con la versión de cada partida: fecha de modificación y tamaño
+/// de su `{id}.json`, la misma firma que usa la caché. Cambia con cualquier
+/// guardado. Vacía si la carpeta no sigue la convención de nombre (entonces no
+/// hay firma estable y quien compare versiones la tratará siempre como nueva).
+pub fn listado_con_versiones() -> Vec<(String, MatchMetadata)> {
+    recorrer(|_, _| true)
+        .into_iter()
+        .filter_map(|(_, v, m)| Some((v, m?)))
+        .collect()
+}
+
+/// El recorrido de la biblioteca con su caché. Devuelve, en orden (más
+/// reciente primero), `(id, versión, metadata)` de cada partida; el metadata
+/// solo se clona si `quiero(id, versión)` lo pide. Para saber qué cambió
+/// basta con las versiones, y clonar mil metadatas para tirarlos costaba más
+/// que todo lo demás.
+pub fn recorrer(mut quiero: impl FnMut(&str, &str) -> bool) -> Vec<(String, String, Option<MatchMetadata>)> {
     let mut tramo = crate::medida::Tramo::nuevo("load_all_matches");
     let bytes_antes = crate::medida::BYTES_RECORRIDOS.load(std::sync::atomic::Ordering::Relaxed);
     let dir = get_videos_dir();
@@ -1123,10 +1159,10 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
     // trece en el primer segundo), los demás esperan y se llevan la caché ya
     // llena en vez de parsear todos la biblioteca a la vez.
     let mut guard = LISTADO.lock().unwrap_or_else(|e| e.into_inner());
-    if guard.as_ref().map(|(d, _, _)| *d != dir).unwrap_or(true) {
-        *guard = Some((dir.clone(), Default::default(), Default::default()));
+    if guard.as_ref().map(|(d, _, _, _)| *d != dir).unwrap_or(true) {
+        *guard = Some((dir.clone(), Default::default(), Default::default(), Default::default()));
     }
-    let (_, cache, no_partidas) = guard.as_mut().expect("recién puesto");
+    let (_, cache, no_partidas, fechas_carpeta) = guard.as_mut().expect("recién puesto");
     let mut vistos = std::collections::HashSet::new();
     let mut no_vistas = std::collections::HashSet::new();
     let mut parseadas = 0usize;
@@ -1156,14 +1192,30 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
                 .file_name()
                 .and_then(|s| s.to_str())
                 .map(|n| path.join(format!("{n}.json")));
-            let firma = canonico
-                .as_ref()
-                .and_then(|f| fs::metadata(f).ok())
-                .and_then(|md| Some((md.modified().ok()?, md.len())));
+            // Si la carpeta tiene la misma fecha que la última vez, su JSON no
+            // ha cambiado: todo lo que la app escribe ahí se escribe a un
+            // temporal y se renombra (o toca la carpeta, ver `escribir_atomico`),
+            // y eso cambia la fecha de la carpeta. Así no hace falta un `stat`
+            // por partida en cada listado: 1.000 partidas costaban ~100 ms solo
+            // en eso.
+            let firma = match (&canonico, fecha_carpeta) {
+                (Some(f), Some(fc)) if fechas_carpeta.get(&path) == Some(&fc) && cache.contains_key(f) => {
+                    cache.get(f).map(|(firma, _)| *firma)
+                }
+                _ => canonico
+                    .as_ref()
+                    .and_then(|f| fs::metadata(f).ok())
+                    .and_then(|md| Some((md.modified().ok()?, md.len()))),
+            };
+            if let Some(fc) = fecha_carpeta {
+                fechas_carpeta.insert(path.clone(), fc);
+            }
             if let (Some(f), Some(firma)) = (&canonico, firma) {
                 if let Some((guardada, m)) = cache.get(f) {
                     if *guardada == firma {
-                        matches.push(m.clone());
+                        let v = version_de(firma);
+                        let copia = quiero(&m.id, &v).then(|| m.clone());
+                        matches.push((m.date.clone(), m.id.clone(), v, copia));
                         vistos.insert(f.clone());
                         continue;
                     }
@@ -1171,11 +1223,13 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
             }
             parseadas += 1;
             if let Some(m) = sin_estela(|| metadata_en_carpeta(&path)) {
+                let version = firma.map(version_de).unwrap_or_default();
                 if let (Some(f), Some(firma)) = (canonico, firma) {
                     cache.insert(f.clone(), (firma, m.clone()));
                     vistos.insert(f);
                 }
-                matches.push(m);
+                let copia = quiero(&m.id, &version).then(|| m.clone());
+                matches.push((m.date.clone(), m.id.clone(), version, copia));
             } else if let Some(f) = fecha_carpeta {
                 no_partidas.insert(path.clone(), f);
                 no_vistas.insert(path);
@@ -1184,16 +1238,18 @@ pub fn load_all_matches() -> Vec<MatchMetadata> {
     }
     cache.retain(|f, _| vistos.contains(f));
     no_partidas.retain(|p, _| no_vistas.contains(p));
+    let carpetas_vistas: std::collections::HashSet<&Path> = vistos.iter().filter_map(|f| f.parent()).collect();
+    fechas_carpeta.retain(|p, _| carpetas_vistas.contains(p.as_path()));
     drop(guard);
 
     // Ordenar de más reciente a más antiguo
-    matches.sort_by(|a, b| b.date.cmp(&a.date));
+    matches.sort_by(|a, b| b.0.cmp(&a.0));
     if crate::medida::activa() {
         let n = crate::medida::contar(&crate::medida::RECORRIDOS, 1);
         let bytes = crate::medida::BYTES_RECORRIDOS.load(std::sync::atomic::Ordering::Relaxed) - bytes_antes;
         tramo.con(format!("recorrido={n} partidas={} parseadas={parseadas} mb={:.1}", matches.len(), bytes as f64 / 1048576.0));
     }
-    matches
+    matches.into_iter().map(|(_, id, v, m)| (id, v, m)).collect()
 }
 
 #[tauri::command]

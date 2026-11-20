@@ -5,6 +5,23 @@ export const getRecordedMatches = async (): Promise<MatchMetadata[]> => {
   return await invoke<MatchMetadata[]>("get_recorded_matches");
 };
 
+/** Cambios de la lista de partidas respecto a lo que ya se tiene (ver el store). */
+export interface CambiosLista {
+  /** Ids de toda la lista, en orden (más reciente primero). */
+  orden: string[];
+  /** Partidas nuevas o cambiadas, con su versión. */
+  cambiadas: { v: string; m: MatchMetadata }[];
+}
+
+/**
+ * La lista de partidas, solo lo que cambió. `conocidas` es id → versión de lo
+ * que ya se tiene; con `{}` llega entera. La lista NO trae `apm_series` ni
+ * `item_purchases` (el reproductor los saca del detalle).
+ */
+export const getRecordedMatchesDelta = async (conocidas: Record<string, string>): Promise<CambiosLista> => {
+  return await invoke<CambiosLista>("get_recorded_matches_delta", { conocidas });
+};
+
 export const deleteMatch = async (id: string): Promise<void> => {
   return await invoke<void>("delete_match", { id });
 };

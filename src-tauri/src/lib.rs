@@ -63,7 +63,7 @@ use commands::{
     add_error_event, delete_error_event, delete_match, delete_matches, edit_error_event, export_clip,
     export_error_clip, get_all_clips, get_all_error_clips, get_app_config, get_audio_status,
     get_hotkeys, set_hotkeys,
-    get_recorded_matches, get_recorder_status, get_video_settings,
+    get_recorded_matches, get_recorded_matches_delta, get_recorder_status, get_video_settings,
     save_match_comments, save_replay_clip, set_app_config, set_error_clip_reviewed, set_event_reviewed, set_video_settings,
     sync_match_now,
     get_match_attribution,
@@ -331,7 +331,7 @@ pub fn run() {
         .manage(video_settings)
         .manage(training_state)
         .invoke_handler(tauri::generate_handler![
-            get_recorded_matches,
+            get_recorded_matches, get_recorded_matches_delta,
             delete_match,
             delete_matches,
             get_recorder_status,

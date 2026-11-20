@@ -317,11 +317,61 @@ impl Default for ActiveMatchState {
 #[tauri::command]
 pub async fn get_recorded_matches() -> Vec<MatchMetadata> {
     let _medida = crate::medida::Tramo::nuevo("cmd/get_recorded_matches");
-    // El listado NO necesita la estela del ratón (arrays enormes). El reproductor
-    // la carga aparte vía `get_match_details`. `load_all_matches` ya ni siquiera
-    // la parsea (ver `storage::sin_estela`): antes se construían cientos de
-    // miles de puntos para vaciarlos acto seguido, en cada refresco periódico.
-    load_all_matches()
+    tauri::async_runtime::spawn_blocking(|| load_all_matches().into_iter().map(para_la_lista).collect())
+        .await
+        .unwrap_or_default()
+}
+
+/// Una partida tal como va en la lista del frontend.
+///
+/// Sin la estela (ya no se serializa) y sin dos series que ninguna pantalla lee
+/// de la lista: `apm_series` (nadie la usa en el frontend) y `item_purchases`
+/// (solo el reproductor, que pide el detalle). Eran el 19 % de lo que cruzaba.
+fn para_la_lista(mut m: MatchMetadata) -> MatchMetadata {
+    m.apm_series = Vec::new();
+    m.item_purchases = Vec::new();
+    m
+}
+
+/// Una partida de la lista con su versión (ver `storage::listado_con_versiones`).
+#[derive(serde::Serialize)]
+pub struct EntradaLista {
+    pub v: String,
+    pub m: MatchMetadata,
+}
+
+/// La lista contada como cambios: el orden completo (solo ids) y las partidas
+/// nuevas o cambiadas. Las que ya no están en `orden` se han borrado.
+#[derive(serde::Serialize)]
+pub struct CambiosLista {
+    pub orden: Vec<String>,
+    pub cambiadas: Vec<EntradaLista>,
+}
+
+/// La lista de partidas, solo lo que ha cambiado desde lo que tiene el frontend.
+///
+/// `conocidas` es id → versión de lo que ya tiene. La lista se pide al
+/// arrancar, cada 5 minutos, cada 15 s durante el post-partida y tras cada
+/// sincronización; mandarla entera cada vez eran 6 MB de JSON con 300 partidas
+/// y 20 MB con 1.000 (~120 y ~380 ms de ida y vuelta medidos en el WebView)
+/// para, casi siempre, no traer nada nuevo.
+#[tauri::command]
+pub async fn get_recorded_matches_delta(conocidas: std::collections::HashMap<String, String>) -> CambiosLista {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_recorded_matches_delta");
+    tauri::async_runtime::spawn_blocking(move || {
+        let lista = crate::storage::recorrer(|id, v| v.is_empty() || conocidas.get(id).map(String::as_str) != Some(v));
+        let mut orden = Vec::with_capacity(lista.len());
+        let mut cambiadas = Vec::new();
+        for (id, v, m) in lista {
+            if let Some(m) = m {
+                cambiadas.push(EntradaLista { v, m: para_la_lista(m) });
+            }
+            orden.push(id);
+        }
+        CambiosLista { orden, cambiadas }
+    })
+    .await
+    .unwrap_or(CambiosLista { orden: Vec::new(), cambiadas: Vec::new() })
 }
 
 pub fn delete_match_bloqueante(id: String) -> Result<(), String> {

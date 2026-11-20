@@ -133,3 +133,21 @@ Qué cambió: `indice.db` (rusqlite con SQLite incluido, WAL, junto a la config)
 Arranque real, 300 partidas, biblioteca sin cambios: los tres resúmenes de Home salen del índice en 5-9 ms a los 0,74 s del arranque; Home completa en ~0,85 s (fase 2: 1,5 s; fase 0: 6,0 s).
 
 Lo siguiente que pesa: `get_recorded_matches` manda la biblioteca entera al WebView en JSON (6 MB con 300, 20 MB con 1.000) y el plan de 10 partidas (`get_coach_plan`, 100-150 ms) no está en el índice porque depende de las sesiones guardadas en `%APPDATA%`.
+
+## La lista de partidas al WebView (2026-11-19)
+
+Medido dentro del WebView (ida y vuelta de `invoke`): la lista completa tardaba ~120 ms con 300 partidas y ~380 ms con 1.000 (6,1 y 20,3 MB de JSON), y se pedía entera al arrancar, cada 5 minutos, cada 15 s durante el post-partida y tras cada sincronización, aunque casi nunca trajera nada nuevo.
+
+Qué cambió:
+- La lista ya no lleva `apm_series` (ninguna pantalla la lee) ni `item_purchases` (solo el reproductor, que la saca del detalle): un 19 % menos.
+- `get_recorded_matches_delta`: el frontend manda la versión de cada partida que ya tiene (fecha y tamaño de su JSON) y recibe el orden completo (solo ids) más las partidas nuevas o cambiadas. El store conserva el objeto de las que no cambian y, si no cambió nada, no toca la lista.
+- El listado en Rust solo clona las partidas que hay que enviar, y no hace un `stat` por partida si la fecha de su carpeta no ha cambiado (lo permite que toda escritura en las carpetas sea atómica; si el renombrado falla, `escribir_atomico` toca la carpeta para que su fecha cambie igual).
+
+| 1.000 partidas, en el WebView | antes | ahora |
+|---|---|---|
+| Lista completa (arranque) | 380 ms · 20,3 MB | 256 ms · 16,6 MB |
+| Refresco sin cambios | 380 ms | 13-15 ms |
+| Refresco con un comentario nuevo | 380 ms | ~15 ms, 1 partida |
+| `load_all_matches` en caliente (banco) | 144 ms | 34 ms |
+
+Con 300: lista completa 97 ms y refresco sin cambios ~35 ms antes de quitar el `stat` (no repetido después).

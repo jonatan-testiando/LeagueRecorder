@@ -43,6 +43,19 @@ function readTokens(): Record<"old" | "recent" | "click" | "core", Rgb> {
   };
 }
 
+/** Los colores, leídos la primera vez que hay algo que dibujar y de nuevo solo
+ *  si cambia el tema. Leerlos al montar forzaba un recálculo de estilos de todo
+ *  el documento justo al abrir la partida (~6 ms, medido). */
+let colores: { tema: string | null; tokens: ReturnType<typeof readTokens> } | null = null;
+function tokensDelTema(): ReturnType<typeof readTokens> {
+  const tema = document.documentElement.getAttribute("data-theme");
+  if (!colores || colores.tema !== tema) colores = { tema, tokens: readTokens() };
+  return colores.tokens;
+}
+
+/** Lo que mueve el instante del vídeo (o lo que se ve de él). */
+const EVENTOS_VIDEO = ["play", "playing", "pause", "seeking", "seeked", "timeupdate", "loadeddata", "ratechange"];
+
 /** Primer índice con `t >= t0` en un array ordenado por `t`. */
 function desde(eventos: MouseEventData[], t0: number): number {
   let lo = 0;
@@ -64,7 +77,6 @@ export function useMouseTrailCanvas(
   mouseEvents: MouseEventData[]
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const rafRef = useRef<number>(0);
 
   // Ordenada por tiempo, una vez: cada fotograma busca la ventana del rastro
   // por bisección en vez de filtrar las ~36.000 muestras de la partida. La
@@ -85,31 +97,27 @@ export function useMouseTrailCanvas(
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const resizeObserver = new ResizeObserver(() => {
-      // En pixeles de dispositivo, no CSS: en una pantalla HiDPI el trazo salia
-      // borroso porque el buffer tenia menos resolucion que la pantalla.
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = Math.round(canvas.clientWidth * dpr);
-      canvas.height = Math.round(canvas.clientHeight * dpr);
-    });
-    resizeObserver.observe(canvas);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    let theme = document.documentElement.getAttribute("data-theme");
-    let tokens = readTokens();
-    const render = () => {
-      rafRef.current = requestAnimationFrame(render);
+    // Solo se pinta cuando el vídeo cambia de instante: mientras se reproduce,
+    // un fotograma tras otro; parado, una vez al buscar, al cargar o al cambiar
+    // de tamaño. Antes el bucle de requestAnimationFrame no paraba nunca, ni con
+    // el vídeo en pausa ni con el reproductor oculto en otra pantalla: 240
+    // repintados por segundo que tenían el hilo principal despierto en cada
+    // fotograma y competían con todas las animaciones de la app (medido).
+    let raf = 0;
+    /** Hay algo dibujado que borrar antes del siguiente fotograma. */
+    let lleno = false;
+
+    const pintar = () => {
       const v = videoRef.current;
       if (!v) return;
-      const now = document.documentElement.getAttribute("data-theme");
-      if (now !== theme) {
-        theme = now;
-        tokens = readTokens();
-      }
-
       const ct = v.currentTime;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (ordenados.length === 0) return;
+      if (lleno) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        lleno = false;
+      }
+      if (ordenados.length === 0 || canvas.width === 0) return;
 
       // Las coordenadas del ratón vienen de rdev y están en el espacio del
       // ESCRITORIO, no del vídeo. Escalar por las dimensiones del vídeo desplazaba
@@ -146,6 +154,8 @@ export function useMouseTrailCanvas(
         recentEvents.push(e);
       }
       if (recentEvents.length === 0) return;
+      const tokens = tokensDelTema();
+      lleno = true;
       const moves = recentEvents.filter(e => e.evt === "move");
       if (moves.length > 1) {
         ctx.lineCap = "round";
@@ -194,10 +204,43 @@ export function useMouseTrailCanvas(
         ctx.restore();
       }
     };
-    rafRef.current = requestAnimationFrame(render);
+
+    const bucle = () => {
+      raf = 0;
+      pintar();
+      const v = videoRef.current;
+      if (v && !v.paused && !v.ended && !document.hidden && canvas.width > 0) raf = requestAnimationFrame(bucle);
+    };
+    const despertar = () => {
+      if (!raf) raf = requestAnimationFrame(bucle);
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      // En pixeles de dispositivo, no CSS: en una pantalla HiDPI el trazo salia
+      // borroso porque el buffer tenia menos resolucion que la pantalla.
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
+      lleno = false;
+      despertar();
+    });
+    resizeObserver.observe(canvas);
+
+    // Los eventos del <video> no burbujean, pero se ven en la captura del
+    // documento: así da igual que el elemento cambie.
+    const alVideo = (e: Event) => {
+      if (e.target === videoRef.current) despertar();
+    };
+    for (const ev of EVENTOS_VIDEO) document.addEventListener(ev, alVideo, true);
+    // Cambiar de tema con el vídeo parado: repintar con los colores nuevos.
+    const tema = new MutationObserver(despertar);
+    tema.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    despertar();
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(raf);
       resizeObserver.disconnect();
+      tema.disconnect();
+      for (const ev of EVENTOS_VIDEO) document.removeEventListener(ev, alVideo, true);
     };
     // `match` solo importa aquí a través de mouseSpace (resolución del
     // escritorio grabado); cambia junto con mouseEvents, que sí está.

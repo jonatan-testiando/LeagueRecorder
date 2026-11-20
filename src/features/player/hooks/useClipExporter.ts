@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { MatchMetadata } from "../../../types";
 import { exportErrorClip } from "../../../core/tauri-ipc";
+import { useAppStore } from "../../../store/useAppStore";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useDialog } from "../../../components/ui/DialogProvider";
 import { useT } from "../../../core/LanguageProvider";
@@ -65,6 +66,9 @@ export function useClipExporter(match: MatchMetadata) {
       } else {
         destino = await exportErrorClip(match.id, match.video_path, clipStart, dur, errorNote);
         setErrorNote("");
+        // La lista compartida de errores (la que usan el reproductor, Hoy y la
+        // galería): el error recién marcado entra en la cola sin reabrir.
+        useAppStore.getState().refreshErrorClips().catch(console.error);
       }
       setIsClippingMode(false);
       // "Exported successfully!" no decía dónde: el fichero existía y no había

@@ -14,7 +14,9 @@ import { flushSync } from "react-dom";
  * Ahora:
  * - Cambiar de pantalla, abrir y cerrar una partida van con View Transitions:
  *   el navegador congela lo de antes, monta lo nuevo sin que se vea y anima
- *   las dos instantáneas en el compositor. Nada se mide a mano.
+ *   las dos instantáneas en el compositor. Nada se mide a mano. El vuelo del
+ *   retrato se rehace solo con `transform` (`vueloEnCompositor`): el del
+ *   navegador cambia ancho y alto, y eso va por el hilo principal.
  * - La entrada escalonada solo en la PRIMERA visita a cada pantalla, sobre
  *   cinco bloques como mucho y sin medir nada (`data-e` o, si no hay, los hijos
  *   del primer contenedor con varios). Lo que se ve decenas de veces al día no
@@ -35,6 +37,8 @@ const MAX_BLOQUES = 5;
 const MAX_FILAS = 10;
 const PASO_FILA_MS = 20;
 const CAMBIO_MS = 160;
+/** --t-share de index.css: el vuelo del retrato. */
+const DUR_COMPARTIDO = 340;
 
 const html = () => document.documentElement;
 export const movimientoReducido = (): boolean =>
@@ -93,7 +97,9 @@ export function conTransicion(
   cambio: () => void,
   opciones: { origen?: Element | null; destino?: () => Element | null; dir?: "down" | "up" | null } = {}
 ): void {
-  const d = document as Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } };
+  const d = document as Document & {
+    startViewTransition?: (cb: () => void) => { finished: Promise<void>; ready: Promise<void> };
+  };
   if (!d.startViewTransition || conTeclado() || document.hidden || (movimientoReducido() && tipo !== "nav")) {
     cambio();
     return;
@@ -126,6 +132,7 @@ export function conTransicion(
       destino = (p.destino?.() as HTMLElement | null) ?? null;
       if (destino && origen) destino.style.viewTransitionName = "retrato";
     });
+    if (origen) t.ready.then(() => vueloEnCompositor("retrato")).catch(() => {});
     t.finished.finally(() => {
       if (destino) destino.style.viewTransitionName = "";
       if (origen) origen.style.viewTransitionName = "";
@@ -133,6 +140,48 @@ export function conTransicion(
       delete raiz.dataset.primera;
     });
   });
+}
+
+/**
+ * El vuelo de un elemento compartido, solo con `transform`.
+ *
+ * El que pone el navegador anima también el ancho y el alto del grupo (el
+ * retrato mide 36 px en la fila, 72 en Hoy y 22 en la miga), y eso el
+ * compositor no lo sabe hacer: cada fotograma del vuelo esperaba al hilo
+ * principal, que justo entonces está montando el reproductor, y el retrato
+ * daba saltos (medido en una traza: `width`/`height` sin componer). Aquí el
+ * grupo se queda con su tamaño final y empieza escalado al de salida: a la
+ * vista es lo mismo, y va entero en el compositor. Las imágenes de dentro
+ * ocupan el ancho del grupo, así que escalan con él.
+ *
+ * Con `transform-origin: 0 0` en el grupo (index.css): la matriz del
+ * navegador es una traslación y la escala tiene que salir de la esquina.
+ */
+function vueloEnCompositor(nombre: string): void {
+  const raiz = html();
+  const pseudo = `::view-transition-group(${nombre})`;
+  const a = document.getAnimations().find((x) => (x.effect as KeyframeEffect | null)?.pseudoElement === pseudo);
+  const ef = a?.effect as KeyframeEffect | undefined;
+  if (!a || !ef) return;
+  const desde = ef.getKeyframes()[0];
+  const w0 = parseFloat(String(desde?.width));
+  const h0 = parseFloat(String(desde?.height));
+  if (!desde?.transform || !(w0 > 0 && h0 > 0)) return;
+  const { duration, delay } = ef.getTiming();
+  const easing = desde.easing && desde.easing !== "linear" ? desde.easing : ef.getTiming().easing;
+  // Sin la animación, el estilo del grupo es el del final.
+  a.cancel();
+  const fin = getComputedStyle(raiz, pseudo);
+  const w1 = parseFloat(fin.width);
+  const h1 = parseFloat(fin.height);
+  if (!(w1 > 0 && h1 > 0) || fin.transform === "none") {
+    a.play();
+    return;
+  }
+  raiz.animate(
+    [{ transform: `${desde.transform} scale(${w0 / w1}, ${h0 / h1})` }, { transform: fin.transform }],
+    { pseudoElement: pseudo, duration: Number(duration) || DUR_COMPARTIDO, delay: Number(delay) || 0, easing, fill: "both" }
+  );
 }
 
 /** El retrato de una partida que se ve ahora mismo (fila, héroe de Hoy). */

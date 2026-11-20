@@ -345,6 +345,22 @@ export const App: React.FC = () => {
       ),
     [selectedError, refreshErrorClips, setSelectedError]
   );
+  // La Biblioteca, aparte: abrir o cerrar una partida no le cambia nada y
+  // antes se volvía a pintar entera dentro de la transición (medido).
+  const galeria = useMemo(
+    () => (
+      <MatchGallery
+        matches={matches}
+        loading={firstLoad}
+        onSelectMatch={setSelectedMatch}
+        onDeleteMatch={deleteMatch}
+        onDeleteMatches={deleteMatches}
+        loadError={matchesError}
+        onRetry={refreshMatches}
+      />
+    ),
+    [matches, firstLoad, setSelectedMatch, deleteMatch, deleteMatches, matchesError, refreshMatches]
+  );
   const cReview = useMemo(
     () => (
       <>
@@ -368,21 +384,11 @@ export const App: React.FC = () => {
             minHeight: 0,
           }}
         >
-          <TitleOff off={selectedMatch != null}>
-            <MatchGallery
-              matches={matches}
-              loading={firstLoad}
-              onSelectMatch={setSelectedMatch}
-              onDeleteMatch={deleteMatch}
-              onDeleteMatches={deleteMatches}
-              loadError={matchesError}
-              onRetry={refreshMatches}
-            />
-          </TitleOff>
+          <TitleOff off={selectedMatch != null}>{galeria}</TitleOff>
         </Shown>
       </>
     ),
-    [selectedMatch, setSelectedMatch, t, matches, firstLoad, deleteMatch, deleteMatches, matchesError, refreshMatches]
+    [selectedMatch, setSelectedMatch, t, galeria]
   );
 
   const panel = (path: Panel, content: React.ReactNode) => {

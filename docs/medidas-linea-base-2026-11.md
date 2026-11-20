@@ -200,3 +200,33 @@ Qué cambió (`core/movimiento.ts`, `core/navegar.ts`):
 Cambio de pantalla, compositor: tras el clic hay ~20 ms con la pantalla quieta (5 fotogramas a 240 Hz: la captura de la transición y el render) y después la animación de 220 ms no pierde ningún fotograma. El render dentro de la transición bajó de 23 ms a ~13 ms con las pantallas memorizadas y el `useNavigate` propio.
 
 Queda: abrir una partida sigue costando ~47 ms de montaje del reproductor antes de la animación (el cuerpo de `VideoPlayer` ~11 ms, el layout de todo el reproductor que fuerzan las medidas de `useIndicator` ~17 ms, y sus efectos después) y la primera visita a la Biblioteca (lista virtualizada) pierde ~20 fotogramas. Eso es el coste del reproductor, no de la animación.
+
+### Abrir una partida (2026-11-20)
+
+Medido en la app de release con doble clic de ratón real por CDP en la Biblioteca (120 ms entre los dos clics, como una persona), pantalla de 240 Hz. Traza del navegador: fotogramas perdidos del compositor y tareas del hilo principal; perfil de CPU con los sourcemaps de la build.
+
+Qué pasaba al abrir:
+- Dentro de la transición (el callback de `startViewTransition`, con la pantalla congelada) se iban 43,6 ms: montar `VideoPlayer`, la maquetación entera que fuerza `useIndicator` al medir, los efectos que React ejecuta dentro de `flushSync` y la Biblioteca entera repintándose aunque se quedaba oculta.
+- Después, cada dato llegaba por su lado (detalle, estela, serie por minuto, errores marcados, miradas, resumen de saltos, versión de Data Dragon) y repintaba el reproductor entero: unas diez tareas de 2-8 ms durante el vuelo.
+- Dos animaciones no se componían y dependían del hilo principal en cada fotograma: el vuelo del retrato (el navegador anima `width`/`height` porque el retrato cambia de tamaño) y el título de la barra (el desenfoque). Cualquier tarea las hacía saltar.
+- La estela del ratón tenía un bucle de `requestAnimationFrame` que no paraba nunca: 240 repintados por segundo con el vídeo en pausa y con el reproductor oculto en otra pantalla, y leía el estilo calculado al montarse (6 ms).
+
+Qué cambió:
+- `features/player/datosPartida.ts`: todo lo del reproductor en una sola espera, pedido al pulsar el ratón sobre una fila o un acceso de Hoy (`data-match-id`, `data-abre-partida`) y en `setSelectedMatch`. El reproductor se monta con los datos si ya llegaron (casi siempre con doble clic) o los aplica de una vez. Los errores marcados salen de la lista compartida del store (y se refresca al marcar uno desde el reproductor).
+- Fuera los estados que se reiniciaban a sí mismos al montar (`useAlCambiar`: solo cuando cambia la partida) y la cola de momentos pasa a `useMemo`.
+- `vueloEnCompositor` (core/movimiento.ts): el vuelo del retrato se rehace solo con `transform` (el grupo con su tamaño final, empezando escalado); al abrir o cerrar, el título cruza sin desenfoque.
+- La Biblioteca, memorizada aparte en App: abrir o cerrar no la repinta.
+- Al abrir con animación, las filas de la lista de sucesos llegan justo después del primer fotograma (`useDeferredValue`), con el panel aún casi transparente; con el teclado, a la vez.
+- La estela pinta solo cuando el vídeo cambia de instante (reproduciendo, al buscar, al cargar, al cambiar de tamaño o de tema) y lee los colores la primera vez que dibuja.
+
+| Abrir partida (en caliente, 3 de 4 aperturas) | antes | ahora |
+|---|---|---|
+| Fotogramas perdidos | 33 | 8-12 |
+| Pausa hasta que empieza a moverse | ~100 ms | ~25 ms |
+| Trabajo dentro de la transición | 43,6 ms | 12 ms |
+| Repintados del reproductor durante el vuelo | ~10 | 3 pequeños |
+| Animaciones sin componer | vuelo del retrato, título | ninguna propia |
+
+La primera apertura de la sesión pierde 20 (JavaScript aún sin optimizar: 21 ms dentro de la transición). Cerrar pierde 2-4, todos en la pausa inicial. Con una partida abierta y el vídeo en pausa, `requestAnimationFrame` pasa de 240 llamadas por segundo a 0; reproduciendo, una por fotograma.
+
+Lo que queda en la pausa inicial es inevitable con View Transitions: capturar la pantalla de antes (~10 ms) y montar y maquetar el reproductor (~12 ms).

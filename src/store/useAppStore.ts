@@ -4,6 +4,10 @@ import { create } from 'zustand';
 import { MatchMetadata } from '../types';
 import { ErrorClipMetadata, getAllErrorClips, getRecordedMatchesDelta } from '../core/tauri-ipc';
 import { conTransicion, retratoDelReproductor, retratoVisible } from '../core/movimiento';
+import { precargarAlPulsar, precargarPartida } from '../features/player/datosPartida';
+
+// Lo del reproductor se pide al pulsar sobre una partida, antes de abrirla.
+precargarAlPulsar();
 
 /** Versión (fecha y tamaño de su JSON) de cada partida que ya tiene la lista. */
 const versiones: Record<string, string> = {};
@@ -202,6 +206,9 @@ export const useAppStore = create<AppState>((set, get) => {
     // otra con el reproductor abierto (la lista de reproducción) no se anima.
     setSelectedMatch: (match) => {
       const prev = get().selectedMatch;
+      // Desde Ctrl K, el post-partida o Patrones no hubo ratón encima: se pide
+      // aquí, un fotograma antes de que el reproductor se monte.
+      if (match && match.id !== prev?.id) precargarPartida(match.id).catch(() => {});
       const aplicar = () =>
         set((s) => {
           const pl = s.playlist;

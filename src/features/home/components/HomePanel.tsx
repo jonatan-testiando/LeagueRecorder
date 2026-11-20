@@ -709,7 +709,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
               )}
 
               <div className="home-hero__actions">
-                <Button variant="ghost" onClick={() => onOpenMatch(ultima)}>
+                <Button variant="ghost" data-abre-partida={ultima.id} onClick={() => onOpenMatch(ultima)}>
                   {sinVideo ? t("Open this game") : t("Open match")}
                 </Button>
                 {objetivo && accionOro && (
@@ -718,6 +718,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                     className="home-cta"
                     icon={<Play size={16} />}
                     aria-keyshortcuts="Enter"
+                    data-abre-partida={objetivo.match.id}
                     onClick={() => abrirEn(objetivo.match, objetivo.moments[0].time)}
                   >
                     {accionOro.label} · {accionOro.aside}
@@ -737,7 +738,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                     {momentos.length === 3 ? t("The 3 moments that teach you the most") : t("The moments that teach you the most")}
                   </h2>
                   {nEventos > 0 && (
-                    <button type="button" className="t-small home-link" onClick={() => onOpenMatch(ultima)}>
+                    <button type="button" className="t-small home-link" data-abre-partida={ultima.id} onClick={() => onOpenMatch(ultima)}>
                       {t("See all {n} events", { n: nEventos })}
                     </button>
                   )}
@@ -986,6 +987,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                         key={m.id}
                         type="button"
                         className={`home-form__game${i === 0 ? " is-last" : ""}`}
+                        data-abre-partida={m.id}
                         onClick={() => onOpenMatch(m)}
                         title={`${m.champion} · ${r === "victory" ? t("Victory") : r === "defeat" ? t("Defeat") : t("No result")} · ${relativeDay(m.date, t)}`}
                       >
@@ -1074,6 +1076,7 @@ export const HomePanel: React.FC<HomePanelProps> = ({ matches, loading = false, 
                             key={`${p.match_id}:${p.time}`}
                             type="button"
                             className="t-small home-chip"
+                            data-abre-partida={m.id}
                             onClick={() => abrirEn(m, p.video_time)}
                             title={`${p.champion} · ${relativeDay(m.date, t)}`}
                           >

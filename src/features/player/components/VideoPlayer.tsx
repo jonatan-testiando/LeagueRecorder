@@ -9,7 +9,7 @@ import {
   Trash2, FileText, ChevronDown,
   SkipBack, SkipForward, MoreHorizontal, VideoOff, FolderOpen, Pencil, X,
 } from "lucide-react";
-import { getAllErrorClips, getCameraLooks, getMatchDetails, getMatchTrail, getMinuteSeries, saveMatchComments, syncMatchNow, type CameraLook, type ErrorClipMetadata, type MinuteSeries } from "../../../core/tauri-ipc";
+import { getCameraLooks, getMatchDetails, saveMatchComments, syncMatchNow, type CameraLook, type MinuteSeries } from "../../../core/tauri-ipc";
 import { analyzeCameraSnaps, getCameraSnapSummary, SnapSummary } from "../../training/api";
 import { clock, relativeDay } from "../../../core/time";
 import { formatDecimal } from "../../../core/benchmarkFormat";
@@ -40,7 +40,7 @@ import { describeEvent } from "../../../core/eventText";
 import { individualEvents, eventChampion, withChampionNames } from "../../../core/matchEvents";
 import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
-import { useMatches } from "../../../store/useAppStore";
+import { useErrorClips, useMatches } from "../../../store/useAppStore";
 import { movimientoReducido, useCambio } from "../../../core/movimiento";
 import { styles } from "./videoPlayerStyles";
 import "./VideoPlayer.css";
@@ -50,6 +50,37 @@ import {
   CLIP_BEFORE,
   CLIP_AFTER,
 } from "./videoPlayerUtils";
+import {
+  datosListos,
+  olvidarPartida,
+  precargarPartida,
+  versionDdragonLista,
+  versionDeDdragon,
+  type DatosPartida,
+} from "../datosPartida";
+
+/** La lista vacía, siempre la misma: si un estado se pone a «vacío» y ya lo
+ *  estaba, React no vuelve a pintar (con un `[]` nuevo, sí). */
+const SIN: never[] = [];
+
+/** El detalle manda en todo menos en los comentarios: si viene sin ellos se
+ *  conservan los del listado en vez de vaciar la pestaña. */
+const conDetalle = (m: MatchMetadata, full: MatchMetadata): MatchMetadata => ({
+  ...full,
+  comments: full.comments ?? m.comments,
+});
+
+/** Como useEffect, pero no al montar: solo cuando cambia algo de `deps`. Para
+ *  lo que sigue a la partida de la lista y ya empezó bien al montar. */
+function useAlCambiar(deps: unknown[], fn: () => void) {
+  const antes = useRef(deps);
+  useEffect(() => {
+    const cambio = deps.some((d, i) => !Object.is(d, antes.current[i]));
+    antes.current = deps;
+    if (cambio) fn();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
 
 // Línea de tiempo «a favor / en contra»: dos filas, arriba lo que salió bien
 // (tus kills y asistencias, objetivos y torres de tu equipo) y abajo lo que
@@ -426,51 +457,42 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   const [stats, setStats] = useState<{ focus: SeccionId | null; n: number } | null>(null);
 
 
-  // Los momentos que merecen una mirada. Los errores que marcaste tu viven en
-  // clips aparte, asi que hay que traerlos y fusionarlos: eran la mitad de la
-  // cola que faltaba.
-  const [errorClips, setErrorClips] = useState<ErrorClipMetadata[]>([]);
-  useEffect(() => {
-    let alive = true;
-    setErrorClips([]);
-    getAllErrorClips()
-      .then((clips) => {
-        if (alive) setErrorClips(clips.filter((c) => c.match_id === match.id));
-      })
-      .catch(console.error);
-    return () => { alive = false; };
-  }, [match.id]);
+  // Lo que se pidió antes de abrir (datosPartida.ts): si ya llegó, el
+  // reproductor se monta con todo y no se vuelve a pintar al recibirlo.
+  const [alAbrir] = useState(() => datosListos(match.id));
+
+  // Los momentos que merecen una mirada. Los errores que marcaste tú viven en
+  // clips aparte: son los de la lista compartida (la de la galería de
+  // Errores), ya cargada al arrancar. Antes se volvían a leer de disco en cada
+  // apertura y llegaban tarde, con otro repintado.
+  const { clips: todosLosErrores } = useErrorClips();
+  const errorClips = React.useMemo(
+    () => todosLosErrores.filter((c) => c.match_id === match.id),
+    [todosLosErrores, match.id]
+  );
 
   // La cola se recompone también al cambiar de idioma: los títulos llevan
   // nombres dentro ("Te mata Ahri"), así que se escriben aquí y no se pueden
-  // traducir después.
-  const [moments, setMoments] = useState<Moment[]>(() => buildQueue(match, [], t));
-  useEffect(() => {
-    setMoments(buildQueue(match, errorClips, t));
-    // `match` entero en las deps: la cola sale de sus eventos y sus saltos de
-    // cámara, no sólo de su id.
-  }, [match, errorClips, t]);
+  // traducir después. `match` entero en las deps: la cola sale de sus eventos y
+  // sus saltos de cámara, no sólo de su id.
+  const moments = React.useMemo<Moment[]>(() => buildQueue(match, errorClips, t), [match, errorClips, t]);
 
   // La ventaja de oro del equipo, minuto a minuto: la columna de la línea de
   // tiempo. Sale de la timeline de Riot guardada; sin ella (partida sin
   // sincronizar, VOD importado) la tira se queda en las dos filas.
-  const [series, setSeries] = useState<MinuteSeries | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    setSeries(null);
-    getMinuteSeries(match.id)
-      .then((d) => vivo && setSeries(d))
-      .catch(() => vivo && setSeries(null));
-    return () => { vivo = false; };
-  }, [match.id]);
+  const [series, setSeries] = useState<MinuteSeries | null>(alAbrir?.serie ?? null);
   const [newComment, setNewComment] = useState<string>("");
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     const v = parseInt(localStorage.getItem("reviewSidebarWidth") || "392", 10);
     return isNaN(v) ? 392 : Math.min(700, Math.max(300, v));
   });
-  const [ddragonVer, setDdragonVer] = useState<string>(DDRAGON_VER);
-  const [participants, setParticipants] = useState<Participant[]>(match.participants ?? []);
-  const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(match.item_purchases ?? []);
+  const [ddragonVer, setDdragonVer] = useState<string>(() => versionDdragonLista() ?? DDRAGON_VER);
+  const [participants, setParticipants] = useState<Participant[]>(
+    alAbrir?.detalle?.participants ?? match.participants ?? SIN
+  );
+  const [itemPurchases, setItemPurchases] = useState<ItemPurchase[]>(
+    alAbrir?.detalle?.item_purchases ?? match.item_purchases ?? SIN
+  );
   /** Qué ocupa el escenario: el vídeo o el Mapa (el minimapa de la grabación
    *  ampliado junto al vídeo). El vídeo sigue sonando en los dos casos. */
   const [stage, setStageRaw] = useState<"video" | "route">("video");
@@ -596,9 +618,12 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     );
   }, [match.video_path, showError, t]);
 
-  // La estela del ratón (mouse_events) NO viene en el listado por rendimiento.
-  const [currentMatch, setCurrentMatch] = useState<MatchMetadata>(match);
-  const [mouseEvents, setMouseEvents] = useState<MouseEventData[]>(match.mouse_events ?? []);
+  // La estela del ratón (mouse_events) NO viene en el listado por rendimiento:
+  // llega con el detalle (datosPartida.ts), en binario.
+  const [currentMatch, setCurrentMatch] = useState<MatchMetadata>(() =>
+    alAbrir?.detalle ? conDetalle(match, alAbrir.detalle) : match
+  );
+  const [mouseEvents, setMouseEvents] = useState<MouseEventData[]>(alAbrir?.estela ?? match.mouse_events ?? SIN);
 
   // Los comentarios NO tienen estado propio: se derivan de `currentMatch`, que es lo que se
   // persiste. Antes vivían a la vez en un useState, en currentMatch.comments y en el backend,
@@ -606,50 +631,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   // lista mostrara algo distinto de lo guardado.
   const comments: MatchComment[] = currentMatch.comments ?? [];
 
-  useEffect(() => {
-    setCurrentMatch(match);
-  }, [match]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getMatchDetails(match.id)
-      .then((full) => {
-        if (!cancelled && full) {
-          // El detalle manda en todo menos en los comentarios: si viene sin ellos conservamos los
-          // del listado en vez de vaciar la pestaña.
-          setCurrentMatch({ ...full, comments: full.comments ?? match.comments });
-          if (full.participants) setParticipants(full.participants);
-          if (full.item_purchases) setItemPurchases(full.item_purchases);
-        }
-      })
-      .catch(() => {});
-    // La estela llega aparte y en binario (ver getMatchTrail).
-    getMatchTrail(match.id)
-      .then((eventos) => {
-        if (!cancelled) setMouseEvents(eventos);
-      })
-      .catch(console.error);
-    return () => { cancelled = true; };
-  }, [match.id]);
-
-  // Última versión de Data Dragon (para los iconos de items).
-  useEffect(() => {
-    fetch(ddragonUrl("/api/versions.json"))
-      .then((r) => r.json())
-      .then((v: string[]) => { if (Array.isArray(v) && v[0]) setDdragonVer(v[0]); })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setParticipants(match.participants ?? []);
-  }, [match.id, match.participants, match.objectives]);
-
+  // Lo que sigue a la partida de la lista, solo cuando CAMBIA (al montar ya se
+  // empezó con lo bueno: volver a ponerlo era un repintado más en la apertura).
+  useAlCambiar([match], () => setCurrentMatch(match));
+  useAlCambiar([match.id, match.participants, match.objectives], () => setParticipants(match.participants ?? SIN));
   // Las compras de objetos ya no vienen en la lista (solo en el detalle): al
   // cambiar de partida se vacían y las pone el detalle. Depender de
   // `match.item_purchases` las borraría cada vez que se refresca la lista.
+  useAlCambiar([match.id], () => setItemPurchases(match.item_purchases ?? SIN));
+
+  // Última versión de Data Dragon (para los iconos de items): una vez por sesión.
   useEffect(() => {
-    setItemPurchases(match.item_purchases ?? []);
-  }, [match.id]);
+    if (versionDdragonLista()) return;
+    let vivo = true;
+    versionDeDdragon(ddragonUrl("/api/versions.json")).then((v) => {
+      if (vivo && v) setDdragonVer(v);
+    });
+    return () => { vivo = false; };
+  }, []);
 
   const jumpToClip = useCallback((eventTime: number) => {
     jumpToClipAt(eventTime, CLIP_BEFORE, CLIP_AFTER);
@@ -854,18 +853,68 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   // --- Saltos de cámara (entrenamiento de teclas de aliado) ---
   // Los tiempos viven en la metadata; el resumen (checks/min, hueco ciego) se pide
   // aparte porque se calcula del informe detallado del analizador.
-  const [snapSummary, setSnapSummary] = useState<SnapSummary | null>(null);
+  const [snapSummary, setSnapSummary] = useState<SnapSummary | null>(alAbrir?.saltos ?? null);
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapPct, setSnapPct] = useState(0);
-  const [cameraSnaps, setCameraSnaps] = useState<number[]>(match.camera_snaps ?? []);
+  const [cameraSnaps, setCameraSnaps] = useState<number[]>(match.camera_snaps ?? SIN);
   // Las mismas miradas, pero sabiendo a qué carril fue cada una.
-  const [cameraLooks, setCameraLooks] = useState<CameraLook[]>([]);
+  const [cameraLooks, setCameraLooks] = useState<CameraLook[]>(alAbrir?.miradas ?? SIN);
 
-  useEffect(() => {
-    setCameraSnaps(match.camera_snaps ?? []);
+  // Si la lista trae saltos nuevos (el análisis de fondo acabó), el resumen y
+  // las miradas se releen.
+  useAlCambiar([match.camera_snaps], () => {
+    setCameraSnaps(match.camera_snaps ?? SIN);
     getCameraSnapSummary(match.id).then(setSnapSummary).catch(() => setSnapSummary(null));
-    getCameraLooks(match.id).then(setCameraLooks).catch(() => setCameraLooks([]));
-  }, [match.id, match.camera_snaps]);
+    getCameraLooks(match.id).then(setCameraLooks).catch(() => setCameraLooks(SIN));
+  });
+
+  // Todo lo que no viene en el listado, de una vez (datosPartida.ts): un solo
+  // repintado cuando llega, y ninguno si llegó antes de abrir.
+  const aplicado = useRef<string | null>(alAbrir ? match.id : null);
+  const montadaCon = useRef(match.id);
+  useEffect(() => {
+    const id = match.id;
+    const otra = montadaCon.current !== id;
+    montadaCon.current = id;
+    if (aplicado.current === id) {
+      olvidarPartida(id);
+      return;
+    }
+    const aplicar = (d: DatosPartida) => {
+      aplicado.current = id;
+      olvidarPartida(id);
+      if (d.detalle) {
+        setCurrentMatch(conDetalle(match, d.detalle));
+        if (d.detalle.participants) setParticipants(d.detalle.participants);
+        if (d.detalle.item_purchases) setItemPurchases(d.detalle.item_purchases);
+      }
+      setMouseEvents(d.estela ?? match.mouse_events ?? SIN);
+      setSeries(d.serie);
+      setCameraLooks(d.miradas);
+      setSnapSummary(d.saltos);
+    };
+    // Otra partida con el reproductor abierto: si lo suyo ya está, entra de
+    // golpe; si no, se vacía lo de la anterior mientras llega.
+    const listos = datosListos(id);
+    if (listos) {
+      aplicar(listos);
+      return;
+    }
+    if (otra) {
+      setMouseEvents(match.mouse_events ?? SIN);
+      setSeries(null);
+      setCameraLooks(SIN);
+      setSnapSummary(null);
+    }
+    let vivo = true;
+    precargarPartida(id).then((d) => {
+      if (vivo) aplicar(d);
+    });
+    return () => { vivo = false; };
+    // Solo al cambiar de partida: `match` se lee para los comentarios del
+    // listado, como hacía el efecto del detalle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [match.id]);
 
   useEffect(() => {
     if (!snapBusy) return;
@@ -968,6 +1017,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
     return out.sort((a, b) => a.time - b.time);
   }, [timedEvents, moments, participants, t]);
 
+  // Las filas de la lista, al abrir con animación, llegan un instante después:
+  // el primer fotograma (el que hace esperar a la transición) sale sin ellas y
+  // React las pinta justo detrás, mientras el panel aún entra casi
+  // transparente. Con el teclado no hay animación ni espera: van a la vez.
+  const [diferirFilas] = useState(() => document.documentElement.dataset.vt === "open");
+  const filas = React.useDeferredValue(rows, diferirFilas ? SIN : rows);
+
   // El momento actual de la tarjeta: el elegido (una marca, una fila, las
   // flechas) o el suceso más cercano al cursor.
   const featured = React.useMemo<ReviewRow | undefined>(() => {
@@ -995,7 +1051,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
       (el) => el.dataset.key === featuredKey
     );
     row?.scrollIntoView({ block: "nearest" });
-  }, [featuredKey, tab]);
+    // `filas`: si se abrió con las filas aún por llegar, se recoloca cuando llegan.
+  }, [featuredKey, tab, filas]);
 
   // Los LP que dio o quitó esta partida: la resta con la clasificatoria anterior
   // del mismo rango, la MISMA cuenta que enseñan la biblioteca y «Hoy».
@@ -1942,7 +1999,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
         {tab === "review" && (() => {
           const counts = { good: 0, neutral: 0, bad: 0 };
           rows.forEach((r) => { counts[r.bucket]++; });
-          const shown = rows.filter((r) => eventFilter === "all" || r.bucket === eventFilter);
+          const shown = filas.filter((r) => eventFilter === "all" || r.bucket === eventFilter);
           // «Regulares» no cabe al ancho por defecto: sale cuando el panel es
           // ancho (se redimensiona desde su borde) o si ya está elegido. Sus
           // filas siguen todas bajo «Todas».
@@ -2050,7 +2107,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
                     </div>
                   );
                 })}
-                {shown.length === 0 && (
+                {shown.length === 0 && filas === rows && (
                   <div style={styles.emptyEvents}>
                     {rows.length === 0
                       ? t("No events recorded in this game.")

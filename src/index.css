@@ -3451,7 +3451,11 @@ button.cap:not(:disabled):active { transform: none; }
    View Transitions (core/movimiento.ts, core/navegar.ts). La raíz no se
    anima: el raíl y la barra se quedan quietos y solo se mueven la pantalla
    (`main`, `pantalla`), el título de la barra (`titulo`) y, al abrir o cerrar
-   una partida, el retrato (`retrato`). Todo en el compositor.
+   una partida, el retrato (`retrato`). Todo en el compositor: el vuelo del
+   retrato lo rehace `vueloEnCompositor` solo con transform, y al abrir o
+   cerrar una partida el título no se desenfoca (un filtro que mueve píxeles
+   tampoco se compone, y entonces el hilo principal está montando el
+   reproductor).
    ========================================================================= */
 ::view-transition { pointer-events: none; }
 ::view-transition-old(root),
@@ -3481,6 +3485,11 @@ button.cap:not(:disabled):active { transform: none; }
 :root[data-vt]::view-transition-new(titulo) { animation: vt-titulo-llega var(--t-nav-in) var(--e-out) both; }
 @keyframes vt-titulo-sale { to { opacity: 0; filter: blur(3px); } }
 @keyframes vt-titulo-llega { from { opacity: 0; filter: blur(3px); } }
+:root[data-vt="open"]::view-transition-old(titulo),
+:root[data-vt="back"]::view-transition-old(titulo) { animation-name: vt-funde-fuera; }
+:root[data-vt="open"]::view-transition-new(titulo),
+:root[data-vt="back"]::view-transition-new(titulo) { animation-name: vt-funde; }
+@keyframes vt-funde-fuera { to { opacity: 0; } }
 
 /* Abrir y cerrar una partida: solo vuela el retrato (340 ms, ease-in-out
    fuerte). La pantalla NO entra en la transición: con el reproductor dentro,
@@ -3491,4 +3500,8 @@ button.cap:not(:disabled):active { transform: none; }
 :root[data-vt="open"] .app-main,
 :root[data-vt="back"] .app-main { view-transition-name: none !important; }
 :root[data-vt="open"]::view-transition-group(retrato),
-:root[data-vt="back"]::view-transition-group(retrato) { animation-duration: var(--t-share); animation-timing-function: var(--e-inout); }
+:root[data-vt="back"]::view-transition-group(retrato) {
+  animation-duration: var(--t-share);
+  animation-timing-function: var(--e-inout);
+  transform-origin: 0 0;
+}

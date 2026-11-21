@@ -332,3 +332,38 @@ Mis grabaciones anteriores empezaban cuando la página ya pintaba. Capturando la
 - **Ahora:** la ventana nace oculta (`"visible": false`); `setup` le pone el fondo del tema, aplica la escala y entonces la enseña. WebView2 nace con el mismo fondo gracias a `WEBVIEW2_DEFAULT_BACKGROUND_COLOR`, que se pone al principio de `run()` según el tema de la configuración (con «sistema», `AppsUseLightTheme` del registro). Un `backgroundColor` fijo en tauri.conf.json daba un fotograma oscuro en el tema claro: wry se lo pasa a WebView2 al crearlo y el cambio de `setup` llegaba tarde.
 
 Medido: en oscuro y con «sistema», 0 fotogramas con blanco (la ventana sale #111114 y la bienvenida encima); en claro, 0 fotogramas oscuros ni blancos (sale #e4e4e7). Solo queda la animación de apertura de Windows, que funde la ventana sobre lo de detrás en el primer fotograma. Si se cambia el tema a mano en el `config.json` sin abrir la app, el primer arranque da unos fotogramas del tema anterior: la página usa su pista (`lr-boot`) hasta leer la configuración.
+
+## La estela del ratón: «Cinta» (2026-11-21)
+
+El usuario eligió «Cinta» entre cinco diseños probados sobre 12 s reales de una pelea (match_20261022_232116, Gwen, minuto 19). Qué cambia en `useMouseTrailCanvas.ts`:
+- **El dibujo.** Un solo trazo de 0,8 s en el oro de la app, que se afila hacia atrás y lleva un filo oscuro para leerse sobre zonas claras. El clic derecho (moverse) es un aro azul que se cierra en 0,45 s. El izquierdo (atacar u objetivo) es un rombo rojo. Cada Q W E R D F sale en una chapa con su letra junto al cursor. Antes había 1 s de trazo grueso del oro al azul, y el mismo aro con resplandor para los dos clics: no se distinguía moverse de atacar.
+- **Colores fijos**, los del tema oscuro. Antes salían de los tokens del tema, así que en el tema claro la estela era un oro oscuro sobre la partida, aunque el vídeo no cambia con el tema.
+- **Ritmo de pintado.** Mientras se reproduce, se pinta con cada fotograma nuevo del vídeo (`requestVideoFrameCallback`). Antes se pintaba con cada refresco del monitor (`requestAnimationFrame`), que a 240 Hz eran cuatro pintados por fotograma de un vídeo a 60. Con el vídeo parado no cambia nada: un pintado al buscar, al cargar o al cambiar de tamaño.
+- **Color por tramo.** El color se fija una vez por pasada y cada tramo cambia solo `globalAlpha`, en vez de construir un `rgba()` por tramo.
+
+Medido con la app de prueba, la biblioteca de 29 y el mismo guion (`estela_foto.mjs`: vídeo parado en el segundo 1.167 y luego 4 s reproduciendo, monitor a 240 Hz):
+
+| | Pintados/s | Script en 4 s | Tareas en 4 s | Fotogramas > 25 ms |
+| --- | --- | --- | --- | --- |
+| Antes (v1.2.46) | ~240 | 143 ms | 503 ms | 0 de 956 |
+| Cinta con requestAnimationFrame | ~240 | 287 ms | 729 ms | 0 de 957 |
+| Cinta con un pintado por fotograma de vídeo | 64 | 80 ms | — | 1 de 957, al arrancar tras buscar; 0 de 1.441 en otra pasada de 6 s |
+
+Los 64 pintados por segundo son los 60 fotogramas del vídeo más los `timeupdate`.
+
+### Una chapa por ráfaga, no por pulsación
+
+El usuario vio en la foto de la pelea más E de las que creía haber pulsado. Las pulsaciones son reales: la grabación anota cada pulsación nueva de Q W E R D F, sin contar la tecla mantenida ni Ctrl más la letra (subir de nivel). Pero en las peleas la misma tecla se pulsa en ráfagas de 2 a 4 (0,1-0,2 s entre una y otra), y solo la primera lanza la habilidad.
+
+Contando como una sola las pulsaciones de la misma tecla separadas por menos de 0,5 s, las ráfagas coinciden con los casteos que da Riot. Es la partida de Gwen del 22 de octubre, la única de la biblioteca de prueba con teclas grabadas:
+
+| Tecla | Pulsaciones | Ráfagas (< 0,5 s) | Casteos según Riot |
+| --- | --- | --- | --- |
+| Q | 459 | 159 | 160 |
+| W | 25 | 18 | 19 |
+| E | 172 | 134 | 128 |
+| R | 53 | 33 | 35 |
+
+Ahora la estela pinta una chapa por ráfaga (`RAFAGA_S`), así que cada chapa es un casteo. Las teclas distintas pulsadas casi a la vez (E y Q en el mismo segundo) se tapaban entre sí; ahora cada chapa toma el primer hueco libre a su derecha. El hueco se decide una vez al cargar la estela, para que ninguna chapa salte cuando se apaga la de al lado.
+
+Esto solo cambia lo que se dibuja. Los análisis que leen las teclas (golpes, barras) siguen viendo todas las pulsaciones.

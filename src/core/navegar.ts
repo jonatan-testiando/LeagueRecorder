@@ -39,14 +39,18 @@ export function useNavigate(): NavigateFunction {
         conTransicion("nav", () => navigator.go(to));
         return;
       }
+      // Una redirección (`replace`: la de "/" a "/home" al arrancar) no es una
+      // navegación de nadie: va sin transición. Con ella, la pantalla de Hoy se
+      // pintaba un instante POR ENCIMA de la bienvenida (los grupos de una View
+      // Transition van sobre todo lo demás; medido grabando el arranque).
+      if (opciones?.replace) {
+        navigator.replace(to, opciones.state);
+        return;
+      }
       const destino = typeof to === "string" ? to : to.pathname ?? "";
       const actual = window.location.hash.replace(/^#/, "") || "/home";
       const dir = indice(destino) >= indice(actual) ? "down" : "up";
-      conTransicion(
-        "nav",
-        () => (opciones?.replace ? navigator.replace(to, opciones.state) : navigator.push(to, opciones?.state)),
-        { dir }
-      );
+      conTransicion("nav", () => navigator.push(to, opciones?.state), { dir });
     }) as NavigateFunction,
     [navigator]
   );

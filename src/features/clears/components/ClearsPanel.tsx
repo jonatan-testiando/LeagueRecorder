@@ -294,6 +294,11 @@ export const ClearsPanel: React.FC = () => {
 
 /** El campeón elegido: su vídeo, sus clears y el tuyo. */
 const Detalle: React.FC<{ campeon: Campeon; tuyo: Tuyo | null; t: T }> = ({ campeon, tuyo, t }) => {
+  // El vídeo solo existe con la pantalla a la vista. App oculta las pantallas
+  // visitadas sin desmontarlas: el reproductor de YouTube se quedaba cargado
+  // detrás (y sonando, si estaba en marcha) gastando ~1 % de un núcleo en
+  // cualquier otra pantalla hasta cerrar la app (medido).
+  const activo = useContext(PanelActiveContext);
   const [sel, setSel] = useState(0);
   const rec = campeon.clears[Math.min(sel, campeon.clears.length - 1)];
   const navigate = useNavigate();
@@ -334,14 +339,16 @@ const Detalle: React.FC<{ campeon: Campeon; tuyo: Tuyo | null; t: T }> = ({ camp
 
       <div className="clr-video">
         {rec.youtubeId ? (
-          <iframe
-            key={`${rec.youtubeId}@${rec.startS}`}
-            src={`https://www.youtube-nocookie.com/embed/${rec.youtubeId}?start=${rec.startS}&rel=0`}
-            title={`${campeon.nombre} · ${mmss(rec.clearS)} · ${rec.player}`}
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
+          activo ? (
+            <iframe
+              key={`${rec.youtubeId}@${rec.startS}`}
+              src={`https://www.youtube-nocookie.com/embed/${rec.youtubeId}?start=${rec.startS}&rel=0`}
+              title={`${campeon.nombre} · ${mmss(rec.clearS)} · ${rec.player}`}
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          ) : null
         ) : (
           <div className="clr-video__fuera">
             <p>{t("This video isn't on YouTube: it opens in your browser.")}</p>

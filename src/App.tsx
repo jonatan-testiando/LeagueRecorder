@@ -231,6 +231,8 @@ export const App: React.FC = () => {
   // La bienvenida del arranque (BootSplash): mientras está, las pantallas no
   // hacen su entrada escalonada, que pasaría debajo sin verse; la hacen al irse.
   const [splash, setSplash] = useState(true);
+  /** La bienvenida ya se está yendo: la pantalla de debajo entra a la vez. */
+  const [splashSaliendo, setSplashSaliendo] = useState(false);
 
   // La píldora del raíl. Antes era un `layoutId` de framer-motion, que mide el
   // layout de la página al montar (~30 ms en el arranque, medido) y metía
@@ -402,7 +404,7 @@ export const App: React.FC = () => {
       <Shown
         key={path}
         when={active}
-        ready={mountedPanels.has(path) && !splash}
+        ready={mountedPanels.has(path) && (!splash || splashSaliendo)}
         style={{
           width: "100%",
           height: "100%",
@@ -455,6 +457,7 @@ export const App: React.FC = () => {
         <BootSplash
           ready={matchesLoaded || !!matchesError}
           games={matches.length}
+          onLeaving={() => setSplashSaliendo(true)}
           onGone={() => {
             performance.mark("wl:bienvenida-fuera");
             setSplash(false);

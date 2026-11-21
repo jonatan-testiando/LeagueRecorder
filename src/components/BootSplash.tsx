@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../core/LanguageProvider";
 import { useCurrentRank } from "../core/useCurrentRank";
 import { rankIcon, rankLabel } from "../core/ddragon";
@@ -17,8 +17,10 @@ import "./BootSplash.css";
  * Se va cuando la biblioteca está leída, pero no antes de MIN_MS (si no, en un
  * arranque rápido sería un parpadeo) ni después de MAX_MS (si Riot o el disco
  * tardan, la app no se queda secuestrada). Un clic o una tecla la cierran ya.
- * Al irse, App deja que la pantalla de debajo haga su entrada escalonada: con
- * la bienvenida encima, esa entrada pasaba sin verse.
+ * Cuando EMPIEZA a irse (`onLeaving`), App suelta la entrada escalonada de la
+ * pantalla de debajo: las dos se cruzan. Soltarla al acabar el fundido hacía
+ * que Hoy se viera entera, desapareciera y volviera (medido grabando el
+ * arranque: visible a 3,30 s, casi transparente a 3,46 y entera a 3,65).
  */
 
 // 1 s desde que se VE (el primer fotograma, no el montaje: en un arranque en
@@ -36,9 +38,11 @@ export const BootSplash: React.FC<{
   ready: boolean;
   /** Cuántas partidas hay, para la última línea. */
   games: number;
-  /** Ya no se ve: App la desmonta y suelta la entrada de la pantalla. */
+  /** Empieza a irse: App suelta la entrada de la pantalla de debajo. */
+  onLeaving?: () => void;
+  /** Ya no se ve: App la desmonta. */
   onGone: () => void;
-}> = ({ ready, games, onGone }) => {
+}> = ({ ready, games, onLeaving, onGone }) => {
   const t = useT();
   const rank = useCurrentRank();
   // Cuándo se vio por primera vez: el fotograma siguiente al montaje.
@@ -50,13 +54,28 @@ export const BootSplash: React.FC<{
   const [saliendo, setSaliendo] = useState(false);
   const fuera = useRef(onGone);
   fuera.current = onGone;
+  const alSalir = useRef(onLeaving);
+  alSalir.current = onLeaving;
 
-  // Salir: el fundido y, al acabar, fuera del árbol.
+  // Mientras se ve, `data-bienvenida` en <html>: con él no hay View
+  // Transitions (core/movimiento.ts), cuyos grupos se pintaban por encima.
+  useLayoutEffect(() => {
+    const raiz = document.documentElement;
+    raiz.dataset.bienvenida = "";
+    return () => {
+      delete raiz.dataset.bienvenida;
+    };
+  }, []);
+
+  // Salir: el fundido y, al acabar, fuera del árbol. Una sola vez.
+  const yaSale = useRef(false);
   const salir = React.useCallback(() => {
-    setSaliendo((s) => {
-      if (!s) window.setTimeout(() => fuera.current(), SALIDA_MS);
-      return true;
-    });
+    if (yaSale.current) return;
+    yaSale.current = true;
+    delete document.documentElement.dataset.bienvenida;
+    setSaliendo(true);
+    alSalir.current?.();
+    window.setTimeout(() => fuera.current(), SALIDA_MS);
   }, []);
 
   // Lista y con el mínimo cumplido; o el máximo, pase lo que pase.

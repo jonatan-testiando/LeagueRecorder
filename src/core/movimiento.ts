@@ -100,7 +100,15 @@ export function conTransicion(
   const d = document as Document & {
     startViewTransition?: (cb: () => void) => { finished: Promise<void>; ready: Promise<void> };
   };
-  if (!d.startViewTransition || conTeclado() || document.hidden || (movimientoReducido() && tipo !== "nav")) {
+  // Con la bienvenida a la vista (`data-bienvenida`, BootSplash), nada de
+  // transiciones: sus grupos se pintan por encima de todo y la tapaban.
+  if (
+    !d.startViewTransition ||
+    conTeclado() ||
+    document.hidden ||
+    html().dataset.bienvenida !== undefined ||
+    (movimientoReducido() && tipo !== "nav")
+  ) {
     cambio();
     return;
   }

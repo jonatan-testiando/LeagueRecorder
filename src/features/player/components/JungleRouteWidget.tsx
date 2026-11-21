@@ -11,6 +11,7 @@ import { useFirstClearMedian } from "./matchMoves";
 import { wstyles } from "./videoPlayerStyles";
 import { useDelayedLoading } from "../../../core/useDelayedLoading";
 import { SkeletonLines } from "../../../components/ui/Skeleton";
+import { JungleRecord } from "./JungleRecord";
 import "./JungleRouteWidget.css";
 import "./MatchTab.css";
 
@@ -32,12 +33,15 @@ import "./MatchTab.css";
 interface Props {
   matchId: string;
   onOpenMap: OpenMap;
+  /** Para el récord de la hoja comunitaria: tu campeón y el parche ("16.21"). */
+  champion: string;
+  patch: string | null;
 }
 
 /** Cuánto de distinto a tu mediana es "como siempre". */
 export const CLEAR_COMO_SIEMPRE_S = 10;
 
-export const JungleRouteWidget: React.FC<Props> = ({ matchId, onOpenMap }) => {
+export const JungleRouteWidget: React.FC<Props> = ({ matchId, onOpenMap, champion, patch }) => {
   const t = useT();
   // Compartida con "Tus muertes" y el resumen: se pide una vez.
   const resp = useJungleRoute(matchId);
@@ -68,7 +72,7 @@ export const JungleRouteWidget: React.FC<Props> = ({ matchId, onOpenMap }) => {
       />
     );
   }
-  return <Ruta r={resp.route} mediana={mediana} onOpenMap={onOpenMap} />;
+  return <Ruta r={resp.route} mediana={mediana} onOpenMap={onOpenMap} champion={champion} patch={patch} />;
 };
 
 /** El foco del Mapa para la primera vuelta: del primer campamento al último. */
@@ -84,7 +88,13 @@ export function firstClearFocus(r: JungleRoute, detail: string | undefined, t: R
   };
 }
 
-const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onOpenMap: OpenMap }> = ({ r, mediana, onOpenMap }) => {
+const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onOpenMap: OpenMap; champion: string; patch: string | null }> = ({
+  r,
+  mediana,
+  onOpenMap,
+  champion,
+  patch,
+}) => {
   const t = useT();
   const totalBudget = BUDGET_PARTS.reduce((a, p) => a + r.budget[p.key], 0) || 1;
   const dudosa = r.agreement < JUNGLE_AGREEMENT_MIN;
@@ -143,6 +153,9 @@ const Ruta: React.FC<{ r: JungleRoute; mediana: number | null; onOpenMap: OpenMa
           <b>{r.scuttles}</b>
         </div>
       </div>
+
+      {/* Tu primer clear frente al récord de la hoja comunitaria. */}
+      <JungleRecord route={r} champion={champion} patch={patch} />
 
       {/* ------------------------------------------------ el tiempo */}
       <span className="u-label">{t("Where your time went")}</span>

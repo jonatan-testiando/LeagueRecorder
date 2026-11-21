@@ -15,6 +15,7 @@ import {
   Target,
   TriangleAlert,
   GraduationCap,
+  Route as RouteIcon,
 } from "lucide-react";
 import { useT } from "../core/LanguageProvider";
 import { useTheme } from "../core/ThemeProvider";
@@ -343,6 +344,7 @@ export const CommandPalette: React.FC<{ open: boolean; openedBy?: NavOrigin; onC
       { path: "/coach", label: "Coach", icon: <GraduationCap size={16} /> },
       { path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn size={16} /> },
       { path: "/training", label: "Training", icon: <Target size={16} /> },
+      { path: "/clears", label: "Clears", icon: <RouteIcon size={16} /> },
       { path: "/vod", label: "Video analysis", icon: <ScanSearch size={16} /> },
       { path: "/settings", label: "Settings", icon: <Settings2 size={16} /> },
     ];

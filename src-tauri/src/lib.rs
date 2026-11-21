@@ -36,6 +36,7 @@ mod oleadas;
 mod barras;
 mod hands;
 mod jugadas;
+mod jungle_records;
 mod jungle_route;
 mod lcu;
 mod minimap;
@@ -288,6 +289,9 @@ pub fn run() {
             // que pulsar "instalar" no sea esperar a que bajen 100 MB.
             app_update::spawn_background_check(app.handle().clone());
 
+            // Récords de primer clear de la hoja comunitaria: copia local, al día.
+            jungle_records::spawn_refresco();
+
             // Que WebView2 sepa cuándo la ventana no se ve (minimizada, en la
             // bandeja o con el juego delante) y deje de pintar y animar.
             visibilidad::vigilar(app.handle().clone());
@@ -423,6 +427,8 @@ pub fn run() {
             camera_snaps::get_blind_spot,
             jungle_route::get_jungle_route,
             jungle_route::get_jungle_routes,
+            jungle_records::get_jungle_records,
+            jungle_records::get_jungle_clear_catalog,
             gold::get_gold_report,
             track::get_match_track,
             track::export_route_video,

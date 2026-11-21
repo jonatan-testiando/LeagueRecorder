@@ -1718,6 +1718,59 @@ export const JUNGLE_AGREEMENT_MIN = 0.6;
 export const getJungleRoute = async (matchId: string): Promise<JungleRouteResponse> =>
   await invoke<JungleRouteResponse>("get_jungle_route", { matchId });
 
+/** Un clear récord de la hoja comunitaria de clears de jungla (jungle_records.rs). */
+export interface RecordClear {
+  /** Como lo escribe la hoja: "Kha'Zix". */
+  champion: string;
+  /** "26.16", "26.01PBE"… */
+  patch: string;
+  /** Tiempo de juego al acabar el último campamento. */
+  clearS: number;
+  camps: number;
+  smites: number;
+  /** Claves de jungle_route.rs ("raptors", "red"…) más "recall" y "scuttle". */
+  route: string[];
+  videoUrl: string;
+  /** Solo si el vídeo es de YouTube. */
+  youtubeId: string | null;
+  startS: number;
+  player: string;
+  /** Runas y build abreviadas: "QEQ, AD/AD/HPS". */
+  notes: string;
+  category: "meta" | "off_meta" | "non_meta" | "outdated";
+}
+
+export interface JungleRecords {
+  /** Clears completos del campeón, del parche de la partida o anteriores; el más rápido primero. */
+  records: RecordClear[];
+  /** La hoja tiene clears de ese campeón aunque ninguno valga (parche posterior, incompletos). */
+  anyForChampion: boolean;
+  /** "S16/2026". */
+  season: string | null;
+  /** Epoch ms de la copia local. */
+  updatedMs: number | null;
+  sheetUrl: string;
+  /** No hay copia y no se pudo bajar. */
+  unavailable: boolean;
+}
+
+/** La hoja comunitaria entera, para la pantalla Clears. */
+export interface JungleClearCatalog {
+  /** Todos los clears (también los de 3 campamentos): la pantalla filtra. */
+  records: RecordClear[];
+  season: string | null;
+  updatedMs: number | null;
+  sheetUrl: string;
+  unavailable: boolean;
+}
+
+export const getJungleClearCatalog = async (): Promise<JungleClearCatalog> =>
+  await invoke<JungleClearCatalog>("get_jungle_clear_catalog");
+
+/** Récords de primer clear de un campeón hasta un parche ("16.21"). */
+export const getJungleRecords = async (champion: string, patch: string | null): Promise<JungleRecords> =>
+  await invoke<JungleRecords>("get_jungle_records", { champion, patch });
+
 export const getJungleRoutes = async (): Promise<JungleRouteGame[]> =>
   await invoke<JungleRouteGame[]>("get_jungle_routes");
 

@@ -345,7 +345,9 @@ export const MatchTab: React.FC<MatchTabProps> = ({
         {seccion(
           "match-jungle",
           <div className="mt-block">
-            {isJungler && <JungleRouteWidget matchId={match.id} onOpenMap={onOpenMap} />}
+            {isJungler && (
+              <JungleRouteWidget matchId={match.id} onOpenMap={onOpenMap} champion={match.champion} patch={match.patch ?? null} />
+            )}
             {isJungler && (
               <div className="mt-sub">
                 <span className="u-label">{t("Invades and ganks")}</span>

@@ -1110,6 +1110,9 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
       const tag = el?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || el?.isContentEditable) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Un diálogo abierto encima (el vídeo del récord de jungla, la paleta) se
+      // queda sus teclas: si no, la barra espaciadora pausaba tu partida detrás.
+      if (document.querySelector("[role=dialog][aria-modal=true]")) return;
       if (!vpRef.current || vpRef.current.getClientRects().length === 0) return;
       const v = videoRef.current;
       if (!v) return;

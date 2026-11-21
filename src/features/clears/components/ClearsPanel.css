@@ -1,0 +1,165 @@
+/* =========================================================================
+   Clears — el primer clear récord de cada campeón (ClearsPanel). Prefijo
+   `clr-`. Solo tokens de index.css. Las rutas (flechas) y el texto pequeño
+   salen de JungleRecord.css (`jrec__*`), que comparte con la ruta de jungla.
+
+   Maestro-detalle a lo alto de la pantalla: la lista y el detalle tienen su
+   propio scroll, los filtros se quedan arriba.
+   ========================================================================= */
+
+.clr {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  /* Piel A: el título va en la barra; 12 al borde. */
+  padding: 0 var(--space-3) var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.clr-col {
+  height: 100%;
+  max-width: calc(var(--content-max) + 2 * var(--space-3));
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------- filtros */
+.clr-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.clr-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 200px;
+  max-width: 280px;
+}
+.clr-search svg {
+  position: absolute;
+  left: 10px;
+  color: var(--faint);
+  pointer-events: none;
+}
+.clr-search .field { width: 100%; padding-left: 30px; }
+
+/* ------------------------------------------------------------- cuerpo */
+.clr-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) 1fr;
+  gap: 10px;
+}
+.clr-empty { padding: var(--space-4); }
+
+/* Lista de campeones */
+.clr-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+.clr-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.clr-list__none { margin: var(--space-3); color: var(--muted); font-size: 13px; }
+.clr-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.clr-item:hover { background: var(--sunken); }
+.clr-item[aria-current="true"] { background: var(--cool-soft); color: var(--cool-ink); }
+.clr-item__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clr-item__meta { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.clr-item__meta b { font-weight: 500; }
+.clr-item__you { font-size: 11px; color: var(--muted); }
+
+/* Detalle del campeón */
+.clr-detail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.clr-detail__head { display: flex; align-items: center; gap: var(--space-3); }
+.clr-detail__title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.clr-detail__title h2 { margin: 0; }
+.clr-faint { color: var(--faint); }
+
+.clr-video {
+  position: relative;
+  width: 100%;
+  max-width: 880px;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.clr-video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.clr-video__fuera {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.clr-video__fuera p { margin: 0; }
+
+.clr-sel,
+.clr-you,
+.clr-clears {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.clr-you { align-items: flex-start; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.clr-you__ruta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px var(--space-3); }
+
+/* Lista de clears del campeón */
+.clr-clears { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.clr-clears ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.clr-clear {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.clr-clear:hover { background: var(--sunken); }
+.clr-clear[aria-current="true"] { background: var(--cool-soft); }
+.clr-clear b { font-weight: 500; }
+.clr-clear__ruta { min-width: 0; }
+.clr-clear__meta { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+.clr-src { flex: none; }

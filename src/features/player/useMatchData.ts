@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   getGoldReport,
+  getJungleRecords,
   getJungleRoute,
   getMatchAttribution,
   getMatchCoach,
@@ -9,6 +10,7 @@ import {
   getSpellAutopsy,
   type CoachMatch,
   type GoldResponse,
+  type JungleRecords,
   type JungleRouteResponse,
   type MatchPlays,
   type MatchTrackResponse,
@@ -58,6 +60,12 @@ function useCached<T>(key: string | null, fetch: () => Promise<T>): T | null | u
 
 export const useJungleRoute = (matchId: string | null) =>
   useCached<JungleRouteResponse>(matchId && `route:${matchId}`, () => getJungleRoute(matchId as string));
+
+/** Récords de primer clear de la hoja comunitaria para un campeón y parche. */
+export const useJungleRecords = (champion: string | null, patch: string | null) =>
+  useCached<JungleRecords>(champion && `records:${champion}:${patch ?? ""}`, () =>
+    getJungleRecords(champion as string, patch)
+  );
 
 export const useGoldReport = (matchId: string | null) =>
   useCached<GoldResponse>(matchId && `gold:${matchId}`, () => getGoldReport(matchId as string));

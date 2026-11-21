@@ -324,3 +324,11 @@ Ahora (lib.rs, `spawn_library_maintenance`):
 - Si hay que repasar (una partida nueva, una actualización, otra configuración), empieza cuando la interfaz ya tiene su primera lista (`esperar_primera_lista`, como mucho 10 s).
 
 Medido con tres arranques seguidos y la misma carpeta de datos (biblioteca de 300, caché caliente): el primero repasa después de la lista (lista a los 840 ms, repaso 278 + 37 ms); el segundo y el tercero se lo saltan. Sin medir en frío (no se puede vaciar la caché de disco de Windows sin permisos de administrador), pero en frío la lista ya no comparte disco con el repaso.
+
+### El primer fotograma de la ventana
+
+Mis grabaciones anteriores empezaban cuando la página ya pintaba. Capturando la pantalla real desde que existe la ventana (`CopyFromScreen` cada ~5 ms, con la ventana de prueba encima de todo; `PrintWindow` no sirve, porque devuelve negro lo que pinta WebView2 en su proceso):
+- **Antes:** la ventana se enseñaba nada más crearse, medio segundo antes de que la app pudiera darle color. Salía blanca (el fondo por defecto de Windows) desde los ~70 ms hasta los ~450 ms; luego WebView2 aparecía con su fondo blanco en un rectángulo del tamaño inicial (1280×800) sobre negro, porque la escala acababa de agrandar la ventana; la bienvenida, a los ~650 ms.
+- **Ahora:** la ventana nace oculta (`"visible": false`); `setup` le pone el fondo del tema, aplica la escala y entonces la enseña. WebView2 nace con el mismo fondo gracias a `WEBVIEW2_DEFAULT_BACKGROUND_COLOR`, que se pone al principio de `run()` según el tema de la configuración (con «sistema», `AppsUseLightTheme` del registro). Un `backgroundColor` fijo en tauri.conf.json daba un fotograma oscuro en el tema claro: wry se lo pasa a WebView2 al crearlo y el cambio de `setup` llegaba tarde.
+
+Medido: en oscuro y con «sistema», 0 fotogramas con blanco (la ventana sale #111114 y la bienvenida encima); en claro, 0 fotogramas oscuros ni blancos (sale #e4e4e7). Solo queda la animación de apertura de Windows, que funde la ventana sobre lo de detrás en el primer fotograma. Si se cambia el tema a mano en el `config.json` sin abrir la app, el primer arranque da unos fotogramas del tema anterior: la página usa su pista (`lr-boot`) hasta leer la configuración.

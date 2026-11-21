@@ -108,6 +108,68 @@ fn mostrar_ventana(app: &tauri::AppHandle) {
     }
 }
 
+/// ¿Tema claro? El de la configuración o, con «sistema», el de Windows (del
+/// registro: al principio de `run` aún no hay ventana a la que preguntar).
+fn tema_claro() -> bool {
+    match crate::storage::load_config().theme.as_str() {
+        "light" => true,
+        "dark" => false,
+        _ => windows_en_claro(),
+    }
+}
+
+#[cfg(windows)]
+fn windows_en_claro() -> bool {
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+    let w = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let clave = w("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+    let valor = w("AppsUseLightTheme");
+    let mut dato: u32 = 0;
+    let mut tam: u32 = std::mem::size_of::<u32>() as u32;
+    let r = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            clave.as_ptr(),
+            valor.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            &mut dato as *mut u32 as *mut _,
+            &mut tam,
+        )
+    };
+    r == 0 && dato == 1
+}
+
+#[cfg(not(windows))]
+fn windows_en_claro() -> bool {
+    false
+}
+
+/// El color de fondo del tema (`--ground` en index.css).
+fn fondo_del_tema(claro: bool) -> (u8, u8, u8) {
+    if claro { (0xe4, 0xe4, 0xe7) } else { (0x11, 0x11, 0x14) }
+}
+
+/// El fondo con el que NACE WebView2, antes de que la página pinte: lo lee de
+/// esta variable al crear su control. wry solo le pasa uno si viene en
+/// tauri.conf.json, y uno fijo ahí daba un fotograma oscuro en el tema claro
+/// (o blanco en el oscuro, sin ninguno). Tiene que ir antes de que Tauri cree
+/// la ventana.
+fn preparar_fondo_de_webview2() {
+    let (r, g, b) = fondo_del_tema(tema_claro());
+    std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", format!("FF{r:02X}{g:02X}{b:02X}"));
+}
+
+/// El fondo de la ventana del color del tema: lo que se ve antes de que pinte
+/// WebView2 y al agrandar la ventana.
+fn pintar_fondo_del_tema(app: &tauri::AppHandle) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let (r, g, b) = fondo_del_tema(tema_claro());
+    if let Err(e) = w.set_background_color(Some(tauri::window::Color(r, g, b, 0xff))) {
+        eprintln!("No se pudo poner el fondo del tema a la ventana: {e}");
+    }
+}
+
 /// Los tres barridos del arranque, en UNA tarea y en orden.
 ///
 /// Eran tres hilos sueltos lanzados a la vez, y los tres empezaban por
@@ -188,6 +250,7 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     crate::medida::arranque();
+    preparar_fondo_de_webview2();
     // Inicializar estados compartidos
     let recorder_state = Arc::new(RecorderState::default());
     let active_match_state = Arc::new(ActiveMatchState::default());
@@ -239,10 +302,22 @@ pub fn run() {
         .manage(app_update::UpdateState::default())
         .setup(move |app| {
             let _t_setup = crate::medida::Tramo::nuevo("arranque/setup");
-            // Lo primero: el tamaño de la interfaz, antes de que pinte la página.
+            // La ventana nace oculta ("visible": false en tauri.conf.json). Antes
+            // se enseñaba nada más crearse, medio segundo antes de llegar aquí:
+            // blanca (el fondo por defecto de Windows y de WebView2) y luego
+            // con un rectángulo blanco al tamaño viejo cuando la escala la
+            // agrandaba (medido capturando la pantalla: blanca de 70 a 450 ms y
+            // la bienvenida a los 650). Ahora: el fondo del tema, el tamaño, y
+            // entonces se enseña, ya del color de la bienvenida.
+            pintar_fondo_del_tema(app.handle());
+            // El tamaño de la interfaz, antes de que pinte la página.
             {
                 let _t = crate::medida::Tramo::nuevo("arranque/escala");
                 escala::aplicar(app.handle(), true);
+            }
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
             }
 
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;

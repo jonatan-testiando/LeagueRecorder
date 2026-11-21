@@ -144,6 +144,22 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
             .await;
         }
 
+        // Lo que sigue repasa la biblioteca ENTERA (cada partida y su informe de
+        // miradas) solo para ver sus sellos: 0,4-0,7 s en cada arranque, y 5,5 s
+        // con la caché de disco fría, a la vez que se leía la lista de Hoy (que
+        // pasaba de 0,2 a 2,7 s; medido el 2026-11-21). Si la biblioteca está
+        // igual que la última vez que se repasó entera, no hay nada que hacer.
+        let firma = tauri::async_runtime::spawn_blocking(crate::indice::firma_biblioteca)
+            .await
+            .unwrap_or_default();
+        if !firma.is_empty() && crate::indice::mantenimiento_hecho(&firma) {
+            crate::medida::anotar("arranque/mantenimiento", 0.0, "biblioteca sin cambios");
+            commands::emit_maintenance(&app, "done", 0, 0);
+            return;
+        }
+        // Y si hay que hacerlo, después de la primera lista de Hoy.
+        commands::esperar_primera_lista(std::time::Duration::from_secs(10)).await;
+
         // Las miradas al mapa salen de los clics ya grabados: las partidas de
         // antes también las tienen, sólo que nadie las había leído.
         {
@@ -156,6 +172,13 @@ fn spawn_library_maintenance(app: tauri::AppHandle) {
         {
             let _t = crate::medida::Tramo::nuevo("arranque/impact_backfill");
             riot_api::impact_backfill(&app).await;
+        }
+
+        // La firma de después: lo que se acaba de escribir ya cuenta.
+        if let Ok(despues) = tauri::async_runtime::spawn_blocking(crate::indice::firma_biblioteca).await {
+            if !despues.is_empty() {
+                crate::indice::marcar_mantenimiento(&despues);
+            }
         }
 
         commands::emit_maintenance(&app, "done", 0, 0);

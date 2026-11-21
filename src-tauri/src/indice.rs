@@ -166,6 +166,19 @@ fn guardar(nombre: &str, firma: &str, datos: &str) {
     });
 }
 
+/// ¿Se repasó ya la biblioteca entera (miradas e impacto) tal como está? El
+/// mantenimiento del arranque guarda la firma al acabar; si no ha cambiado
+/// nada desde entonces, no hay que releer cada partida para ver sus sellos.
+pub fn mantenimiento_hecho(firma: &str) -> bool {
+    leer("mantenimiento", firma).is_some()
+}
+
+/// Lo apunta al acabar el mantenimiento, con la firma de DESPUÉS (lo que
+/// escribió ya forma parte de ella).
+pub fn marcar_mantenimiento(firma: &str) {
+    guardar("mantenimiento", firma, "{}");
+}
+
 /// Borra todo lo guardado: el siguiente resumen se recalcula. Para el botón de
 /// Ajustes y para cuando algo se vea raro.
 pub fn vaciar() {

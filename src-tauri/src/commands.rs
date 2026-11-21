@@ -358,7 +358,7 @@ pub struct CambiosLista {
 #[tauri::command]
 pub async fn get_recorded_matches_delta(conocidas: std::collections::HashMap<String, String>) -> CambiosLista {
     let _medida = crate::medida::Tramo::nuevo("cmd/get_recorded_matches_delta");
-    tauri::async_runtime::spawn_blocking(move || {
+    let r = tauri::async_runtime::spawn_blocking(move || {
         let lista = crate::storage::recorrer(|id, v| v.is_empty() || conocidas.get(id).map(String::as_str) != Some(v));
         let mut orden = Vec::with_capacity(lista.len());
         let mut cambiadas = Vec::new();
@@ -371,7 +371,22 @@ pub async fn get_recorded_matches_delta(conocidas: std::collections::HashMap<Str
         CambiosLista { orden, cambiadas }
     })
     .await
-    .unwrap_or(CambiosLista { orden: Vec::new(), cambiadas: Vec::new() })
+    .unwrap_or(CambiosLista { orden: Vec::new(), cambiadas: Vec::new() });
+    PRIMERA_LISTA.store(true, Ordering::Relaxed);
+    r
+}
+
+/// La interfaz ya tiene su primera lista de partidas (la de Hoy).
+static PRIMERA_LISTA: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Espera a que la interfaz tenga su primera lista, o `max`. Para lo que relee
+/// la biblioteca al arrancar y no corre prisa: con la caché de disco fría
+/// (el primer arranque del día) le quitaba disco a lo que pinta Hoy.
+pub async fn esperar_primera_lista(max: std::time::Duration) {
+    let fin = std::time::Instant::now() + max;
+    while !PRIMERA_LISTA.load(Ordering::Relaxed) && std::time::Instant::now() < fin {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 pub fn delete_match_bloqueante(id: String) -> Result<(), String> {

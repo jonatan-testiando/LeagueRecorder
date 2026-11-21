@@ -297,3 +297,30 @@ Ahora (`components/TiraEnVivo.tsx`):
 | Maquetación + pintado | 64-95 ms | 65-70 ms |
 
 Reproduciendo, el JavaScript queda igual (16-33 ms por segundo); el cursor pasa de 4 a 240 posiciones por segundo. Comprobado con el ratón por CDP: el cursor cae donde toca (466,4 px esperado y real), la etiqueta del instante dice la hora y el oro, la de un racimo lista sus sucesos sin la del instante, fuera de la tira no queda nada y un clic en el 70 % busca el 70 %.
+
+## Arranque: el parpadeo de Hoy (2026-11-21)
+
+El usuario: al abrir la app, Hoy se ve un momento, luego la bienvenida («Cargando tus partidas…») y otra vez Hoy con un parpadeo raro. Grabado fotograma a fotograma con `Page.startScreencast` por CDP desde que la página pinta, con una firma del DOM cada 40 ms, en la app de release contra una biblioteca de 300 partidas.
+
+Tres causas:
+1. **La redirección de `/` a `/home` al arrancar iba con View Transition** (`useNavigate` de core/navegar.ts envuelve todas las navegaciones). Los grupos de la transición (`pantalla`, `titulo`) se pintan por encima de todo, bienvenida incluida: el título «Hoy» y la pantalla de Hoy con su esqueleto se veían encima de la bienvenida durante la transición (capturado a 519 y 606 ms). Ahora las redirecciones (`replace`) van sin transición, y mientras se ve la bienvenida (`<html data-bienvenida>`) no hay View Transitions.
+2. **La bienvenida entraba con un fundido desde transparente**: Hoy se veía debajo un instante. Ahora es opaca desde el primer fotograma (la marca y los textos ya tienen su entrada).
+3. **La entrada escalonada de Hoy se soltaba al ACABAR la salida de la bienvenida**: la bienvenida se desvanecía dejando Hoy entera a la vista, y entonces Hoy arrancaba su entrada desde opacidad 0 (visible a 3,30 s, casi transparente a 3,46 s, entera a 3,65 s). Ahora se suelta cuando la bienvenida EMPIEZA a irse (`onLeaving`) y las dos se cruzan.
+
+Comprobado en una grabación nueva: la barra de título no asoma antes del cruce (contraste 0), Hoy no baja de contraste una vez que aparece y la consola no da errores durante el arranque.
+
+### Clears récord (v1.2.44)
+
+- La hoja se baja 45 s después de arrancar y como mucho una vez al día (110 KB de JSON en `jungle_records.json`): no toca el arranque.
+- `get_jungle_clear_catalog`, 3-5 ms; `get_jungle_records` de un campeón, ~2 ms.
+- **Bug arreglado**: al salir de la pantalla Clears, el reproductor de YouTube se quedaba cargado en la pantalla oculta (App no desmonta las pantallas visitadas) y gastaba ~1 % de un núcleo en cualquier otra pantalla hasta cerrar la app, y seguía sonando si estaba en marcha. Ahora el vídeo solo existe con Clears a la vista (`PanelActiveContext`); al volver se carga otra vez.
+
+### El arranque en frío
+
+En el primer arranque con la caché de disco de Windows fría, la lista de 300 partidas tardó 2,7 s (167-261 ms en caliente) y la bienvenida duró 3,4 s. A la vez, el mantenimiento del arranque (`camera_input::backfill`) releía todas las partidas y su informe de miradas solo para ver sus sellos: 5,5 s en frío, 0,4-0,7 s en caliente, compitiendo por el disco con lo que necesita Hoy.
+
+Ahora (lib.rs, `spawn_library_maintenance`):
+- Al acabar el repaso se guarda la firma de la biblioteca (la de los resúmenes en SQLite: versión, configuración y nombre y fecha de cada carpeta). Si al arrancar es la misma, no se repasa nada: «biblioteca sin cambios».
+- Si hay que repasar (una partida nueva, una actualización, otra configuración), empieza cuando la interfaz ya tiene su primera lista (`esperar_primera_lista`, como mucho 10 s).
+
+Medido con tres arranques seguidos y la misma carpeta de datos (biblioteca de 300, caché caliente): el primero repasa después de la lista (lista a los 840 ms, repaso 278 + 37 ms); el segundo y el tercero se lo saltan. Sin medir en frío (no se puede vaciar la caché de disco de Windows sin permisos de administrador), pero en frío la lista ya no comparte disco con el repaso.

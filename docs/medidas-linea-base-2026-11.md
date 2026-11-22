@@ -367,3 +367,32 @@ Contando como una sola las pulsaciones de la misma tecla separadas por menos de 
 Ahora la estela pinta una chapa por ráfaga (`RAFAGA_S`), así que cada chapa es un casteo. Las teclas distintas pulsadas casi a la vez (E y Q en el mismo segundo) se tapaban entre sí; ahora cada chapa toma el primer hueco libre a su derecha. El hueco se decide una vez al cargar la estela, para que ninguna chapa salte cuando se apaga la de al lado.
 
 Esto solo cambia lo que se dibuja. Los análisis que leen las teclas (golpes, barras) siguen viendo todas las pulsaciones.
+
+## Grabar a 1080p como máximo (2026-11-22, probado y DESCARTADO)
+
+El usuario pidió que la grabación no pase de 1080p. «Nativa» graba al tamaño del cliente de League, con techo en 1440p. Se probó bajar `MAX_CANVAS` a 1920×1080 y quitar la opción «1440p»; con las medidas de abajo el usuario eligió volver a 1440p y el cambio se deshizo. Queda esta sección como registro de por qué no conviene.
+
+**Coste de grabar.** Servidor real (`leaguerec-obs`, monitor 2560×1440 a 240 Hz, AV1 NVENC, 25 s), dos tomas de cada resolución alternadas:
+
+| | 1440p | 1080p |
+| --- | --- | --- |
+| Chip codificador NVENC | 34,8 / 35,0 % | 19,2 / 19,2 % |
+| GPU 3D del servidor | 2,5 / 2,7 % | 2,2 / 2,0 % |
+| Procesador del servidor (de un núcleo) | 11,7 / 10,5 % | 10,6 / 12,2 % |
+| dwm, GPU | ~5 % | ~5 % |
+
+Bajar a 1080p casi divide por dos el trabajo del chip codificador, pero League no usa ese chip. El procesador, que es lo que limita a League en esta máquina, queda igual. No hay que esperar más FPS en el juego.
+
+**Lo que pierden los análisis.** Misma partida (match_20261022_232116, Gwen, 30 min) leída a 1440p y a 1080p. La de 1080p es una recodificación de la original: algo peor que una grabación nativa a 1080p, así que la cifra es pesimista. Todo pasó por la app de `target/release`, con las mismas llamadas que hace ella.
+
+| Análisis | 1440p | 1080p |
+| --- | --- | --- |
+| Vida propia (HUD) | — | igual: diferencia mediana 0,1 %, el 99,9 % de las muestras a ±2 % |
+| Iconos de efecto (HUD) | 90 | 50; solo 31 coinciden con los de 1440p |
+| Súbditos en el minimapa (oleadas) | 835.718 aliados, 1.357.955 rivales | −18 % y −29 %; casan a <400 u el 64 % y el 58 % |
+| Golpes que te comes | 92 | 94 (igual) |
+| Puntería (habilidades apuntadas) | 137 | 103 (−25 %) |
+
+Los tres que pierden usan medidas en píxeles fijos afinadas a 1440p (`hud_vida.py`, `oleadas.py`, `barras.py`). Se podrían reajustar, pero a 1080p cada punto de súbdito mide ~7 px y cada icono ~25 px: parte de lo perdido es información que ya no está en el vídeo.
+
+Aparte, arreglado y conservado: `dataset_generator.rs` dividía los clics (en píxeles del escritorio) por el tamaño del vídeo. Si el vídeo y el escritorio no miden lo mismo (un monitor 4K grabado a 1440p, o una grabación «1080p» en un monitor 1440p), las etiquetas salían de hasta 1,33. Ahora divide por `mouse_space`. Solo actúa con `auto_dataset_generator`, que está apagado.

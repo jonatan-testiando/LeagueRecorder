@@ -45,11 +45,24 @@ pub async fn generate_dataset(
     // Resolución real del vídeo. Se lee de la cabecera de `ffmpeg -i` en vez de
     // llamar a ffprobe: ese binario no se empaqueta, así que dependía de que el
     // usuario lo tuviera instalado.
-    let (screen_w, screen_h) = crate::proc::video_dimensions(&ffmpeg_exe, video_path)
+    let (video_w, video_h) = crate::proc::video_dimensions(&ffmpeg_exe, video_path)
         .unwrap_or((1920.0, 1080.0));
+    // Los clics vienen en píxeles del ESCRITORIO (rdev), no del vídeo. Dividirlos
+    // por el tamaño del vídeo solo cuadraba si los dos coincidían: un juego a
+    // 1440p grabado a 1080p (el ajuste «1080p», y todo lo grabado antes del
+    // 2026-09-02) o un 4K acotado a 1440p daban etiquetas de hasta 1,33 o 1,5,
+    // fuera de [0, 1].
+    // Partidas antiguas sin el dato: se supone que el escritorio era el vídeo.
+    let (screen_w, screen_h) = if metadata.mouse_space_w > 0 && metadata.mouse_space_h > 0 {
+        (metadata.mouse_space_w as f64, metadata.mouse_space_h as f64)
+    } else {
+        (video_w, video_h)
+    };
 
-    let box_size = 60.0; // 60x60 pixels bounding box
-    
+    // Recuadro de 60×60 píxeles del escritorio alrededor del clic: el cursor
+    // mide lo mismo en el escritorio sea cual sea la resolución del vídeo.
+    let box_size = 60.0;
+
     let norm_w = box_size / screen_w;
     let norm_h = box_size / screen_h;
 

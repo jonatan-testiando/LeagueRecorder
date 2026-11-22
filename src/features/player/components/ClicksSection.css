@@ -1,0 +1,196 @@
+/* «Tus clics» (ClicksSection). Prefijo `cl-`. Solo tokens de index.css.
+   Va en la hoja de estadísticas, a hasta 1040 px: las seis cifras arriba y,
+   debajo, la pantalla con el mapa de calor y, a su lado, los tramos y el
+   ritmo. En estrecho se apila. */
+
+/* ------------------------------------------- las seis cifras */
+/* Tres por fila, o las seis en una si cabe: con auto-fit salían cuatro y dos,
+   con un hueco a la derecha. */
+.cl { container-type: inline-size; }
+.cl-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+@container (min-width: 960px) {
+  .cl-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+@container (max-width: 460px) {
+  .cl-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.cl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+.cl-card__label {
+  display: flex;
+  align-items: center;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+}
+.cl-card__value {
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: 600;
+  color: var(--text);
+}
+.cl-card__sub {
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  color: var(--faint);
+}
+.cl-card__delta {
+  margin-top: var(--space-1);
+  font-size: var(--fs-12);
+  line-height: var(--lh-12);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.cl-card__delta[data-tone="win"] { color: var(--win); }
+.cl-card__delta[data-tone="loss"] { color: var(--loss); }
+.cl-card__delta[title] { cursor: help; }
+
+/* ------------------------------------------- pantalla y columna */
+.cl-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .cl-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+.cl-screen { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; min-width: 0; }
+.cl-screen__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.cl-screen__hint { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+.cl-screen__wrap {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken), inset 0 0 0 1px var(--hair);
+}
+.cl-screen__canvas { display: block; cursor: crosshair; touch-action: none; }
+.cl-screen__cap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  min-height: 28px;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+}
+.cl-visits { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.cl-visit {
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+.cl-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.cl-soft { color: var(--faint); font-size: var(--fs-12); }
+@media (hover: hover) and (pointer: fine) {
+  .cl-visit:hover { background: var(--bg-hover); }
+  .cl-link:hover { color: var(--text); }
+}
+.cl-visit:focus-visible, .cl-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.cl-side { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.cl-side > .mt-sub:first-child { margin-top: 0; }
+.cl-side > .mt-sub { margin-top: var(--space-3); }
+
+/* ------------------------------------------- los tramos */
+.cl-wins { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.cl-win {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+.cl-win__pick {
+  display: grid;
+  grid-template-columns: 44px minmax(40px, 1fr) 44px 44px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  padding: 4px var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+  text-align: left;
+  cursor: pointer;
+}
+.cl-win[data-active] .cl-win__pick { background: var(--raised); box-shadow: inset 0 0 0 1px var(--hair-strong); }
+.cl-win__time { color: var(--muted); }
+.cl-win__bar {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.cl-win__bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius-full); background: var(--faint); }
+.cl-win__bar > i[data-tone="win"] { background: var(--win); }
+.cl-win__bar > i[data-tone="loss"] { background: var(--loss); }
+.cl-win__pct { text-align: right; font-weight: 500; }
+.cl-win__dur { text-align: right; font-size: var(--fs-12); color: var(--faint); font-variant-numeric: tabular-nums; }
+.cl-win__go {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cl-win__pick:hover { background: var(--bg-hover); }
+  .cl-win__go:hover { background: var(--bg-hover); color: var(--text); }
+}
+.cl-win__pick:focus-visible, .cl-win__go:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+/* ------------------------------------------- el ritmo */
+.cl-rhythm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.cl-rhythm__what { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--text); }
+.cl-rhythm__what small { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); font-variant-numeric: tabular-nums; }
+.cl-rhythm__play { display: inline-flex; align-items: center; gap: 6px; }
+.cl-rhythm__play[aria-pressed="true"] { color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-strong); }

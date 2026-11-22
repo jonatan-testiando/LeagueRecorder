@@ -205,6 +205,7 @@ fn medida_banco() {
     abrir!("get_jungle_route", |i| crate::jungle_route::get_jungle_route(i));
     abrir!("get_hits_taken", |i| crate::golpes::get_hits_taken(i));
     abrir!("get_hand_report", |i| crate::hands::get_hand_report(i));
+    abrir!("get_click_patterns", |i| crate::clics::get_click_patterns(i));
     abrir!("get_spell_autopsy", |i| crate::spells::get_spell_autopsy(i));
     abrir!("get_aim", |i| crate::barras::get_aim(i));
     abrir!("get_gold_report", |i| crate::gold::get_gold_report(i));

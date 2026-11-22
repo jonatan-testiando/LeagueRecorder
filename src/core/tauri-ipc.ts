@@ -1441,6 +1441,79 @@ export const getHandReport = async (matchId: string): Promise<HandReport> => {
   return await invoke<HandReport>("get_hand_report", { matchId });
 };
 
+/** Las cifras de «Tus clics» de una partida (`clics.rs`). Todo en tiempo vivo. */
+export interface ClickStats {
+  apm: number | null;
+  clicks: number;
+  left: number;
+  right: number;
+  /** Metros de una pantalla de referencia de 1080 px a 96 ppp. */
+  traveled_m: number;
+  traveled_m_min: number;
+  /** Recta entre clics seguidos / camino real del cursor, 0..1. */
+  efficiency: number | null;
+  spread_px: number | null;
+  /** La misma dispersión en píxeles de una pantalla de 1080 de alto. */
+  spread_ref: number | null;
+  /** Viajes del cursor al borde de la pantalla (paneos con la cámara suelta). */
+  edge_pans: number;
+  edge_pans_min: number;
+  tempo_hz: number | null;
+  idle_s: number;
+  idle_ratio: number | null;
+  alive_s: number;
+}
+
+/** Tu mediana de las partidas anteriores (hasta 10). */
+export interface ClickBaseline {
+  matches: number;
+  apm: number | null;
+  traveled_m_min: number | null;
+  efficiency: number | null;
+  spread_ref: number | null;
+  tempo_hz: number | null;
+  idle_ratio: number | null;
+  edge_pans_min: number | null;
+}
+
+/** Diez clics seguidos; `start` y `end` en segundos de VÍDEO. */
+export interface ClickWindow {
+  start: number;
+  end: number;
+  clicks: number;
+  efficiency: number;
+  straight_px: number;
+  path_px: number;
+}
+
+export interface ClickRhythm {
+  button: "left" | "right";
+  intervals: number;
+  hz: number;
+  interval_ms: number;
+  cv: number;
+  /** 100·e^(−CV/50): 100 = metrónomo. */
+  consistency: number;
+}
+
+export interface ClickPatterns {
+  stats: ClickStats;
+  baseline: ClickBaseline | null;
+  best: ClickWindow[];
+  worst: ClickWindow[];
+  rhythm: ClickRhythm[];
+  /** Tramos vivos en segundos de VÍDEO: lo que se contó. */
+  alive: [number, number][];
+  deaths_known: boolean;
+  screen_w: number;
+  screen_h: number;
+  /** Minimapa en fracciones de pantalla: x0, x1, y0, y1. */
+  minimap: [number, number, number, number];
+}
+
+export const getClickPatterns = async (matchId: string): Promise<ClickPatterns> =>
+  await invoke<ClickPatterns>("get_click_patterns", { matchId });
+
 /** Un hechizo que te comes, agregado. */
 export interface SpellHit {
   spell: string;

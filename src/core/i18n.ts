@@ -2883,6 +2883,115 @@ const ES: Record<string, string> = {
   "Last seconds": "Últimos segundos",
   "Your record against your lane opponent, your pool and your plan.":
     "Tu historial contra tu rival de carril, tu pool y tu plan.",
+  // ---- Tus clics (ClicksSection, clics.rs)
+  "Your clicks":
+    "Tus clics",
+  "actions per minute":
+    "acciones por minuto",
+  "Keys and clicks per minute, the same APM as in the rest of the app.":
+    "Teclas y clics por minuto: el mismo APM que en el resto de la app.",
+  "Mouse travel":
+    "Recorrido",
+  "{n} m/min":
+    "{n} m/min",
+  "{n} m in total":
+    "{n} m en total",
+  "How far your cursor moved per minute alive, in metres of a 1080p screen at 96 dpi: the same unit for every game, whatever your monitor.":
+    "Cuánto se movió tu cursor por minuto vivo, en metros de una pantalla de 1080p a 96 ppp: la misma unidad en todas las partidas, sea cual sea tu monitor.",
+  "Efficiency":
+    "Eficiencia",
+  "straight line between clicks":
+    "de línea recta entre clics",
+  "The straight line from one click to the next, divided by the path your cursor actually took. 100% is always in a straight line; detours and wiggles bring it down. Pairs of clicks more than 5 s apart, or with a trip to the screen edge in between (a camera pan), don't count.":
+    "La línea recta de un clic al siguiente dividida por el camino que hizo de verdad tu cursor. 100% es ir siempre en línea recta; los rodeos y los titubeos lo bajan. No cuentan los pares de clics separados por más de 5 s ni los que tienen un viaje al borde de la pantalla en medio (un paneo de cámara).",
+  "straight between clicks, {px} px apart":
+    "recto entre clics, a {px} px uno de otro",
+  "Edge pans":
+    "Paneos por el borde",
+  "{n}/min":
+    "{n}/min",
+  "{n} in the game":
+    "{n} en la partida",
+  "Times your cursor went to the edge of the screen. With the camera unlocked that pans it; with it locked, it's a trip for nothing. They don't count against your efficiency.":
+    "Veces que tu cursor llegó al borde de la pantalla. Con la cámara suelta eso la desplaza; con ella bloqueada, es un viaje para nada. No cuentan contra tu eficiencia.",
+  "{n} clicks":
+    "{n} clics",
+  "Left and right clicks per second alive.":
+    "Clics izquierdos y derechos por segundo vivo.",
+  "Mouse still":
+    "Ratón quieto",
+  "{time} of your time alive":
+    "{time} de tu tiempo vivo",
+  "Stretches of 1 s or more in which the cursor stayed within 5 px of where it stopped, alive only. Recalls and waiting for a wave count too.":
+    "Rachas de 1 s o más en las que el cursor no se apartó más de 5 px de donde se paró, solo vivo. Las vueltas a base y esperar una oleada también cuentan.",
+  "{arrow} {n} points":
+    "{arrow} {n} puntos",
+  "{arrow} 1 point":
+    "{arrow} 1 punto",
+  "The arrows compare with your previous game.":
+    "Las flechas te comparan con tu partida anterior.",
+  "Clicks per second":
+    "Clics por segundo",
+  "How your hand moved in this game, only while your champion was alive.":
+    "Cómo se movió tu mano en esta partida, solo mientras tu campeón estaba vivo.",
+  "The arrows compare with your median of the previous {n} games.":
+    "Las flechas te comparan con tu mediana de las {n} partidas anteriores.",
+  "There are no earlier games with a mouse trail to compare with yet.":
+    "Aún no hay partidas anteriores con estela del ratón con las que comparar.",
+  "Without Riot's timeline your deaths aren't known, so they count as time alive.":
+    "Sin la timeline de Riot no se saben tus muertes, así que cuentan como tiempo vivo.",
+  "Your median: {v}":
+    "Tu mediana: {v}",
+  "as usual":
+    "como siempre",
+  "What to draw":
+    "Qué dibujar",
+  "Cursor":
+    "Cursor",
+  "Clicks":
+    "Clics",
+  "Drag a box to count your visits":
+    "Arrastra una caja para contar tus visitas",
+  "{secs} s inside · {n} visits":
+    "{secs} s dentro · {n} visitas",
+  "Watch this visit":
+    "Ver esta visita",
+  "Your cursor never stayed a second in that box.":
+    "Tu cursor nunca estuvo un segundo seguido en esa caja.",
+  "Stretch at {time}: {pct} straight, {path} px of path for {straight} px of straight line.":
+    "Tramo del {time}: {pct} recto, {path} px de camino para {straight} px de línea recta.",
+  "Where your cursor spent its time. The dashed box is the minimap; the cross, your champion with the camera locked.":
+    "Dónde pasó el tiempo tu cursor. El recuadro discontinuo es el minimapa; la cruz, tu campeón con la cámara bloqueada.",
+  "Where you clicked, left and right together.":
+    "Dónde clicaste, izquierdo y derecho juntos.",
+  "Your 10-click stretches":
+    "Tus tramos de 10 clics",
+  "Ten clicks in a row without a pause or a death in between, ranked by efficiency. Stretches where the hand barely moved (ten clicks on the same target) don't enter.":
+    "Diez clics seguidos sin una pausa ni una muerte en medio, ordenados por eficiencia. No entran los tramos en los que la mano apenas se movió (diez clics al mismo objetivo).",
+  "Which stretches":
+    "Qué tramos",
+  "Straightest":
+    "Más rectos",
+  "Most crooked":
+    "Más torcidos",
+  "Not enough clicks in a row to rank.":
+    "No hay clics seguidos suficientes para ordenarlos.",
+  "Your click rhythm":
+    "Tu ritmo de clic",
+  "How often you click when you click in a row (gaps under 1.5 s). Regularity is 100 when every gap is the same and drops the more they vary. Listen plays it back as a metronome.":
+    "Cada cuánto clicas cuando clicas seguido (huecos de menos de 1,5 s). La regularidad es 100 si todos los huecos son iguales y baja cuanto más varían. «Escuchar» lo hace sonar como un metrónomo.",
+  "Not enough clicks in a row to measure a rhythm.":
+    "No hay clics seguidos suficientes para medir un ritmo.",
+  "Attack · left click":
+    "Ataque · clic izquierdo",
+  "Movement · right click":
+    "Movimiento · clic derecho",
+  "{hz} per second · every {ms} ms · regularity {c}/100":
+    "{hz} por segundo · cada {ms} ms · regularidad {c}/100",
+  "Listen":
+    "Escuchar",
+  "Map of your cursor on the screen":
+    "Mapa de tu cursor en la pantalla",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

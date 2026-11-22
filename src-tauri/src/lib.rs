@@ -34,6 +34,7 @@ mod golpes;
 mod franja;
 mod oleadas;
 mod barras;
+mod clics;
 mod hands;
 mod jugadas;
 mod jungle_records;
@@ -549,6 +550,7 @@ pub fn run() {
             hands::get_hand_career,
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,
+            clics::get_click_patterns,
             spells::get_spell_autopsy,
             spells::get_spell_diet,
             riot_api::get_pressure_summary,

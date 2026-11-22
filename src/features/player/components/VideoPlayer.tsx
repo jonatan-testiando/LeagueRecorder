@@ -1967,6 +1967,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
                 seekTo={sheetSeek}
                 videoTime={currentTime}
                 onOpenMap={sheetMap}
+                mouseEvents={mouseEvents}
                 showSummary={false}
                 focus={stats.focus ? { id: stats.focus, n: stats.n } : null}
                 extra={{

@@ -132,6 +132,35 @@ la Efficiency algo más alta. Si se quiere su precisión, hay que grabar por eve
 con su regla de 8 ms y 1 px. Eso solo vale para partidas nuevas y engorda la
 estela.
 
+**Hecho (2026-11-22, sin commit): bloque «Tus clics»** en la hoja de estadísticas
+de cada partida. Cálculo en `src-tauri/src/clics.rs` (`get_click_patterns`),
+pantalla en `ClicksSection.tsx`.
+
+- **Seis cifras:** APM, recorrido por minuto vivo, eficiencia (con la dispersión
+  de subtítulo), paneos por el borde, clics por segundo y ratón quieto. Cada una
+  lleva una flecha frente a tu mediana de las 10 partidas anteriores.
+- **Mapa de calor** del cursor (por tiempo) o de los clics, con el minimapa y el
+  centro dibujados. Se puede arrastrar una caja y cuenta las visitas, con la
+  regla de MicroLab de 4 s y 1 s; cada visita lleva al vídeo.
+- **Tramos de 10 clics:** primero los más torcidos y después los más rectos. Al
+  elegir uno se dibuja su camino; con ▶ se ve en el vídeo.
+- **Ritmo por botón** con regularidad 100·e^(−CV/50) y metrónomo, que solo
+  suena en la hoja.
+
+Diferencias con MicroLab, todas a propósito:
+
+- Solo cuenta el tiempo vivo de la partida. Las muertes salen de la timeline,
+  con su temporizador.
+- Cifras por minuto vivo y distancias a escala de 1080p.
+- El ratón quieto se mide como racha anclada, no por ventanas. Así una pausa que
+  empieza moviéndose no se pierde.
+- Los pares de clics con un viaje al borde en medio no cuentan para la
+  eficiencia: son paneos de cámara, y se cuentan aparte.
+
+Medido en la partida del 21-11 (Gwen): sin quitar los paneos, la eficiencia daba
+72 %; quitándolos, 80 %, con 115 paneos (4,9 por minuto). Los peores tramos eran
+todos viajes del cursor a una esquina y vuelta.
+
 ### 2. Clears de jungla
 
 **Qué hace MicroLab.**

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import type { MatchMetadata, Participant, ItemPurchase } from "../../../types";
+import type { MatchMetadata, Participant, ItemPurchase, MouseEventData } from "../../../types";
 import { useT } from "../../../core/LanguageProvider";
 import { champLabel } from "../../../core/matchEvents";
 import { sameRole } from "../../../core/roles";
@@ -14,6 +14,7 @@ import { JungleRouteWidget } from "./JungleRouteWidget";
 import { DeathsSection } from "./DeathsSection";
 import { HitsTaken } from "./HitsTaken";
 import { AimSection } from "./AimSection";
+import { ClicksSection } from "./ClicksSection";
 import { GoldPurchases } from "./GoldPurchases";
 import { InspNotice, SyncNotice } from "./InspNotice";
 import { BenchmarkWidget } from "./BenchmarkWidget";
@@ -58,7 +59,7 @@ import "./MatchTab.css";
  * hablan de un sitio (muertes, golpes, invasiones, ganks) abren el Mapa ahí.
  */
 
-export type SeccionId = BlockId | "match-scoreboard" | "match-impact";
+export type SeccionId = BlockId | "match-clicks" | "match-scoreboard" | "match-impact";
 
 /** El bloque abierto, para toda la sesión: cambiar de partida o de pestaña no
  *  lo cierra. null es que el usuario los plegó todos. */
@@ -82,6 +83,9 @@ export interface MatchTabProps {
   videoTime: number;
   /** Abrir el Mapa en un momento con lo suyo dibujado. */
   onOpenMap: OpenMap;
+  /** La estela del ratón (segundos de VÍDEO), para el bloque Tus clics. Sin
+   *  ella el bloque no sale. */
+  mouseEvents?: MouseEventData[];
   /** «Lo que decidió la partida» arriba. En la hoja va en el Resumen. */
   showSummary?: boolean;
   /** Un bloque más al final de la barra (el Impacto, en la hoja). */
@@ -93,7 +97,7 @@ export interface MatchTabProps {
 
 export const MatchTab: React.FC<MatchTabProps> = ({
   match, participants, itemPurchases, ddragonVer, cameraSnaps, syncing, onSync, seekTo, videoTime, onOpenMap,
-  showSummary = true, extra, focus,
+  mouseEvents, showSummary = true, extra, focus,
 }) => {
   const t = useT();
   const selfP = participants.find((p) => p.is_self);
@@ -105,6 +109,7 @@ export const MatchTab: React.FC<MatchTabProps> = ({
   // salen cero emboscadas no le hace falta un bloque que le diga cero.
   const hasGankMarkers = (match.timeline_markers ?? []).some((m) => m.event_type === "gank_attempt");
   const videoOffset = match.video_offset ?? 0;
+  const hasTrail = !match.is_vod && (match.mouse_space_w ?? 0) > 0 && (mouseEvents?.length ?? 0) > 0;
   // Todo lo de los bloques sale de la timeline de Riot. Sin ella, cada bloque
   // decía a su manera que faltaba algo (y "Tus muertes" decía que no habías
   // muerto): mejor una sola explicación y el botón.
@@ -124,6 +129,8 @@ export const MatchTab: React.FC<MatchTabProps> = ({
           { id: "match-gold" as const, title: t("Gold"), anchor: t("Gold") },
         ]
       : []),
+    // Tus clics no necesita a Riot, solo la estela: también sin sincronizar.
+    ...(hasTrail ? [{ id: "match-clicks" as const, title: t("Your clicks"), anchor: t("Your clicks") }] : []),
     ...(participants.length > 0 ? [{ id: "match-scoreboard" as const, title: t("Scoreboard"), anchor: t("Scoreboard") }] : []),
     ...(extra ? [{ id: extra.id, title: extra.title, anchor: extra.title }] : []),
   ];
@@ -377,6 +384,15 @@ export const MatchTab: React.FC<MatchTabProps> = ({
             videoOffset={videoOffset}
             onSeek={seek}
           />
+        )}
+
+        {/* --------------------------------------------- Tus clics.
+            Cómo se movió tu mano: las cifras frente a tu mediana, el mapa de
+            calor con su caja, los tramos de 10 clics y el ritmo
+            (ClicksSection, cálculo en clics.rs). */}
+        {seccion(
+          "match-clicks",
+          <ClicksSection matchId={match.id} mouseEvents={mouseEvents ?? []} videoOffset={videoOffset} seekTo={seekTo} />
         )}
 
         {/* --------------------------------------------- el marcador.

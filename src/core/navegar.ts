@@ -24,7 +24,7 @@ import { conTransicion } from "./movimiento";
  * La dirección sigue el orden del raíl: hacia abajo, lo nuevo sube; hacia
  * arriba, baja. Con el teclado no hay animación.
  */
-const ORDEN = ["/home", "/review", "/clips", "/errors", "/coach", "/patterns", "/training", "/clears", "/vod", "/settings", "/champ-select"];
+const ORDEN = ["/home", "/review", "/clips", "/errors", "/coach", "/patterns", "/clicks", "/training", "/clears", "/vod", "/settings", "/champ-select"];
 
 const indice = (ruta: string) => {
   const i = ORDEN.findIndex((p) => ruta === p || ruta.startsWith(p + "/") || ruta.startsWith(p + "?"));

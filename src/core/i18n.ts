@@ -2992,6 +2992,83 @@ const ES: Record<string, string> = {
     "Escuchar",
   "Map of your cursor on the screen":
     "Mapa de tu cursor en la pantalla",
+  // ---- pantalla Tus clics (ClicksPanel)
+  "Your hand game after game":
+    "Tu mano partida a partida",
+  "Direction of your movement orders in fights":
+    "Rumbo de tus órdenes de movimiento en las peleas",
+  "{n} of {total} {unit}":
+    "{n} de {total} {unit}",
+  "at random: {p}":
+    "al azar: {p}",
+  "Your orders land on the diagonals about as often as random clicks would: you aren't looking for the 45° angle yet. That's exactly what DOPA trains.":
+    "Tus órdenes caen en las diagonales más o menos como caerían clics al azar: todavía no buscas el ángulo de 45°. Justo lo que entrena DOPA.",
+  "When you change direction you look for the diagonal more than when you just walk: the habit is there, now it has to be in every dodge.":
+    "Al cambiar de rumbo buscas la diagonal más que cuando solo andas: el hábito está, ahora tiene que estar en cada esquiva.",
+  "You land on the diagonals more often than random clicks would. Keep it up in the turns, which are the dodges.":
+    "Caes en las diagonales más que unos clics al azar. Mantenlo en los cambios de rumbo, que son las esquivas.",
+  "No games with a mouse trail yet":
+    "Aún no hay partidas con la estela del ratón",
+  "Wardline records your mouse while you play. Play a game with the app open and it will show up here.":
+    "Wardline graba tu ratón mientras juegas. Juega una partida con la app abierta y saldrá aquí.",
+  "Your hand in your last game":
+    "Tu mano en tu última partida",
+  "Your hand in your last {n} games":
+    "Tu mano en tus últimas {n} partidas",
+  "Your median, with how the most recent game went underneath. Only the time your champion was alive counts. Efficiency is better higher and mouse still is better lower; the rest are your style, neither good nor bad.":
+    "Tu mediana, con la última partida debajo. Solo cuenta el tiempo con tu campeón vivo. La eficiencia es mejor cuanto más alta y el ratón quieto cuanto más bajo; el resto es tu estilo, ni bueno ni malo.",
+  "last game: {v}":
+    "última partida: {v}",
+  "Against DOPA · the 45° angle":
+    "Frente a DOPA · el ángulo de 45°",
+  "DOPA Tools only counts a movement order as good if it sends your champion along one of the four diagonals, with 18° of margin on each side. Your right clicks in fights are judged the same way here, measured from where your champion was in the video, not from the centre of the screen: your camera is unlocked and the centre isn't you.":
+    "DOPA Tools solo da por buena una orden de movimiento si lleva a tu campeón por una de las cuatro diagonales, con 18° de margen a cada lado. Aquí se juzgan igual tus clics derechos en las peleas, medidos desde donde estaba tu campeón en el vídeo y no desde el centro de la pantalla: tu cámara va suelta y el centro no eres tú.",
+  "To compare you, Wardline has to read where your champion was in the video of each game (about 15 minutes per game, in the background).":
+    "Para compararte, Wardline tiene que leer dónde estaba tu campeón en el vídeo de cada partida (unos 15 minutos por partida, en segundo plano).",
+  "Use «Read the video» on any game in the list below.":
+    "Usa «Leer el vídeo» en cualquier partida de la lista de abajo.",
+  "None of these games can be read right now: they need the video and Riot's data.":
+    "Ahora mismo no se puede leer ninguna de estas partidas: hace falta el vídeo y los datos de Riot.",
+  "Where you send your champion in fights. The shaded bands are DOPA's diagonals.":
+    "Hacia dónde mandas a tu campeón en las peleas. Las franjas sombreadas son las diagonales de DOPA.",
+  "On a diagonal":
+    "En diagonal",
+  "Share of your movement orders in fights that fall within 18° of a diagonal: what DOPA's «Evaluate 45° angle» accepts. A random click would land there 40% of the time.":
+    "La parte de tus órdenes de movimiento en las peleas que cae a 18° o menos de una diagonal: lo que acepta «Evaluar ángulo 45°» de DOPA. Un clic al azar caería ahí el 40% de las veces.",
+  "orders":
+    "órdenes",
+  "When you change direction":
+    "Al cambiar de rumbo",
+  "The same, only for orders that turn 60° or more from the previous one (less than 2 s before): those are the dodges.":
+    "Lo mismo, solo con las órdenes que giran 60° o más respecto a la anterior (de menos de 2 s antes): esas son las esquivas.",
+  "turns":
+    "cambios de rumbo",
+  "Purist mode":
+    "Modo purista",
+  "On a diagonal and within DOPA's 400 px ring (on a 1080p scale): the only clicks its purist mode moves you with.":
+    "En diagonal y dentro del anillo de 400 px de DOPA (a escala de 1080p): los únicos clics con los que te mueve su modo purista.",
+  "From 1 game with its video read.":
+    "De 1 partida con el vídeo leído.",
+  "From {n} games with their video read.":
+    "De {n} partidas con el vídeo leído.",
+  "Game by game":
+    "Partida a partida",
+  "DOPA 45°":
+    "DOPA 45°",
+  "Open this game on Your clicks":
+    "Abrir esta partida en Tus clics",
+  "alive":
+    "vivo",
+  "{n} of {total} orders in fights on a diagonal":
+    "{n} de {total} órdenes en pelea en diagonal",
+  "no fights read":
+    "sin peleas leídas",
+  "Reading the bars…":
+    "Leyendo las barras…",
+  "Reading… {p}":
+    "Leyendo… {p}",
+  "It needs the video and Riot's data.":
+    "Hace falta el vídeo y los datos de Riot.",
 };
 
 const DICTS: Record<Language, Record<string, string>> = {

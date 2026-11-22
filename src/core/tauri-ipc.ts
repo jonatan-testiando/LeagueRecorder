@@ -1514,6 +1514,44 @@ export interface ClickPatterns {
 export const getClickPatterns = async (matchId: string): Promise<ClickPatterns> =>
   await invoke<ClickPatterns>("get_click_patterns", { matchId });
 
+/** Tus órdenes de movimiento con la regla de 45° de DOPA Tools (±18° de una
+ *  diagonal, medido desde tu campeón en el vídeo). Ver `clics.rs`. */
+export interface DopaStats {
+  orders: number;
+  diagonal: number;
+  /** Cambios de rumbo de 60° o más: las esquivas. */
+  turns: number;
+  turns_diagonal: number;
+  /** Dentro del anillo de 400 px (a 1080p). */
+  in_ring: number;
+  /** Diagonal y dentro del anillo: el modo purista. */
+  purist: number;
+  /** Rumbos en sectores de 10°, desde 0° = derecha, antihorario. */
+  sectors: number[];
+}
+
+export interface ClickGame {
+  id: string;
+  date: string;
+  champion: string;
+  result: string;
+  stats: ClickStats;
+  dopa: DopaStats | null;
+  /** Se puede leer el vídeo para tener la comparación con DOPA. */
+  can_read: boolean;
+}
+
+export interface ClickCareer {
+  /** De la más nueva a la más vieja. */
+  games: ClickGame[];
+  /** Tu mediana de las 10 más nuevas. */
+  median: ClickBaseline | null;
+  dopa: DopaStats;
+  dopa_games: number;
+}
+
+export const getClickCareer = async (): Promise<ClickCareer> => await invoke<ClickCareer>("get_click_career");
+
 /** Un hechizo que te comes, agregado. */
 export interface SpellHit {
   spell: string;

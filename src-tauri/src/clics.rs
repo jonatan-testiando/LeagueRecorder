@@ -595,35 +595,25 @@ fn guardar_cifras(m: &MatchMetadata, s: &ClickStats) {
     }
 }
 
-/// Tu mediana de las [`BAREMO_PARTIDAS`] partidas grabadas antes que esta.
-fn baremo(actual: &MatchMetadata) -> Option<ClickBaseline> {
-    let mut anteriores: Vec<MatchMetadata> = crate::storage::load_all_matches()
-        .into_iter()
-        .filter(|m| !m.is_vod && m.id != actual.id && m.date < actual.date && m.mouse_space_w > 0)
-        .collect();
-    anteriores.sort_by(|a, b| b.date.cmp(&a.date));
-    let mut todas: Vec<ClickStats> = Vec::new();
-    for ligera in anteriores {
-        if todas.len() >= BAREMO_PARTIDAS {
-            break;
-        }
-        let s = match cifras_en_cache(&ligera) {
-            Some(s) => s,
-            None => {
-                let Ok(m) = crate::storage::get_match_metadata_con_estela(&ligera.id) else { continue };
-                let muertes = muertes_en_video(&m);
-                let s = analizar(&m, muertes.as_deref()).stats;
-                guardar_cifras(&m, &s);
-                s
-            }
-        };
-        // Una partida sin clics (grabada sin estela, o un abandono a los
-        // pocos segundos) no es tu mano: no entra en la mediana.
-        if s.clicks < 50 {
-            continue;
-        }
-        todas.push(s);
+/// Las cifras de una partida del listado (sin estela cargada): de la caché, o
+/// cargándola y calculándolas. `None` si no se puede leer.
+fn cifras_de(ligera: &MatchMetadata) -> Option<ClickStats> {
+    if let Some(s) = cifras_en_cache(ligera) {
+        return Some(s);
     }
+    let m = crate::storage::get_match_metadata_con_estela(&ligera.id).ok()?;
+    let muertes = muertes_en_video(&m);
+    let s = analizar(&m, muertes.as_deref()).stats;
+    guardar_cifras(&m, &s);
+    Some(s)
+}
+
+/// Una partida sin clics (grabada sin estela, o un abandono a los pocos
+/// segundos) no es tu mano: no entra en ninguna mediana.
+const CLICS_MIN: usize = 50;
+
+/// La mediana, campo a campo, de unas cifras.
+fn medianas(todas: &[ClickStats]) -> Option<ClickBaseline> {
     if todas.is_empty() {
         return None;
     }
@@ -638,6 +628,25 @@ fn baremo(actual: &MatchMetadata) -> Option<ClickBaseline> {
         idle_ratio: campo(|s| s.idle_ratio),
         edge_pans_min: campo(|s| Some(s.edge_pans_min)),
     })
+}
+
+/// Tu mediana de las [`BAREMO_PARTIDAS`] partidas grabadas antes que esta.
+fn baremo(actual: &MatchMetadata) -> Option<ClickBaseline> {
+    let mut anteriores: Vec<MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.is_vod && m.id != actual.id && m.date < actual.date && m.mouse_space_w > 0)
+        .collect();
+    anteriores.sort_by(|a, b| b.date.cmp(&a.date));
+    let mut todas: Vec<ClickStats> = Vec::new();
+    for ligera in anteriores {
+        if todas.len() >= BAREMO_PARTIDAS {
+            break;
+        }
+        if let Some(s) = cifras_de(&ligera).filter(|s| s.clicks >= CLICS_MIN) {
+            todas.push(s);
+        }
+    }
+    medianas(&todas)
 }
 
 /// El cálculo de [`get_click_patterns`], fuera del comando para las pruebas.
@@ -662,6 +671,223 @@ pub async fn get_click_patterns(match_id: String) -> Result<ClickPatterns, Strin
     tokio::task::spawn_blocking(move || calcular(&match_id))
         .await
         .map_err(|e| e.to_string())?
+}
+
+// ---------------------------------------------------------------- DOPA, 45°
+//
+// DOPA Tools (maurogarih.com/herramientas/dopa) es un entrenador de esquivas en
+// el navegador. Con «Evaluar ángulo 45°» solo da por buena una orden de
+// movimiento (clic derecho) cuyo rumbo, del campeón al clic, cae a ±18° o
+// menos de una de las cuatro diagonales: `isAngleOptimal` en su código, con
+// `ne = 18`. Su «modo purista» pide además que el clic caiga dentro de un
+// anillo de 400 px alrededor del campeón.
+//
+// Aquí se aplica la misma regla a tus órdenes de verdad. El rumbo tiene que
+// salir de donde estaba TU CAMPEÓN, no del centro de la pantalla: juegas con
+// la cámara suelta, y medido en una partida con las barras leídas (la del
+// 22-10) tu campeón estaba de mediana a 0,115 del alto del centro, el rumbo
+// medido desde el centro erraba una mediana de 20° (más que la franja de ±18°)
+// y el veredicto clic a clic coincidía solo en el 61 %. Por eso solo cuenta
+// donde `barras.json` sabe dónde estabas: en las ventanas de pelea y de
+// habilidad, que es justo donde se esquiva.
+
+/// La franja de DOPA a cada lado de la diagonal.
+const DOPA_TOLERANCIA: f64 = 18.0;
+const DOPA_DIAGONALES: [f64; 4] = [45.0, 135.0, 225.0, 315.0];
+/// El anillo de DOPA, en píxeles de una pantalla de 1080 de alto.
+const DOPA_ANILLO_REF: f64 = 400.0;
+/// Un clic encima del campeón no tiene rumbo (lo mismo que `linea_de_fuego`).
+const DOPA_SIN_RUMBO: f64 = 0.02;
+/// El fotograma de barras más cercano vale si está a menos de esto del clic.
+const DOPA_FOTOGRAMA: f64 = 0.15;
+/// Un giro de al menos esto respecto a la orden anterior (de menos de 2 s
+/// antes) es un cambio de rumbo: donde viven las esquivas. Lo mismo que
+/// `GIRO_REACTIVO` y `GIRO_VENTANA_SECS` en hands.rs.
+const DOPA_GIRO: f64 = 60.0;
+const DOPA_GIRO_VENTANA: f64 = 2.0;
+/// Sectores de la rosa de rumbos (10° cada uno).
+const DOPA_SECTORES: usize = 36;
+
+/// Tus órdenes de movimiento juzgadas con la regla de DOPA.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct DopaStats {
+    /// Órdenes con tu campeón a la vista (en las ventanas leídas del vídeo).
+    pub orders: usize,
+    /// Las que caen en una diagonal (±18°).
+    pub diagonal: usize,
+    /// Las que cambian de rumbo (≥60° respecto a la anterior): las esquivas.
+    pub turns: usize,
+    pub turns_diagonal: usize,
+    /// Dentro del anillo de 400 px (a 1080p).
+    pub in_ring: usize,
+    /// Diagonal y dentro del anillo: lo que acepta el modo purista.
+    pub purist: usize,
+    /// Rumbos en sectores de 10°, del 0° (derecha) en sentido antihorario.
+    pub sectors: Vec<usize>,
+}
+
+impl DopaStats {
+    fn sumar(&mut self, o: &DopaStats) {
+        self.orders += o.orders;
+        self.diagonal += o.diagonal;
+        self.turns += o.turns;
+        self.turns_diagonal += o.turns_diagonal;
+        self.in_ring += o.in_ring;
+        self.purist += o.purist;
+        if self.sectors.len() < o.sectors.len() {
+            self.sectors.resize(o.sectors.len(), 0);
+        }
+        for (a, b) in self.sectors.iter_mut().zip(&o.sectors) {
+            *a += b;
+        }
+    }
+}
+
+/// ¿Cae este rumbo (grados, 0 = derecha, antihorario) en una diagonal?
+fn en_diagonal(deg: f64) -> bool {
+    DOPA_DIAGONALES.iter().any(|d| {
+        let x = (deg - d).abs() % 360.0;
+        x.min(360.0 - x) <= DOPA_TOLERANCIA
+    })
+}
+
+/// El fotograma de barras más cercano a `t`, si lo hay a menos de la tolerancia.
+fn fotograma(b: &crate::barras::Barras, t: f64) -> Option<&crate::barras::Frame> {
+    let i = b.frames.partition_point(|f| f.t < t);
+    [i.checked_sub(1), Some(i)]
+        .into_iter()
+        .flatten()
+        .filter_map(|j| b.frames.get(j))
+        .filter(|f| (f.t - t).abs() <= DOPA_FOTOGRAMA)
+        .min_by(|x, y| (x.t - t).abs().total_cmp(&(y.t - t).abs()))
+}
+
+/// La regla de DOPA sobre las órdenes de una partida con sus barras leídas.
+fn dopa(m: &MatchMetadata, b: &crate::barras::Barras, minimapa: Rect) -> DopaStats {
+    let mut r = DopaStats { sectors: vec![0; DOPA_SECTORES], ..Default::default() };
+    if m.mouse_space_w == 0 || m.mouse_space_h == 0 || b.height <= 0.0 {
+        return r;
+    }
+    let (sx, sy) = (b.width / m.mouse_space_w as f64, b.height / m.mouse_space_h as f64);
+    let escala = ALTO_REF / b.height;
+    let mut previa: Option<(f64, f64)> = None;
+    for (t, x, y, _, _) in crate::hands::ordenes(m, minimapa) {
+        let yo = fotograma(b, t).and_then(|f| f.bars.iter().find(|s| s.team == "self"));
+        let Some(s) = yo else {
+            // Sin tu campeón a la vista no hay rumbo, y la siguiente orden ya
+            // no se puede comparar con la de antes.
+            previa = None;
+            continue;
+        };
+        let (dx, dy) = (x * sx - s.x, y * sy - s.y);
+        let d = dx.hypot(dy);
+        if d < DOPA_SIN_RUMBO * b.height {
+            continue;
+        }
+        // El eje Y de la pantalla crece hacia abajo; el del ángulo, hacia arriba.
+        let deg = ((-dy).atan2(dx).to_degrees() + 360.0) % 360.0;
+        let diag = en_diagonal(deg);
+        let anillo = d * escala <= DOPA_ANILLO_REF;
+        r.orders += 1;
+        r.diagonal += diag as usize;
+        r.in_ring += anillo as usize;
+        r.purist += (diag && anillo) as usize;
+        r.sectors[((deg / (360.0 / DOPA_SECTORES as f64)) as usize).min(DOPA_SECTORES - 1)] += 1;
+        if let Some((t0, d0)) = previa {
+            let g = (deg - d0).abs() % 360.0;
+            if t - t0 <= DOPA_GIRO_VENTANA && g.min(360.0 - g) >= DOPA_GIRO {
+                r.turns += 1;
+                r.turns_diagonal += diag as usize;
+            }
+        }
+        previa = Some((t, deg));
+    }
+    r
+}
+
+/// Una partida en la vista de «Tus clics».
+#[derive(Debug, Clone, Serialize)]
+pub struct ClickGame {
+    pub id: String,
+    pub date: String,
+    pub champion: String,
+    pub result: String,
+    pub stats: ClickStats,
+    /// `None` si aún no se leyeron las barras del vídeo.
+    pub dopa: Option<DopaStats>,
+    /// Se puede leer el vídeo para tener la comparación con DOPA.
+    pub can_read: bool,
+}
+
+/// La vista de varias partidas.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ClickCareer {
+    /// De la más nueva a la más vieja.
+    pub games: Vec<ClickGame>,
+    /// Tu mediana de las [`BAREMO_PARTIDAS`] más nuevas.
+    pub median: Option<ClickBaseline>,
+    /// DOPA sumado sobre las partidas con barras.
+    pub dopa: DopaStats,
+    pub dopa_games: usize,
+}
+
+/// Partidas que enseña la vista.
+const CARRERA_PARTIDAS: usize = 30;
+
+/// El cálculo de [`get_click_career`], sin memo.
+pub fn calcular_carrera(se_puede_leer: impl Fn(&str) -> bool) -> ClickCareer {
+    let mut lista: Vec<MatchMetadata> = crate::storage::load_all_matches()
+        .into_iter()
+        .filter(|m| !m.is_vod && m.mouse_space_w > 0)
+        .collect();
+    lista.sort_by(|a, b| b.date.cmp(&a.date));
+    let cal = Calibracion::actual();
+    let mut r = ClickCareer { dopa: DopaStats { sectors: vec![0; DOPA_SECTORES], ..Default::default() }, ..Default::default() };
+    for ligera in lista {
+        if r.games.len() >= CARRERA_PARTIDAS {
+            break;
+        }
+        let Some(stats) = cifras_de(&ligera).filter(|s| s.clicks >= CLICS_MIN) else { continue };
+        let barras = crate::barras::Barras::load(&ligera.id);
+        let dopa = barras.and_then(|b| {
+            let m = crate::storage::get_match_metadata_con_estela(&ligera.id).ok()?;
+            Some(dopa(&m, &b, cal.rect(&m)))
+        });
+        if let Some(d) = &dopa {
+            r.dopa.sumar(d);
+            r.dopa_games += 1;
+        }
+        r.games.push(ClickGame {
+            can_read: dopa.is_none() && se_puede_leer(&ligera.id),
+            id: ligera.id,
+            date: ligera.date,
+            champion: ligera.champion,
+            result: ligera.result,
+            stats,
+            dopa,
+        });
+    }
+    let recientes: Vec<ClickStats> = r.games.iter().take(BAREMO_PARTIDAS).map(|g| g.stats.clone()).collect();
+    r.median = medianas(&recientes);
+    r
+}
+
+/// «Tus clics» de todas tus partidas: cada una con sus cifras, tu mediana de
+/// las 10 más nuevas y la comparación con la regla de 45° de DOPA.
+///
+/// Guardado en el índice: leer el vídeo de una partida (barras.json) cambia la
+/// firma de la biblioteca y se recalcula.
+#[tauri::command]
+pub async fn get_click_career(app: tauri::AppHandle) -> Result<Box<serde_json::value::RawValue>, String> {
+    let _medida = crate::medida::Tramo::nuevo("cmd/get_click_career");
+    crate::indice::memo_result_async("click_career", move || async move {
+        tokio::task::spawn_blocking(move || {
+            calcular_carrera(|id| crate::hud::falta(&app, id) || crate::barras::falta(&app, id))
+        })
+        .await
+        .map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -842,10 +1068,77 @@ mod tests {
     }
 
     #[test]
+    fn la_franja_de_dopa_es_de_18_grados_a_cada_lado() {
+        assert!(en_diagonal(45.0) && en_diagonal(27.0) && en_diagonal(63.0));
+        assert!(!en_diagonal(26.0) && !en_diagonal(64.0));
+        assert!(en_diagonal(315.0) && en_diagonal(333.0) && !en_diagonal(0.0) && !en_diagonal(90.0));
+    }
+
+    #[test]
+    fn dopa_mide_desde_tu_campeon_y_no_desde_el_centro() {
+        // Tu campeón a la izquierda del centro (en 600, 540 de un vídeo 1920×1080).
+        // Un clic a la derecha y arriba de él, a 45°, es diagonal aunque desde el
+        // centro de la pantalla salga casi horizontal.
+        let m = MatchMetadata {
+            mouse_events: vec![
+                ev(10.0, 900.0, 240.0, "right_click"),  // 45° desde él: diagonal
+                ev(10.5, 600.0, 140.0, "right_click"),  // 90° desde él: no; giro de 45°
+                ev(11.0, 400.0, 740.0, "right_click"),  // 225°: diagonal y giro de 135°
+                ev(30.0, 900.0, 240.0, "right_click"),  // sin barras cerca: no cuenta
+            ],
+            ..partida(vec![])
+        };
+        let frames: Vec<serde_json::Value> = [10.0, 10.5, 11.0]
+            .iter()
+            .map(|t| serde_json::json!({ "t": t, "bars": [{ "team": "self", "x": 600.0, "y": 540.0, "hp": 1.0 }] }))
+            .collect();
+        let b: crate::barras::Barras =
+            serde_json::from_value(serde_json::json!({ "width": 1920.0, "height": 1080.0, "frames": frames })).unwrap();
+        let r = dopa(&m, &b, Calibracion::default().rect(&m));
+        assert_eq!(r.orders, 3);
+        assert_eq!(r.diagonal, 2);
+        assert_eq!(r.turns, 1, "45° no es un cambio de rumbo; 135° sí");
+        assert_eq!(r.turns_diagonal, 1);
+        // El primero está a 424 px (fuera del anillo de 400); el segundo a 400 y
+        // el tercero a 283, dentro. Purista: solo el tercero (diagonal y dentro).
+        assert_eq!(r.in_ring, 2);
+        assert_eq!(r.purist, 1);
+        assert_eq!(r.sectors.iter().sum::<usize>(), 3);
+    }
+
+    #[test]
     fn sin_estela_no_se_inventa_nada() {
         let r = analizar(&MatchMetadata::default(), None);
         assert_eq!(r.stats.clicks, 0);
         assert!(r.best.is_empty() && r.rhythm.is_empty());
+    }
+
+    /// La vista de varias partidas sobre la biblioteca de verdad (`LR_REAL=1`).
+    #[test]
+    fn carrera_real() {
+        if std::env::var("LR_REAL").is_err() {
+            return;
+        }
+        let ini = std::time::Instant::now();
+        let c = calcular_carrera(|_| false);
+        println!("{} partidas en {:.0} ms; DOPA en {}", c.games.len(), ini.elapsed().as_secs_f64() * 1000.0, c.dopa_games);
+        let d = &c.dopa;
+        if d.orders > 0 {
+            let p = |n: usize, de: usize| if de == 0 { 0.0 } else { n as f64 / de as f64 * 100.0 };
+            println!(
+                "DOPA: {} órdenes, diagonal {:.1} %, giros {} (diagonal {:.1} %), anillo {:.1} %, purista {:.1} %",
+                d.orders,
+                p(d.diagonal, d.orders),
+                d.turns,
+                p(d.turns_diagonal, d.turns),
+                p(d.in_ring, d.orders),
+                p(d.purist, d.orders)
+            );
+            println!("sectores: {:?}", d.sectors);
+        }
+        for g in &c.games {
+            println!("{} {} {:?}", g.id, g.champion, g.dopa.as_ref().map(|d| (d.orders, d.diagonal)));
+        }
     }
 
     /// Sobre la biblioteca de verdad. Se activa con `LR_REAL=1`.

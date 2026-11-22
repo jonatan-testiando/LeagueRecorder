@@ -40,7 +40,7 @@ import { describeEvent } from "../../../core/eventText";
 import { individualEvents, eventChampion, withChampionNames } from "../../../core/matchEvents";
 import { ddragonUrl } from "../../../core/ddragon";
 import { useLang } from "../../../core/LanguageProvider";
-import { useErrorClips, useMatches } from "../../../store/useAppStore";
+import { useAppStore, useErrorClips, useMatches } from "../../../store/useAppStore";
 import { movimientoReducido, useCambio } from "../../../core/movimiento";
 import { CabezaTira, HoverTira, type HoverTiraApi } from "./TiraEnVivo";
 import { styles } from "./videoPlayerStyles";
@@ -594,6 +594,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ match, onBack, backLab
   }, [isFullscreen]);
   // Otra partida, otra hoja: no se queda abierta la de la anterior.
   useEffect(() => setStats(null), [match.id]);
+  // Si se llegó desde otra pantalla pidiendo un bloque (Tus clics), se abre
+  // la hoja en él. Va después de cerrar la de la partida anterior.
+  const pendingStats = useAppStore((s) => s.pendingStats);
+  const setPendingStats = useAppStore((s) => s.setPendingStats);
+  useEffect(() => {
+    if (!pendingStats || isFullscreen) return;
+    setPendingStats(null);
+    openStats(pendingStats as SeccionId);
+  }, [pendingStats, match.id, isFullscreen, openStats, setPendingStats]);
 
   /**
    * Un solo reloj en todo el reproductor: el de la PARTIDA, el que se ve en el

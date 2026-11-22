@@ -161,6 +161,31 @@ Medido en la partida del 21-11 (Gwen): sin quitar los paneos, la eficiencia daba
 72 %; quitándolos, 80 %, con 115 paneos (4,9 por minuto). Los peores tramos eran
 todos viajes del cursor a una esquina y vuelta.
 
+**Hecho después (2026-11-22, sin commit): pantalla propia «Tus clics»** en el
+raíl, a petición del usuario. Lleva tres cosas:
+
+- Tus seis cifras, en mediana de tus 10 últimas partidas y con una minigráfica.
+- La comparación con **DOPA Tools** (maurogarih.com/herramientas/dopa), en su
+  opción «Evaluar ángulo 45°». Allí una orden vale si su rumbo, del campeón al
+  clic, cae a ±18° o menos de una diagonal (`isAngleOptimal`, `ne = 18`); el
+  «modo purista» pide además un anillo de 400 px.
+- Una lista partida a partida; cada fila abre la partida en el bloque «Tus
+  clics».
+
+**La comparación se mide desde tu campeón, no desde el centro de la pantalla.**
+En la partida del 22-10, que tenía las barras leídas, tu campeón estaba de
+mediana a 0,115 del alto del centro. Desde el centro, el rumbo erraba una
+mediana de 20° y el veredicto clic a clic solo coincidía en el 61 %. Por eso
+solo cuentan los clics derechos dentro de las ventanas de `barras.json` (peleas
+y habilidades), y la pantalla ofrece «Leer el vídeo» en las partidas que no las
+tienen.
+
+En esa partida salió:
+
+- En diagonal: 38,6 % de 1.555 órdenes. Al azar daría un 40 %.
+- Al cambiar de rumbo (60° o más): 45,4 % de 271.
+- Purista: 35,7 %.
+
 ### 2. Clears de jungla
 
 **Qué hace MicroLab.**

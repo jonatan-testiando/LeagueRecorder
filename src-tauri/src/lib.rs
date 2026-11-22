@@ -551,6 +551,7 @@ pub fn run() {
             camera_snaps::get_camera_zone_history,
             hands::get_hand_report,
             clics::get_click_patterns,
+            clics::get_click_career,
             spells::get_spell_autopsy,
             spells::get_spell_diet,
             riot_api::get_pressure_summary,

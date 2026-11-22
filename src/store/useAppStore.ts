@@ -84,6 +84,14 @@ interface AppState {
   setPendingSeek: (seconds: number | null) => void;
 
   /**
+   * Bloque de la hoja de estadísticas que abrir cuando el reproductor abra la
+   * partida seleccionada («match-clicks» desde la pantalla Tus clics). Se
+   * consume una sola vez, como `pendingSeek`.
+   */
+  pendingStats: string | null;
+  setPendingStats: (block: string | null) => void;
+
+  /**
    * Si el asistente de primer arranque ya se completó.
    *
    * `null` mientras no ha llegado la config del disco: es la diferencia entre
@@ -276,6 +284,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
     pendingSeek: null,
     setPendingSeek: (seconds) => set({ pendingSeek: seconds }),
+
+    pendingStats: null,
+    setPendingStats: (block) => set({ pendingStats: block }),
 
     onboardingDone: null,
     setOnboardingDone: (done) => set({ onboardingDone: done }),

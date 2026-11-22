@@ -7,7 +7,7 @@ import { HomePanel } from "./features/home/components/HomePanel";
 import { Titlebar } from "./components/Titlebar";
 import { BrandMark } from "./components/BrandMark";
 import { PanelActiveContext, TitleOff, TitleSlotContext } from "./components/ScreenTitle";
-import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap, Swords, Route as RouteIcon } from "lucide-react";
+import { Settings2, Library, Film, TriangleAlert, ScanSearch, Target, ChartNoAxesColumn, CircleDot, GraduationCap, Swords, MousePointerClick, Route as RouteIcon } from "lucide-react";
 import { RiotKeyBanner } from "./components/RiotKeyBanner";
 import { CaptureStatus } from "./components/CaptureStatus";
 import { RailProfile } from "./components/RailProfile";
@@ -41,6 +41,7 @@ const TrainingPanel = perezoso(() => import("./features/training/components/Trai
 const CoachPanel = perezoso(() => import("./features/coach/components/CoachPanel").then((m) => m.CoachPanel));
 const ChampSelectPanel = perezoso(() => import("./features/champselect/components/ChampSelectPanel").then((m) => m.ChampSelectPanel));
 const ClearsPanel = perezoso(() => import("./features/clears/components/ClearsPanel").then((m) => m.ClearsPanel));
+const ClicksPanel = perezoso(() => import("./features/clicks/components/ClicksPanel").then((m) => m.ClicksPanel));
 const OnboardingWizard = perezoso(() => import("./features/onboarding/components/OnboardingWizard").then((m) => m.OnboardingWizard));
 
 /** Qué trozo necesita cada sección del raíl, para precargarlo al pasar por encima. */
@@ -55,6 +56,7 @@ const TROZOS: Record<string, Array<{ precargar: () => Promise<unknown> }>> = {
   "/settings": [SettingsPanel],
   "/champ-select": [ChampSelectPanel],
   "/clears": [ClearsPanel],
+  "/clicks": [ClicksPanel],
 };
 import { useAppStore } from "./store/useAppStore";
 import { useT } from "./core/LanguageProvider";
@@ -65,9 +67,9 @@ import { BootSplash } from "./components/BootSplash";
 
 import { withPercent } from "./core/benchmarkFormat";
 import { jungleRoutesOnce } from "./features/player/components/matchMoves";
-type Tab = "home" | "clips" | "errors" | "review" | "coach" | "patterns" | "vod" | "training" | "clears" | "settings";
+type Tab = "home" | "clips" | "errors" | "review" | "coach" | "patterns" | "clicks" | "vod" | "training" | "clears" | "settings";
 
-type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/vod" | "/training" | "/clears" | "/settings" | "/champ-select";
+type Panel = "/home" | "/review" | "/clips" | "/errors" | "/coach" | "/patterns" | "/clicks" | "/vod" | "/training" | "/clears" | "/settings" | "/champ-select";
 
 // Un icono por sección y ninguno repetido: antes "Clips" y "VOD Analysis"
 // compartían el mismo `Film`, que es lo que obliga a leer la etiqueta para saber
@@ -97,6 +99,8 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       // El plan de 10 partidas: primero, porque es lo que te dice qué mejorar.
       { key: "coach", path: "/coach", label: "Coach", icon: <GraduationCap {...NAV_ICON} /> },
       { key: "patterns", path: "/patterns", label: "Patterns", icon: <ChartNoAxesColumn {...NAV_ICON} /> },
+      // Tu mano partida a partida y frente a la regla de 45° de DOPA.
+      { key: "clicks", path: "/clicks", label: "Your clicks", icon: <MousePointerClick {...NAV_ICON} /> },
       { key: "training", path: "/training", label: "Training", icon: <Target {...NAV_ICON} /> },
       // El primer clear récord de cada campeón, de la hoja comunitaria.
       { key: "clears", path: "/clears", label: "Clears", icon: <RouteIcon {...NAV_ICON} /> },
@@ -309,6 +313,7 @@ export const App: React.FC = () => {
   const cCoach = useMemo(() => <CoachPanel />, []);
   const cChamp = useMemo(() => <ChampSelectPanel />, []);
   const cClears = useMemo(() => <ClearsPanel />, []);
+  const cClicks = useMemo(() => <ClicksPanel />, []);
   const cHome = useMemo(
     () => (
       <HomePanel
@@ -463,7 +468,7 @@ export const App: React.FC = () => {
             setSplash(false);
             // Con Hoy ya a la vista y su entrada en marcha, el resto de
             // pantallas se cargan en ratos ociosos: la primera visita no espera.
-            precargarEnReposo([MatchGallery, VideoPlayer, PatternsPanel, CoachPanel, ErrorsGallery, ErrorPlayer, ClipsGallery, SettingsPanel, TrainingPanel, VodGallery, ChampSelectPanel, ClearsPanel]);
+            precargarEnReposo([MatchGallery, VideoPlayer, PatternsPanel, CoachPanel, ErrorsGallery, ErrorPlayer, ClipsGallery, SettingsPanel, TrainingPanel, VodGallery, ChampSelectPanel, ClearsPanel, ClicksPanel]);
           }}
         />
       )}
@@ -581,6 +586,7 @@ export const App: React.FC = () => {
         {panel("/coach", cCoach)}
         {panel("/champ-select", cChamp)}
         {panel("/clears", cClears)}
+        {panel("/clicks", cClicks)}
 
         {panel("/home", cHome)}
 

@@ -1,0 +1,175 @@
+/* =========================================================================
+   Tus clics (ClicksPanel). Prefijo `ck-`. Solo tokens de index.css. Las
+   tarjetas de cifras (`cl-card`) salen de ClicksSection.css, que comparte con
+   el bloque de la hoja de estadísticas.
+   ========================================================================= */
+
+.ck {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* Piel A: el título va en la barra; 12 al borde. */
+  padding: 0 var(--space-3) var(--space-6);
+  font-variant-numeric: tabular-nums;
+}
+.ck-col {
+  max-width: calc(var(--content-max) + 2 * var(--space-3));
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  container-type: inline-size;
+}
+.ck-sec { display: flex; flex-direction: column; gap: var(--space-3); }
+.ck-sec .sect__head { margin-bottom: 0; }
+.ck-h {
+  margin: 0;
+  font-size: var(--fs-16);
+  line-height: var(--lh-16);
+  font-weight: 600;
+  color: var(--text);
+}
+.ck-lead {
+  margin: 0;
+  max-width: 78ch;
+  font-size: var(--fs-13);
+  line-height: var(--lh-13);
+  color: var(--muted);
+}
+.ck-soft { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+.ck-err { display: block; font-size: var(--fs-12); color: var(--loss); }
+
+/* Las seis cifras: las tarjetas de la hoja, con su minigráfica debajo. */
+.ck .cl-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@container (min-width: 980px) {
+  .ck .cl-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+.ck-spark { display: block; width: 100%; height: 28px; margin-top: var(--space-2); overflow: visible; }
+.ck-spark--vacia { height: 28px; }
+.ck-spark__line { fill: none; stroke: var(--faint); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.ck-spark__dot { fill: var(--muted); }
+.ck-spark__dot[data-tone="win"] { fill: var(--win); }
+.ck-spark__dot[data-tone="loss"] { fill: var(--loss); }
+
+/* ------------------------------------------------------------- DOPA */
+.ck-empty {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  color: var(--muted);
+}
+.ck-empty p { margin: 0; font-size: var(--fs-13); line-height: var(--lh-13); }
+.ck-empty svg { flex: none; margin-top: 1px; color: var(--faint); }
+
+.ck-dopa {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+@container (max-width: 620px) {
+  .ck-dopa { grid-template-columns: minmax(0, 1fr); }
+}
+.ck-dopa__rose { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ck-dopa__rose figcaption { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); text-align: center; }
+.ck-rose { width: 100%; height: auto; }
+.ck-rose__bg { fill: var(--sunken); stroke: var(--line-soft); }
+.ck-rose__band { fill: var(--brand-soft); }
+.ck-rose__bar { fill: var(--cool); fill-opacity: 0.75; }
+.ck-rose__you { fill: var(--text); }
+
+.ck-dopa__bars { display: flex; flex-direction: column; gap: var(--space-4); }
+.ck-dbar { display: flex; flex-direction: column; gap: var(--space-1); }
+.ck-dbar__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.ck-dbar__label { display: flex; align-items: center; font-size: var(--fs-14); line-height: var(--lh-14); color: var(--text); }
+.ck-dbar__val { font-size: var(--fs-20); line-height: var(--lh-20); font-weight: 600; color: var(--text); }
+.ck-dbar__val[data-tone="win"] { color: var(--win); }
+.ck-dbar__val[data-tone="loss"] { color: var(--loss); }
+.ck-dbar__track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--sunken);
+  box-shadow: var(--inset-sunken);
+}
+.ck-dbar__track > i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-full);
+  background: var(--faint);
+}
+.ck-dbar__track > i[data-tone="win"] { background: var(--win); }
+.ck-dbar__track > i[data-tone="loss"] { background: var(--loss); }
+/* La marca del azar (40 %): una raya un poco más alta que la pista. */
+.ck-dbar__track > em {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  opacity: 0.55;
+}
+.ck-dbar__sub { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); }
+.ck-read { margin: 0; font-size: var(--fs-13); line-height: var(--lh-13); color: var(--text); max-width: 70ch; }
+.ck-dopa__bars .ck-soft { margin: calc(-1 * var(--space-2)) 0 0; }
+
+/* ------------------------------------------------------- partida a partida */
+.ck-table { display: flex; flex-direction: column; }
+.ck-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(64px, 0.6fr)) minmax(120px, 0.9fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  min-height: 52px;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--fs-13);
+  color: var(--text);
+}
+.ck-row > [role="cell"] { text-align: right; }
+.ck-row--head {
+  min-height: 32px;
+  font-size: var(--fs-12);
+  color: var(--faint);
+}
+.ck-row--head > span:not(:first-child) { text-align: right; }
+.ck-game {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 6px var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ck-game__who { display: flex; flex-direction: column; min-width: 0; }
+.ck-game__who b { font-weight: 500; }
+.ck-game__who small { font-size: var(--fs-12); line-height: var(--lh-12); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ck-game__who [data-tone="win"] { color: var(--win); }
+.ck-game__who [data-tone="loss"] { color: var(--loss); }
+.ck-game__go { flex: none; margin-left: auto; color: var(--faint); }
+@media (hover: hover) and (pointer: fine) {
+  .ck-game:hover { background: var(--bg-hover); }
+  .ck-game:hover .ck-game__go { color: var(--muted); }
+}
+.ck-game:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ck-dopacell { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.ck-dopacell b { font-weight: 500; }
+@container (max-width: 700px) {
+  .ck-row { grid-template-columns: minmax(0, 1fr) repeat(2, minmax(56px, auto)) minmax(100px, auto); }
+  .ck-row > :nth-child(2), .ck-row > :nth-child(5) { display: none; }
+}
